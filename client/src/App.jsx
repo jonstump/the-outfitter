@@ -36,9 +36,15 @@ export default function App() {
         </section>
       </main>
       <footer className="app-footer">
-        Fan-made planner. Sizes, prices and rules are community-compiled approximations of the Update 2.8 loadout
-        system (5-point weapon capacity, 6 with Quartermaster; 8 mixed equipment slots, max 4 per consumable type).
-        Weapon images are schematic silhouettes, not game assets. Not affiliated with Crytek.
+        {/* Governing: ADR-0002; Implements: SPEC-0001 REQ "Attribution" */}
+        <p>
+          Fan-made planner. Sizes, prices and rules are community-compiled approximations of the Update 2.8 loadout
+          system (5-point weapon capacity, 6 with Quartermaster; 8 mixed equipment slots, max 4 per consumable type).
+          Not affiliated with Crytek.
+        </p>
+        <p>
+          Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg.
+        </p>
       </footer>
     </div>
   );

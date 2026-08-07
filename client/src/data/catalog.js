@@ -3,6 +3,25 @@
 // Tool tuple shape: [name, cost, group]
 // Consumable tuple shape: [name, cost, category, group]
 // Trait tuple shape: [name, up, group]
+//
+// Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time, Self-Hosted Scrape)
+// Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback"
+//
+// Image resolution model: scraped photos are primary, the SVG icons below (THUMBS/TOOL_THUMBS/
+// TRAIT_THUMBS/CONS_THUMBS + their *Thumb() dispatch functions) are the fallback safety net for
+// any item that hasn't been scraped yet (or ever, e.g. brand-new DLC). Each dispatch function
+// checks a per-item override map first, then falls back to the item's group icon — the per-item
+// maps are empty today (no per-item SVGs are authored yet) but the two-tier lookup is structured
+// so per-item icons can be dropped in later without touching any call site.
+//
+// The scraped-image side of the lookup (see slugify() and the <img onError> chain in
+// client/src/components/ItemThumb/ItemThumb.jsx) does not use a hardcoded IMAGES manifest keyed
+// by item name (the literal mechanism design.md sketches). Instead it derives the expected
+// `/images/{category}/{slug}.{ext}` URL from the item's name and tries known extensions via
+// <img onError>, falling back to the SVG icon only once every extension has failed. This avoids
+// needing to hand-maintain (or regenerate) a manifest of which items have been scraped — the
+// scrape script (issue #7) can add/replace image files under client/public/images/ without any
+// catalog.js change being required to pick them up.
 
 export const AMMO = {
   compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
@@ -90,7 +109,13 @@ const THUMBS = {
   xbow: "M14 18h64v5H36l-3 9h-9l3-9H14zM72 4h5v32h-5z",
 };
 
+// Per-item SVG overrides, keyed by exact catalog name. Empty today — nothing per-item has been
+// authored — but weaponThumb() checks it first so per-item icons can be added later without any
+// call-site change.
+const ITEM_THUMBS = {};
+
 export function weaponThumb(w) {
+  if (ITEM_THUMBS[w[0]]) return ITEM_THUMBS[w[0]];
   const cls = w[3];
   if (cls === "none") return THUMBS.melee;
   if (cls === "bow") return THUMBS.bow;
@@ -99,6 +124,55 @@ export function weaponThumb(w) {
   if (w[1] <= 2) return THUMBS.pistol;
   if (w[1] === 3) return THUMBS.carbine;
   return THUMBS.rifle;
+}
+
+// Tools/Traits/Consumables SVG fallback layer (mirrors THUMBS/weaponThumb above). These didn't
+// exist before this change — Tools, Traits, and Consumables previously rendered no imagery at
+// all. One simple line-art path silhouette per group (5 groups per category), dispatched by the
+// item's `group` field. Kept intentionally schematic/simple, consistent with the weapon THUMBS
+// visual language — this is now a fallback tier behind scraped photos, not primary art (see
+// docs/openspec/specs/equipment-iconography/design.md).
+const TOOL_THUMBS = {
+  Medical: "M41 4h14v9h17v14H55v9H41v-9H24V13h17z",
+  Melee: "M6 30L66 6l5 8L11 38zM70 2h14v10H70z",
+  Throwing: "M10 34L34 6l6 4-24 28zM50 34L74 6l6 4-24 28z",
+  Traps: "M48 6l6 10h12l-9 8 4 12-13-7-13 7 4-12-9-8h12z",
+  Utility: "M48 4l14 14-14 14-14-14zM40 32h16v6H40z",
+};
+
+const TRAIT_THUMBS = {
+  Combat: "M8 6l58 28-4 6L4 12zM8 34l58-28 4 6L12 40z",
+  Medical: "M41 4h14v9h17v14H55v9H41v-9H24V13h17z",
+  Mobility: "M10 20l30-16v10h46v12H40v10z",
+  Stealth: "M48 4L20 36h56zM40 26h16v4H40z",
+  Utility: "M48 4l14 14-14 14-14-14zM40 32h16v6H40z",
+};
+
+const CONS_THUMBS = {
+  Shots: "M42 4h12v6h6v26H36V10h6z",
+  Explosives: "M44 6l14 14-14 14-14-14zM44 6l6-6 4 4-6 6z",
+  Fire: "M46 4l8 12-6 4 10 6-14 14-14-10 8-4-8-10 10-2z",
+  Gas: "M20 24l10-8 10 8-10 8zM40 20l10-8 10 8-10 8zM60 24l10-8 10 8-10 8z",
+  Utility: "M30 4h4v32h-4zM34 6h26l-8 7 8 7H34z",
+};
+
+// Per-item override maps for the new categories, same rationale as ITEM_THUMBS above: empty
+// until per-item SVGs are authored, but the two-tier (per-item, else per-group) lookup shape is
+// in place now so adding one later is a data-only change.
+const TOOL_ITEM_THUMBS = {};
+const TRAIT_ITEM_THUMBS = {};
+const CONS_ITEM_THUMBS = {};
+
+export function toolThumb(tool) {
+  return TOOL_ITEM_THUMBS[tool[0]] || TOOL_THUMBS[tool[2]] || TOOL_THUMBS.Utility;
+}
+
+export function traitThumb(trait) {
+  return TRAIT_ITEM_THUMBS[trait[0]] || TRAIT_THUMBS[trait[2]] || TRAIT_THUMBS.Utility;
+}
+
+export function consThumb(cons) {
+  return CONS_ITEM_THUMBS[cons[0]] || CONS_THUMBS[cons[3]] || CONS_THUMBS.Utility;
 }
 
 export const QM = TRAITS.findIndex((t) => t[0] === "Quartermaster");
