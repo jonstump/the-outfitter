@@ -1,3 +1,10 @@
+import ItemThumb from "../ItemThumb/ItemThumb.jsx";
+
+// Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
+// Self-Hosted Scrape)
+// Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
+// SPEC-0001 REQ "Consistent Visual Presentation"
+
 export default function PickerRow({ row, showThumb }) {
   return (
     <button
@@ -6,9 +13,13 @@ export default function PickerRow({ row, showThumb }) {
       onClick={row.onAdd}
     >
       {showThumb && (
-        <svg viewBox="0 0 96 40" className="picker-row-thumb">
-          <path d={row.thumb} fill="#6b5a3a" />
-        </svg>
+        <ItemThumb
+          category={row.category}
+          name={row.name}
+          svgPath={row.thumb}
+          svgFill="#6b5a3a"
+          className="picker-row-thumb"
+        />
       )}
       <span className="picker-row-body">
         <span className="picker-row-name">{row.name}</span>

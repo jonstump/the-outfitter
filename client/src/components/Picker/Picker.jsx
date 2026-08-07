@@ -10,6 +10,9 @@ import {
   TRAIT_GROUPS,
   WEAPONS,
   WEAPON_GROUPS,
+  consThumb,
+  toolThumb,
+  traitThumb,
   weaponThumb,
 } from "../../data/catalog.js";
 import { capMax, catCount, slotMax, upTotal } from "../../utils/calc.js";
@@ -52,6 +55,7 @@ function buildRows(tab, ui, loadout, dispatch) {
           meta: AMMO_LABEL[x.w[3]],
           badge: "Size " + x.w[1],
           badgeColor: "#b08d4f",
+          category: "weapons",
           thumb: weaponThumb(x.w),
           costStr: "$" + x.w[2],
           enabled: fits,
@@ -70,6 +74,8 @@ function buildRows(tab, ui, loadout, dispatch) {
           meta: x.t[2] + " tool · one per loadout",
           badge: "TOOL",
           badgeColor: "#8a6f42",
+          category: "tools",
+          thumb: toolThumb(x.t),
           costStr: "$" + x.t[1],
           enabled: ok,
           onAdd: () => ok && dispatch(loadoutActions.addEquip({ t: "T", i: x.i })),
@@ -88,6 +94,8 @@ function buildRows(tab, ui, loadout, dispatch) {
           meta: x.c[3] + " · " + x.c[2] + " · " + cnt + "/4 of type equipped",
           badge: x.c[2].toUpperCase(),
           badgeColor: x.c[2] === "Shot" ? "#7a8a5c" : "#a5674a",
+          category: "consumables",
+          thumb: consThumb(x.c),
           costStr: "$" + x.c[1],
           enabled: ok,
           onAdd: () => ok && dispatch(loadoutActions.addEquip({ t: "C", i: x.i })),
@@ -104,6 +112,8 @@ function buildRows(tab, ui, loadout, dispatch) {
         meta: x.i === QM ? "Raises weapon capacity to 6" : x.t[2] + " trait",
         badge: x.t[1] + " UP",
         badgeColor: "#b08d4f",
+        category: "traits",
+        thumb: traitThumb(x.t),
         costStr: "",
         enabled: ok,
         onAdd: () => dispatch(addTraitIfAllowed(x.i)),
@@ -117,7 +127,9 @@ export default function Picker() {
   const ui = useSelector((s) => s.ui);
 
   const rows = buildRows(ui.tab, ui, loadout, dispatch);
-  const showThumb = ui.tab === "Weapons";
+  // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
+  // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.
+  const showThumb = true;
 
   return (
     <>

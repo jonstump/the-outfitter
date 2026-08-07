@@ -161,6 +161,41 @@ button {
   font-style: italic;
 }
 
+.app-footer p {
+  margin: 0 0 4px;
+}
+.app-footer p:last-child {
+  margin-bottom: 0;
+}
+
+/* Shared item imagery container (Implements: SPEC-0001 REQ "Consistent Visual Presentation")
+   Used by weapon slots, equipment slots, trait chips, and picker rows so scraped photos and SVG
+   fallback icons are framed identically and read as one system. Size/shape is set per call site
+   by the modifier classes below; this base rule only fixes the shared chrome. */
+.item-thumb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scroll-track);
+  border: 1px solid var(--divider);
+  overflow: hidden;
+}
+
+.item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.item-thumb svg {
+  width: 100%;
+  height: 100%;
+  padding: 3px;
+  display: block;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -363,10 +398,6 @@ button {
 .weapon-thumb {
   width: 74px;
   height: 31px;
-  flex: none;
-  background: var(--scroll-track);
-  border: 1px solid var(--divider);
-  padding: 3px;
 }
 
 .weapon-name {
@@ -476,6 +507,11 @@ button {
   color: var(--gold);
 }
 
+.equip-thumb {
+  width: 44px;
+  height: 32px;
+}
+
 /* Traits panel */
 
 .trait-chips {
@@ -493,7 +529,7 @@ button {
   font-size: 14px;
   display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
 }
 .trait-chip:hover {
   border-color: var(--red-border);
@@ -502,6 +538,11 @@ button {
 .trait-chip-up {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.trait-thumb {
+  width: 30px;
+  height: 24px;
 }
 
 /* Actions panel */
