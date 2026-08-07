@@ -1,0 +1,720 @@
+:root {
+  --bg: #131009;
+  --panel: #1a1510;
+  --border: #3a2f1e;
+  --border-soft: #2a2216;
+  --divider: #241d12;
+  --text: #d9cbab;
+  --text-bright: #e6dab9;
+  --text-muted: #8a7c5f;
+  --text-dim: #6b5f47;
+  --gold: #b08d4f;
+  --gold-bright: #d9b878;
+  --gold-border: #8a6f42;
+  --red: #7f2b26;
+  --red-border: #a04338;
+  --red-bright: #c96b5b;
+  --olive: #9aa06b;
+  --input-bg: #221b12;
+  --input-bg-active: #2c2315;
+  --row-hover: #221b12;
+  --scroll-track: #17130c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  font-family: "Alegreya", Georgia, serif;
+  color: var(--text);
+}
+
+a {
+  color: var(--gold);
+}
+a:hover {
+  color: var(--gold-bright);
+}
+
+input,
+select,
+button {
+  font-family: "Alegreya", Georgia, serif;
+}
+
+select {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--scroll-track);
+}
+
+.display-font {
+  font-family: "IM Fell English SC", serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Layout */
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-family: "IM Fell English SC", serif;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--text);
+  letter-spacing: 2px;
+}
+
+.app-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.header-stats {
+  display: flex;
+  gap: 28px;
+  align-items: baseline;
+}
+
+.header-stat {
+  text-align: right;
+}
+
+.header-stat-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.header-stat-value {
+  font-family: "IM Fell English SC", serif;
+  font-size: 26px;
+}
+
+.app-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px 24px 40px;
+  align-items: flex-start;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.left-column {
+  flex: 1 1 400px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.right-column {
+  flex: 1.25 1 440px;
+  min-width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-footer {
+  padding: 0 24px 28px;
+  max-width: 1440px;
+  margin: 0 auto;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.panel-title {
+  font-family: "IM Fell English SC", serif;
+  font-size: 17px;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+}
+
+.panel-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.empty-note {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 14px;
+}
+
+/* Buttons */
+
+.btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 10px 16px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.btn:hover {
+  color: var(--text);
+  border-color: var(--gold-border);
+}
+
+.btn-primary {
+  background: var(--red);
+  border: 1px solid var(--red-border);
+  color: #f0e2c4;
+  font-family: "IM Fell English SC", serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+  padding: 12px 16px;
+}
+.btn-primary:hover {
+  background: #96352d;
+}
+
+.btn-gold {
+  background: var(--input-bg);
+  border: 1px solid var(--gold-border);
+  color: var(--gold-bright);
+  padding: 10px 18px;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+.btn-gold:hover {
+  background: var(--input-bg-active);
+}
+
+.btn-outline {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 18px;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+.btn-outline:hover {
+  border-color: var(--gold-border);
+}
+
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  line-height: 1;
+}
+.icon-btn:hover {
+  color: var(--red-bright);
+  border-color: var(--red-border);
+}
+
+.toggle-btn {
+  border: 1px solid var(--border);
+  padding: 9px 14px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.toggle-btn.on {
+  background: var(--input-bg-active);
+  color: var(--gold-bright);
+}
+
+.chip {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 7px 12px;
+  font-size: 13.5px;
+  font-family: "Alegreya", Georgia, serif;
+}
+.chip.active {
+  background: var(--input-bg);
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
+}
+
+.size-chip {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  min-width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+.size-chip.active {
+  background: var(--input-bg);
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
+}
+
+.text-input {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text-bright);
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
+/* Weapons panel */
+
+.weapons-capacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-pips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.cap-pip {
+  width: 14px;
+  height: 8px;
+}
+
+.weapon-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.weapon-slot {
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  min-height: 52px;
+}
+.weapon-slot.empty-slot {
+  border-style: dashed;
+  background: transparent;
+}
+.weapon-slot.filled-slot {
+  background: #211a11;
+}
+
+.weapon-slot-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.weapon-slot-main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.weapon-thumb {
+  width: 74px;
+  height: 31px;
+  flex: none;
+  background: var(--scroll-track);
+  border: 1px solid var(--divider);
+  padding: 3px;
+}
+
+.weapon-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.weapon-meta {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.weapon-slot-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.weapon-cost {
+  font-size: 14px;
+  color: var(--gold);
+}
+
+.ammo-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.over-capacity-warning {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--red-bright);
+}
+
+/* Equipment panel */
+
+.equip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.equip-slot {
+  text-align: left;
+  min-height: 76px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  font-family: "Alegreya", Georgia, serif;
+}
+
+.equip-slot.filled-slot {
+  background: #211a11;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.equip-slot.filled-slot:hover {
+  border-color: var(--red-border);
+}
+
+.equip-slot.empty-slot {
+  border: 1px dashed var(--border);
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+}
+.equip-slot.empty-slot:hover {
+  border-color: var(--gold-border);
+}
+.equip-slot.blocked-slot {
+  border: 1px dashed #4a2320;
+  background: #1a1210;
+  color: var(--red);
+}
+
+.equip-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-bright);
+}
+
+.equip-foot {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 12px;
+}
+
+.equip-cat {
+  letter-spacing: 1px;
+}
+
+.equip-cost {
+  color: var(--gold);
+}
+
+/* Traits panel */
+
+.trait-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.trait-chip {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.trait-chip:hover {
+  border-color: var(--red-border);
+}
+
+.trait-chip-up {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Actions panel */
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.budget-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.budget-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.number-input {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 15px;
+}
+
+.save-row {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.share-message {
+  font-size: 13.5px;
+  color: var(--olive);
+  font-style: italic;
+}
+
+/* Saved loadouts */
+
+.saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.saved-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--scroll-track);
+  padding: 8px 10px;
+}
+
+.saved-row-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-bright);
+  font-size: 15px;
+  padding: 6px 2px;
+  font-family: "Alegreya", Georgia, serif;
+}
+.saved-row-name:hover {
+  color: var(--gold-bright);
+}
+
+.saved-row-cost {
+  font-size: 13px;
+  color: var(--gold);
+}
+
+/* Picker */
+
+.picker-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 13px 6px;
+  font-family: "IM Fell English SC", serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+.picker-tab.active {
+  background: var(--input-bg);
+  border-bottom-color: var(--gold-border);
+  color: var(--gold-bright);
+}
+
+.picker-search-row {
+  padding: 12px 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.picker-search-input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.picker-size-chips {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.picker-filter-row {
+  padding: 10px 14px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.picker-filter-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  margin-right: 4px;
+}
+
+.picker-list {
+  overflow-y: auto;
+  max-height: 680px;
+}
+
+.picker-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  padding: 11px 16px;
+  min-height: 48px;
+}
+.picker-row:hover {
+  background: var(--row-hover);
+}
+.picker-row.disabled {
+  cursor: default;
+}
+
+.picker-row-thumb {
+  width: 58px;
+  height: 24px;
+  flex: none;
+}
+
+.picker-row-body {
+  flex: 1;
+}
+
+.picker-row-name {
+  display: block;
+  font-size: 15.5px;
+  font-weight: 500;
+  color: var(--text-bright);
+  font-family: "Alegreya", Georgia, serif;
+}
+
+.picker-row-meta {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.picker-row-badge {
+  font-size: 13px;
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.picker-row-cost {
+  font-size: 14.5px;
+  color: var(--gold);
+  min-width: 54px;
+  text-align: right;
+}
+
+.picker-empty {
+  padding: 24px 16px;
+  color: var(--text-dim);
+  font-style: italic;
+}
