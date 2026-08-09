@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-07
 decision-makers: [jmstump]
 supersedes: [ADR-0001]

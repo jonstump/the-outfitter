@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 date: 2026-08-09
 implements: [ADR-0004]
 ---
@@ -10,9 +10,9 @@ implements: [ADR-0004]
 
 This capability formalizes how The Outfitter's developer environment is pinned, enforced, and documented. It realizes [ADR-0004](../../../adrs/ADR-0004-developer-environment-consistency.md), which chose host-side pinning — a version manager, `engines` enforcement, a single install command, and a lockfile-integrity check — over containerized development, on the grounds that this app has no database, cache, or native dependency and that a Docker Compose dev profile would not deliver the dev/prod topology parity that appears to justify it.
 
-The gap this capability closes is concrete. Node 20 is currently pinned in four places (`.nvmrc`, `.github/workflows/ci.yml`, and twice in `Dockerfile`) with no mechanism keeping them in sync, and nothing reads any of them automatically — the machine ADR-0004 was authored on resolves `node` to v24.13.1. The README instructs `npm install` while CI and the production image run `npm ci`, permitting lockfile drift that surfaces only as a CI failure on an unrelated pull request. No `.env.example` exists, so the four environment variables the app reads are discoverable only by grepping source.
+The gap this capability closes is concrete. Node 20 was pinned in four places (`.nvmrc`, `.github/workflows/ci.yml`, and twice in `Dockerfile`) with no mechanism keeping them in sync, and nothing read any of them automatically — the machine ADR-0004 was authored on resolves `node` to v24.13.1. The README instructs `npm install` while CI and the production image run `npm ci`, permitting lockfile drift that surfaces only as a CI failure on an unrelated pull request. No `.env.example` existed, so the four environment variables the app reads were discoverable only by grepping source.
 
-None of `mise.toml`, `.npmrc`, or `.env.example` exists in the repository today; every requirement below is greenfield.
+**Implementation status.** The requirements below are partially satisfied. `mise.toml`, `.npmrc`, and `.env.example` now exist at the repo root, and the root `package.json` declares `engines.node` — this covers "Automatic Toolchain Activation", "Toolchain Enforcement at Install Time", and "Documented Environment Variables". The remaining four requirements are not yet implemented: `.github/workflows/ci.yml` still hardcodes `node-version: "20"` and has no lockfile-integrity step, `Dockerfile` still hardcodes its Node tag in both stages, and the README still instructs `npm install`.
 
 ## Requirements
 
