@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   AMMO_LABEL,
@@ -124,9 +125,19 @@ function buildRows(tab, ui, loadout, dispatch) {
 export default function Picker() {
   const dispatch = useDispatch();
   const loadout = useSelector((s) => s.loadout);
-  const ui = useSelector((s) => s.ui);
+  const tab = useSelector((s) => s.ui.tab);
 
-  const rows = buildRows(ui.tab, ui, loadout, dispatch);
+  // Governing: #23 — search/size/group/ammo filters are transient UI state owned
+  // by this panel alone; keeping them here (instead of the global store) means a
+  // keystroke in the search box doesn't route through Redux and the filters reset
+  // naturally when the tab changes.
+  const [search, setSearch] = useState("");
+  const [sizeFilter, setSizeFilter] = useState(0);
+  const [group, setGroup] = useState("");
+  const [ammoF, setAmmoF] = useState("");
+
+  const ui = { tab, search, sizeFilter, group, ammoF };
+  const rows = buildRows(tab, ui, loadout, dispatch);
   // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
   // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.
   const showThumb = true;
@@ -137,8 +148,13 @@ export default function Picker() {
         {TABS.map((label) => (
           <button
             key={label}
-            className={`picker-tab${ui.tab === label ? " active" : ""}`}
-            onClick={() => dispatch(uiActions.setTab(label))}
+            className={`picker-tab${tab === label ? " active" : ""}`}
+            onClick={() => {
+              dispatch(uiActions.setTab(label));
+              setSearch("");
+              setGroup("");
+              setAmmoF("");
+            }}
           >
             {label}
           </button>
@@ -149,17 +165,17 @@ export default function Picker() {
         <input
           className="text-input picker-search-input"
           placeholder="Search…"
-          value={ui.search}
-          onChange={(e) => dispatch(uiActions.setSearch(e.target.value))}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        {ui.tab === "Weapons" && (
+        {tab === "Weapons" && (
           <span className="picker-size-chips">
             <span className="picker-filter-label">SIZE</span>
             {[0, 1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
-                className={`size-chip${ui.sizeFilter === n ? " active" : ""}`}
-                onClick={() => dispatch(uiActions.setSizeFilter(n))}
+                className={`size-chip${sizeFilter === n ? " active" : ""}`}
+                onClick={() => setSizeFilter(n)}
               >
                 {n === 0 ? "All" : n}
               </button>
@@ -170,25 +186,25 @@ export default function Picker() {
 
       <div className="picker-filter-row">
         <span className="picker-filter-label">FILTER</span>
-        {[""].concat(GROUP_SETS[ui.tab]).map((g) => (
+        {[""].concat(GROUP_SETS[tab]).map((g) => (
           <button
             key={g || "all"}
-            className={`chip${ui.group === g ? " active" : ""}`}
-            onClick={() => dispatch(uiActions.setGroup(g))}
+            className={`chip${group === g ? " active" : ""}`}
+            onClick={() => setGroup(g)}
           >
             {g || "All"}
           </button>
         ))}
       </div>
 
-      {ui.tab === "Weapons" && (
+      {tab === "Weapons" && (
         <div className="picker-filter-row">
           <span className="picker-filter-label">AMMO</span>
           {[""].concat(Object.keys(AMMO_FILTERS)).map((a) => (
             <button
               key={a || "all"}
-              className={`chip${ui.ammoF === a ? " active" : ""}`}
-              onClick={() => dispatch(uiActions.setAmmoFilter(a))}
+              className={`chip${ammoF === a ? " active" : ""}`}
+              onClick={() => setAmmoF(a)}
             >
               {a || "All"}
             </button>

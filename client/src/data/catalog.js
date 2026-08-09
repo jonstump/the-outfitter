@@ -109,13 +109,7 @@ const THUMBS = {
   xbow: "M14 18h64v5H36l-3 9h-9l3-9H14zM72 4h5v32h-5z",
 };
 
-// Per-item SVG overrides, keyed by exact catalog name. Empty today — nothing per-item has been
-// authored — but weaponThumb() checks it first so per-item icons can be added later without any
-// call-site change.
-const ITEM_THUMBS = {};
-
 export function weaponThumb(w) {
-  if (ITEM_THUMBS[w[0]]) return ITEM_THUMBS[w[0]];
   const cls = w[3];
   if (cls === "none") return THUMBS.melee;
   if (cls === "bow") return THUMBS.bow;
@@ -156,23 +150,16 @@ const CONS_THUMBS = {
   Utility: "M30 4h4v32h-4zM34 6h26l-8 7 8 7H34z",
 };
 
-// Per-item override maps for the new categories, same rationale as ITEM_THUMBS above: empty
-// until per-item SVGs are authored, but the two-tier (per-item, else per-group) lookup shape is
-// in place now so adding one later is a data-only change.
-const TOOL_ITEM_THUMBS = {};
-const TRAIT_ITEM_THUMBS = {};
-const CONS_ITEM_THUMBS = {};
-
 export function toolThumb(tool) {
-  return TOOL_ITEM_THUMBS[tool[0]] || TOOL_THUMBS[tool[2]] || TOOL_THUMBS.Utility;
+  return TOOL_THUMBS[tool[2]] || TOOL_THUMBS.Utility;
 }
 
 export function traitThumb(trait) {
-  return TRAIT_ITEM_THUMBS[trait[0]] || TRAIT_THUMBS[trait[2]] || TRAIT_THUMBS.Utility;
+  return TRAIT_THUMBS[trait[2]] || TRAIT_THUMBS.Utility;
 }
 
 export function consThumb(cons) {
-  return CONS_ITEM_THUMBS[cons[0]] || CONS_THUMBS[cons[3]] || CONS_THUMBS.Utility;
+  return CONS_THUMBS[cons[3]] || CONS_THUMBS.Utility;
 }
 
 export const QM = TRAITS.findIndex((t) => t[0] === "Quartermaster");
