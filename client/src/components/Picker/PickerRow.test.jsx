@@ -13,19 +13,19 @@ import { slugify } from "../ItemThumb/ItemThumb.jsx";
 // item (see buildRows() in Picker.jsx) and always passes showThumb={true} today, on all four
 // tabs (Weapons/Tools/Consumables/Traits), not just Weapons. Both aspects are covered here.
 
-const weaponIndex = WEAPONS.findIndex((w) => w[3] === "compact");
+const weaponIndex = WEAPONS.findIndex((w) => w[4] === "compact");
 const def = WEAPONS[weaponIndex];
 
 function makeRow(overrides) {
   return {
     key: weaponIndex,
-    name: def[0],
+    name: def[1],
     meta: "Compact ammo",
-    badge: "Size " + def[1],
+    badge: "Size " + def[2],
     badgeColor: "#b08d4f",
     category: "weapons",
     thumb: weaponThumb(def),
-    costStr: "$" + def[2],
+    costStr: "$" + def[3],
     enabled: true,
     onAdd: vi.fn(),
     ...overrides,
@@ -36,7 +36,7 @@ describe("PickerRow", () => {
   it("renders the scraped image as the primary tier when showThumb is true", () => {
     const { container } = render(<PickerRow row={makeRow()} showThumb />);
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.jpg`);
     expect(container.querySelector(".picker-row-thumb")).toBeInTheDocument();
   });
 
