@@ -121,7 +121,9 @@ export function collectCatalogItems(categories = CATEGORIES) {
     const rows = CATEGORY_SOURCES[category];
     if (!rows) continue;
     for (const row of rows) {
-      const name = row[0];
+      // Catalog tuples are id-first ([id, name, ...]) since the stable-id
+      // refactor; the display name (row[1]) drives the wiki URL and slug.
+      const name = row[1];
       items.push({ category, name, slug: slugify(name) });
     }
   }
