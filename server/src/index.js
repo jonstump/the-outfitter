@@ -11,6 +11,10 @@ const isProd = process.env.NODE_ENV === "production";
 
 const app = express();
 
+// Trust one reverse-proxy hop so express-rate-limit's IP keying works (and
+// doesn't throw ER_ERL_UNEXPECTED_X_FORWARDED_FOR) behind nginx/Render/Fly.
+app.set("trust proxy", 1);
+
 // The app is designed as a single origin serving both the API and the built
 // client (see README), so same-origin requests never need CORS. In dev, Vite's
 // proxy forwards /api to this server with a browser-like Origin header; allowing
@@ -45,9 +49,9 @@ app.get("/healthz", (_req, res) => {
 if (isProd) {
   const clientDist = path.join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(clientDist));
-  // SPA fallback. Named wildcard instead of Express 4's bare "*" so an Express 5
-  // upgrade (path-to-regexp v6+) doesn't throw at route-registration time (issue #32).
-  app.get("/{*splat}", (_req, res) => {
+  // SPA fallback owned by the server-prod-config PR (#46) — reverted here to
+  // avoid an Express-4/5-incompatible route and a merge conflict with that PR.
+  app.get("*", (_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
   });
 }
