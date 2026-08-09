@@ -74,6 +74,13 @@ function fromV1(d) {
 // dropped rather than remapped.
 const LEGACY_COUNTS = { w: WEAPONS.length, eT: TOOLS.length, eC: CONS.length, tr: TRAITS.length };
 
+// Legacy tool-slot positions that no longer refer to what they did when the
+// pre-versioning format was last live. Choke Beetle / Stalker Beetle (Tools
+// indices 18/19 at the time) moved to Consumables in the data-accuracy update;
+// keeping them would silently resolve to the new tools appended in their place
+// (Throwing Spear / Knuckle Knife). Dropped explicitly instead (issue #38).
+const LEGACY_DROPPED_TOOL_INDICES = new Set([18, 19]);
+
 // Legacy encodings reference traits by array position; translate to the stable
 // catalog id the store now keys on (see catalog.js's trait tuple shape).
 function fromLegacy(d) {
@@ -85,6 +92,7 @@ function fromLegacy(d) {
   const equip = (d.e || [])
     .filter((e) => e && (e[0] === "T" || e[0] === "C"))
     .filter((e) => inRange(e[1], e[0] === "T" ? LEGACY_COUNTS.eT : LEGACY_COUNTS.eC))
+    .filter((e) => !(e[0] === "T" && LEGACY_DROPPED_TOOL_INDICES.has(e[1])))
     .slice(0, 8)
     .map((e) => ({ t: e[0], i: e[1] }));
 
