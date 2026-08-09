@@ -1,4 +1,4 @@
-import { AMMO, CONS, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { AMMO, CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { totalCost } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
@@ -36,17 +36,19 @@ function attempt({ slotMax, upBudgetOn, upBudget }) {
     Math.random() < 0.3 && AMMO[WEAPONS[i][4]].length ? Math.floor(Math.random() * AMMO[WEAPONS[i][4]].length) : -1;
   const weapons = [{ i: i1, a: mkAmmo(i1) }, i2 === null ? null : { i: i2, a: mkAmmo(i2) }];
 
-  const equip = [{ t: "T", i: 0 }];
+  // Starter tool resolved by stable catalog id so a future reorder of TOOLS
+  // can't silently remap the random build's guaranteed First Aid Kit.
+  const equip = [{ t: "T", i: TOOLS.findIndex((t) => t[0] === FIRST_AID_KIT) }];
   const n = Math.min(5 + Math.floor(Math.random() * 4), slotMax);
   let guard = 0;
   while (equip.length < n && guard++ < EQUIP_FILL_GUARD) {
     if (Math.random() < 0.5) {
       const i = 1 + Math.floor(Math.random() * (TOOLS.length - 1));
-      if (!equip.some((e) => e.t === "T" && e.i === i)) equip.push({ t: "T", i });
+      if (i !== equip[0].i && !equip.some((e) => e.t === "T" && e.i === i)) equip.push({ t: "T", i });
     } else {
       const i = Math.floor(Math.random() * CONS.length);
-      const cat = CONS[i][2];
-      if (equip.filter((e) => e.t === "C" && CONS[e.i][2] === cat).length < 4) equip.push({ t: "C", i });
+      const cat = CONS[i][3];
+      if (equip.filter((e) => e.t === "C" && CONS[e.i][3] === cat).length < 4) equip.push({ t: "C", i });
     }
   }
 

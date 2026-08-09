@@ -57,9 +57,11 @@ function fromV1(d) {
   return {
     weapons: [0, 1].map(slotWeapon),
     equip,
-    traits: (d.tr || []).filter((id) => TRAIT_BY_ID.has(id)).map((id) => indexOfItem(TRAITS, id)),
+    // Traits are stored by stable catalog id (see catalog.js) — pass the ids
+    // straight through rather than re-mapping to current array positions.
+    traits: (d.tr || []).filter((id) => TRAIT_BY_ID.has(id)),
     name: d.n || "",
-    blocked: Math.min(Math.max(d.b || 0, 0), 8),
+    blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
   };
 }
 
@@ -72,6 +74,8 @@ function fromV1(d) {
 // dropped rather than remapped.
 const LEGACY_COUNTS = { w: WEAPONS.length, eT: TOOLS.length, eC: CONS.length, tr: TRAITS.length };
 
+// Legacy encodings reference traits by array position; translate to the stable
+// catalog id the store now keys on (see catalog.js's trait tuple shape).
 function fromLegacy(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
@@ -87,16 +91,30 @@ function fromLegacy(d) {
   return {
     weapons: [0, 1].map(slotWeapon),
     equip,
-    traits: (d.tr || []).filter((i) => inRange(i, LEGACY_COUNTS.tr)),
+    traits: (d.tr || [])
+      .filter((i) => inRange(i, LEGACY_COUNTS.tr))
+      .filter((i) => TRAITS[i])
+      .map((i) => TRAITS[i][0]),
     name: d.n || "",
-    blocked: Math.min(Math.max(d.b || 0, 0), 8),
+    blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
   };
 }
+
+// Wire-format decoders, oldest to newest. fromData() picks the newest decoder
+// whose version entry matches, so a future FORMAT_VERSION bump only needs a new
+// decoder added here — older records keep migrating instead of silently dropping.
+const DECODERS = [
+  { v: FORMAT_VERSION, decode: fromV1 },
+  // Legacy (unversioned) records are the fallback — anything unrecognized routes
+  // here, and fromLegacy's bounds checks safely drop what it can't place.
+  { v: null, decode: fromLegacy },
+];
 
 // compact wire shape -> loadout, dropping anything that no longer resolves against the catalog
 export function fromData(d) {
   if (!d || typeof d !== "object") return emptyLoadout();
-  return d.v === FORMAT_VERSION ? fromV1(d) : fromLegacy(d);
+  const decoder = DECODERS.find((x) => x.v !== null && d.v === x.v) || DECODERS.find((x) => x.v === null);
+  return decoder.decode(d);
 }
 
 export function readStoredLoadout() {

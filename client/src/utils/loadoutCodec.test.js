@@ -31,7 +31,7 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     expect(dec.blocked).toBe(1);
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 14, a: 2 }]);
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
-    expect(dec.traits).toEqual([TRAITS.findIndex((t) => t[0] === "quartermaster")]);
+    expect(dec.traits).toEqual(["quartermaster"]);
   });
 
   it("encodes item references by stable id, not array position", () => {
@@ -68,7 +68,7 @@ describe("fromData (legacy index-based wire format)", () => {
     const dec = fromData(legacy);
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 14, a: 2 }]);
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
-    expect(dec.traits).toEqual([0]);
+    expect(dec.traits).toEqual(["quartermaster"]);
     expect(dec.name).toBe("Old build");
   });
 
@@ -87,7 +87,7 @@ describe("fromData (legacy index-based wire format)", () => {
     const legacy = { v: 0, w: [[1, -1], null], e: [], tr: [0] };
     const dec = fromData(legacy);
     expect(dec.weapons[0]).toEqual({ i: 1, a: -1 });
-    expect(dec.traits).toEqual([0]);
+    expect(dec.traits).toEqual([TRAITS[0][0]]);
   });
 
   it("returns an empty loadout for null/non-object input", () => {

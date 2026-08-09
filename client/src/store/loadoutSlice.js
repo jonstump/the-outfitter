@@ -5,11 +5,13 @@ import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Shape of a valid loadout state object. setLoadout() rejects payloads that don't
 // conform so a malformed/partial payload can't silently poison the store (issue #27).
+// `name`/`blocked` are optional and defaulted — randomize's payload intentionally
+// omits them (a random build has no name and keeps the current blocked count).
 function isValidLoadoutShape(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (typeof payload.weapons !== "object" || !Array.isArray(payload.weapons) || payload.weapons.length !== 2) return false;
-  if (typeof payload.blocked !== "number" || payload.blocked < 0 || payload.blocked > 8) return false;
-  if (typeof payload.name !== "string") return false;
+  if (payload.blocked !== undefined && (typeof payload.blocked !== "number" || payload.blocked < 0 || payload.blocked > 8)) return false;
+  if (payload.name !== undefined && typeof payload.name !== "string") return false;
   if (!Array.isArray(payload.equip) || !Array.isArray(payload.traits)) return false;
   return payload.weapons.every(
     (w) => w === null || (typeof w === "object" && typeof w.i === "number" && WEAPONS[w.i] && Number.isInteger(w.a))
@@ -39,7 +41,7 @@ const loadoutSlice = createSlice({
       const { t, i } = action.payload;
       if (state.equip.length >= slotMax(state)) return;
       if (t === "T" && state.equip.some((e) => e.t === "T" && e.i === i)) return;
-      if (t === "C" && catCount(state, CONS[i][2]) >= 4) return;
+      if (t === "C" && catCount(state, CONS[i][3]) >= 4) return;
       state.equip.push({ t, i });
     },
     removeEquip(state, action) {
@@ -75,8 +77,8 @@ const loadoutSlice = createSlice({
       state.weapons = payload.weapons;
       state.equip = payload.equip;
       state.traits = payload.traits;
-      state.blocked = payload.blocked;
-      state.name = payload.name;
+      state.blocked = payload.blocked ?? state.blocked;
+      state.name = payload.name ?? state.name;
     },
   },
 });
