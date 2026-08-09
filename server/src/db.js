@@ -25,8 +25,16 @@ try {
   // Legacy records are excluded from every live query below (see loadouts.js) —
   // they remain on disk for archival purposes but can never be read, overwritten,
   // or deleted through the API, by any token.
+  //
+  // Anything without a token-shaped owner is treated as legacy. Client tokens
+  // are either a UUID (crypto.randomUUID) or "t-" + rng (the client fallback);
+  // per-request anonymous identities are "request-scoped:<uuid>". Hardcoded
+  // sentinels from any past version ("anon", "unowned") intentionally do NOT
+  // count as token-shaped — enumerating known-bad values one at a time is how
+  // this check drifted in the first place.
+  const TOKEN_SHAPED_OWNER = /^(?=[a-f0-9-]{36}$|[tT]-[A-Za-z0-9]{10,}|request-scoped:[a-f0-9-]{36}$)/;
   for (const record of db.data.loadouts) {
-    if (!record.owner || record.owner === "unowned") {
+    if (!record.owner || !TOKEN_SHAPED_OWNER.test(record.owner)) {
       delete record.owner;
       record.legacy = true;
     }

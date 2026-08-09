@@ -191,6 +191,29 @@ describe("loadouts API", () => {
     expect(db.data.loadouts.some((l) => l.id === "legacy-1")).toBe(true);
   });
 
+  it("migrates records carrying the historical anon/unowned sentinels to legacy at boot", async () => {
+    const { db } = await import("../db.js");
+    await db.read();
+    const stamp = Date.now();
+    const ids = [`__test__mig-anon-${stamp}`, `__test__mig-unowned-${stamp}`];
+    db.data.loadouts.push(
+      { id: ids[0], owner: "anon", name: ids[0], data: validData, updatedAt: "2021-01-01" },
+      { id: ids[1], owner: "unowned", name: ids[1], data: validData, updatedAt: "2021-01-01" }
+    );
+    await db.write();
+
+    // Re-import the module to re-run its boot-time migration.
+    const freshReload = (await import("../db.js?mig" + stamp)).db;
+    await freshReload.read();
+
+    const anon = freshReload.data.loadouts.find((l) => l.id === ids[0]);
+    const unowned = freshReload.data.loadouts.find((l) => l.id === ids[1]);
+    expect(anon.legacy).toBe(true);
+    expect(anon.owner).toBeUndefined();
+    expect(unowned.legacy).toBe(true);
+    expect(unowned.owner).toBeUndefined();
+  });
+
   it("rejects a loadout name longer than 200 characters", async () => {
     const app = makeApp();
     const res = await request(app)
@@ -198,5 +221,24 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "namecheck")
       .send({ name: "x".repeat(201), data: validData });
     expect(res.status).toBe(400);
+  });
+
+  it("hits the per-IP floor even when rotating the token on every write", async () => {
+    // ipLimiter: 240/min per IP. Rotating the token must not bypass it. Runs
+    // last because it exhausts the shared test IP's budget for the window
+    // (limiters are module-level singletons shared by every makeApp()).
+    const app = makeApp();
+    let limited = false;
+    for (let i = 0; i < 250; i++) {
+      const res = await request(app)
+        .post("/api/loadouts")
+        .set("x-loadout-token", `rotate-${i}`)
+        .send({ name: `__test__rot${i}`, data: validData });
+      if (res.status === 429) {
+        limited = true;
+        break;
+      }
+    }
+    expect(limited).toBe(true);
   });
 });
