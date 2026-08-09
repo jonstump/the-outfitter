@@ -599,6 +599,15 @@ button {
   color: var(--danger, #c96b5b);
 }
 
+/* Governing: SPEC-0001 REQ "Accessibility Requirements" (Dynamic Content Regions).
+   ActionsPanel keeps both live regions mounted while empty so screen readers announce
+   updates (see the comment there). An empty region has no height, but it is still a flex
+   item of the surrounding .panel, so it would collect that container's 14px gap and pad
+   the panel whenever there's no message. Cancel the gap while empty. */
+.share-message:empty {
+  margin-top: -14px;
+}
+
 /* Saved loadouts */
 
 .saved-list {

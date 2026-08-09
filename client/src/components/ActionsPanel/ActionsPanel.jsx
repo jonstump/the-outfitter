@@ -17,6 +17,21 @@ export default function ActionsPanel() {
   const budgetLabelColor = overBudget ? "#c96b5b" : "#d9cbab";
   const upLabelColor = overUp ? "#c96b5b" : "#d9cbab";
 
+  // Governing: SPEC-0001 REQ "Accessibility Requirements" (Dynamic Content Regions).
+  //
+  // `ui.message` carries save/delete/fetch/share feedback, with a leading "!" marking a
+  // failure (set by savedLoadoutsSlice.js and thunks.js). Both regions below stay mounted
+  // permanently instead of rendering one node only when there's a message: a live region
+  // has to already be in the accessibility tree when its text changes, and inserting the
+  // region together with its content is the standard way to get silence from a screen
+  // reader. Politeness is fixed per node rather than swapped on one node, because changing
+  // aria-live after mount is unreliable across assistive tech — failures go to the
+  // assertive region (a failed save shouldn't wait behind other speech), everything else
+  // to the polite one. `.share-message:empty` in global.css collapses the flex gap the
+  // idle regions would otherwise add to the panel.
+  const isError = ui.message.startsWith("!");
+  const messageText = ui.message.replace(/^!/, "");
+
   return (
     <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div className="actions-row">
@@ -91,7 +106,12 @@ export default function ActionsPanel() {
         </button>
       </div>
 
-      {ui.message && <div className={`share-message${ui.message.startsWith("!") ? " error" : ""}`}>{ui.message.replace(/^!/, "")}</div>}
+      <div className="share-message error" role="alert" aria-live="assertive" aria-atomic="true">
+        {isError ? messageText : ""}
+      </div>
+      <div className="share-message" role="status" aria-live="polite" aria-atomic="true">
+        {isError ? "" : messageText}
+      </div>
     </div>
   );
 }
