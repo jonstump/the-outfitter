@@ -21,18 +21,22 @@ export default function TraitsPanel() {
         </div>
       )}
       <div className="trait-chips">
-        {traits.map((i) => (
-          <button
-            key={i}
-            className="trait-chip"
-            title="Remove"
-            onClick={() => dispatch(loadoutActions.removeTrait(i))}
-          >
-            <ItemThumb category="traits" name={TRAITS[i][0]} svgPath={traitThumb(TRAITS[i])} className="trait-thumb" />
-            <span>{TRAITS[i][0]}</span>
-            <span className="trait-chip-up">{TRAITS[i][1]} UP</span>
-          </button>
-        ))}
+        {traits.map((id) => {
+          const trait = TRAITS.find((t) => t[0] === id);
+          if (!trait) return null;
+          return (
+            <button
+              key={id}
+              className="trait-chip"
+              title="Remove"
+              onClick={() => dispatch(loadoutActions.removeTrait(id))}
+            >
+              <ItemThumb category="traits" name={trait[1]} svgPath={traitThumb(trait)} className="trait-thumb" />
+              <span>{trait[1]}</span>
+              <span className="trait-chip-up">{trait[2]} UP</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

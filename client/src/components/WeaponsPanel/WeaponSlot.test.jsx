@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Provider } from "react-redux";
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import WeaponSlot from "./WeaponSlot.jsx";
 import { WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { loadoutActions } from "../../store/loadoutSlice.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { slugify } from "../ItemThumb/ItemThumb.jsx";
 
@@ -22,7 +23,7 @@ function renderSlot(preloadedState) {
 
 describe("WeaponSlot", () => {
   it("renders the scraped image as the primary tier for a filled slot", () => {
-    const weaponIndex = WEAPONS.findIndex((w) => w[3] === "compact");
+    const weaponIndex = WEAPONS.findIndex((w) => w[4] === "compact");
     const def = WEAPONS[weaponIndex];
     const { container } = renderSlot({
       loadout: loadoutState({ weapons: [{ i: weaponIndex, a: -1 }, null] }),
@@ -30,7 +31,7 @@ describe("WeaponSlot", () => {
 
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.jpg`);
     expect(container.querySelector(".weapon-thumb")).toBeInTheDocument();
   });
 
@@ -38,7 +39,7 @@ describe("WeaponSlot", () => {
     // This is the specific regression this issue calls out: pre-#8, Weapons only ever rendered an
     // SVG icon. Confirm that SVG-only-forever behavior is gone (photo is tried first) *and* that
     // the SVG fallback still works when the photo genuinely isn't available.
-    const weaponIndex = WEAPONS.findIndex((w) => w[3] === "none");
+    const weaponIndex = WEAPONS.findIndex((w) => w[4] === "none");
     const def = WEAPONS[weaponIndex];
     const { container } = renderSlot({
       loadout: loadoutState({ weapons: [{ i: weaponIndex, a: -1 }, null] }),
@@ -48,7 +49,7 @@ describe("WeaponSlot", () => {
     ["jpeg", "png", "webp"].forEach((ext) => {
       fireEvent.error(img);
       img = container.querySelector("img");
-      expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[0])}.${ext}`);
+      expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.${ext}`);
     });
     fireEvent.error(img);
 
@@ -70,5 +71,25 @@ describe("WeaponSlot", () => {
     const { container } = renderSlot({ loadout: loadoutState() });
     expect(container.querySelector(".item-thumb")).not.toBeInTheDocument();
     expect(container.querySelector(".empty-slot")).toBeInTheDocument();
+  });
+});
+
+describe("WeaponSlot — memoized selector", () => {
+  it("reflects a loadout change after dispatch (selector instance stays stable)", () => {
+    const store = createTestStore({ loadout: loadoutState() });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    expect(container.querySelector(".empty-note")).toHaveTextContent("Primary");
+
+    const weaponIndex = WEAPONS.findIndex((w) => w[2] === 2);
+    act(() => store.dispatch(loadoutActions.addWeapon(weaponIndex)));
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][1]);
+
+    // An unrelated UI change must not break the slot either.
+    act(() => store.dispatch({ type: "ui/setMessage", payload: "hello" }));
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][1]);
   });
 });

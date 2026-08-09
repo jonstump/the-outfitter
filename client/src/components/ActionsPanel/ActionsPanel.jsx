@@ -3,16 +3,17 @@ import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { randomizeThunk, clearBuildThunk, shareThunk } from "../../store/thunks.js";
-import { totalCost, upTotal } from "../../utils/calc.js";
+import { selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
   const dispatch = useDispatch();
   const name = useSelector((s) => s.loadout.name);
-  const loadout = useSelector((s) => s.loadout);
+  const total = useSelector(selectTotalCost);
+  const up = useSelector(selectUpTotal);
   const ui = useSelector((s) => s.ui);
 
-  const overBudget = ui.budgetOn && totalCost(loadout) > ui.budget;
-  const overUp = ui.upBudgetOn && upTotal(loadout) > ui.upBudget;
+  const overBudget = ui.budgetOn && total > ui.budget;
+  const overUp = ui.upBudgetOn && up > ui.upBudget;
   const budgetLabelColor = overBudget ? "#c96b5b" : "#d9cbab";
   const upLabelColor = overUp ? "#c96b5b" : "#d9cbab";
 
@@ -90,7 +91,7 @@ export default function ActionsPanel() {
         </button>
       </div>
 
-      {ui.message && <div className="share-message">{ui.message}</div>}
+      {ui.message && <div className={`share-message${ui.message.startsWith("!") ? " error" : ""}`}>{ui.message.replace(/^!/, "")}</div>}
     </div>
   );
 }

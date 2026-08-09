@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Provider } from "react-redux";
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import EquipmentSlot from "./EquipmentSlot.jsx";
 import { CONS, TOOLS, consThumb, toolThumb } from "../../data/catalog.js";
+import { loadoutActions } from "../../store/loadoutSlice.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { slugify } from "../ItemThumb/ItemThumb.jsx";
 
@@ -29,7 +30,7 @@ describe("EquipmentSlot — Tool entry", () => {
     });
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/tools/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/tools/${slugify(def[1])}.jpg`);
   });
 
   it("falls back to the SVG icon once every extension fails to load", () => {
@@ -62,7 +63,7 @@ describe("EquipmentSlot — Consumable entry", () => {
     });
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/consumables/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/consumables/${slugify(def[1])}.jpg`);
   });
 
   it("falls back to the SVG icon once every extension fails to load", () => {
@@ -97,5 +98,24 @@ describe("EquipmentSlot", () => {
     const { container } = renderSlot({ loadout: loadoutState() });
     expect(container.querySelector(".item-thumb")).not.toBeInTheDocument();
     expect(container.querySelector(".empty-slot")).toBeInTheDocument();
+  });
+});
+
+describe("EquipmentSlot — memoized selector", () => {
+  it("reflects a loadout change after dispatch (selector instance stays stable)", () => {
+    const store = createTestStore({ loadout: loadoutState() });
+    const { container } = render(
+      <Provider store={store}>
+        <EquipmentSlot index={0} />
+      </Provider>
+    );
+    expect(container.querySelector(".empty-slot")).toBeInTheDocument();
+
+    act(() => store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 })));
+    expect(container.querySelector(".equip-name")).toHaveTextContent("First Aid Kit");
+
+    // An unrelated UI change must not break the slot either.
+    act(() => store.dispatch({ type: "ui/setMessage", payload: "hello" }));
+    expect(container.querySelector(".equip-name")).toHaveTextContent("First Aid Kit");
   });
 });

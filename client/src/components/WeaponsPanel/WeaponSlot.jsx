@@ -1,5 +1,7 @@
 import { useDispatch, useSelector } from "react-redux";
+import { useMemo } from "react";
 import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { selectWeaponSlot } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
@@ -10,7 +12,9 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 export default function WeaponSlot({ slot }) {
   const dispatch = useDispatch();
-  const w = useSelector((s) => s.loadout.weapons[slot]);
+  // selectWeaponSlot is a selector factory; memoize the instance so its
+  // createSelector cache survives re-renders (issue #24/#25).
+  const w = useSelector(useMemo(() => selectWeaponSlot(slot), [slot]));
 
   if (!w) {
     return (
@@ -23,18 +27,18 @@ export default function WeaponSlot({ slot }) {
   }
 
   const def = WEAPONS[w.i];
-  const variants = AMMO[def[3]];
+  const variants = AMMO[def[4]];
   const ammoCost = w.a >= 0 ? variants[w.a][1] : 0;
 
   return (
     <div className="weapon-slot filled-slot">
       <div className="weapon-slot-row">
         <div className="weapon-slot-main">
-          <ItemThumb category="weapons" name={def[0]} svgPath={weaponThumb(def)} className="weapon-thumb" />
+          <ItemThumb category="weapons" name={def[1]} svgPath={weaponThumb(def)} className="weapon-thumb" />
           <div>
-            <div className="weapon-name">{def[0]}</div>
+            <div className="weapon-name">{def[1]}</div>
             <div className="weapon-meta">
-              Size {def[1]} · {AMMO_LABEL[def[3]]}
+              Size {def[2]} · {AMMO_LABEL[def[4]]}
               {w.a >= 0 ? ` · ${variants[w.a][0]}` : ""}
             </div>
           </div>
@@ -43,7 +47,7 @@ export default function WeaponSlot({ slot }) {
           <button className="icon-btn" onClick={() => dispatch(loadoutActions.removeWeapon(slot))}>
             ✕
           </button>
-          <div className="weapon-cost">${def[2] + ammoCost}</div>
+          <div className="weapon-cost">${def[3] + ammoCost}</div>
         </div>
       </div>
       {variants.length > 0 && (

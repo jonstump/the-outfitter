@@ -21,33 +21,33 @@ function renderPicker(preloadedState) {
 
 describe("Picker Traits-tab UP-budget gate (issue #23 regression)", () => {
   it("disables trait rows that would exceed the UP budget", () => {
-    const expensive = TRAITS.find((t) => t[1] === 8); // Fanning, 8 UP pre-audit shape
+    const expensive = TRAITS.find((t) => t[2] === 8); // e.g. Fanning, 8 UP
     const { store, getAllByRole } = renderPicker({
       loadout: loadoutState({ traits: [] }),
       ui: { tab: "Traits", upBudgetOn: true, upBudget: 4, message: "", search: "", group: "" },
     });
 
     const buttons = getAllByRole("button");
-    const expensiveRow = buttons.find((b) => b.textContent.includes(expensive[0]));
+    const expensiveRow = buttons.find((b) => b.textContent.includes(expensive[1]));
     expect(expensiveRow).toBeTruthy();
     expect(expensiveRow).toHaveClass("disabled");
   });
 
   it("keeps affordable rows enabled when the UP budget is on", () => {
-    const cheap = TRAITS.find((t) => t[1] === 1); // e.g. Kiteskin
+    const cheap = TRAITS.find((t) => t[2] === 1); // e.g. Kiteskin, 1 UP
     const { getAllByRole } = renderPicker({
       loadout: loadoutState({ traits: [] }),
       ui: { tab: "Traits", upBudgetOn: true, upBudget: 4, message: "", search: "", group: "" },
     });
 
     const buttons = getAllByRole("button");
-    const cheapRow = buttons.find((b) => b.textContent.includes(cheap[0]));
+    const cheapRow = buttons.find((b) => b.textContent.includes(cheap[1]));
     expect(cheapRow).toBeTruthy();
     expect(cheapRow).not.toHaveClass("disabled");
   });
 
   it("re-enables rows after toggling the UP budget off", () => {
-    const expensive = TRAITS.find((t) => t[1] === 8);
+    const expensive = TRAITS.find((t) => t[2] === 8);
     const store = createTestStore({
       loadout: loadoutState({ traits: [] }),
       ui: { tab: "Traits", upBudgetOn: true, upBudget: 4, message: "", search: "", group: "" },
@@ -60,7 +60,7 @@ describe("Picker Traits-tab UP-budget gate (issue #23 regression)", () => {
 
     act(() => store.dispatch({ type: "ui/toggleUpBudgetOn" }));
     const buttons = getAllByRole("button");
-    const expensiveRow = buttons.find((b) => b.textContent.includes(expensive[0]));
+    const expensiveRow = buttons.find((b) => b.textContent.includes(expensive[1]));
     expect(expensiveRow).not.toHaveClass("disabled");
   });
 });

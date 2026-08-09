@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   AMMO_LABEL,
@@ -45,20 +45,20 @@ function buildRows(tab, ui, loadout, dispatch) {
 
   if (tab === "Weapons") {
     return WEAPONS.map((w, i) => ({ w, i }))
-      .filter((x) => match(x.w[0]) && gOK(x.w[4]) && aOK(x.w[3]) && (!ui.sizeFilter || x.w[1] === ui.sizeFilter))
+      .filter((x) => match(x.w[1]) && gOK(x.w[5]) && aOK(x.w[4]) && (!ui.sizeFilter || x.w[2] === ui.sizeFilter))
       .map((x) => {
         const free = loadout.weapons[0] && loadout.weapons[1] ? -1 : loadout.weapons[0] ? 1 : 0;
-        const other = free === -1 ? 999 : loadout.weapons[1 - free] ? WEAPONS[loadout.weapons[1 - free].i][1] : 0;
-        const fits = free !== -1 && x.w[1] + other <= max;
+        const other = free === -1 ? 999 : loadout.weapons[1 - free] ? WEAPONS[loadout.weapons[1 - free].i][2] : 0;
+        const fits = free !== -1 && x.w[2] + other <= max;
         return {
           key: x.i,
-          name: x.w[0],
-          meta: AMMO_LABEL[x.w[3]],
-          badge: "Size " + x.w[1],
+          name: x.w[1],
+          meta: AMMO_LABEL[x.w[4]],
+          badge: "Size " + x.w[2],
           badgeColor: "#b08d4f",
           category: "weapons",
           thumb: weaponThumb(x.w),
-          costStr: "$" + x.w[2],
+          costStr: "$" + x.w[3],
           enabled: fits,
           onAdd: () => fits && dispatch(loadoutActions.addWeapon(x.i)),
         };
@@ -66,18 +66,18 @@ function buildRows(tab, ui, loadout, dispatch) {
   }
   if (tab === "Tools") {
     return TOOLS.map((t, i) => ({ t, i }))
-      .filter((x) => match(x.t[0]) && gOK(x.t[2]))
+      .filter((x) => match(x.t[1]) && gOK(x.t[3]))
       .map((x) => {
         const ok = loadout.equip.length < sMax && !loadout.equip.some((e) => e.t === "T" && e.i === x.i);
         return {
           key: x.i,
-          name: x.t[0],
-          meta: x.t[2] + " tool · one per loadout",
+          name: x.t[1],
+          meta: x.t[3] + " tool · one per loadout",
           badge: "TOOL",
           badgeColor: "#8a6f42",
           category: "tools",
           thumb: toolThumb(x.t),
-          costStr: "$" + x.t[1],
+          costStr: "$" + x.t[2],
           enabled: ok,
           onAdd: () => ok && dispatch(loadoutActions.addEquip({ t: "T", i: x.i })),
         };
@@ -85,33 +85,33 @@ function buildRows(tab, ui, loadout, dispatch) {
   }
   if (tab === "Consumables") {
     return CONS.map((c, i) => ({ c, i }))
-      .filter((x) => match(x.c[0]) && gOK(x.c[3]))
+      .filter((x) => match(x.c[1]) && gOK(x.c[4]))
       .map((x) => {
-        const cnt = catCount(loadout, x.c[2]);
+        const cnt = catCount(loadout, x.c[3]);
         const ok = loadout.equip.length < sMax && cnt < 4;
         return {
           key: x.i,
-          name: x.c[0],
-          meta: x.c[3] + " · " + x.c[2] + " · " + cnt + "/4 of type equipped",
-          badge: x.c[2].toUpperCase(),
-          badgeColor: x.c[2] === "Shot" ? "#7a8a5c" : "#a5674a",
+          name: x.c[1],
+          meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 of type equipped",
+          badge: x.c[3].toUpperCase(),
+          badgeColor: x.c[3] === "Shot" ? "#7a8a5c" : "#a5674a",
           category: "consumables",
           thumb: consThumb(x.c),
-          costStr: "$" + x.c[1],
+          costStr: "$" + x.c[2],
           enabled: ok,
           onAdd: () => ok && dispatch(loadoutActions.addEquip({ t: "C", i: x.i })),
         };
       });
   }
   return TRAITS.map((t, i) => ({ t, i }))
-    .filter((x) => match(x.t[0]) && gOK(x.t[2]))
+    .filter((x) => match(x.t[1]) && gOK(x.t[3]))
     .map((x) => {
-      const ok = !loadout.traits.includes(x.i) && !(ui.upBudgetOn && upSpent + x.t[1] > ui.upBudget);
+      const ok = !loadout.traits.includes(x.t[0]) && !(ui.upBudgetOn && upSpent + x.t[2] > ui.upBudget);
       return {
         key: x.i,
-        name: x.t[0],
-        meta: x.i === QM ? "Raises weapon capacity to 6" : x.t[2] + " trait",
-        badge: x.t[1] + " UP",
+        name: x.t[1],
+        meta: x.t[0] === QM ? "Raises weapon capacity to 6" : x.t[3] + " trait",
+        badge: x.t[2] + " UP",
         badgeColor: "#b08d4f",
         category: "traits",
         thumb: traitThumb(x.t),
@@ -142,7 +142,15 @@ export default function Picker() {
   const [ammoF, setAmmoF] = useState("");
 
   const ui = { tab, search, sizeFilter, group, ammoF, upBudgetOn, upBudget };
-  const rows = buildRows(tab, ui, loadout, dispatch);
+  // Governing: #25 — buildRows re-filters/remaps the entire active catalog array
+  // (up to ~40 weapon rows) and would otherwise run on every single render,
+  // including renders triggered by changes that don't affect the row list. Keyed
+  // on the exact ui/loadout fields it reads (local filter state + Redux-backed
+  // up-budget flags); dispatch is stable.
+  const rows = useMemo(
+    () => buildRows(tab, ui, loadout, dispatch),
+    [tab, search, sizeFilter, group, ammoF, upBudgetOn, upBudget, loadout, dispatch]
+  );
   // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
   // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.
   const showThumb = true;
