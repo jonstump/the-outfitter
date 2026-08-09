@@ -21,7 +21,12 @@ app.get("/healthz", (_req, res) => {
 if (process.env.NODE_ENV === "production") {
   const clientDist = path.join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(clientDist));
-  app.get("/{*splat}", (_req, res) => {
+  // SPA fallback for deep links/refreshes. Registered as a plain middleware, not a
+  // route pattern, so it behaves identically on Express 4 (where `/{*splat}`
+  // wildcards were parsed as literals and matched nothing) and Express 5 (where
+  // Express 4's bare `*` throws at startup). /healthz is registered above, so a
+  // liveness probe is never shadowed by this fallback.
+  app.use((_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
   });
 }
