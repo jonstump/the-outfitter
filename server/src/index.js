@@ -7,7 +7,6 @@ import { db } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4100;
-const isProd = process.env.NODE_ENV === "production";
 
 const app = express();
 
@@ -41,17 +40,20 @@ app.use(express.json());
 
 app.use("/api/loadouts", loadoutsRouter);
 
-// Lightweight liveness/readiness endpoint for orchestrators/load balancers (issue #31).
+// Lightweight liveness endpoint for orchestrators/load balancers (issue #31).
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
 
-if (isProd) {
+if (process.env.NODE_ENV === "production") {
   const clientDist = path.join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(clientDist));
-  // SPA fallback owned by the server-prod-config PR (#46) — reverted here to
-  // avoid an Express-4/5-incompatible route and a merge conflict with that PR.
-  app.get("*", (_req, res) => {
+  // SPA fallback for deep links/refreshes. Registered as a plain middleware, not a
+  // route pattern, so it behaves identically on Express 4 (where `/{*splat}`
+  // wildcards were parsed as literals and matched nothing) and Express 5 (where
+  // Express 4's bare `*` throws at startup). /healthz is registered above, so a
+  // liveness probe is never shadowed by this fallback.
+  app.use((_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
   });
 }

@@ -37,7 +37,7 @@ Run from the repo root:
 |---|---|
 | `npm run dev` | Run client and server concurrently in watch mode |
 | `npm run build` | Build the client for production |
-| `npm start` | Start the production server (serves the built client when `NODE_ENV=production`) |
+| `npm start` | Start the production server (sets `NODE_ENV=production` itself; serves the built client) |
 
 ## Project structure
 
