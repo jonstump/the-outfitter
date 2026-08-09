@@ -1,5 +1,5 @@
-# Runs the full app: web client, API, and persistent storage (SQLite file on a
-# mounted volume). One instance only — see README "Deployment" for the
+# Runs the full app: web client, API, and persistent storage (lowdb JSON file
+# on a mounted volume). One instance only — see README "Deployment" for the
 # single-writer constraint behind lowdb.
 #
 #   docker compose up --build

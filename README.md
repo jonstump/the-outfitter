@@ -53,10 +53,11 @@ docs/     Architecture Decision Records and specs (see below)
 - `POST /api/loadouts` — create or update a loadout (`{ name, data }`)
 - `DELETE /api/loadouts/:id` — delete a loadout
 
-Loadouts are scoped per browser via a client-generated token (`x-loadout-token`
-header), so different browsers never see or overwrite each other's saves. The
-write/delete endpoints are IP-rate-limited and the server validates the loadout
-payload shape before persisting.
+Loadouts are saved under a client-generated `x-loadout-token` header that the
+client sends with every request (per-browser isolation; see the `loadouts.js`
+API wrapper). Deployment hardening for the write/delete endpoints (rate
+limiting, payload-shape validation, strict per-token scoping) is tracked in the
+server API-security work.
 
 ## Deployment
 
@@ -90,8 +91,9 @@ for other container runtimes; mount a persistent volume at `/app/server/data`.
 The `Procfile` documents the process command for platforms that use them
 (`web: npm run start -w server`), but lowdb's single-writer constraint applies
 just the same — run one instance, keep `server/data` on durable disk, and set
-`PORT`, `CORS_ORIGIN`, and `NODE_ENV` yourself. The server exposes
-`GET /healthz` for orchestrator liveness checks.
+`PORT` and `NODE_ENV` yourself. The production server also exposes
+`GET /healthz` for orchestrator liveness checks once the server-prod-config
+work lands.
 
 ### Separate origins (optional)
 
@@ -103,8 +105,10 @@ VITE_API_URL=https://api.example.com npm run build -w client
 ```
 
 The same-origin relative path remains the default and is what the
-single-process model uses. Note that cross-origin requests between the two
-hosts require the server's `CORS_ORIGIN` to be set to the client's origin.
+single-process model uses. Note that CORS is currently wide open on the server
+(a bare `cors()` call), so separate-origin requests work today without extra
+configuration; a configurable `CORS_ORIGIN` restriction is tracked in the
+server-prod-config work.
 
 
 ## Attribution

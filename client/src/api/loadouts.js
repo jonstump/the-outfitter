@@ -7,10 +7,10 @@ const BASE = (import.meta.env && import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "") + "/api/loadouts";
 
-// Per-browser anonymous identifier sent with every request (issue #17): loadouts
-// are scoped server-side to this value, so two different browsers never see or
-// overwrite each other's saves. No login needed for a fan tool — the token is
-// just an ownership boundary.
+// Per-browser anonymous identifier sent with every request (issue #17). It
+// identifies the browser to the API so saved loadouts can be scoped per browser
+// (server-side scoping lands with the server API-security work; until then this
+// header is carried but has no server-side effect on main).
 function clientToken() {
   try {
     let token = localStorage.getItem(TOKEN_KEY);
@@ -23,8 +23,8 @@ function clientToken() {
     }
     return token;
   } catch {
-    // localStorage unavailable (private mode) — the server falls back to its
-    // anonymous shared scope for requests without a token.
+    // localStorage unavailable (private mode) — send no token; the server's
+    // anonymous scope handles the request.
     return "";
   }
 }
