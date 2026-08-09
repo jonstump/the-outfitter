@@ -1,10 +1,15 @@
-const BASE = "/api/loadouts";
 const TOKEN_KEY = "hunt-outfitter-token";
 
-// Per-browser anonymous identifier sent with every request (issue #17): loadouts
-// are scoped server-side to this value, so two different browsers never see or
-// overwrite each other's saves. No login needed for a fan tool — the token is
-// just an ownership boundary.
+// API base. Defaults to the same-origin /api path (the app's intended
+// single-process deploy model). Set VITE_API_URL at build time to deploy the
+// client and server as separate origins (see README "Deployment").
+const BASE = (import.meta.env && import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "") + "/api/loadouts";
+
+// Per-browser anonymous identifier sent with every request (issue #17). It
+// identifies the browser to the API, which scopes saved loadouts per token
+// server-side, so different browsers never see or overwrite each other's saves.
 function clientToken() {
   try {
     let token = localStorage.getItem(TOKEN_KEY);
@@ -17,8 +22,8 @@ function clientToken() {
     }
     return token;
   } catch {
-    // localStorage unavailable (private mode) — the server falls back to its
-    // anonymous shared scope for requests without a token.
+    // localStorage unavailable (private mode) — send no token; the server's
+    // per-request anonymous scope isolates the request.
     return "";
   }
 }
