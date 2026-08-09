@@ -594,6 +594,10 @@ button {
   font-style: italic;
 }
 
+.share-message.error {
+  color: var(--danger, #c96b5b);
+}
+
 /* Saved loadouts */
 
 .saved-list {

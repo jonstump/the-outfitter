@@ -3,19 +3,39 @@ import { deleteLoadout, getLoadouts, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
 import { uiActions } from "./uiSlice.js";
 
-export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async () => getLoadouts());
+// Failed save/delete/fetch attempts surface through the same ui.message banner
+// that success messages use, so errors are at least as visible as successes
+// (issue #20). Each thunk reports its own failure via dispatch.
+export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, { dispatch }) => {
+  try {
+    return await getLoadouts();
+  } catch (err) {
+    dispatch(uiActions.setMessage(`!!Couldn't load saved loadouts: ${err.message}`));
+    throw err;
+  }
+});
 
 export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
   const { loadout } = getState();
   const name = loadout.name.trim() || "Unnamed loadout";
-  const record = await upsertLoadout(name, toData({ ...loadout, name }));
-  dispatch(uiActions.setMessage(`Saved “${name}”.`));
-  return record;
+  try {
+    const record = await upsertLoadout(name, toData({ ...loadout, name }));
+    dispatch(uiActions.setMessage(`Saved “${name}”.`));
+    return record;
+  } catch (err) {
+    dispatch(uiActions.setMessage(`!Couldn't save “${name}”: ${err.message}`));
+    throw err;
+  }
 });
 
-export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id) => {
-  await deleteLoadout(id);
-  return id;
+export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id, { dispatch }) => {
+  try {
+    await deleteLoadout(id);
+    return id;
+  } catch (err) {
+    dispatch(uiActions.setMessage(`!Couldn't delete loadout: ${err.message}`));
+    throw err;
+  }
 });
 
 const savedLoadoutsSlice = createSlice({
