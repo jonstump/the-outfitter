@@ -67,3 +67,15 @@ When orchestrating multiple SDD plugin skills in a single session (e.g., running
 - **Type**: github
 - **Owner**: jonstump
 - **Repo**: the-outfitter
+
+#### Projects
+
+- **Default Mode**: per-epic
+- **Views**: All Work (table), Board (board), Roadmap (roadmap)
+- **Iteration Weeks**: 2
+
+Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creating duplicates):
+
+| Spec | Project | Number | ID |
+|------|---------|--------|-----|
+| SPEC-0002 | SPEC-0002: Developer Environment Consistency | 1 | `PVT_kwHOA4k1ys4Bf4Mk` |
