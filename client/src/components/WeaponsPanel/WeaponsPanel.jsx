@@ -1,11 +1,10 @@
 import { useSelector } from "react-redux";
-import { capMax, capUsed } from "../../utils/calc.js";
+import { selectCapMax, selectCapUsed } from "../../store/selectors.js";
 import WeaponSlot from "./WeaponSlot.jsx";
 
 export default function WeaponsPanel() {
-  const loadout = useSelector((s) => s.loadout);
-  const max = capMax(loadout);
-  const used = capUsed(loadout);
+  const max = useSelector(selectCapMax);
+  const used = useSelector(selectCapUsed);
   const overCap = used > max;
   const pipCount = Math.max(max, used);
 

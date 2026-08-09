@@ -1,5 +1,7 @@
 import { useDispatch, useSelector } from "react-redux";
+import { useMemo } from "react";
 import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { selectWeaponSlot } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
@@ -10,7 +12,9 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 export default function WeaponSlot({ slot }) {
   const dispatch = useDispatch();
-  const w = useSelector((s) => s.loadout.weapons[slot]);
+  // selectWeaponSlot is a selector factory; memoize the instance so its
+  // createSelector cache survives re-renders (issue #24/#25).
+  const w = useSelector(useMemo(() => selectWeaponSlot(slot), [slot]));
 
   if (!w) {
     return (

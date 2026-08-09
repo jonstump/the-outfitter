@@ -1,17 +1,17 @@
 import { useSelector } from "react-redux";
-import { slotMax } from "../../utils/calc.js";
+import { selectEquipCount, selectSlotMax } from "../../store/selectors.js";
 import EquipmentSlot from "./EquipmentSlot.jsx";
 
 export default function EquipmentPanel() {
-  const loadout = useSelector((s) => s.loadout);
-  const sMax = slotMax(loadout);
+  const equipCount = useSelector(selectEquipCount);
+  const sMax = useSelector(selectSlotMax);
 
   return (
     <div className="panel">
       <div className="panel-header">
         <div className="panel-title">Equipment</div>
         <div className="panel-meta">
-          {loadout.equip.length}/{sMax} SLOTS · MAX 4 PER CONSUMABLE TYPE
+          {equipCount}/{sMax} SLOTS · MAX 4 PER CONSUMABLE TYPE
         </div>
       </div>
       <div className="equip-grid">

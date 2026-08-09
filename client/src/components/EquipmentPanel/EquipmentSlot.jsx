@@ -1,6 +1,7 @@
 import { useDispatch, useSelector } from "react-redux";
+import { useMemo } from "react";
 import { CONS, TOOLS, consThumb, toolThumb } from "../../data/catalog.js";
-import { slotMax } from "../../utils/calc.js";
+import { selectEquipEntry, selectSlotMax } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
@@ -11,11 +12,13 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 export default function EquipmentSlot({ index }) {
   const dispatch = useDispatch();
-  const loadout = useSelector((s) => s.loadout);
-  const entry = loadout.equip[index];
+  // selectEquipEntry is a selector factory; memoize the instance so its
+  // createSelector cache survives re-renders (issue #24/#25).
+  const entry = useSelector(useMemo(() => selectEquipEntry(index), [index]));
+  const sMax = useSelector(selectSlotMax);
 
   if (!entry) {
-    const isBlocked = index >= slotMax(loadout);
+    const isBlocked = index >= sMax;
     return (
       <button
         className={`equip-slot empty-slot${isBlocked ? " blocked-slot" : ""}`}
