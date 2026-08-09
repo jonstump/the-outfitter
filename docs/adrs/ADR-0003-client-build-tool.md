@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-09
 decision-makers: [jmstump]
 ---
@@ -10,7 +10,7 @@ decision-makers: [jmstump]
 
 The Outfitter's client (`client/`) is a React 18 + Redux Toolkit single-page app, developed and shipped inside an npm-workspaces monorepo alongside an Express + lowdb API server (`server/`). The client currently uses Vite for both its dev server and production build (`npm run dev` serves it at `http://localhost:5173`, proxying `/api` to the Express server at `4100`; `npm run build` produces static assets the production server serves when `NODE_ENV=production`).
 
-Vite was carried over from the original standalone "Loadout Builder" prototype this app was ported from, and no ADR has ever recorded why it's the right tool versus the other mainstream React tooling options. This ADR exists to make that choice explicit and reviewable rather than implicit. It is being opened as `proposed` and deliberately left unresolved — the Decision Outcome is not yet finalized — pending review of the alternatives below.
+Vite was carried over from the original standalone "Loadout Builder" prototype this app was ported from, and no ADR had ever recorded why it's the right tool versus the other mainstream React tooling options. This ADR exists to make that choice explicit and reviewable rather than implicit — the incumbent had never been re-affirmed against the alternatives below.
 
 ## Decision Drivers
 
@@ -31,7 +31,32 @@ Vite was carried over from the original standalone "Loadout Builder" prototype t
 
 ## Decision Outcome
 
-Not yet decided — this ADR is `proposed`, not `accepted`. Vite is the incumbent (already in production use, inherited from the original prototype), but it has not been formally re-affirmed against the alternatives below. See "Pros and Cons of the Options" for the tradeoffs to weigh before this is closed out.
+Chosen option: **"Vite (current)"**, because it is the only option that satisfies every decision driver simultaneously — and because the alternatives fail on drivers that are structural to this project rather than matters of taste.
+
+The disqualifications are what make this decision easy rather than close:
+
+* **CRA is deprecated.** No longer maintained by Meta, which makes it a project risk rather than a trade-off. Driver 5 rules it out on its own.
+* **Next.js solves a problem this app does not have.** It is built around SSR, routing, and React Server Components; this is a single builder screen plus a share-link view (driver 1). Adopting it would also put a Node framework runtime in production where the Express server currently serves a static `dist/` (driver 6).
+* **A hand-rolled Webpack config inverts driver 4.** It buys configurability this project has no use for, at the price of a loader chain nobody owns.
+* **Parcel is the only genuinely close call.** Its zero-config story is comparable and its dev loop is fast. It loses on ecosystem gravity: for a React SPA in 2026, Vite is where the templates, tutorials, and troubleshooting answers are, which matters disproportionately for a project maintained without dedicated frontend tooling ownership.
+
+Vite is also already in production here, so choosing it carries no migration cost. This ADR is being closed as `accepted` to record the decision that the codebase has effectively been running on since the port — not to authorize a change.
+
+### Consequences
+
+* Good, because dev-server startup and HMR stay near-instant regardless of app growth, which is what the builder's interaction-heavy UX depends on.
+* Good, because the production build is a plain static `dist/` the existing Express server serves as-is, keeping the single-process, single-origin deployment model intact.
+* Good, because `vite.config.js` stays small — the `/api` dev proxy is a few lines, with no loader chain to maintain.
+* Good, because it settles a dependency that [ADR-0004](ADR-0004-developer-environment-consistency.md) already relies on: that ADR's rejection of containerized development rests on preserving native-filesystem HMR, which is Vite's contribution.
+* Bad, because Vite's dev-mode native ESM can diverge from the production Rollup bundle in edge cases — a real "works in dev, breaks in build" class of bug that CI's `npm run build -w client` step is the guard against.
+* Bad, because Vite pulls in `esbuild` and Rollup, both shipping per-platform native binaries. This is what makes a shared `node_modules` across differing libc/arch boundaries fail, and is called out explicitly in ADR-0004.
+* Neutral, because Vite has a shorter track record than Webpack. Widely adopted and actively maintained, but younger.
+
+### Confirmation
+
+* CI builds the client on every PR (`npm run build -w client`), so a dev/production divergence fails before merge rather than after deploy.
+* `client/vite.config.js` remains the single build-tool config; the appearance of a competing config (`webpack.config.js`, `next.config.js`) is the signal this decision has drifted.
+* `npm start` continues to serve `client/dist` from the Express server under `NODE_ENV=production`, confirming the static-output requirement still holds.
 
 ## Pros and Cons of the Options
 
