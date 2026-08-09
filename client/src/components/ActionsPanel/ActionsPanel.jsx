@@ -91,7 +91,7 @@ export default function ActionsPanel() {
         </button>
       </div>
 
-      {ui.message && <div className="share-message">{ui.message}</div>}
+      {ui.message && <div className={`share-message${ui.message.startsWith("!") ? " error" : ""}`}>{ui.message.replace(/^!/, "")}</div>}
     </div>
   );
 }
