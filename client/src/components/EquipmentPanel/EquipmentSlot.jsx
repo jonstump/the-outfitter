@@ -28,7 +28,7 @@ export default function EquipmentSlot({ index }) {
   }
 
   const def = entry.t === "T" ? TOOLS[entry.i] : CONS[entry.i];
-  const catColor = entry.t === "T" ? "#8a6f42" : def[2] === "Shot" ? "#7a8a5c" : "#a5674a";
+  const catColor = entry.t === "T" ? "#8a6f42" : def[3] === "Shot" ? "#7a8a5c" : "#a5674a";
   const category = entry.t === "T" ? "tools" : "consumables";
   const svgPath = entry.t === "T" ? toolThumb(def) : consThumb(def);
 
@@ -38,13 +38,13 @@ export default function EquipmentSlot({ index }) {
       title="Remove"
       onClick={() => dispatch(loadoutActions.removeEquip(index))}
     >
-      <ItemThumb category={category} name={def[0]} svgPath={svgPath} className="equip-thumb" />
-      <span className="equip-name">{def[0]}</span>
+      <ItemThumb category={category} name={def[1]} svgPath={svgPath} className="equip-thumb" />
+      <span className="equip-name">{def[1]}</span>
       <span className="equip-foot">
         <span className="equip-cat" style={{ color: catColor }}>
-          {entry.t === "T" ? "TOOL" : def[2].toUpperCase()}
+          {entry.t === "T" ? "TOOL" : def[3].toUpperCase()}
         </span>
-        <span className="equip-cost">${def[1]}</span>
+        <span className="equip-cost">${def[2]}</span>
       </span>
     </button>
   );

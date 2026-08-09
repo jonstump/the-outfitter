@@ -29,12 +29,16 @@ export function clearBuildThunk() {
 
 // Traits have a cross-slice legality check (the UP budget lives in `ui`), so this
 // stays a thunk rather than a plain reducer — mirrors the original's picker-side `ok` guard.
+// Traits are stored by stable catalog id (see catalog.js), resolved through the index
+// action.payload carries (Picker already looks the entry up by array position).
 export function addTraitIfAllowed(index) {
   return (dispatch, getState) => {
     const { loadout, ui } = getState();
-    if (loadout.traits.includes(index)) return;
-    if (ui.upBudgetOn && upTotal(loadout) + TRAITS[index][1] > ui.upBudget) return;
-    dispatch(loadoutActions.addTrait(index));
+    const trait = TRAITS[index];
+    if (!trait) return;
+    if (loadout.traits.includes(trait[0])) return;
+    if (ui.upBudgetOn && upTotal(loadout) + trait[2] > ui.upBudget) return;
+    dispatch(loadoutActions.addTrait(trait[0]));
   };
 }
 

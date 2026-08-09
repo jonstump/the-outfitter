@@ -39,37 +39,37 @@ describe("weaponThumb", () => {
   });
 
   it("dispatches melee ('none' ammo class) weapons to the melee icon", () => {
-    const melee = WEAPONS.find((w) => w[3] === "none");
+    const melee = WEAPONS.find((w) => w[4] === "none");
     expect(melee).toBeTruthy();
-    expect(weaponThumb(melee)).toBe(weaponThumb(["fixture", 99, 0, "none", "Melee"]));
+    expect(weaponThumb(melee)).toBe(weaponThumb(["fixture", "Fixture", 99, 0, "none", "Melee"]));
   });
 
   it("dispatches bow-class weapons to the bow icon, distinct from crossbows", () => {
-    const bow = WEAPONS.find((w) => w[3] === "bow");
-    const xbow = WEAPONS.find((w) => w[3] === "xbow" || w[3] === "hxbow");
+    const bow = WEAPONS.find((w) => w[4] === "bow");
+    const xbow = WEAPONS.find((w) => w[4] === "xbow" || w[4] === "hxbow");
     expect(bow).toBeTruthy();
     expect(xbow).toBeTruthy();
     expect(weaponThumb(bow)).not.toBe(weaponThumb(xbow));
   });
 
   it("dispatches hxbow the same as xbow (shared crossbow icon)", () => {
-    expect(weaponThumb(["fixture-hxbow", 2, 0, "hxbow", "Bows"])).toBe(
-      weaponThumb(["fixture-xbow", 3, 0, "xbow", "Bows"])
+    expect(weaponThumb(["fixture-hxbow", "Fixture", 2, 0, "hxbow", "Bows"])).toBe(
+      weaponThumb(["fixture-xbow", "Fixture", 3, 0, "xbow", "Bows"])
     );
   });
 
   it("dispatches shotgun-class weapons to the shotgun icon regardless of size", () => {
-    const shotgun = WEAPONS.find((w) => w[3] === "shotgun");
+    const shotgun = WEAPONS.find((w) => w[4] === "shotgun");
     expect(shotgun).toBeTruthy();
-    expect(weaponThumb(shotgun)).toBe(weaponThumb(["fixture", 1, 0, "shotgun", "Shotguns"]));
+    expect(weaponThumb(shotgun)).toBe(weaponThumb(["fixture", "Fixture", 1, 0, "shotgun", "Shotguns"]));
   });
 
   it("dispatches by size for firearm classes not covered above: <=2 pistol, 3 carbine, >=4 rifle", () => {
-    const pistolIcon = weaponThumb(["fixture", 1, 0, "compact", "Pistols"]);
-    const pistolIcon2 = weaponThumb(["fixture", 2, 0, "medium", "Pistols"]);
-    const carbineIcon = weaponThumb(["fixture", 3, 0, "compact", "Rifles"]);
-    const rifleIcon = weaponThumb(["fixture", 4, 0, "long", "Rifles"]);
-    const rifleIcon2 = weaponThumb(["fixture", 5, 0, "slong", "Rifles"]);
+    const pistolIcon = weaponThumb(["fixture", "Fixture", 1, 0, "compact", "Pistols"]);
+    const pistolIcon2 = weaponThumb(["fixture", "Fixture", 2, 0, "medium", "Pistols"]);
+    const carbineIcon = weaponThumb(["fixture", "Fixture", 3, 0, "compact", "Rifles"]);
+    const rifleIcon = weaponThumb(["fixture", "Fixture", 4, 0, "long", "Rifles"]);
+    const rifleIcon2 = weaponThumb(["fixture", "Fixture", 5, 0, "slong", "Rifles"]);
 
     expect(pistolIcon).toBe(pistolIcon2);
     expect(pistolIcon).not.toBe(carbineIcon);
@@ -87,13 +87,13 @@ describe("toolThumb", () => {
   });
 
   it("resolves a distinct icon per declared tool group", () => {
-    const icons = new Set(TOOL_GROUPS.map((g) => toolThumb(["fixture", 0, g])));
+    const icons = new Set(TOOL_GROUPS.map((g) => toolThumb(["fixture", "Fixture", 0, g])));
     expect(icons.size).toBe(TOOL_GROUPS.length);
   });
 
   it("falls back to the Utility icon for an unrecognized group", () => {
-    const utilityIcon = toolThumb(["fixture", 0, "Utility"]);
-    expect(toolThumb(["fixture", 0, "NotARealGroup"])).toBe(utilityIcon);
+    const utilityIcon = toolThumb(["fixture", "Fixture", 0, "Utility"]);
+    expect(toolThumb(["fixture", "Fixture", 0, "NotARealGroup"])).toBe(utilityIcon);
   });
 });
 
@@ -106,13 +106,13 @@ describe("traitThumb", () => {
   });
 
   it("resolves a distinct icon per declared trait group", () => {
-    const icons = new Set(TRAIT_GROUPS.map((g) => traitThumb(["fixture", 0, g])));
+    const icons = new Set(TRAIT_GROUPS.map((g) => traitThumb(["fixture", "Fixture", 0, g])));
     expect(icons.size).toBe(TRAIT_GROUPS.length);
   });
 
   it("falls back to the Utility icon for an unrecognized group", () => {
-    const utilityIcon = traitThumb(["fixture", 0, "Utility"]);
-    expect(traitThumb(["fixture", 0, "NotARealGroup"])).toBe(utilityIcon);
+    const utilityIcon = traitThumb(["fixture", "Fixture", 0, "Utility"]);
+    expect(traitThumb(["fixture", "Fixture", 0, "NotARealGroup"])).toBe(utilityIcon);
   });
 });
 
@@ -125,12 +125,12 @@ describe("consThumb", () => {
   });
 
   it("resolves a distinct icon per declared consumable group", () => {
-    const icons = new Set(CONS_GROUPS.map((g) => consThumb(["fixture", 0, "Throwable", g])));
+    const icons = new Set(CONS_GROUPS.map((g) => consThumb(["fixture", "Fixture", 0, "Throwable", g])));
     expect(icons.size).toBe(CONS_GROUPS.length);
   });
 
   it("falls back to the Utility icon for an unrecognized group", () => {
-    const utilityIcon = consThumb(["fixture", 0, "Throwable", "Utility"]);
-    expect(consThumb(["fixture", 0, "Throwable", "NotARealGroup"])).toBe(utilityIcon);
+    const utilityIcon = consThumb(["fixture", "Fixture", 0, "Throwable", "Utility"]);
+    expect(consThumb(["fixture", "Fixture", 0, "Throwable", "NotARealGroup"])).toBe(utilityIcon);
   });
 });

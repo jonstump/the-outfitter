@@ -22,7 +22,7 @@ function renderSlot(preloadedState) {
 
 describe("WeaponSlot", () => {
   it("renders the scraped image as the primary tier for a filled slot", () => {
-    const weaponIndex = WEAPONS.findIndex((w) => w[3] === "compact");
+    const weaponIndex = WEAPONS.findIndex((w) => w[4] === "compact");
     const def = WEAPONS[weaponIndex];
     const { container } = renderSlot({
       loadout: loadoutState({ weapons: [{ i: weaponIndex, a: -1 }, null] }),
@@ -30,7 +30,7 @@ describe("WeaponSlot", () => {
 
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.jpg`);
     expect(container.querySelector(".weapon-thumb")).toBeInTheDocument();
   });
 
@@ -38,7 +38,7 @@ describe("WeaponSlot", () => {
     // This is the specific regression this issue calls out: pre-#8, Weapons only ever rendered an
     // SVG icon. Confirm that SVG-only-forever behavior is gone (photo is tried first) *and* that
     // the SVG fallback still works when the photo genuinely isn't available.
-    const weaponIndex = WEAPONS.findIndex((w) => w[3] === "none");
+    const weaponIndex = WEAPONS.findIndex((w) => w[4] === "none");
     const def = WEAPONS[weaponIndex];
     const { container } = renderSlot({
       loadout: loadoutState({ weapons: [{ i: weaponIndex, a: -1 }, null] }),
@@ -48,7 +48,7 @@ describe("WeaponSlot", () => {
     ["jpeg", "png", "webp"].forEach((ext) => {
       fireEvent.error(img);
       img = container.querySelector("img");
-      expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[0])}.${ext}`);
+      expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.${ext}`);
     });
     fireEvent.error(img);
 

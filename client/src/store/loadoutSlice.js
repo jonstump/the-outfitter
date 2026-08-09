@@ -3,6 +3,19 @@ import { CONS, WEAPONS } from "../data/catalog.js";
 import { capMax, catCount, slotMax } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
+// Shape of a valid loadout state object. setLoadout() rejects payloads that don't
+// conform so a malformed/partial payload can't silently poison the store (issue #27).
+function isValidLoadoutShape(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (typeof payload.weapons !== "object" || !Array.isArray(payload.weapons) || payload.weapons.length !== 2) return false;
+  if (typeof payload.blocked !== "number" || payload.blocked < 0 || payload.blocked > 8) return false;
+  if (typeof payload.name !== "string") return false;
+  if (!Array.isArray(payload.equip) || !Array.isArray(payload.traits)) return false;
+  return payload.weapons.every(
+    (w) => w === null || (typeof w === "object" && typeof w.i === "number" && WEAPONS[w.i] && Number.isInteger(w.a))
+  );
+}
+
 const loadoutSlice = createSlice({
   name: "loadout",
   initialState: emptyLoadout(),
@@ -11,8 +24,8 @@ const loadoutSlice = createSlice({
       const weaponIndex = action.payload;
       const w = WEAPONS[weaponIndex];
       const slot = state.weapons[0] ? 1 : 0;
-      const other = state.weapons[1 - slot] ? WEAPONS[state.weapons[1 - slot].i][1] : 0;
-      if (w[1] + other > capMax(state)) return;
+      const other = state.weapons[1 - slot] ? WEAPONS[state.weapons[1 - slot].i][2] : 0;
+      if (w[2] + other > capMax(state)) return;
       state.weapons[slot] = { i: weaponIndex, a: -1 };
     },
     removeWeapon(state, action) {
@@ -52,8 +65,18 @@ const loadoutSlice = createSlice({
       state.traits = [];
     },
     // Bulk merge — used by hydrate-on-load, loading a saved build, and randomize.
+    // Rejects payloads that don't match the loadout shape so a bad call fails
+    // loudly at the source instead of silently corrupting derived math later.
     setLoadout(state, action) {
-      Object.assign(state, action.payload);
+      const payload = action.payload;
+      if (!isValidLoadoutShape(payload)) {
+        throw new Error("setLoadout: payload does not match the expected loadout shape");
+      }
+      state.weapons = payload.weapons;
+      state.equip = payload.equip;
+      state.traits = payload.traits;
+      state.blocked = payload.blocked;
+      state.name = payload.name;
     },
   },
 });

@@ -24,17 +24,17 @@ describe("TraitsPanel", () => {
   it("renders the scraped image as the primary tier for each taken trait", () => {
     const traitIndex = 0;
     const def = TRAITS[traitIndex];
-    const { container } = renderPanel([traitIndex]);
+    const { container } = renderPanel([def[0]]);
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/traits/${slugify(def[0])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/traits/${slugify(def[1])}.jpg`);
     expect(container.querySelector(".trait-thumb")).toBeInTheDocument();
   });
 
   it("falls back to the SVG icon once every extension fails to load", () => {
     const traitIndex = 0;
     const def = TRAITS[traitIndex];
-    const { container } = renderPanel([traitIndex]);
+    const { container } = renderPanel([def[0]]);
 
     let img = container.querySelector("img");
     ["jpeg", "png", "webp"].forEach(() => {
@@ -50,7 +50,7 @@ describe("TraitsPanel", () => {
   });
 
   it("applies the shared .item-thumb container class regardless of photo-vs-SVG state", () => {
-    const { container } = renderPanel([0]);
+    const { container } = renderPanel([TRAITS[0][0]]);
     expect(container.querySelector(".trait-thumb")).toHaveClass("item-thumb", "trait-thumb");
   });
 
