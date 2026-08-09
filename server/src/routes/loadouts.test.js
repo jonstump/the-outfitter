@@ -166,16 +166,37 @@ describe("loadouts API", () => {
     expect(tokenList.body.some((l) => l.name === name)).toBe(false);
   });
 
-  it("does not expose unowned (pre-token) legacy records to any request", async () => {
+  it("exposes no legacy (pre-token) record to any request, including forged scopes", async () => {
     const app = makeApp();
+    // Simulate what the boot-time migration in db.js produces: a pre-token
+    // record carrying no owner, marked `legacy: true`.
     await db.read();
-    db.data.loadouts.push({ id: "legacy-1", name: "__test__legacy", data: validData, updatedAt: "2020-01-01" });
+    db.data.loadouts.push({ id: "legacy-1", legacy: true, name: "__test__legacy", data: validData, updatedAt: "2020-01-01" });
     await db.write();
 
-    const anon = await request(app).get("/api/loadouts");
-    expect(anon.body.some((l) => l.name === "__test__legacy")).toBe(false);
+    // No token, a real token, and forged attempts at the old "unowned"/"anon"
+    // scope names — none may see the legacy record.
+    const probes = [undefined, "whoever", "unowned", "anon", "request-scoped"];
+    for (const tok of probes) {
+      const req = request(app).get("/api/loadouts");
+      if (tok) req.set("x-loadout-token", tok);
+      const res = await req;
+      expect(res.body.some((l) => l.name === "__test__legacy")).toBe(false);
+    }
 
-    const token = await request(app).get("/api/loadouts").set("x-loadout-token", "whoever");
-    expect(token.body.some((l) => l.name === "__test__legacy")).toBe(false);
+    // A forged DELETE by its id must 404 and must not remove the record.
+    const del = await request(app).delete("/api/loadouts/legacy-1").set("x-loadout-token", "unowned");
+    expect(del.status).toBe(404);
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.id === "legacy-1")).toBe(true);
+  });
+
+  it("rejects a loadout name longer than 200 characters", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "namecheck")
+      .send({ name: "x".repeat(201), data: validData });
+    expect(res.status).toBe(400);
   });
 });

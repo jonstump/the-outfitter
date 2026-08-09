@@ -19,14 +19,17 @@ try {
   db.data.loadouts ||= [];
 
   // Records written before per-user ownership (issue #17) have no `owner` field.
-  // They are left unowned rather than folded into a shared bucket: exposing them
-  // to every request that simply omits the token would recreate the exact
-  // cross-user leak #17 exists to close. They are preserved on disk but not
-  // returned by any scope — a deliberate, documented tradeoff (the real client
-  // always sends a per-browser token, so pre-token saves are not attributable to
-  // any current browser anyway).
+  // They are marked with a `legacy` flag rather than folded into any named
+  // scope: a well-known owner value (e.g. "anon"/"unowned") is trivially
+  // forgeable via the header and would reproduce the cross-user leak #17 closes.
+  // Legacy records are excluded from every live query below (see loadouts.js) —
+  // they remain on disk for archival purposes but can never be read, overwritten,
+  // or deleted through the API, by any token.
   for (const record of db.data.loadouts) {
-    if (!record.owner) record.owner = "unowned";
+    if (!record.owner || record.owner === "unowned") {
+      delete record.owner;
+      record.legacy = true;
+    }
   }
 
   await db.write();

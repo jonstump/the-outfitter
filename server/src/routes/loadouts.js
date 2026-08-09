@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
-import rateLimit from "express-rate-limit";
+import { createHash, randomUUID } from "node:crypto";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { db } from "../db.js";
 
 export const loadoutsRouter = Router();
@@ -23,21 +23,46 @@ function callerToken(req) {
 }
 
 // Basic throttling on the write/delete endpoints — defense-in-depth
-// independent of the ownership model (issue #21). Keyed by client token where
-// one is present so users sharing a NAT don't collectively trip a per-IP limit;
-// anonymous (no-token) requests fall back to IP.
-function writeLimiterKey(req) {
-  const token = req.get("x-loadout-token");
-  return token && typeof token === "string" && token.trim() ? `tok:${token.trim().slice(0, 200)}` : req.ip;
+// independent of the ownership model (issue #21). Two stacked limiters:
+//  - ipLimiter: a hard per-IP floor so rotating the client-controlled token
+//    can't bypass rate limiting entirely (abuse/DoS protection).
+//  - tokenLimiter: per-client-token fairness so users sharing a NAT don't
+//    collectively trip the IP floor; anonymous (no-token) requests key by IP.
+const WRITE_PER_IP = 240; // generous hard floor (4x the per-token budget)
+const WRITE_PER_TOKEN = 60;
+
+// Normalize the client IP (IPv6 subnetting handled by the library's helper) and
+// prefix it so keys stay within the rate-limiter store's size limits.
+function ipKey(req) {
+  const ip = ipKeyGenerator(req.ip || "unknown", 56);
+  return `ip:${createHash("sha256").update(ip).digest("hex").slice(0, 32)}`;
 }
 
-const writeLimiter = rateLimit({
+const ipLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 60,
+  limit: WRITE_PER_IP,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  keyGenerator: (req) => writeLimiterKey(req),
+  keyGenerator: ipKey,
 });
+
+function tokenLimiterKey(req) {
+  const token = req.get("x-loadout-token");
+  return token && typeof token === "string" && token.trim() ? `tok:${token.trim().slice(0, 200)}` : ipKey(req);
+}
+
+const tokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: WRITE_PER_TOKEN,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req) => tokenLimiterKey(req),
+});
+
+// Live records are those owned by a client token; legacy pre-token records
+// (issue #17, marked `legacy: true` at boot in db.js) have no owner and are
+// excluded from every handler so no header value can ever reach them.
+const liveRecords = (list) => list.filter((l) => !l.legacy);
 
 // Wire shape the client's toData()/fromData() (client/src/utils/loadoutCodec.js)
 // produces: { w, e, tr, n, b } — item references as numeric catalog indices on
@@ -74,7 +99,7 @@ loadoutsRouter.get("/", async (_req, res) => {
   try {
     await db.read();
     const token = callerToken(_req);
-    const mine = db.data.loadouts
+    const mine = liveRecords(db.data.loadouts)
       .filter((l) => l.owner === token)
       .map(({ owner, ...record }) => record);
     res.json(mine);
@@ -84,11 +109,14 @@ loadoutsRouter.get("/", async (_req, res) => {
   }
 });
 
-loadoutsRouter.post("/", writeLimiter, async (req, res) => {
+loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
   try {
     const { name, data } = req.body || {};
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name must be a non-empty string" });
+    }
+    if (name.trim().length > 200) {
+      return res.status(400).json({ error: "name must be at most 200 characters" });
     }
     if (!isValidData(data)) {
       return res.status(400).json({ error: "data must be a valid loadout payload" });
@@ -98,7 +126,7 @@ loadoutsRouter.post("/", writeLimiter, async (req, res) => {
     await db.read();
     const trimmedName = name.trim();
     const now = new Date().toISOString();
-    const existing = db.data.loadouts.find((l) => l.owner === token && l.name === trimmedName);
+    const existing = liveRecords(db.data.loadouts).find((l) => l.owner === token && l.name === trimmedName);
 
     let record;
     if (existing) {
@@ -119,12 +147,17 @@ loadoutsRouter.post("/", writeLimiter, async (req, res) => {
   }
 });
 
-loadoutsRouter.delete("/:id", writeLimiter, async (req, res) => {
+loadoutsRouter.delete("/:id", ipLimiter, tokenLimiter, async (req, res) => {
   try {
     const token = callerToken(req);
     await db.read();
     const before = db.data.loadouts.length;
-    db.data.loadouts = db.data.loadouts.filter((l) => l.id !== req.params.id || l.owner !== token);
+    // Filter applies only to live (non-legacy) records; legacy records stay
+    // untouched on disk and can never be deleted through the API.
+    db.data.loadouts = [
+      ...db.data.loadouts.filter((l) => l.legacy),
+      ...liveRecords(db.data.loadouts).filter((l) => l.id !== req.params.id || l.owner !== token),
+    ];
     if (db.data.loadouts.length === before) {
       return res.status(404).json({ error: "loadout not found" });
     }
