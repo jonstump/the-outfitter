@@ -1,4 +1,5 @@
 import { useDispatch, useSelector } from "react-redux";
+import { useMemo } from "react";
 import { CONS, TOOLS, consThumb, toolThumb } from "../../data/catalog.js";
 import { selectEquipEntry, selectSlotMax } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
@@ -11,7 +12,9 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 export default function EquipmentSlot({ index }) {
   const dispatch = useDispatch();
-  const entry = useSelector(selectEquipEntry(index));
+  // selectEquipEntry is a selector factory; memoize the instance so its
+  // createSelector cache survives re-renders (issue #24/#25).
+  const entry = useSelector(useMemo(() => selectEquipEntry(index), [index]));
   const sMax = useSelector(selectSlotMax);
 
   if (!entry) {
