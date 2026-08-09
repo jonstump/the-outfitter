@@ -62,8 +62,8 @@ describe("catCount", () => {
 
 describe("upTotal / slotMax", () => {
   it("sums trait UP costs by stable id", () => {
-    const lo = loadoutWith({ traits: ["quartermaster", "fanning"] }); // 8 + 7
-    expect(upTotal(lo)).toBe(15);
+    const lo = loadoutWith({ traits: ["quartermaster", "fanning"] }); // 8 + 8
+    expect(upTotal(lo)).toBe(16);
   });
 
   it("derives slot count from blocked slots", () => {

@@ -38,6 +38,10 @@ export const AMMO = {
   xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
   hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
   bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
+  // "Special" pool (Dolch 96 / Nitro Express). Both weapons' custom ammo (Dumdum /
+  // Explosive / Shredder) has been Scarce since Update 2.8 and can't be bought with
+  // Hunt Dollars, so no purchasable variants are listed here.
+  special: [],
   none: [],
 };
 
@@ -50,6 +54,7 @@ export const AMMO_LABEL = {
   xbow: "Crossbow",
   hxbow: "Hand crossbow",
   bow: "Bow",
+  special: "Special ammo",
   none: "Melee",
 };
 
@@ -71,7 +76,7 @@ export const WEAPONS = [
   ["caldwell-conversion-uppercut", "Caldwell Conversion Uppercut", 2, 275, "long", "Pistols"],
   ["nagant-officer-carbine", "Nagant Officer Carbine", 2, 109, "compact", "Rifles"],
   ["hunting-bow", "Hunting Bow", 2, 90, "bow", "Bows"],
-  ["dolch-96", "Dolch 96", 2, 400, "compact", "Pistols"],
+  ["dolch-96", "Dolch 96", 2, 690, "special", "Pistols"],
   ["springfield-1866", "Springfield 1866", 3, 33, "medium", "Rifles"],
   ["winfield-m1873c", "Winfield M1873C", 3, 44, "compact", "Rifles"],
   ["winfield-m1873", "Winfield M1873", 3, 63, "compact", "Rifles"],
@@ -93,7 +98,11 @@ export const WEAPONS = [
   ["lebel-1886", "Lebel 1886", 4, 510, "slong", "Rifles"],
   ["crown-king-auto-5", "Crown & King Auto-5", 4, 600, "shotgun", "Shotguns"],
   ["mosin-nagant-avtomat", "Mosin-Nagant Avtomat", 5, 1000, "slong", "Rifles"],
-  ["nitro-express", "Nitro Express", 5, 1470, "long", "Rifles"],
+  ["nitro-express", "Nitro Express", 5, 1015, "special", "Rifles"],
+  // Update 2.8 additions — appended (never inserted) so legacy index-based
+  // encodings keep resolving to the same items they did before (issue #35/#36).
+  ["haymaker", "Haymaker", 2, 279, "long", "Pistols"],
+  ["1890-cavalry", "1890 Cavalry", 3, 56, "long", "Rifles"],
 ];
 
 export const WEAPON_GROUPS = ["Pistols", "Rifles", "Shotguns", "Melee", "Bows"];
@@ -117,8 +126,16 @@ export const TOOLS = [
   ["concertina-trip-mine", "Concertina Trip Mine", 55, "Traps"],
   ["poison-trip-mine", "Poison Trip Mine", 55, "Traps"],
   ["quad-derringer", "Quad Derringer", 40, "Utility"],
-  ["choke-beetle", "Choke Beetle", 40, "Traps"],
-  ["stalker-beetle", "Stalker Beetle", 25, "Utility"],
+  // Update 2.8 additions — appended (never inserted) so legacy index-based
+  // encodings keep resolving to the same items they did before (issue #35/#38).
+  // Choke Beetle / Stalker Beetle moved to CONS below; loadoutCodec.js's legacy
+  // decoder explicitly drops their old tool-slot positions (18/19) rather than
+  // letting them silently resolve to these new entries.
+  ["throwing-spear", "Throwing Spear", 80, "Throwing"],
+  ["knuckle-knife", "Knuckle Knife", 50, "Melee"],
+  ["choke-bombs", "Choke Bombs", 25, "Utility"],
+  ["derringer-pennyshot", "Derringer Pennyshot", 63, "Utility"],
+  ["bear-traps", "Bear Traps", 70, "Traps"],
 ];
 
 export const TOOL_GROUPS = ["Medical", "Melee", "Throwing", "Traps", "Utility"];
@@ -140,42 +157,66 @@ export const CONS = [
   ["choke-bomb", "Choke Bomb", 25, "Throwable", "Gas"],
   ["flash-bomb", "Flash Bomb", 40, "Throwable", "Utility"],
   ["concertina-bomb", "Concertina Bomb", 60, "Throwable", "Utility"],
+  // Update 2.8 additions — appended (never inserted) so legacy index-based
+  // encodings keep resolving to the same items they did before (issue #35/#37/#38).
+  ["vitality-shot-weak", "Vitality Shot (Weak)", 20, "Shot", "Shots"],
+  ["regeneration-shot-weak", "Regeneration Shot (Weak)", 40, "Shot", "Shots"],
+  ["stamina-shot-weak", "Stamina Shot (Weak)", 60, "Shot", "Shots"],
+  ["antidote-shot-weak", "Antidote Shot (Weak)", 30, "Shot", "Shots"],
+  ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
+  ["medical-pack", "Medical Pack", 35, "Shot", "Shots"],
+  ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
+  ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
+  ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
+  ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
+  ["ammo-box", "Ammo Box", 65, "Throwable", "Utility"],
+  ["tool-box", "Tool Box", 70, "Throwable", "Utility"],
+  ["choke-beetle", "Choke Beetle", 22, "Throwable", "Gas"],
+  ["stalker-beetle", "Stalker Beetle", 45, "Throwable", "Utility"],
+  ["fire-beetle", "Fire Beetle", 57, "Throwable", "Fire"],
 ];
 
 export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 
+// UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1).
+// Update 2.8 changed exactly three costs (Quartermaster 6->8, Frontiersman 5->6,
+// Hundred Hands 2->3); the rest of the old table was stale from the 1.x/2.0 era.
+// "Iron Repeater" was removed from the game (merged into Iron Eye, 3 UP, Update 1.15)
+// and "Poison Sense" was renamed to "Pain Sense" (3 UP, Update 2.1). Entries are
+// edited in place, never reordered, so legacy index-based encodings keep
+// resolving to the same traits they did before.
 export const TRAITS = [
   ["quartermaster", "Quartermaster", 8, "Utility"],
-  ["fanning", "Fanning", 7, "Combat"],
-  ["levering", "Levering", 4, "Combat"],
-  ["doctor", "Doctor", 7, "Medical"],
-  ["physician", "Physician", 3, "Medical"],
-  ["packmule", "Packmule", 2, "Utility"],
-  ["frontiersman", "Frontiersman", 2, "Utility"],
-  ["greyhound", "Greyhound", 5, "Mobility"],
+  ["fanning", "Fanning", 8, "Combat"],
+  ["levering", "Levering", 7, "Combat"],
+  ["doctor", "Doctor", 9, "Medical"],
+  ["physician", "Physician", 5, "Medical"],
+  ["packmule", "Packmule", 4, "Utility"],
+  ["frontiersman", "Frontiersman", 6, "Utility"],
+  ["greyhound", "Greyhound", 2, "Mobility"],
   ["kiteskin", "Kiteskin", 1, "Mobility"],
-  ["lightfoot", "Lightfoot", 3, "Stealth"],
-  ["pitcher", "Pitcher", 3, "Combat"],
-  ["bulletgrubber", "Bulletgrubber", 2, "Combat"],
-  ["iron-repeater", "Iron Repeater", 2, "Combat"],
-  ["bolt-thrower", "Bolt Thrower", 5, "Combat"],
-  ["serpent", "Serpent", 3, "Utility"],
-  ["ghoul", "Ghoul", 5, "Medical"],
-  ["determination", "Determination", 4, "Medical"],
-  ["resilience", "Resilience", 5, "Medical"],
-  ["salveskin", "Salveskin", 4, "Medical"],
-  ["necromancer", "Necromancer", 5, "Medical"],
-  ["beastface", "Beastface", 3, "Stealth"],
+  ["lightfoot", "Lightfoot", 5, "Stealth"],
+  ["pitcher", "Pitcher", 4, "Combat"],
+  ["bulletgrubber", "Bulletgrubber", 4, "Combat"],
+  ["iron-eye", "Iron Eye", 3, "Combat"],
+  ["bolt-thrower", "Bolt Thrower", 3, "Combat"],
+  ["serpent", "Serpent", 4, "Utility"],
+  ["ghoul", "Ghoul", 3, "Medical"],
+  ["determination", "Determination", 1, "Medical"],
+  ["resilience", "Resilience", 3, "Medical"],
+  ["salveskin", "Salveskin", 2, "Medical"],
+  ["necromancer", "Necromancer", 4, "Medical"],
+  ["beastface", "Beastface", 4, "Stealth"],
   ["hundred-hands", "Hundred Hands", 3, "Combat"],
   ["steady-aim", "Steady Aim", 2, "Combat"],
-  ["silent-killer", "Silent Killer", 2, "Stealth"],
-  ["vulture", "Vulture", 1, "Utility"],
-  ["whispersmith", "Whispersmith", 2, "Stealth"],
-  ["poison-sense", "Poison Sense", 1, "Stealth"],
-  ["conduit", "Conduit", 2, "Utility"],
+  ["silent-killer", "Silent Killer", 3, "Stealth"],
+  ["vulture", "Vulture", 2, "Utility"],
+  ["whispersmith", "Whispersmith", 1, "Stealth"],
+  ["pain-sense", "Pain Sense", 3, "Stealth"],
+  ["conduit", "Conduit", 5, "Utility"],
   ["magpie", "Magpie", 1, "Utility"],
-  ["ambidextrous", "Ambidextrous", 2, "Combat"],
-  ["dauntless", "Dauntless", 4, "Combat"],
+  ["ambidextrous", "Ambidextrous", 3, "Combat"],
+  ["dauntless", "Dauntless", 1, "Combat"],
   ["vigilant", "Vigilant", 1, "Utility"],
 ];
 

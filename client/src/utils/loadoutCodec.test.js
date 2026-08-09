@@ -57,7 +57,7 @@ describe("toData / fromData (v1 id-based wire format)", () => {
 });
 
 describe("fromData (legacy index-based wire format)", () => {
-  it("decodes a legacy record against the current catalog order", () => {
+  it("decodes a legacy record against the current catalog order, preserving item identity", () => {
     const legacy = {
       w: [[0, -1], [14, 2]],
       e: [["T", 0], ["C", 3]],
@@ -67,9 +67,23 @@ describe("fromData (legacy index-based wire format)", () => {
     };
     const dec = fromData(legacy);
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 14, a: 2 }]);
+    // Resolved identity, not just raw index pass-through: appends to the catalog
+    // must never shift what a legacy position refers to (data-accuracy update).
+    expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nagant M1895");
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Dolch 96");
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
+    expect(TOOLS[dec.equip[0].i][1]).toBe("First Aid Kit");
+    expect(CONS[dec.equip[1].i][1]).toBe("Antidote Shot");
     expect(dec.traits).toEqual(["quartermaster"]);
     expect(dec.name).toBe("Old build");
+  });
+
+  it("drops legacy tool positions that moved to Consumables instead of remapping them", () => {
+    // Pre-data-accuracy Tools index 18/19 were Choke Beetle / Stalker Beetle,
+    // which moved to Consumables; the new tools appended there must not be
+    // resolved in their place.
+    const dec = fromData({ w: [null, null], e: [["T", 18], ["T", 19]], tr: [], n: "", b: 0 });
+    expect(dec.equip).toEqual([]);
   });
 
   it("drops out-of-range legacy indices instead of remapping them", () => {

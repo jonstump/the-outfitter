@@ -40,6 +40,8 @@ const loadoutSlice = createSlice({
     addEquip(state, action) {
       const { t, i } = action.payload;
       if (state.equip.length >= slotMax(state)) return;
+      // One of each specific Tool per loadout — re-verified against the wiki as still
+      // in force after Update 2.8's equipment-slot rework (issue #41).
       if (t === "T" && state.equip.some((e) => e.t === "T" && e.i === i)) return;
       if (t === "C" && catCount(state, CONS[i][3]) >= 4) return;
       state.equip.push({ t, i });
