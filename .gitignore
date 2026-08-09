@@ -4,3 +4,6 @@ server/data/db.json
 .DS_Store
 *.log
 .sdd/
+
+# Local environment overrides (copy of .env.example); never commit real values
+.env
