@@ -126,6 +126,11 @@ export default function Picker() {
   const dispatch = useDispatch();
   const loadout = useSelector((s) => s.loadout);
   const tab = useSelector((s) => s.ui.tab);
+  // UP-budget flags stay in Redux (#23) and are read by buildRows's Traits-tab
+  // affordability gate — they must be re-included here or the gate silently
+  // disables (upBudgetOn becomes undefined).
+  const upBudgetOn = useSelector((s) => s.ui.upBudgetOn);
+  const upBudget = useSelector((s) => s.ui.upBudget);
 
   // Governing: #23 — search/size/group/ammo filters are transient UI state owned
   // by this panel alone; keeping them here (instead of the global store) means a
@@ -136,7 +141,7 @@ export default function Picker() {
   const [group, setGroup] = useState("");
   const [ammoF, setAmmoF] = useState("");
 
-  const ui = { tab, search, sizeFilter, group, ammoF };
+  const ui = { tab, search, sizeFilter, group, ammoF, upBudgetOn, upBudget };
   const rows = buildRows(tab, ui, loadout, dispatch);
   // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
   // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.

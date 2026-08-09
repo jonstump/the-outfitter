@@ -20,15 +20,9 @@ import {
 // catalog.js has no awareness of scraped photos at all (see the header note in catalog.js) — that
 // tier is resolved entirely in ItemThumb.jsx via <img onError> and is covered by
 // ItemThumb.test.jsx instead. What catalog.js *does* own is the SVG fallback safety net: a
-// two-tier per-item-override-else-per-group lookup, per category, with a final hardcoded default.
-// These tests cover that lookup for every category. The per-item override tier (ITEM_THUMBS /
-// TOOL_ITEM_THUMBS / TRAIT_ITEM_THUMBS / CONS_ITEM_THUMBS) is intentionally empty today — no
-// per-item SVGs have been authored yet, and those maps are module-private (not exported) — so
-// every real catalog item currently resolves through the per-group tier below. That's exercised
-// directly. The "per-item override wins over per-group" precedence can't be exercised from outside
-// the module without changing catalog.js's exports (out of scope for this issue), but every
-// existing item passing through to its group's icon is itself proof the per-item tier is being
-// consulted first and (correctly) coming up empty.
+// per-group lookup per category, with a final hardcoded default. The per-item override tier was
+// removed (issue #22) — the maps were empty and carried no per-item SVGs — so every real catalog
+// item resolves through the per-group tier below. That's exercised directly.
 
 describe("weaponThumb", () => {
   it("resolves every weapon in the catalog to a non-empty SVG path", () => {
