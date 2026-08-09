@@ -53,11 +53,11 @@ docs/     Architecture Decision Records and specs (see below)
 - `POST /api/loadouts` — create or update a loadout (`{ name, data }`)
 - `DELETE /api/loadouts/:id` — delete a loadout
 
-Loadouts are saved under a client-generated `x-loadout-token` header that the
-client sends with every request (per-browser isolation; see the `loadouts.js`
-API wrapper). Deployment hardening for the write/delete endpoints (rate
-limiting, payload-shape validation, strict per-token scoping) is tracked in the
-server API-security work.
+Loadouts are scoped per browser via a client-generated `x-loadout-token` header
+that the client sends with every request, so different browsers never see or
+overwrite each other's saves. The write/delete endpoints are rate-limited per
+client (with a per-IP floor) and the server validates the loadout payload shape
+and name before persisting.
 
 ## Deployment
 
@@ -91,9 +91,8 @@ for other container runtimes; mount a persistent volume at `/app/server/data`.
 The `Procfile` documents the process command for platforms that use them
 (`web: npm run start -w server`), but lowdb's single-writer constraint applies
 just the same — run one instance, keep `server/data` on durable disk, and set
-`PORT` and `NODE_ENV` yourself. The production server also exposes
-`GET /healthz` for orchestrator liveness checks once the server-prod-config
-work lands.
+`PORT` and `NODE_ENV` yourself. The production server exposes `GET /healthz`
+for orchestrator liveness checks.
 
 ### Separate origins (optional)
 
@@ -105,10 +104,10 @@ VITE_API_URL=https://api.example.com npm run build -w client
 ```
 
 The same-origin relative path remains the default and is what the
-single-process model uses. Note that CORS is currently wide open on the server
-(a bare `cors()` call), so separate-origin requests work today without extra
-configuration; a configurable `CORS_ORIGIN` restriction is tracked in the
-server-prod-config work.
+single-process model uses. Note that CORS is restricted to the dev origins by
+default (`http://localhost:5173`); for cross-origin production requests, set
+the server's `CORS_ORIGIN` env var to the client's origin (comma-separated
+for multiple).
 
 
 ## Attribution
