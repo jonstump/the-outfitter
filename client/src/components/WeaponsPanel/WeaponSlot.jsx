@@ -1,5 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { selectWeaponSlot } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
@@ -10,7 +11,7 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 export default function WeaponSlot({ slot }) {
   const dispatch = useDispatch();
-  const w = useSelector((s) => s.loadout.weapons[slot]);
+  const w = useSelector(selectWeaponSlot(slot));
 
   if (!w) {
     return (

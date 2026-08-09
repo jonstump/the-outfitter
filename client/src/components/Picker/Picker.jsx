@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   AMMO_LABEL,
@@ -126,7 +127,14 @@ export default function Picker() {
   const loadout = useSelector((s) => s.loadout);
   const ui = useSelector((s) => s.ui);
 
-  const rows = buildRows(ui.tab, ui, loadout, dispatch);
+  // Governing: #25 — buildRows re-filters/remaps the entire active catalog array
+  // (up to ~36 weapon rows) and would otherwise run on every single render,
+  // including renders triggered by state changes that don't affect the row list.
+  // Keyed on the exact ui/loadout fields it reads; dispatch is stable.
+  const rows = useMemo(
+    () => buildRows(ui.tab, ui, loadout, dispatch),
+    [ui.tab, ui.search, ui.group, ui.ammoF, ui.sizeFilter, ui.upBudgetOn, ui.upBudget, loadout, dispatch]
+  );
   // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
   // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.
   const showThumb = true;

@@ -1,11 +1,11 @@
 import { useSelector } from "react-redux";
-import { totalCost, upTotal } from "../../utils/calc.js";
+import { selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function Header() {
-  const loadout = useSelector((s) => s.loadout);
+  const total = useSelector(selectTotalCost);
+  const up = useSelector(selectUpTotal);
   const budgetOn = useSelector((s) => s.ui.budgetOn);
   const budget = useSelector((s) => s.ui.budget);
-  const total = totalCost(loadout);
   const overBudget = budgetOn && total > budget;
 
   return (
@@ -24,7 +24,7 @@ export default function Header() {
         <div className="header-stat">
           <div className="header-stat-label">Trait points</div>
           <div className="header-stat-value" style={{ color: "#b08d4f" }}>
-            {upTotal(loadout)} UP
+            {up} UP
           </div>
         </div>
       </div>
