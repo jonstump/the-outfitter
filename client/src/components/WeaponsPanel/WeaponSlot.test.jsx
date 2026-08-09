@@ -84,12 +84,12 @@ describe("WeaponSlot — memoized selector", () => {
     );
     expect(container.querySelector(".empty-note")).toHaveTextContent("Primary");
 
-    const weaponIndex = WEAPONS.findIndex((w) => w[1] === 2);
+    const weaponIndex = WEAPONS.findIndex((w) => w[2] === 2);
     act(() => store.dispatch(loadoutActions.addWeapon(weaponIndex)));
-    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][0]);
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][1]);
 
     // An unrelated UI change must not break the slot either.
     act(() => store.dispatch({ type: "ui/setMessage", payload: "hello" }));
-    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][0]);
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][1]);
   });
 });
