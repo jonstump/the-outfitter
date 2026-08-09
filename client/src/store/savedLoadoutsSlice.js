@@ -10,7 +10,7 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
   try {
     return await getLoadouts();
   } catch (err) {
-    dispatch(uiActions.setMessage(`!!Couldn't load saved loadouts: ${err.message}`));
+    dispatch(uiActions.setMessage(`!Couldn't load saved loadouts: ${err.message}`));
     throw err;
   }
 });
