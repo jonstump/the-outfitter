@@ -1,0 +1,9 @@
+# Governing: ADR-0004 (pin-and-guard on the host), SPEC-0002 (Automatic Toolchain Activation).
+# Node major mirrors .nvmrc (canonical); npm version is the one shipped with the pinned Node.
+# Optional convenience layer: contributors without mise are unaffected (enforcement is .npmrc + engines).
+[engines]
+node = "20"
+
+[tools]
+node = "20"
+npm = "10"

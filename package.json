@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "description": "Hunt: Showdown loadout builder — frontend + backend",
+  "engines": {
+    "node": "^20"
+  },
   "workspaces": [
     "client",
     "server"
