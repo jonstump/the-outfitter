@@ -323,27 +323,31 @@ describe("a list whose hunter is not in the dataset", () => {
   });
 });
 
-describe("portrait sizes across contexts", () => {
-  it("asks for the thumbnail on a card and the full size in the expanded header", () => {
+// Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption Contract
+// Compatibility", SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+//
+// REWRITTEN, not deleted (#148). This was "portrait sizes across contexts" and asserted the
+// card and the expanded header asked for DIFFERENT assets, then that each fell back to the
+// other before the placeholder. There is one asset now, so the property worth pinning here
+// inverted: the two surfaces must agree, and the ladder must stop at two rungs.
+describe("portraits across contexts", () => {
+  it("asks for the same single portrait on a card and in the expanded header", () => {
     renderPanel(
       base([list("a", "Rat builds", { hunterId: REAL_HUNTER.id })], [], { selectedListId: "a" })
     );
-    expect(screen.getByTestId("list-art-a").querySelector("img")).toHaveAttribute(
-      "src",
-      `/images/hunters/${REAL_HUNTER.portrait}-thumb.avif`
-    );
+    const expected = `/images/hunters/${REAL_HUNTER.portrait}.avif`;
+    expect(screen.getByTestId("list-art-a").querySelector("img")).toHaveAttribute("src", expected);
     expect(screen.getByTestId("list-expanded-art").querySelector("img")).toHaveAttribute(
       "src",
-      `/images/hunters/${REAL_HUNTER.portrait}.avif`
+      expected
     );
   });
 
-  it("falls back to the other size before the placeholder", () => {
+  it("goes straight to the placeholder when that portrait fails", () => {
     renderPanel(base([list("a", "Rat builds", { hunterId: REAL_HUNTER.id })], []));
     const art = screen.getByTestId("list-art-a");
     fireEvent.error(art.querySelector("img"));
-    expect(art.querySelector("img")).toHaveAttribute("src", `/images/hunters/${REAL_HUNTER.portrait}.avif`);
-    fireEvent.error(art.querySelector("img"));
+    // No second request: the size the old middle rung retried no longer exists on disk.
     expect(art.querySelector("img")).not.toBeInTheDocument();
     expect(art.querySelector("svg")).toBeInTheDocument();
   });

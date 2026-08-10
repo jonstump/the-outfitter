@@ -9,8 +9,9 @@
 //
 // Also: SPEC-0003 REQ "Hunter Dataset Consumption Contract", SPEC-0003 REQ "Lists Are
 // Visually Distinguishable Independent of Portrait and Name" (issue #88). Portraits render
-// through HunterPortrait, which owns the size-then-placeholder fallback ladder; the accent
-// renders as the card frame and the expanded header's rule, and is editable there.
+// through HunterPortrait, which owns the portrait-then-placeholder fallback ladder — one
+// asset per hunter, no size chosen here (#148); the accent renders as the card frame and
+// the expanded header's rule, and is editable there.
 //
 // The accent is never the only thing separating two lists — the name is on every card, in
 // the expanded header, and in the move-to-list select. The palette separates by hue rather
@@ -341,7 +342,11 @@ function ListCard({ id, name, hunterId, accent, count, open, onToggle, unassigne
     >
       {hasHunter ? (
         <span className="ll-card-art" data-testid={`list-art-${id}`}>
-          <HunterPortrait hunterId={hunterId} size="thumb" alt="" />
+          {/* Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption
+              Contract Compatibility". No size: the card upscales the one portrait by
+              roughly 1.9×, which SPEC-0003 records as an accepted source-resolution
+              ceiling rather than something a second asset could have fixed. */}
+          <HunterPortrait hunterId={hunterId} alt="" />
         </span>
       ) : (
         <span className="ll-card-mono" aria-hidden="true">
@@ -401,12 +406,14 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
       <div className="ll-expanded-head">
         {!unassigned && list && (
           <span className="ll-expanded-art" data-testid="list-expanded-art">
-            {/* Full size here, thumbnail on the cards — and each falls back to the other
-                before the placeholder (SPEC-0003 "Hunter Dataset Consumption Contract").
+            {/* Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption
+                Contract Compatibility". The same portrait the cards render — this header
+                used to ask for a "full" size, and there is now only the one asset, so the
+                ladder is the portrait then the placeholder.
                 Eager: it is one image, already on screen, and the header is the thing the
                 user just opened. */}
             {list.hunterId ? (
-              <HunterPortrait hunterId={list.hunterId} size="full" alt="" lazy={false} />
+              <HunterPortrait hunterId={list.hunterId} alt="" lazy={false} />
             ) : (
               <span className="ll-card-mono ll-expanded-mono" aria-hidden="true">
                 {monogram(list.name)}
@@ -680,7 +687,7 @@ function CreateList({ onDone }) {
         <button className="btn-outline ll-create-portrait" type="button" onClick={() => setPicking(true)}>
           <span className="ll-create-portrait-art" aria-hidden="true">
             {hunter?.hunterId ? (
-              <HunterPortrait hunterId={hunter.hunterId} size="thumb" alt="" lazy={false} />
+              <HunterPortrait hunterId={hunter.hunterId} alt="" lazy={false} />
             ) : (
               "?"
             )}

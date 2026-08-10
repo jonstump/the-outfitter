@@ -199,21 +199,26 @@ describe("decorative mode", () => {
   });
 });
 
-// Covers: SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+// Covers: SPEC-0003 REQ "Hunter Dataset Consumption Contract", SPEC-0004 REQ "Consumption
+// Contract Compatibility"
 //
 // How far the fallback chain has walked is state about one candidate list. A component
 // instance reused at a stable JSX position — the expanded-list header as the open list
 // switches, the create-form preview across successive picks — must not carry one subject's
 // exhausted chain onto the next. jsdom loads no images, so the failures are driven with
 // fireEvent.error, exactly as the cascade tests above do.
+//
+// The hunter fixtures below are ONE candidate each since #148 — that is the real portrait
+// contract now, and a one-element list is the case most likely to hide a leak, because a
+// single failure exhausts it. The mid-chain cases keep two candidates and are written
+// against the ITEM extension chain, which is where a multi-candidate list still lives.
 describe("fallback state across subjects", () => {
   it("re-derives from the new candidates when sources change on a reused instance", () => {
     const { rerender, container } = render(
-      <ItemThumb name="a" alt="" sources={["/images/hunters/a-thumb.avif", "/images/hunters/a.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="a" alt="" sources={["/images/hunters/a.avif"]} svgPath={SVG_PATH} />
     );
 
-    // Exhaust A's chain: both candidates 404, so A lands on the silhouette.
-    fireEvent.error(container.querySelector("img"));
+    // Exhaust A's chain: its only candidate 404s, so A lands on the silhouette.
     fireEvent.error(container.querySelector("img"));
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("svg")).toBeInTheDocument();
@@ -221,38 +226,38 @@ describe("fallback state across subjects", () => {
     // Same position, different hunter. B's portrait exists — it must be attempted, not
     // skipped because A's attempt failed.
     rerender(
-      <ItemThumb name="b" alt="" sources={["/images/hunters/b-thumb.avif", "/images/hunters/b.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="b" alt="" sources={["/images/hunters/b.avif"]} svgPath={SVG_PATH} />
     );
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/b-thumb.avif");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/b.avif");
   });
 
   it("restarts at the first candidate rather than mid-chain", () => {
     const { rerender, container } = render(
-      <ItemThumb name="a" alt="" sources={["/images/hunters/a-thumb.avif", "/images/hunters/a.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="a" alt="" sources={["/images/weapons/a.jpg", "/images/weapons/a.png"]} svgPath={SVG_PATH} />
     );
 
     // One failure only: A has advanced to its SECOND candidate but has not given up.
     fireEvent.error(container.querySelector("img"));
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/a.avif");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/weapons/a.png");
 
     rerender(
-      <ItemThumb name="b" alt="" sources={["/images/hunters/b-thumb.avif", "/images/hunters/b.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="b" alt="" sources={["/images/weapons/b.jpg", "/images/weapons/b.png"]} svgPath={SVG_PATH} />
     );
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/b-thumb.avif");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/weapons/b.jpg");
   });
 
   it("leaves the walked chain alone when the candidates are unchanged", () => {
     const { rerender, container } = render(
-      <ItemThumb name="a" alt="" sources={["/images/hunters/a-thumb.avif", "/images/hunters/a.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="a" alt="" sources={["/images/weapons/a.jpg", "/images/weapons/a.png"]} svgPath={SVG_PATH} />
     );
     fireEvent.error(container.querySelector("img"));
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/a.avif");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/weapons/a.png");
 
     // An unrelated prop changing must not rewind progress — otherwise a re-render mid-chain
     // re-requests a URL already known to 404.
     rerender(
-      <ItemThumb name="a" alt="" className="x" sources={["/images/hunters/a-thumb.avif", "/images/hunters/a.avif"]} svgPath={SVG_PATH} />
+      <ItemThumb name="a" alt="" className="x" sources={["/images/weapons/a.jpg", "/images/weapons/a.png"]} svgPath={SVG_PATH} />
     );
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/a.avif");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/weapons/a.png");
   });
 });

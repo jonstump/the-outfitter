@@ -497,12 +497,15 @@ describe("HunterPicker portraits", () => {
     }
   });
 
-  it("asks tiles for the thumbnail size, not the full portrait", () => {
+  // Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption Contract
+  // Compatibility". This used to assert the tile asked for `the-rat-thumb.avif`. #147
+  // deleted all 242 `-thumb` files, so that assertion was pinning a 404 in place.
+  it("asks tiles for the hunter's one portrait, with no size segment in the path", () => {
     render(<Harness />);
     openPicker();
     expect(screen.getByTestId("hunter-tile-the-rat").querySelector("img")).toHaveAttribute(
       "src",
-      "/images/hunters/the-rat-thumb.avif"
+      "/images/hunters/the-rat.avif"
     );
   });
 });

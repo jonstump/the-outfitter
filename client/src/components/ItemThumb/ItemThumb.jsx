@@ -21,8 +21,9 @@ import { slugify } from "../../utils/slugify.js";
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
-// Hunter portraits are AVIF and only AVIF: SPEC-0004's scrape encodes both sizes with no format
-// fallback chain, so every other extension is a guaranteed 404 for this category.
+// Hunter portraits are AVIF and only AVIF: SPEC-0004's scrape encodes the one portrait per
+// hunter with no format fallback chain, so every other extension is a guaranteed 404 for this
+// category.
 //
 // This is a per-CATEGORY ordering hint, not the per-item `IMAGES` manifest the note above rejects
 // — it says nothing about which hunters exist, and the scrape can still add, replace or remove
@@ -47,9 +48,13 @@ export { slugify };
  * Derived from `category` + `name` for items — one URL per known extension, which is the
  * arrangement that keeps the scrape free to re-extension its output. Callers that already
  * KNOW their URLs pass `sources` instead: hunter portraits derive theirs from the dataset's
- * own slug and need the chain to walk two SIZES rather than two extensions (SPEC-0003
- * "Hunter Dataset Consumption Contract"). Same fallback machinery, different candidates —
- * which is the point of pulling it out here rather than growing a second component.
+ * own slug (SPEC-0003 "Hunter Dataset Consumption Contract"). Same fallback machinery,
+ * different candidates — which is the point of pulling it out here rather than growing a
+ * second component.
+ *
+ * That list is ONE candidate long for portraits since #148, and the generality still earns
+ * its keep: it is the same `onError` walk the item extension chain rides, and a single
+ * candidate is the degenerate case of it rather than a second code path.
  *
  * An empty result means "go straight to the SVG": no category, or a caller that knows
  * there is no asset to ask for. Neither issues a network request.
