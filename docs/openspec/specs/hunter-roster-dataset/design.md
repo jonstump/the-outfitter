@@ -141,6 +141,31 @@ Two requirements written here failed the artifact they were meant to govern, and
 
 The lesson worth keeping: a normative number derived from a projection should be marked as provisional until an artifact exists to measure, and a post-condition should be stated against the stage that owns it. Both of these were caught by review rather than by the tests, because the tests were written against the same wrong assumptions.
 
+### The trim threshold is 8, not zero — a third number was wrong
+
+*Added 2026-08-10, after QA of the committed output. This is the same failure as the two above, one level deeper: a requirement asserted from reasoning, and a test written against the same assumption, so the pipeline passed while its output was visibly wrong.*
+
+**Decision**: the subject's bounding box is the smallest rectangle containing every pixel whose alpha is **≥ 8 of 255**. The scan stays hand-written over raw pixels; only the constant moved.
+
+**Why**: the zero threshold's premise — "not fully transparent" means "subject" — is false for 21 of 242 wiki sources. Those carry an alpha 1–3 wash (one reaches 7) across nearly the entire 384×256 canvas. Under `> 0` every one of those pixels is subject, the box expands to almost the full canvas, and the trim does nothing. The evidence, measured across all 242 committed assets:
+
+- **Nothing in the wasted margins exceeds alpha 31 of 255** on any of the 21, and the overwhelming mass is 1–3. Correctly trimmed assets reach alpha 255 at their edges, so the two populations do not overlap.
+- The 21 committed at **322–333px wide against a ~207px median**, 30–46% dead space by width.
+- Every surface fits portraits with `object-fit: cover`, so dead space is drawn as frame and the hunter shrinks. This is what a user notices: *some hunters look smaller than others* in the picker.
+- 10 of the 21 are `-rookie` or `-survivor` variants, pointing at a wiki-side export batch.
+
+**What it costs**: ten more hunters fall below 192px of tile width (51 → 61) once their padding is gone. The worst-case upscale does not move — it stays 1.09×, set by hunters whose trim was always correct — and the old pass for those ten was false anyway, earned with invisible padding rather than pixels. Total portrait area drops about 6.5%.
+
+**Why 8 specifically**: it is 3.1% opacity, below which nothing renders that a reader can see over any background the app uses, and it clears the observed wash (max 7) with margin. Verified against the real artifacts: re-running the corrected bounding box over the 21 committed assets recovers the visible subject on **20 of 21**. The lone holdout, `joan-damon-rookie`, is held open by five pixels in a single vertical run at exactly alpha 8, in a corner far from the subject — AVIF block-boundary ringing introduced by the quality-70 encode, which the lossless source will not contain. Raising the threshold to swallow it would be choosing a constant to satisfy a measurement artifact, which is the mistake the transparent-border clause above already documents. The number stays at 8, and the re-scrape is what confirms it.
+
+**Alternatives considered**:
+
+- *Retrim the committed AVIFs in place*: rejected, though it needs no wiki access and would look right. It re-encodes already-lossy AVIF, and it computes the box from decoded lossy alpha rather than the source — output that looks better and is not what the spec describes. The defect is in the pipeline; the assets are downstream of it.
+- *Threshold 32*: it repairs all 21 including the ringing holdout, but it is chosen to pass a measurement rather than to match perception, and at 12.5% opacity it is high enough to start shaving genuinely faint silhouette edges — the risk the original zero threshold correctly named.
+- *Per-image adaptive threshold (e.g. Otsu on the alpha histogram)*: rejected. It makes dimensions depend on an inference rather than a definition, which is exactly what "two conforming implementations produce identical dimensions" forbids.
+
+**The lesson, again, and it is the same one**: the test suite asserted that a pixel at alpha 1 is kept, which is the defect stated as a requirement. It passed on every run. A fixture built from the assumption cannot falsify the assumption — only measuring the shipped artifact did.
+
 ### The card cannot be made sharp, and the spec says so
 
 *Added 2026-08-10.*
@@ -241,7 +266,7 @@ No size selection appears anywhere in that graph. One asset leaves the scrape an
 
 Every per-hunter failure is recorded and the run continues. The distinctions that matter are between *page missing*, *portrait missing on a page that exists*, *portrait present but unusable*, *network or rate-limit failure*, *robots disallowed*, and *over budget* — because they call for different responses. A missing page may mean the roster changed; an over-budget asset means the encoding settings need work; a robots failure means stop entirely.
 
-*Portrait present but unusable* was added 2026-08-10 with the trimming requirement: a source whose alpha is zero at every pixel has no subject bounding box to trim to. It is kept separate from *portrait missing* because the two send a maintainer in opposite directions — one says the wiki has no art for this hunter, the other says the art is there and this pipeline cannot consume it. Merging them would be the same mistake as a generic failure mode, one level down.
+*Portrait present but unusable* was added 2026-08-10 with the trimming requirement: a source with no pixel at or above the trim threshold has no subject bounding box to trim to (originally "alpha is zero at every pixel"; widened with the threshold amendment, since a wash-only source is just as invisible as a blank one). It is kept separate from *portrait missing* because the two send a maintainer in opposite directions — one says the wiki has no art for this hunter, the other says the art is there and this pipeline cannot consume it. Merging them would be the same mistake as a generic failure mode, one level down.
 
 Only the robots failure aborts the run, and it aborts before any hunter page is fetched.
 
@@ -274,6 +299,8 @@ The live migration is the 2026-08-10 amendment, and it is not additive. It chang
 ## Open Questions
 
 - ~~What does the wiki actually serve as a hunter's portrait — a consistent infobox image, or something that varies by page?~~ **Resolved by measurement (2026-08-10).** Entirely consistent: every original is **384×256 PNG with alpha**, 41–69 KB, across an even-stride sample of the roster. The variation is not in the canvas but in where the subject sits inside it — trimmed subjects run 176–333 wide and 205–256 tall (measured on the emitted set; an earlier estimate of 178–334 was scaled from the committed 320px assets rather than the originals). That consistency is what made the trim amendment safe to specify as a rule rather than as a per-hunter heuristic, and this question turning out to have a boring answer is exactly why it was worth asking.
+
+  **Reopened and re-resolved by the trim threshold (2026-08-10).** The canvas is consistent, but the *alpha* is not, and this answer missed it by measuring only geometry. The 333px upper bound recorded above is not a wide hunter — it is the invisible wash defeating the trim on 21 sources, and it should have read as an anomaly against a ~207px median rather than as the top of a range. Projected post-re-scrape: **176–270 wide, 204–256 tall**. What the wiki serves varies in one more way than this question thought to ask about, which is the more useful answer: sample the alpha distribution, not just the dimensions.
 - Are descriptions consistently present, and how long? If they are several paragraphs, the "small next to the portraits" assumption ADR-0007 made stops holding and they may want their own file after all.
 - Should the scrape detect that a hunter's `sourceRevision` is unchanged and skip re-encoding its portraits? Cheap idempotence, but only worth it once a refresh cadence exists.
 - ~~Do the per-asset budgets survive contact with real art, and at what AVIF quality setting?~~ **Resolved twice.** Under the two-size pipeline: largest thumbnail 6.7 KB against 15 KB, largest full size 14.9 KB against 25 KB, total 2.91 MB. Re-answered for the single trimmed asset by #147's full run at **quality 70**: largest asset **20.0 KB** against the 25 KB ceiling (`devils-advocate`), total **2.49 MB** against 12 MB — roughly 20% headroom per asset and 80% in aggregate. Quality 70 is now normative precisely because the per-asset budget is derived from it; moving it moves the budget.

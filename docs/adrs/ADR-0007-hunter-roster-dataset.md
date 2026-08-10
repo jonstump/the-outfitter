@@ -88,6 +88,7 @@ Hunters do not work that way. A hunter's portrait and description are two facts 
 * A grep for `huntshowdown.wiki.gg` in `client/src/` returns only attribution text and comments, never a fetch or an `<img src>`
 * `client/src/data/hunters.json` exists, is generated, carries per-entry source revision and ingestion timestamp, and is not hand-edited
 * Exactly one portrait asset per hunter with imagery exists on disk, trimmed to the subject, and no `-thumb` variant remains *(amended 2026-08-10 — this criterion previously required both sizes and asserted the thumbnail was materially smaller)*
+* No committed asset is materially wider than its visible subject: decoding the set and comparing each frame against the box of pixels at alpha ≥ 32 shows no frame more than ~8% wider or taller than its subject *(added 2026-08-10 with the trim-threshold amendment — this is the check that caught 21 no-op trims, and it is a property of the committed artifact rather than of the code, so no unit test can stand in for it)*
 * A test covers both degradation paths: the portrait renders when present, and falls through to SPEC-0003's neutral placeholder when absent *(amended 2026-08-10 — there were three paths while there were two sizes)*
 * SPEC-0003's tolerance requirements still hold against the real dataset: a list referencing a hunter absent from `hunters.json` stays fully usable, and a hunter with no portrait asset renders the placeholder rather than a broken image
 * Per-hunter failures follow SPEC-0001's error handling standard — recorded in the run summary with hunter, URL, and reason, never silently swallowed, never aborting the run
@@ -229,3 +230,22 @@ So the amendment is not a trade of weight against quality. It is smaller *and* s
 * **This ADR's own Confirmation criteria** are amended in place: the two that asserted both sizes on disk and three degradation paths described a pipeline this amendment removes, and would have been unsatisfiable by a conforming implementation.
 * Consuming code no longer selects a size, so the `size` argument threaded through the render sites disappears. That work is owned by **SPEC-0003's** amended consumption contract, which states it as a requirement — this ADR records the consequence, not the obligation.
 * **484 assets are already committed**, 242 of them `-thumb` variants that the new pipeline never emits. SPEC-0004 therefore requires the scrape to delete stale variants rather than leaving orphans, since a re-scrape that only overwrites would leave the payload assertions permanently unfalsifiable.
+
+### 2026-08-10 — the trim threshold is alpha ≥ 8, not alpha > 0
+
+**Original:** the trim's bounding box is the smallest rectangle containing every pixel whose alpha is greater than zero. The threshold was fixed at zero deliberately, so that two conforming implementations agree on dimensions and no antialiased edge pixel is ever discarded.
+
+**Amended to:** the bounding box is the smallest rectangle containing every pixel whose alpha is **greater than or equal to 8, of 255**. The scan is still hand-written over raw pixels rather than delegated to the image library; only the constant changed.
+
+**Why:** the amendment above assumed the alpha channel cleanly separates subject from padding. For most of the roster it does. For **21 of 242** it does not: those sources carry a near-invisible wash at alpha 1–3 across nearly the whole 384×256 canvas, so under `> 0` the box expands to almost the full canvas and the trim does nothing. Those assets shipped at 322–333px wide against a ~207px median — 30–46% dead space by width — and because every surface fits portraits with `object-fit: cover`, that dead space is drawn as frame and the hunter appears smaller than his neighbours. The defect was specified rather than mis-coded: the pipeline matched the clause exactly, and a unit test asserted the wrong behaviour as a requirement.
+
+8 of 255 is 3.1% opacity, below the point where anything renders that a reader could see, and it clears the observed wash with margin. The half of the original reasoning that survives is the important half: an explicit constant is a definition, and a library default is a moving target.
+
+**What did not change:** one asset per hunter, native trimmed resolution, AVIF at quality 70, the budgets, the dataset file, and the offline human-invoked posture with its robots and rate-limit rules. This narrows which pixels count as subject and nothing else.
+
+**Blast radius:**
+
+* **SPEC-0004's** trim clause carries the new threshold and the measurement behind it. Its unusable-source condition widens from "alpha is zero at every pixel" to "no pixel reaches the threshold" — a wash-only source renders as nothing and is unusable for the same reason a blank one is, where before it would have succeeded and emitted a full canvas of empty space.
+* **The committed assets do not conform** until `node scripts/scrape-hunters.mjs --force` is run. That run needs wiki access and is human-invoked by ADR-0002, so code, spec and disk are deliberately out of step until it happens, and SPEC-0004 marks the affected figures as projections rather than restating them as measured.
+* **The surface table's width figures move**: 176–333 wide becomes a projected 176–270, and the count falling short of a tile's 192px rises 51 → 61. The 1.09× worst case is unchanged, since the 176px floor belongs to hunters whose trim was always correct.
+* **No consumer change.** Assets already vary in dimension and aspect, and `object-fit: cover` already does the fitting; this makes the variation smaller and more honest, not different in kind.
