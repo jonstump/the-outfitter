@@ -147,9 +147,19 @@ describe("LoadoutListsPanel", () => {
     renderPanel(base([list("a", "Alpha")], []));
     const opts = within(screen.getByLabelText(/order lists by/i)).getAllByRole("option").map((o) => o.textContent);
     expect(opts).toEqual(["Sort: List name", "Sort: Creation date", "Sort: Loadouts held"]);
-    // "Hunter name" and "Recently used" fall through to the name tiebreak until #88 /
-    // ADR-0007 supply the data, so shipping them would duplicate the default silently.
-    expect(opts.join()).not.toMatch(/Hunter name|Recently used/);
+
+    // Two absences with two different causes, asserted separately because only one of
+    // them is temporary — a single combined regex hid that distinction.
+
+    // WITHHELD. The comparator exists and the panel already passes hunterNameFor, but an
+    // empty roster resolves nothing, so the ordering would silently duplicate the default.
+    // This entry is expected to appear on its own once #109 populates hunters.js — at which
+    // point this assertion is the one that should fail and be updated.
+    expect(opts.join()).not.toMatch(/Hunter name/);
+
+    // GONE. SPEC-0003 dropped the requirement outright (2026-08-10) rather than deferring
+    // it, so unlike the above this must not come back without a spec change first.
+    expect(opts.join()).not.toMatch(/Recently used/);
   });
 
   it("blanks the move control for a dangling listId rather than showing a dead id", () => {
