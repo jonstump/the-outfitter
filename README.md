@@ -39,7 +39,28 @@ Run from the repo root:
 | `npm run build` | Build the client for production |
 | `npm start` | Start the production server (sets `NODE_ENV=production` itself; serves the built client) |
 | `npm test` | Run every suite — client, server, and the scrape scripts. This is what CI runs |
-| `npm run test:scrape-images` | Run only the scrape-script tests |
+| `npm run test:scrape` | Run only the scrape-script tests (images and hunters) |
+
+## Data scrapes
+
+Catalog images and the hunter roster are sourced from [huntshowdown.wiki.gg](https://huntshowdown.wiki.gg)
+by offline scripts and committed to the repository. They are **never** run by `dev`, `build`,
+`start`, or CI — the app itself issues no requests to the wiki (ADR-0002, ADR-0007). Run them by
+hand only when refreshing the data:
+
+```
+node scripts/scrape-images.mjs            # catalog item art
+node scripts/scrape-hunters.mjs           # hunter roster + portraits
+node scripts/scrape-hunters.mjs --names-only   # roster only; no sharp required
+```
+
+Both respect `robots.txt` (aborting if it can't be read), rate-limit every request, and report a
+structured per-run summary. `scrape-hunters.mjs` writes `client/src/data/hunters.json` plus two
+AVIF portrait sizes per hunter under `client/public/images/hunters/`, enforcing a per-asset and a
+total byte budget — an over-budget asset fails its hunter rather than being written. Useful flags:
+`--force` (re-encode existing art), `--limit=N`, `--dry-run`, `--delay-ms=N`.
+
+Generated files are committed and must not be hand-edited; re-running the scrape rewrites them.
 
 ## Project structure
 
@@ -114,7 +135,7 @@ for multiple).
 
 ## Attribution
 
-Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; image data via [huntshowdown.wiki.gg](https://huntshowdown.wiki.gg). This project is fan-made and not affiliated with or endorsed by Crytek.
+Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via [huntshowdown.wiki.gg](https://huntshowdown.wiki.gg). This project is fan-made and not affiliated with or endorsed by Crytek.
 
 ## Architecture docs
 

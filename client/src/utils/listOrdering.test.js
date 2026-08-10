@@ -134,11 +134,18 @@ describe("availableSortKeys", () => {
 });
 
 describe("hunterNameFor", () => {
-  it("resolves nothing while the roster is empty, which is the specified state", () => {
-    // SPEC-0003 requires consumers to tolerate a hunterId absent from the dataset. With no
-    // dataset every id is absent, so this is correct behaviour rather than a stub.
-    expect(HUNTERS).toEqual([]);
-    expect(hunterNameFor("the-rat")).toBeNull();
+  it("resolves against the scraped roster", () => {
+    // SPEC-0004's dataset has landed, so the comparator the panel already wired up now has
+    // something to resolve. Asserting a known entry rather than a count keeps this from
+    // breaking every time the wiki gains a hunter.
+    expect(HUNTERS.length).toBeGreaterThan(0);
+    const first = HUNTERS[0];
+    expect(hunterNameFor(first.id)).toBe(first.name);
+  });
+
+  it("still returns null for a hunter absent from the dataset", () => {
+    // SPEC-0003: a list may reference a hunter that has left the roster, and must stay usable.
+    expect(hunterNameFor("definitely-not-a-hunter")).toBeNull();
   });
 
   it("returns null for a missing or empty id without throwing", () => {
@@ -147,9 +154,41 @@ describe("hunterNameFor", () => {
     expect(hunterNameFor("")).toBeNull();
   });
 
-  it("drives hunter ordering into the unresolved bucket rather than erroring", () => {
-    const lists = [L("1", "b", { hunterId: "the-rat" }), L("2", "a", { hunterId: "unknown" })];
+  it("drives unresolved hunters into the trailing bucket rather than erroring", () => {
+    const known = HUNTERS[0];
+    const lists = [L("1", "b", { hunterId: "gone-from-the-wiki" }), L("2", "a", { hunterId: known.id })];
     const out = sortLists(lists, "hunter", { hunterNameFor });
+    // The resolvable hunter sorts ahead; the unresolved one lands after everything that resolves.
     expect(out.map((l) => l.name)).toEqual(["a", "b"]);
+  });
+});
+
+describe("the scraped dataset satisfies SPEC-0003's consumption contract", () => {
+  it("gives every entry a stable id and a display name", () => {
+    for (const hunter of HUNTERS) {
+      expect(typeof hunter.id).toBe("string");
+      expect(hunter.id.length).toBeGreaterThan(0);
+      expect(typeof hunter.name).toBe("string");
+      expect(hunter.name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps ids unique, so a hunterId reference is unambiguous", () => {
+    expect(new Set(HUNTERS.map((h) => h.id)).size).toBe(HUNTERS.length);
+  });
+
+  it("carries the classification the picker filters on", () => {
+    for (const hunter of HUNTERS) {
+      expect(hunter).toHaveProperty("acquisition");
+      expect(hunter).toHaveProperty("obtainable");
+      expect(hunter).toHaveProperty("source");
+    }
+  });
+
+  it("records provenance on every entry", () => {
+    for (const hunter of HUNTERS) {
+      expect(hunter.sourceRevision).toBeTruthy();
+      expect(hunter.ingestedAt).toBeTruthy();
+    }
   });
 });

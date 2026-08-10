@@ -21,6 +21,20 @@ import { slugify } from "../../utils/slugify.js";
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
+// Hunter portraits are AVIF and only AVIF: SPEC-0004's scrape encodes both sizes with no format
+// fallback chain, so every other extension is a guaranteed 404 for this category.
+//
+// This is a per-CATEGORY ordering hint, not the per-item `IMAGES` manifest the note above rejects
+// — it says nothing about which hunters exist, and the scrape can still add, replace or remove
+// assets with no change here. The ordering earns its keep: the picker renders the full roster, so
+// a shared chain would cost either one wasted request per item image (avif first) or several per
+// portrait (avif last). Neither is acceptable at roster scale, and a category split costs nothing.
+const EXTENSIONS_BY_CATEGORY = { hunters: ["avif"] };
+
+export function extensionsFor(category) {
+  return EXTENSIONS_BY_CATEGORY[category] ?? IMAGE_EXTENSIONS;
+}
+
 // Re-exported, not redefined. This component is the READER end of the asset-path contract;
 // scripts/lib/wiki.mjs is the writer. Both now import client/src/utils/slugify.js, because
 // the two local copies that used to live here and there had already drifted on apostrophes
@@ -39,16 +53,17 @@ export default function ItemThumb({ category, name, alt, svgPath, svgFill = "#8a
   const [extIndex, setExtIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
 
-  const tryImage = Boolean(category) && !imageFailed && extIndex < IMAGE_EXTENSIONS.length;
+  const extensions = extensionsFor(category);
+  const tryImage = Boolean(category) && !imageFailed && extIndex < extensions.length;
 
   return (
     <span className={`item-thumb${className ? ` ${className}` : ""}`}>
       {tryImage ? (
         <img
-          src={`/images/${category}/${slugify(name)}.${IMAGE_EXTENSIONS[extIndex]}`}
+          src={`/images/${category}/${slugify(name)}.${extensions[extIndex]}`}
           alt={label}
           onError={() => {
-            if (extIndex < IMAGE_EXTENSIONS.length - 1) setExtIndex((i) => i + 1);
+            if (extIndex < extensions.length - 1) setExtIndex((i) => i + 1);
             else setImageFailed(true);
           }}
         />
