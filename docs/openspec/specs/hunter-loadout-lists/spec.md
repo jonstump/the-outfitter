@@ -24,7 +24,7 @@ See ADR-0006 for the decision record and the rejected alternatives.
 - **The hunter portrait picker**, its filtering, and **favorite hunters** — no picker surface exists yet; lists are created with a name only (#88, #114).
 - **Accent colour rendering** — the server assigns and persists an accent from the six-value palette, but no client surface reads it and `--list-accent-{1..6}` are not yet defined in `global.css` (#88).
 - **Portrait rendering against the real dataset** — the render site currently resolves `/images/hunters/{hunterId}` through the item extension chain, which carries no size segment and no `avif`. Both land with SPEC-0004's pipeline (#110).
-- **Hunter-name and recently-used sort orders** — the comparators are implemented and unit-tested but not offered. Hunter-name is blocked on SPEC-0004's dataset; recently-used is blocked on a `lastUsedAt` the server does not record.
+- **Hunter-name sort order** — implemented, unit-tested, and wired, but withheld from the menu while the hunters dataset is empty, since it would resolve nothing. It appears automatically once `client/src/data/hunters.js` carries a roster (#109).
 
 ## Requirements
 
@@ -360,8 +360,11 @@ Lists SHALL be presented in alphabetical order by list display name by default. 
 
 - alphabetical by the display name of the list's hunter, resolved through the hunters dataset
 - creation date
-- most recently used, where "used" means the list was last opened by the user
 - number of loadouts held, descending, ties broken by list display name
+
+Hunter-name ordering SHALL be offered once the hunters dataset resolves names, and MAY be withheld while the dataset is empty, since with nothing to resolve it would silently duplicate the default ordering.
+
+**Most-recently-used ordering was considered and dropped** (2026-08-10). It was originally specified here as "used means the list was last opened by the user", which requires persisting a `lastUsedAt` on the list record — a server write on every list open, for a single ordering. That also sits awkwardly beside "The Selected List Is Client State", which forbids persisting which list the user is looking at: an open *event* is arguably durable where the *cursor* is not, but the distinction is thin enough that it should be argued for rather than assumed. Neither the write cost nor that argument is worth one sort order, so the ordering is removed rather than left indefinitely deferred. If it returns, it needs both the field and a sentence reconciling it with the selection rule.
 
 Under hunter-name ordering, a list that references no hunter, or whose `hunterId` is absent from the dataset, SHALL be grouped together after all lists that resolve to a hunter, ordered among themselves by list display name. Such lists MUST NOT be hidden, and MUST NOT be sorted as though their hunter name were an empty string interleaved with real names.
 

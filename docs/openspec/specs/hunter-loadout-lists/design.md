@@ -160,7 +160,7 @@ What favorites actually solve is *finding* the handful of hunters someone return
 
 Choosing filter-over-gate follows directly. A gate needs a seeding answer, because you cannot favorite a hunter you have never seen — which is what makes a brand-new user's picker empty. A filter has no cold start at all: an empty favorites set is simply no filter applied, and the picker behaves exactly as it would without the feature.
 
-Not pre-populating is the same instinct. Seeding favorites randomly, as was floated, would write preferences the user never expressed and make their first action removing hunters they did not choose. If a head start is wanted later, "recently used" derives one from actual behaviour instead of inventing it.
+Not pre-populating is the same instinct. Seeding favorites randomly, as was floated, would write preferences the user never expressed and make their first action removing hunters they did not choose. If a head start is wanted later, deriving one from actual behaviour beats inventing it.
 
 Storage mirrors `loadoutLists` exactly — a token-scoped collection under the ownership rules issue #17 established — so the ownership checks and their tests carry over rather than being reinvented.
 
@@ -171,7 +171,9 @@ Storage mirrors `loadoutLists` exactly — a token-scoped collection under the o
 
 ### List ordering is client-side, with alphabetical as the default
 
-**Choice**: Default alphabetical by list display name. Alternatives: alphabetical by hunter name, creation date, most-recently-used, and loadout-count. Unassigned holds a fixed position regardless of sort. The preference is client state.
+**Choice**: Default alphabetical by list display name. Alternatives: alphabetical by hunter name, creation date, and loadout-count. Unassigned holds a fixed position regardless of sort. The preference is client state.
+
+*Amended 2026-08-10*: most-recently-used was originally a fourth alternative and has been dropped. It needs a persisted `lastUsedAt` — a server write on every list open — and it sits awkwardly beside the rule that the selected list is client state. Neither cost is worth one ordering. See the spec requirement for the full reasoning.
 
 **Rationale**: List name and hunter name are genuinely different orderings once a user renames anything, and both are useful — "where's my Rat stuff" and "where's that shotgun list" are different questions. Since the app carries a full hunters dataset, resolving `hunterId` to a name is a local lookup, so offering both costs nothing but the sort function.
 
@@ -297,12 +299,12 @@ Rollback: steps 2 and 3 are additive. Reverting the server change leaves `listId
 Settled during review of the initial draft, recorded so the reasoning is not re-litigated:
 
 - **Move affordance** — a native `<select>` on the loadout row whose value is the loadout's current list, not drag-and-drop. DnD may be added later; if it is, the explicit control stays rather than being replaced. Full detail in the decision below and in #87.
-- **List ordering** — alphabetical by list name by default, with hunter name, creation date, most-recently-used, and loadout count as alternatives. Hunter-name ordering places hunterless and unresolvable lists after everything that resolves.
+- **List ordering** — alphabetical by list name by default, with hunter name, creation date, and loadout count as alternatives. Hunter-name ordering places hunterless and unresolvable lists after everything that resolves. (Most-recently-used was dropped on 2026-08-10; see the ordering decision above.)
 - **Picker behaviour for already-used hunters** — never restrict them, and never mark them either. Reuse is unremarkable; the per-list accent colour is what keeps lists distinguishable. (An earlier draft required an in-use marker; see the decision above for why it was dropped.)
 - **Collection name** — `loadoutLists`, not `hunterLists`, because lists need not correspond to hunters and a `hunters` dataset is coming.
 - **Portrait scope** — the full wiki roster, and the dataset's sourcing is factored out into its own decision rather than being specified here.
 - **Accent palette** — six fixed values, assigned least-used-first, all verified at 3:1 or better. `--gold` was dropped from the designed palette to avoid colliding with the theme's interactive colour.
-- **"Most recently used"** — means last *opened*, not last saved into or last modified. Opening a list is the act that expresses intent to work in it.
+- **"Most recently used"** — dropped as an ordering on 2026-08-10. It had meant last *opened*, not last saved into or last modified. Recorded because the definition is the part worth keeping if it ever returns.
 - **In-use marker in the picker** — dropped. Reuse is unrestricted and unmarked.
 - **Catch-all group name** — "Unassigned", kept because it is technically accurate: those loadouts have no list assignment, as distinct from belonging to a category that happens to be uncategorized.
 
