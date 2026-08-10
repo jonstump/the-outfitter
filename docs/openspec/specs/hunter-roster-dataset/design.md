@@ -50,6 +50,23 @@ The numbers are anchored on what the app ships today: 121 item images, median 7 
 
 These are starting values chosen to be enforceable, not sacred. Moving them is a spec edit, which is the right amount of friction: visible, reviewed, but not an ADR revision.
 
+### The budget is a total, not just a per-asset ceiling
+
+**Choice**: 20 KB per thumbnail, 60 KB per full size, and **25 MB total** across the roster. A run that would breach the total fails rather than committing a partial set.
+
+**Rationale**: The original budgets were 40 KB and 150 KB, anchored on the 121 committed item images (median 7 KB, max 36 KB). That anchoring was sound for a single asset and meaningless in aggregate, because it was never multiplied by the roster.
+
+Counting the wiki's roster page gives roughly **285 hunters**. At the original numbers that is 11.1 MB of thumbnails and 41.7 MB of full sizes — **52.9 MB** committed, against a repository whose entire image payload today is 1.10 MB and whose `.git` is 6.4 MB. Roughly a fiftyfold increase, permanent, paid by every clone forever.
+
+The per-asset numbers are also tightened, and that costs nothing: a 192px WebP photograph is comfortably under 20 KB and a 440px one under 60 KB at reasonable quality. The original figures were loose rather than measured.
+
+A total ceiling is the control that actually matters here, because per-asset compliance says nothing about aggregate weight — every file can pass and the repository still gain 50 MB. Failing the run rather than warning follows the same reasoning as the per-asset rule: a total overage is invisible in any single file, so nothing in review would catch it.
+
+**Alternatives considered**:
+- *Keep the per-asset budgets and accept the total*: rejected — 53 MB of binaries is a decision, and making it by not doing arithmetic is not making it.
+- *Scrape thumbnails only, defer full sizes*: viable, and still available if 25 MB proves too generous once real art is measured. Not taken now because it would leave the expanded list header rendering an upscaled thumbnail, and the two-size decision in ADR-0007 exists precisely to avoid that.
+- *Narrow the roster scope*: rejected — the full roster is an explicit ADR-0007 decision, and the right lever is the budget, not the coverage.
+
 ### sharp, as a devDependency the app can never reach
 
 **Choice**: `sharp`, declared in `devDependencies`, imported only by the scrape script.
@@ -162,4 +179,5 @@ Each step is independently useful and independently revertible. Step 3 changing 
 - What does the wiki actually serve as a hunter's portrait — a consistent infobox image, or something that varies by page? The parser's shape depends on it, and it is the thing most likely to force a revision here.
 - Are descriptions consistently present, and how long? If they are several paragraphs, the "small next to the portraits" assumption ADR-0007 made stops holding and they may want their own file after all.
 - Should the scrape detect that a hunter's `sourceRevision` is unchanged and skip re-encoding its portraits? Cheap idempotence, but only worth it once a refresh cadence exists.
-- Do the 40 KB / 150 KB budgets survive contact with real art, and at what WebP quality setting?
+- Do the 20 KB / 60 KB per-asset budgets survive contact with real art, and at what WebP quality setting? If they do not, the 25 MB total is the constraint to hold and the per-asset figures are the ones to move — or thumbnails ship alone and full sizes follow.
+- Progression hunters appear as Rookie / Survivor / Veteran variants of the same character. Are those three dataset entries or one entry with three assets? This spec assumes three entries, which is what the wiki lists, but it affects how the picker groups them.

@@ -252,6 +252,43 @@ The picker SHALL offer an explicit "no portrait" choice, so a list can be create
 - **WHEN** a user chooses the "no portrait" option in the picker
 - **THEN** a list SHALL be created with a null `hunterId`, rendering a monogram derived from its name
 
+### Requirement: The Hunter Picker Is Filterable and Bounded
+
+The roster is roughly 285 hunters. A flat grid of every portrait is not a usable picker and is not a defensible payload, so filtering is a functional requirement rather than a refinement.
+
+The picker SHALL provide a free-text filter matching on hunter name. It SHALL provide filtering by the classification SPEC-0004 supplies — at minimum `acquisition` and `obtainable`.
+
+The picker MUST NOT load every hunter's portrait eagerly. Images SHALL be loaded lazily, so the bytes fetched are proportional to what the user has actually scrolled to rather than to the size of the roster.
+
+Filtering SHALL narrow which hunters are shown; it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter.
+
+An empty result SHALL say so, rather than rendering an empty grid.
+
+#### Scenario: Name filtering narrows the roster
+
+- **WHEN** a user types into the picker's filter
+- **THEN** only hunters whose name matches SHALL be shown, and the count of shown hunters SHALL decrease
+
+#### Scenario: Classification filtering uses the dataset's own values
+
+- **WHEN** a user filters by an acquisition value
+- **THEN** only hunters whose `acquisition` matches SHALL be shown
+
+#### Scenario: Portraits are not loaded eagerly
+
+- **WHEN** the picker is opened against the full roster
+- **THEN** portraits outside the visible area SHALL NOT be fetched, and the bytes loaded SHALL be proportional to what has been scrolled to rather than to the roster size
+
+#### Scenario: Filtering does not mark reuse
+
+- **WHEN** a filter is applied and some matching hunters are already used by the user's other lists
+- **THEN** those hunters SHALL be presented identically to unused ones, with no badge, dimming, reordering, or count
+
+#### Scenario: An empty result is stated
+
+- **WHEN** a filter matches no hunters
+- **THEN** the picker SHALL say that nothing matched rather than rendering an empty grid
+
 ### Requirement: List Ordering and Sorting
 
 Lists SHALL be presented in alphabetical order by list display name by default. The system SHALL offer additional orderings, at minimum:

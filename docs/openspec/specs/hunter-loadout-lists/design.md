@@ -138,6 +138,18 @@ The non-obvious cost is what happens *after* a successful move: the row leaves t
 - *Custom menu button*: rejected — every affordance the native select provides would have to be rebuilt and retested, for styling control this design does not need.
 - *Modal picker*: rejected — far too heavy for a per-row operation, and it hides the roster the user is choosing among.
 
+### The picker filters, because 285 portraits is not a grid
+
+**Choice**: The picker requires name search, classification filters, and lazy-loaded imagery.
+
+**Rationale**: This was discovered by counting rather than reasoned from first principles. The wiki's roster page lists roughly **285 hunters**. A flat grid renders 285 tiles and, at the portrait budgets SPEC-0004 sets, loads several megabytes of images to let someone pick one.
+
+That is not a scale problem to solve later. It is the difference between a picker that works and one that hangs a phone, so filtering is specified as a functional requirement rather than an enhancement.
+
+It also changes what the SPEC-0004 classification fields are for. They were originally framed as preparation for future sorting; at this roster size they are what filtering *runs on*, which is why SPEC-0004 now requires `acquisition` and `obtainable` rather than leaving them optional.
+
+The requirement is written to not collide with "The Hunter Picker Does Not Restrict or Mark Reuse". Filtering narrows *which hunters are candidates*; it never distinguishes among the candidates it shows. A filtered-out hunter is out of scope for this selection, which is a different thing from a shown hunter being marked as already used.
+
 ### List ordering is client-side, with alphabetical as the default
 
 **Choice**: Default alphabetical by list display name. Alternatives: alphabetical by hunter name, creation date, most-recently-used, and loadout-count. Unassigned holds a fixed position regardless of sort. The preference is client state.
