@@ -79,3 +79,4 @@ Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creatin
 | Spec | Project | Number | ID |
 |------|---------|--------|-----|
 | SPEC-0002 | SPEC-0002: Developer Environment Consistency | 1 | `PVT_kwHOA4k1ys4Bf4Mk` |
+| SPEC-0003 | SPEC-0003: Hunter Loadout Lists | 2 | `PVT_kwHOA4k1ys4Bf478` |
