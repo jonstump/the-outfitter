@@ -139,7 +139,7 @@ Trimming changes what one asset can do. At native trimmed size every hunter clea
 
 That deserves to be written down rather than left as an unexplained blur. The previous spec asserted the opposite — a scenario titled "The full size stays crisp at the largest render" — and it was wrong on arithmetic that nobody had run: it compared the asset's width against the card's width while `object-fit: cover` was cropping the asset to 47% of that width first. A future reader who notices the softness deserves to find the ceiling documented, not to re-derive it.
 
-The gap is closable, but only in SPEC-0003: rendering the card's portrait area at **≤113px tall** would make every surface sharp. That is a visual redesign of the poster card the design handoff specifies, and it was declined as out of scope for a pipeline amendment.
+The gap is closable, but only in SPEC-0003: rendering the card's portrait area at **≤113px tall** would bring the card in line with the others, leaving the picker tile's bounded 1.08× as the only residual upscale anywhere. That is a visual redesign of the poster card the design handoff specifies, and it was declined as out of scope for a pipeline amendment.
 
 ### sharp, as a devDependency the app can never reach
 

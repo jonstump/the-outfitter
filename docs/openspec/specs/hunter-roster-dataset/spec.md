@@ -14,7 +14,7 @@ This spec covers **production**. SPEC-0003 specifies **consumption** — the fal
 
 See ADR-0007 for the decision record, including why this is one script rather than the images/stats split ADR-0005 established.
 
-**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset larger than every surface needs except one, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
+**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.08× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
 
 ## Requirements
 
@@ -158,7 +158,7 @@ The scrape MUST NOT upscale a subject to meet any of these figures. Where the so
 - **WHEN** the scrape runs against a directory containing assets from the previous two-size pipeline
 - **THEN** every stale variant SHALL be deleted, the run SHALL report how many were removed, and only one asset per hunter SHALL remain
 
-#### Scenario: Subjects are never upscaled
+#### Scenario: The scrape never upscales a subject
 
 - **WHEN** a trimmed subject is smaller than what a rendering surface would need at 2×
 - **THEN** the asset SHALL be written at its native trimmed size rather than upscaled, and the run SHALL NOT fail on that basis
@@ -183,10 +183,15 @@ The card is therefore rendered at roughly **1.9× upscale**. This SHALL be treat
 - **WHEN** the scrape produces a portrait for a hunter whose trimmed subject is shorter than 440px
 - **THEN** the asset SHALL be written at native size, and the scrape MUST NOT upscale it to satisfy the card
 
-#### Scenario: Every other surface is served without upscaling
+#### Scenario: The expanded list header is served without upscaling
 
-- **WHEN** the emitted portrait is rendered in the picker tile or the expanded list header
-- **THEN** the asset SHALL be at least as large as those surfaces require at 2×, so the browser does not upscale it
+- **WHEN** the emitted portrait is rendered in the 52×68 expanded list header
+- **THEN** the asset SHALL exceed what that surface requires at 2× in both dimensions for every hunter, so the browser does not upscale it
+
+#### Scenario: The picker tile's residual upscale is bounded
+
+- **WHEN** the emitted portrait is rendered in a 96px square picker tile
+- **THEN** the asset SHALL clear the required 192px in height for every hunter, and a hunter whose trimmed width falls below 192px SHALL be upscaled by no more than 1.08× rather than by an unbounded amount
 
 ### Requirement: Portrait Payload Budget
 
