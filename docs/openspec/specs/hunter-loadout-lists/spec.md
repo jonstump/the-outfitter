@@ -289,6 +289,57 @@ An empty result SHALL say so, rather than rendering an empty grid.
 - **WHEN** a filter matches no hunters
 - **THEN** the picker SHALL say that nothing matched rather than rendering an empty grid
 
+### Requirement: Favorite Hunters
+
+With a roster of roughly 285, finding the handful of hunters a user actually returns to is the picker's real cost. A user MAY mark any hunter as a favorite.
+
+Favorites SHALL be token-scoped and persisted server-side, under the same ownership rules as lists: a favorite belongs to the token that created it, and MUST NOT be visible to any other token.
+
+Favorites SHALL act as a **filter and sort over the full roster**, never as a gate. Every hunter SHALL remain reachable regardless of what is favorited:
+
+- Favorited hunters SHALL sort ahead of unfavorited ones within whatever filter is active
+- The picker SHALL offer a "favorites only" toggle
+- With that toggle off, the roster SHALL be shown in full
+
+An empty favorites set SHALL therefore behave as no filter at all, not as an empty picker. The system MUST NOT pre-populate favorites — a favorite records a choice the user made, and seeding it with arbitrary hunters would require the user to remove preferences they never expressed.
+
+Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: a favorite is the user's own preference, whereas reuse is a fact about their other lists, which "The Hunter Picker Does Not Restrict or Mark Reuse" requires stay unmarked.
+
+#### Scenario: A favorite persists for its owner
+
+- **WHEN** a user favorites a hunter and reloads the application
+- **THEN** that hunter SHALL still be favorited
+
+#### Scenario: Favorites are private to their token
+
+- **WHEN** a request bearing token A fetches favorites
+- **THEN** the response SHALL contain only token A's favorites, and SHALL NOT reveal any favorite belonging to another token
+
+#### Scenario: Favorites sort ahead within the active filter
+
+- **WHEN** a user filters by an acquisition value and some matching hunters are favorited
+- **THEN** the favorited matches SHALL be shown before the unfavorited matches, and no non-matching hunter SHALL be shown
+
+#### Scenario: The full roster stays reachable
+
+- **WHEN** a user has favorites and the "favorites only" toggle is off
+- **THEN** every hunter SHALL be shown, favorited or not
+
+#### Scenario: An empty favorites set is not an empty picker
+
+- **WHEN** a user who has favorited nothing opens the picker
+- **THEN** the full roster SHALL be shown, and no favorites filter SHALL be applied
+
+#### Scenario: Favorites are never pre-populated
+
+- **WHEN** a user opens the picker for the first time
+- **THEN** no hunter SHALL be favorited on their behalf
+
+#### Scenario: Favoriting does not mark reuse
+
+- **WHEN** a favorited hunter is also already used by one of the user's lists
+- **THEN** the picker SHALL indicate only that it is favorited, and SHALL NOT indicate that it is in use
+
 ### Requirement: List Ordering and Sorting
 
 Lists SHALL be presented in alphabetical order by list display name by default. The system SHALL offer additional orderings, at minimum:
