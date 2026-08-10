@@ -167,7 +167,12 @@ export const CONS = [
   ["liquid-fire-bomb", "Liquid Fire Bomb", 75, "Throwable", "Fire"],
   ["hive-bomb", "Hive Bomb", 90, "Throwable", "Gas"],
   ["chaos-bomb", "Chaos Bomb", 25, "Throwable", "Utility"],
-  ["choke-bomb", "Choke Bomb", 25, "Throwable", "Gas"],
+  // "Choke Bomb" was removed here (issue #67): it duplicated the "Choke Bombs" TOOLS
+  // entry, had no wiki page or image of its own, and let a player fill a consumable slot
+  // with something the game only offers as a tool. Removing a row from the middle of an
+  // array is safe now that loadoutCodec.js pins the legacy order in its own table
+  // (issue #68) instead of reading these arrays positionally. The `choke-bomb` id is
+  // retired and must never be reused.
   ["flash-bomb", "Flash Bomb", 40, "Throwable", "Utility"],
   ["concertina-bomb", "Concertina Bomb", 60, "Throwable", "Utility"],
   // Update 2.8 additions — appended (never inserted) so legacy index-based

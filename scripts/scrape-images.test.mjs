@@ -144,7 +144,16 @@ test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
 
 test("resolveWikiPath: returns null for known catalog duplicates", () => {
   assert.equal(resolveWikiPath("weapons", "winfield-m1873c", "Winfield M1873C"), null);
-  assert.equal(resolveWikiPath("consumables", "choke-bomb", "Choke Bomb"), null);
+});
+
+// Issue #67: the "Choke Bomb" consumable duplicated the "Choke Bombs" tool and was skipped
+// by the scrape rather than removed from the catalog. It is gone from CONS now, so the
+// surviving tool must resolve normally and nothing may re-add a null override for the
+// retired consumable id.
+test("resolveWikiPath: the retired Choke Bomb duplicate is gone, the tool resolves", () => {
+  assert.equal(resolveWikiPath("tools", "choke-bombs", "Choke Bombs"), "Tools/Choke_Bombs");
+  assert.equal(KNOWN_CATALOG_DUPLICATES["choke-bomb"], undefined);
+  assert.ok(!collectCatalogItems(["consumables"]).some((i) => i.id === "choke-bomb"));
 });
 
 // Regression: "Winfield M1873" is the live weapon the wiki calls "Ranger 73", not a duplicate.
