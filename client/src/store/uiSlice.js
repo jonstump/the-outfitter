@@ -10,6 +10,9 @@ import { DEFAULT_SORT } from "../utils/listOrdering.js";
 // it survives a reload, per-browser — which is the correct scope for a cursor.
 export const LS_SELECTED_LIST = "hunt-outfitter-selected-list";
 
+/** @see the extraReducers note below for why this is a literal rather than an import. */
+export const FETCH_LISTS_FULFILLED = "loadoutLists/fetch/fulfilled";
+
 function readSelectedList() {
   try {
     return localStorage.getItem(LS_SELECTED_LIST) || null;
@@ -92,6 +95,33 @@ const uiSlice = createSlice({
     setConfirmRetireListId(state, action) {
       state.confirmRetireListId = action.payload ?? null;
     },
+  },
+  extraReducers: (builder) => {
+    // Reconcile a stale selection against the lists that actually exist.
+    //
+    // The panel resolves selectedListId for RENDERING, but that is render-local — it never
+    // clears the stored value, and saveCurrent does not go through the panel. So a
+    // selection that outlived its list (retired in another tab, or restored from
+    // localStorage against cleared server data) still went out on the wire as a listId and
+    // 404'd every save, invisibly: no expanded panel, no pressed card, nothing to click to
+    // clear it. Reconciling here, where the list data arrives, is the only place that fixes
+    // every consumer at once.
+    //
+    // The action type is written as a literal because loadoutListsSlice imports uiActions
+    // from this module — importing fetchLists back would be a cycle. uiSlice.test.js
+    // asserts this string still matches fetchLists.fulfilled.type, so a rename breaks a
+    // test rather than silently disabling reconciliation.
+    builder.addCase(FETCH_LISTS_FULFILLED, (state, action) => {
+      if (!state.selectedListId) return;
+      const stillExists = (action.payload || []).some((l) => l.id === state.selectedListId);
+      if (stillExists) return;
+      state.selectedListId = null;
+      try {
+        localStorage.removeItem(LS_SELECTED_LIST);
+      } catch {
+        // Storage unavailable — in-memory state is already reconciled.
+      }
+    });
   },
 });
 

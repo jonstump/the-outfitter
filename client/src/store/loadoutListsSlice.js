@@ -89,8 +89,9 @@ const loadoutListsSlice = createSlice({
         state.status = "succeeded";
         state.items = action.payload;
       })
-      // Reconciliation lives in the panel (see selectedList resolution); the slice only
-      // owns the list data itself.
+      // Stale-selection reconciliation is handled in uiSlice's extraReducers on this same
+      // action — it owns selectedListId, and doing it there fixes every consumer at once
+      // rather than only the render path.
       .addCase(fetchLists.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;

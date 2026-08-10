@@ -16,13 +16,22 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
 });
 
 export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
-  const { loadout, ui } = getState();
+  const { loadout, ui, loadoutLists } = getState();
   const name = loadout.name.trim() || "Unnamed loadout";
+
+  // SPEC-0003 line 318: the user SHALL be able to save to Unassigned without first
+  // deselecting. Unassigned is ui.unassignedOpen, never a listId, so no sentinel can
+  // travel here.
+  //
+  // Resolve rather than trust, symmetrically with the panel's render path: a stale
+  // selectedListId — retired in another tab, or restored from localStorage before
+  // fetchLists has resolved — would otherwise be sent as a real list id and 404 the save.
+  // uiSlice reconciles on fetchLists.fulfilled; this closes the window before that lands.
+  const selected = ui.selectedListId;
+  const listId = selected && (loadoutLists?.items || []).some((l) => l.id === selected) ? selected : null;
+
   try {
-    // SPEC-0003 line 318: the user SHALL be able to save to Unassigned without first
-    // deselecting. selectedListId is a real list id or null — Unassigned is tracked by
-    // ui.unassignedOpen and never travels as a listId, so this cannot send a sentinel.
-    const record = await upsertLoadout(name, toData({ ...loadout, name }), ui.selectedListId ?? null);
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId);
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;
   } catch (err) {

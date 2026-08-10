@@ -111,6 +111,26 @@ describe("LoadoutListsPanel", () => {
     expect(captured.find((c) => c.url.endsWith("/api/loadouts")).body.listId).toBe("a");
   });
 
+  it("sends listId null when the selected list no longer exists", async () => {
+    // The render path already hid the ghost panel, but saveCurrent read selectedListId raw,
+    // so a stale id still went out on the wire and 404'd the save — invisibly, since there
+    // is no expanded panel and no pressed card to clear. Found in re-review.
+    const captured = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      captured.push({ url: String(url), body: JSON.parse(opts.body) });
+      return { ok: true, status: 201, json: async () => ({ id: "new", name: "x", data, listId: null }) };
+    });
+
+    const store = renderPanel(base([list("a", "Alpha")], [], { selectedListId: "retired-id" }));
+    await act(async () => {
+      await store.dispatch(saveCurrent());
+    });
+
+    const save = captured.find((c) => c.url.endsWith("/api/loadouts"));
+    expect(save.body.listId).toBeNull();
+    expect(JSON.stringify(save.body)).not.toContain("retired-id");
+  });
+
   it("does not render a ghost panel for a selection that no longer resolves", () => {
     // Reachable from localStorage after a list is retired in another tab.
     renderPanel(base([list("a", "Alpha")], [], { selectedListId: "gone-list" }));
