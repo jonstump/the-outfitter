@@ -113,7 +113,7 @@ describe("hunterFavorites slice", () => {
     await store.dispatch(fetchFavorites());
 
     // A failed refetch is not evidence the user unfavorited anything; blanking the list
-    // would silently drop the sort priority the picker is already rendering.
+    // would silently collapse the Favorites section the picker is already rendering.
     expect(favorites(store)).toEqual(["the-rat"]);
     expect(store.getState().hunterFavorites.status).toBe("failed");
     expect(store.getState().ui.message).toMatch(/^!Couldn't load your favorite hunters/);
