@@ -1,8 +1,9 @@
 // Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
 // Hunter Portraits), ADR-0007 (hunter roster dataset), SPEC-0003 REQ "The Hunter Picker Is
 // Filterable and Bounded", SPEC-0003 REQ "The Hunter Picker Does Not Restrict or Mark
-// Reuse", SPEC-0003 REQ "Favorite Hunters", SPEC-0003 REQ "Focus Management", SPEC-0003
-// REQ "Keyboard Navigation"
+// Reuse", SPEC-0003 REQ "Favorite Hunters", SPEC-0003 REQ "Favorites-Only Becomes the
+// Default Past a Threshold", SPEC-0003 REQ "Focus Management", SPEC-0003 REQ "Keyboard
+// Navigation", SPEC-0003 Accessibility "The Favorites Section Is Exposed, Not Merely Drawn"
 //
 // 242 hunters. Four properties follow from that number and none of them are refinements:
 //
@@ -14,7 +15,7 @@
 //   Reuse is invisible.  This component is never told which hunters other lists already
 //     reference, which is the strongest available guarantee that it cannot mark them.
 //     There is no badge to remove later and no prop to accidentally thread through.
-//   Favorites sort, they do not gate.  See below.
+//   Favorites section, they do not gate.  See below.
 //
 // The picker is a modal dialog rather than the inline section the design handoff sketches
 // (§5). Two reasons: SPEC-0003 "Focus Management" requires a trap, focus-in, and
@@ -39,14 +40,20 @@
 // bookkeeping (an index becomes a row/column pair) differ.
 //
 // ---------------------------------------------------------------------------------------
-// FAVORITES ARE A FILTER AND A SORT, NEVER A GATE (SPEC-0003 REQ "Favorite Hunters")
+// FAVORITES ARE A SECTION AND A FILTER, NEVER A GATE (SPEC-0003 REQ "Favorite Hunters")
 //
-// Every hunter stays reachable no matter what is favorited. Favorited hunters sort ahead
-// WITHIN the active filter — the sort is applied by filterHunters after narrowing, so a
-// favorite that fails the acquisition filter is already gone before the sort runs and no
-// non-matching hunter can appear because it is favorited. "Favorites only" is an explicit,
-// opt-in toggle; with it off the roster shows in full, and an empty favorites set behaves
-// as no filter at all rather than as an empty picker.
+// Every hunter stays reachable no matter what is favorited. Favorited hunters occupy their
+// own labelled, counted section AHEAD of the rest, WITHIN the active filter — the split is
+// applied by filterHunters after narrowing, so a favorite that fails the acquisition filter
+// is already gone before the split runs and no non-matching hunter can appear because it is
+// favorited. A hunter appears in exactly one section. "Favorites only" is a user-operable
+// toggle; with it off the roster shows in full, and an empty favorites set behaves as no
+// filter at all rather than as an empty picker.
+//
+// REVERSAL, 2026-08-10 (#138). Favorites used to sort inline to the front of one undivided
+// grid. Sectioning REPLACES that sort rather than layering on it: doing both would place a
+// hunter above the very section it is also inside. See design.md, "Favorites are sectioned,
+// not sorted inline".
 //
 // The toggle is LOCAL COMPONENT STATE and is never sent anywhere. It is a view preference,
 // client state under the same rule as the selected list and the sort order. What favorites
@@ -57,12 +64,32 @@
 // about the user's other lists, which this component still cannot see. A favorited hunter
 // that another list already uses therefore shows the favorite indicator and nothing else —
 // not because that case is special-cased, but because the in-use half does not exist here.
+//
+// ---------------------------------------------------------------------------------------
+// HOW SECTIONS STAY ONE COMPOSITE WIDGET
+// (SPEC-0003 Accessibility "The Favorites Section Is Exposed, Not Merely Drawn")
+//
+// One role="grid", several role="rowgroup" children. That is the whole trick, and it is why
+// nothing about the keyboard model had to change shape: `rowEls()` collects every row in the
+// grid in DOM order regardless of which rowgroup holds it, so the flat row index the roving
+// tabindex has always used still spans the whole widget. Arrow keys therefore cross a
+// section boundary without knowing sections exist, and Tab still reaches the grid in exactly
+// ONE stop rather than one per section.
+//
+// Two grids, or a section that was its own role="grid", would have bought the visual split
+// at the price of both properties.
+//
+// The visible section caption is aria-hidden and the ROWGROUP carries the accessible name
+// including the count ("Favorites, 3 hunters"). A bare heading element between rows would be
+// an invalid child of a grid; hiding it and naming the rowgroup gives assistive technology
+// the same information through a structure the grid role actually permits.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import {
   ACQUISITIONS,
+  FAVORITES_SECTION,
   HAS_UNKNOWN_ACQUISITION,
   HUNTERS,
   UNKNOWN_ACQUISITION,
@@ -76,6 +103,31 @@ const OBTAINABLE_OPTIONS = [
   { value: UNKNOWN_ACQUISITION, label: "Unknown" },
 ];
 
+// Governing: SPEC-0003 REQ "Favorites-Only Becomes the Default Past a Threshold"
+//
+// THE threshold — one named constant, so moving it is one edit rather than a search. Past
+// this many favorites the picker OPENS with "favorites only" already enabled.
+//
+// Ten is a product judgement, not a measurement; design.md ("'Favorites only' defaults on
+// past ten") says so explicitly, so nobody goes looking for the study behind it.
+//
+// Strictly greater than: at exactly ten the picker opens with the toggle off.
+export const FAVORITES_ONLY_DEFAULT_THRESHOLD = 10;
+
+/** Whether a freshly-opened picker starts with "favorites only" enabled. */
+export function favoritesOnlyDefault(favoriteCount) {
+  return favoriteCount > FAVORITES_ONLY_DEFAULT_THRESHOLD;
+}
+
+/**
+ * Section captions. "Other hunters" only reads correctly with a Favorites section above it,
+ * so the wording depends on whether the split actually happened.
+ */
+function sectionLabel(sectionId, hasFavoritesSection) {
+  if (sectionId === FAVORITES_SECTION) return "Favorites";
+  return hasFavoritesSection ? "Other hunters" : "All hunters";
+}
+
 export default function HunterPicker({
   selectedHunterId = null,
   favorites = [],
@@ -85,10 +137,22 @@ export default function HunterPicker({
 }) {
   const dialogRef = useRef(null);
   const gridRef = useRef(null);
+  const favored = useMemo(() => new Set(favorites), [favorites]);
   const [query, setQuery] = useState("");
   const [acquisition, setAcquisition] = useState("");
   const [obtainable, setObtainable] = useState("");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // Governing: SPEC-0003 REQ "Favorites-Only Becomes the Default Past a Threshold"
+  //
+  // A LAZY INITIALISER, which is exactly the whole mechanism. The picker is mounted when it
+  // opens and unmounted when it closes, so this runs once per picker session: the default is
+  // applied on open, turning the toggle off holds for the rest of that session because
+  // nothing re-runs it, and reopening re-applies it because a fresh mount re-runs it. There
+  // is deliberately no effect syncing it to `favorites` afterwards — that would revert the
+  // user's own click the moment a favorite changed, which is the gate this must not become.
+  //
+  // Nothing here is sent anywhere: the toggle is client state, like the selected list and
+  // the sort order. The server's data file has no field for it.
+  const [favoritesOnly, setFavoritesOnly] = useState(() => favoritesOnlyDefault(favored.size));
   // Roving tabindex: exactly one cell is tabbable at a time, so Tab reaches the grid in one
   // stop instead of walking 242 tiles, and the arrow keys do the navigating within it.
   const [activeRow, setActiveRow] = useState(0);
@@ -100,8 +164,6 @@ export default function HunterPicker({
   };
 
   const { onKeyDown, returnFocus } = useFocusTrap(dialogRef, { onEscape: close });
-
-  const favored = useMemo(() => new Set(favorites), [favorites]);
 
   // Unfavoriting the LAST favorite must clear the toggle, not just grey it out. The
   // checkbox renders `favoritesOnly && !noFavorites`, so an unreset `true` hides behind a
@@ -118,11 +180,25 @@ export default function HunterPicker({
     if (noFavorites) setFavoritesOnly(false);
   }, [noFavorites]);
 
-  // 242 entries filtered on every keystroke; memoised on the inputs it reads.
-  const matches = useMemo(
+  // 242 entries filtered on every keystroke; memoised on the inputs it reads. `sections`
+  // arrives with empty groups already dropped, so mapping over it faithfully is what
+  // satisfies "a section with no members SHALL be omitted rather than rendered as an empty
+  // heading" — there is no empty-check to forget here.
+  const { sections, total } = useMemo(
     () => filterHunters(HUNTERS, { query, acquisition, obtainable, favorites: favored, favoritesOnly }),
     [query, acquisition, obtainable, favored, favoritesOnly]
   );
+
+  // The roving tabindex indexes rows across the WHOLE grid, not within a section — that is
+  // what keeps the sections one composite widget with one tab stop. Each section's first row
+  // therefore needs its offset into that flat sequence.
+  const sectionStart = [];
+  let flatRows = 0;
+  for (const section of sections) {
+    sectionStart.push(flatRows);
+    flatRows += section.hunters.length;
+  }
+  const hasFavoritesSection = sections.some((s) => s.id === FAVORITES_SECTION);
 
   const resetActive = () => {
     setActiveRow(0);
@@ -219,13 +295,15 @@ export default function HunterPicker({
     }
   };
 
-  // A filter change can leave the active row past the end of the shorter list. Clamp on
-  // render rather than in an effect: an effect would paint one frame with a tabindex on
-  // nothing, which is exactly the frame a Tab press lands in.
-  const rowCount = matches.length + 1; // + the always-present "no portrait" tile
+  // A filter change — or a favorite moving a hunter between sections — can leave the active
+  // row past the end of the shorter list. Clamp on render rather than in an effect: an
+  // effect would paint one frame with a tabindex on nothing, which is exactly the frame a
+  // Tab press lands in.
+  const rowCount = total + 1; // + the always-present "no portrait" tile
   const aRow = Math.min(activeRow, rowCount - 1);
   // The "no portrait" tile has nothing to favorite, so its row holds one focusable cell.
-  const aCol = aRow === matches.length ? 0 : activeCol;
+  const noneRow = total;
+  const aCol = aRow === noneRow ? 0 : activeCol;
 
   const onChooseKeyDown = (e, hunter) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -335,10 +413,10 @@ export default function HunterPicker({
             narrows. Not to be confused with the count of already-used hunters that "Does
             Not Restrict or Mark Reuse" forbids — this component cannot compute that one. */}
         <p className="hp-count" aria-live="polite">
-          {matches.length} of {HUNTERS.length} hunters
+          {total} of {HUNTERS.length} hunters
         </p>
 
-        {matches.length === 0 && (
+        {total === 0 && (
           <p className="hp-empty">
             No hunters match those filters.{" "}
             {favoritesOnly && !noFavorites ? "Turn off “Favorites only”, clear" : "Clear"} the
@@ -353,95 +431,130 @@ export default function HunterPicker({
           aria-label="Hunters"
           onKeyDown={onGridKeyDown}
         >
-          {matches.map((h, r) => {
-            const favorite = favored.has(h.id);
+          {sections.map((section, s) => {
+            const label = sectionLabel(section.id, hasFavoritesSection);
+            const count = section.hunters.length;
             return (
-              // The only conditional classes are the CURRENT selection in THIS picker and
-              // the user's own favorite. Neither is reuse: an already-used hunter is
-              // rendered by this exact branch, indistinguishably from an unused one.
-              <div
-                key={h.id}
-                role="row"
-                className={`hp-tile${selectedHunterId === h.id ? " hp-tile-picked" : ""}${
-                  favorite ? " hp-tile-fav" : ""
-                }`}
-              >
+              <Fragment key={section.id}>
+                {/* aria-hidden because the ROWGROUP below carries the same words as its
+                    accessible name. A heading loose among rows would be an invalid child of
+                    a grid, and naming it twice would announce the section twice. */}
+                <p className="hp-section-label" aria-hidden="true">
+                  {label} <span className="hp-section-count">{count}</span>
+                </p>
                 <div
-                  role="gridcell"
-                  data-hp-focus=""
-                  aria-selected={selectedHunterId === h.id}
-                  tabIndex={r === aRow && aCol === 0 ? 0 : -1}
-                  className="hp-tile-choose"
-                  data-testid={`hunter-tile-${h.id}`}
-                  onClick={() => choose(h)}
-                  onKeyDown={(e) => onChooseKeyDown(e, h)}
-                  onFocus={() => {
-                    setActiveRow(r);
-                    setActiveCol(0);
-                  }}
+                  role="rowgroup"
+                  className="hp-section"
+                  data-testid={`hp-section-${section.id}`}
+                  // The count is part of the NAME, not a separate description: SPEC-0003
+                  // requires a screen-reader user to know which group they are in and how
+                  // large it is, at the moment they enter it.
+                  aria-label={`${label}, ${count} ${count === 1 ? "hunter" : "hunters"}`}
                 >
-                  <span className="hp-tile-art">
-                    {/* alt="" — the name is rendered right below, so announcing the portrait
-                        would read the hunter twice. The cell's own text is its name. */}
-                    <HunterPortrait hunterId={h.id} size="thumb" alt="" />
-                  </span>
-                  <span className="hp-tile-name">{h.name}</span>
-                </div>
+                  {section.hunters.map((h, i) => {
+                    // The row index is the FLAT one, across every section — see the note at
+                    // the top of this file on why the sections stay one composite widget.
+                    const r = sectionStart[s] + i;
+                    const favorite = favored.has(h.id);
+                    return (
+                      // The only conditional classes are the CURRENT selection in THIS picker
+                      // and the user's own favorite. Neither is reuse: an already-used hunter
+                      // is rendered by this exact branch, indistinguishably from an unused
+                      // one, in whichever section it belongs to.
+                      <div
+                        key={h.id}
+                        role="row"
+                        className={`hp-tile${selectedHunterId === h.id ? " hp-tile-picked" : ""}${
+                          favorite ? " hp-tile-fav" : ""
+                        }`}
+                      >
+                        <div
+                          role="gridcell"
+                          data-hp-focus=""
+                          aria-selected={selectedHunterId === h.id}
+                          tabIndex={r === aRow && aCol === 0 ? 0 : -1}
+                          className="hp-tile-choose"
+                          data-testid={`hunter-tile-${h.id}`}
+                          onClick={() => choose(h)}
+                          onKeyDown={(e) => onChooseKeyDown(e, h)}
+                          onFocus={() => {
+                            setActiveRow(r);
+                            setActiveCol(0);
+                          }}
+                        >
+                          <span className="hp-tile-art">
+                            {/* alt="" — the name is rendered right below, so announcing the
+                                portrait would read the hunter twice. The cell's own text is
+                                its name. */}
+                            <HunterPortrait hunterId={h.id} size="thumb" alt="" />
+                          </span>
+                          <span className="hp-tile-name">{h.name}</span>
+                        </div>
 
-                <div role="gridcell" className="hp-fav-cell">
-                  {/* The accessible name carries BOTH the action and the hunter, per
-                      SPEC-0003's rule for icon-only controls — "Favorite The Rat", not a
-                      bare star repeated 242 times. aria-pressed carries the state, so the
-                      glyph is decoration and is hidden. */}
-                  <button
-                    type="button"
-                    data-hp-focus=""
-                    className="hp-fav"
-                    tabIndex={r === aRow && aCol === 1 ? 0 : -1}
-                    aria-pressed={favorite}
-                    aria-label={`${favorite ? "Unfavorite" : "Favorite"} ${h.name}`}
-                    data-testid={`hunter-fav-${h.id}`}
-                    onClick={() => toggleFavorite(h)}
-                    onFocus={() => {
-                      setActiveRow(r);
-                      setActiveCol(1);
-                    }}
-                  >
-                    <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
-                  </button>
+                        <div role="gridcell" className="hp-fav-cell">
+                          {/* The accessible name carries BOTH the action and the hunter, per
+                              SPEC-0003's rule for icon-only controls — "Favorite The Rat",
+                              not a bare star repeated 242 times. aria-pressed carries the
+                              state, so the glyph is decoration and is hidden. */}
+                          <button
+                            type="button"
+                            data-hp-focus=""
+                            className="hp-fav"
+                            tabIndex={r === aRow && aCol === 1 ? 0 : -1}
+                            aria-pressed={favorite}
+                            aria-label={`${favorite ? "Unfavorite" : "Favorite"} ${h.name}`}
+                            data-testid={`hunter-fav-${h.id}`}
+                            onClick={() => toggleFavorite(h)}
+                            onFocus={() => {
+                              setActiveRow(r);
+                              setActiveCol(1);
+                            }}
+                          >
+                            <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </Fragment>
             );
           })}
 
           {/* Always present, never filtered: "no portrait" is not a hunter, so no filter
-              can exclude it — and it must stay reachable when nothing matched. */}
-          <div
-            role="row"
-            className={`hp-tile hp-tile-none${selectedHunterId === null ? " hp-tile-picked" : ""}`}
-          >
+              can exclude it — and it must stay reachable when nothing matched.
+              Its own rowgroup rather than the tail of the last section: appended to
+              "Favorites, 2 hunters" it would be counted as a favorited hunter, and it is
+              neither. Being a rowgroup inside the SAME grid keeps it on the flat row
+              sequence, so End still reaches it and it keeps its single focusable cell. */}
+          <div role="rowgroup" className="hp-section" aria-label="Other options">
             <div
-              role="gridcell"
-              data-hp-focus=""
-              aria-selected={selectedHunterId === null}
-              tabIndex={aRow === matches.length ? 0 : -1}
-              className="hp-tile-choose"
-              data-testid="hunter-tile-none"
-              onClick={() => choose(null)}
-              onKeyDown={(e) => onChooseKeyDown(e, null)}
-              onFocus={() => {
-                setActiveRow(matches.length);
-                setActiveCol(0);
-              }}
+              role="row"
+              className={`hp-tile hp-tile-none${selectedHunterId === null ? " hp-tile-picked" : ""}`}
             >
-              <span className="hp-tile-art hp-tile-mono" aria-hidden="true">
-                ?
-              </span>
-              <span className="hp-tile-name hp-tile-name-none">No portrait</span>
+              <div
+                role="gridcell"
+                data-hp-focus=""
+                aria-selected={selectedHunterId === null}
+                tabIndex={aRow === noneRow ? 0 : -1}
+                className="hp-tile-choose"
+                data-testid="hunter-tile-none"
+                onClick={() => choose(null)}
+                onKeyDown={(e) => onChooseKeyDown(e, null)}
+                onFocus={() => {
+                  setActiveRow(noneRow);
+                  setActiveCol(0);
+                }}
+              >
+                <span className="hp-tile-art hp-tile-mono" aria-hidden="true">
+                  ?
+                </span>
+                <span className="hp-tile-name hp-tile-name-none">No portrait</span>
+              </div>
+              {/* Not a hunter, so there is nothing to favorite — but a row with fewer cells
+                  than its siblings is a malformed grid, so the cell exists and is empty. */}
+              <div role="gridcell" className="hp-fav-cell" />
             </div>
-            {/* Not a hunter, so there is nothing to favorite — but a row with fewer cells
-                than its siblings is a malformed grid, so the cell exists and is empty. */}
-            <div role="gridcell" className="hp-fav-cell" />
           </div>
         </div>
 

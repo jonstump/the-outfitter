@@ -1242,12 +1242,36 @@ button {
   font-style: italic;
   color: var(--text-dim);
 }
+/* The grid is ONE role="grid" holding several role="rowgroup" sections (SPEC-0003
+   "The Favorites Section Is Exposed, Not Merely Drawn"). The tile columns therefore live on
+   the section rather than on the scroll container, so each section packs its own tiles while
+   the roving tabindex still spans the whole widget. */
 .hp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.hp-section {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 10px;
-  overflow-y: auto;
-  padding: 2px;
+}
+/* The visible caption for a section. Its words are duplicated as the rowgroup's aria-label,
+   so this element is aria-hidden — see HunterPicker.jsx. */
+.hp-section-label {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.hp-section-count {
+  color: var(--text-dim);
+}
+.hp-section-count::before {
+  content: "· ";
 }
 /* A tile is a grid ROW holding two cells: choose, and favorite. The favorite cell is
    positioned over the artwork's top-right corner, which is why the row is the positioning

@@ -105,8 +105,27 @@ export function acquisitionLabel(value) {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+// Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
+// Hunter Portraits), SPEC-0003 REQ "Favorite Hunters"
+//
+// Section identifiers. The LABELS are the caller's business — "Other hunters" only reads
+// correctly when a Favorites section is actually above it — so this seam names the groups
+// and leaves the wording to the picker.
+export const FAVORITES_SECTION = "favorites";
+export const ROSTER_SECTION = "roster";
+
+/** Build the section list, dropping any group with no members. */
+function sectionsOf(favoriteMatches, otherMatches) {
+  const sections = [];
+  // A section with no members is OMITTED rather than emitted empty, so the caller cannot
+  // render an empty heading by faithfully mapping over what it was given.
+  if (favoriteMatches.length) sections.push({ id: FAVORITES_SECTION, hunters: favoriteMatches });
+  if (otherMatches.length) sections.push({ id: ROSTER_SECTION, hunters: otherMatches });
+  return { sections, total: favoriteMatches.length + otherMatches.length };
+}
+
 /**
- * Narrow the roster to the hunters matching every supplied filter, favorites first.
+ * Narrow the roster to the hunters matching every supplied filter, split into sections.
  *
  * Filtering narrows WHICH hunters are candidates: relative order is the dataset's own, and
  * no hunter is ever treated differently for being referenced by an existing list. That
@@ -120,25 +139,40 @@ export function acquisitionLabel(value) {
  * filter is what actually makes 242 tractable.
  *
  * ---------------------------------------------------------------------------------------
- * Governing: SPEC-0003 REQ "Favorite Hunters" — favorites FILTER AND SORT, never gate.
+ * Governing: SPEC-0003 REQ "Favorite Hunters" — favorites SECTION AND FILTER, never gate.
+ *
+ * REVERSAL, 2026-08-10 (#138). This used to return ONE array with favorites sorted to the
+ * front. It now returns SECTIONS, because the inline sort was correct about priority and
+ * wrong about legibility: in a single 242-tile grid there was no visible boundary between
+ * the user's own curation and the alphabet resuming, and the count the user wanted ("I have
+ * six favorites") was present in the ordering without being readable anywhere.
  *
  * `favorites` is a Set (or array) of favorited hunter ids. It does two things and neither
  * of them is a gate:
  *
- *   Sort.  Favorited matches are moved AHEAD of unfavorited ones, within whatever filter is
- *     already active. This is applied AFTER narrowing, which is what makes "no non-matching
- *     hunter is shown because it is favorited" true by construction: a favorite that fails
- *     the acquisition filter was dropped before the sort ever saw it. The partition is
- *     stable on both sides, so dataset order survives within each group.
+ *   Section.  Favorited matches are lifted into their own group, ahead of the rest, within
+ *     whatever filter is already active. The split is applied AFTER narrowing, which is what
+ *     makes "no non-matching hunter is shown because it is favorited" true by construction:
+ *     a favorite that fails the acquisition filter was dropped before the split ever saw it.
+ *     Both groups keep dataset order.
  *
  *   Filter, only if asked.  `favoritesOnly` narrows to favorited hunters, and is the
  *     picker's own toggle rather than anything persisted.
  *
- * An EMPTY favorites set behaves as no filter and no sort — identical output to calling
- * this without the option at all — INCLUDING when `favoritesOnly` is true. That is the
+ * A hunter lands in EXACTLY ONE section — never both. Duplicating a favorite into the
+ * alphabetical group would preserve completeness at the cost of three things at once: the
+ * section counts would stop summing to `total`, the picker's roving tabindex would have to
+ * treat one hunter as two focus positions, and favoriting from the lower copy would make a
+ * tile appear above while the clicked one stayed put. One hunter, one tile.
+ *
+ * An EMPTY favorites set behaves as no filter and no split — a single roster section holding
+ * everything the other filters left — INCLUDING when `favoritesOnly` is true. That is the
  * spec's "an empty favorites set is not an empty picker": you cannot favorite a hunter you
  * have never seen, so a set that has never been populated must not be able to hide the
  * roster that populates it.
+ *
+ * @returns {{sections: {id: string, hunters: object[]}[], total: number}} sections in render
+ *   order with empty ones omitted, and the total number of hunters across all of them.
  */
 export function filterHunters(
   hunters,
@@ -165,11 +199,14 @@ export function filterHunters(
     return true;
   });
 
-  // Nothing favorited: return the narrowed set untouched, so the feature is invisible to a
-  // user who has not used it rather than being an empty state they have to escape.
-  if (favored.size === 0) return matched;
+  // Nothing favorited: one undivided roster section, so the feature is invisible to a user
+  // who has not used it rather than being an empty state they have to escape.
+  if (favored.size === 0) return sectionsOf([], matched);
 
   const isFavorite = (h) => favored.has(h.id);
-  if (favoritesOnly) return matched.filter(isFavorite);
-  return [...matched.filter(isFavorite), ...matched.filter((h) => !isFavorite(h))];
+  const favoriteMatches = matched.filter(isFavorite);
+  // With the toggle on there is nothing outside Favorites to show, so the roster section is
+  // empty and `sectionsOf` drops it — the same code path as "no unfavorited hunter matched".
+  const otherMatches = favoritesOnly ? [] : matched.filter((h) => !isFavorite(h));
+  return sectionsOf(favoriteMatches, otherMatches);
 }
