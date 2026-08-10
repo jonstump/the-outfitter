@@ -73,6 +73,20 @@ A total ceiling is the control that actually matters here, because per-asset com
 - *Scrape thumbnails only, defer full sizes*: viable, and still available if 25 MB proves too generous once real art is measured. Not taken now because it would leave the expanded list header rendering an upscaled thumbnail, and the two-size decision in ADR-0007 exists precisely to avoid that.
 - *Narrow the roster scope*: rejected — the full roster is an explicit ADR-0007 decision, and the right lever is the budget, not the coverage.
 
+### ~11 MB of committed assets is accepted, and both sizes are kept
+
+**Choice**: The portrait assets are committed to the repository. Both sizes are retained.
+
+**Rationale**: The tenfold increase over today's 1.10 MB image payload is not evidence of waste — it is proportional to content. It decomposes as **2.4× more subjects** (285 hunters against 121 items) multiplied by **4.3× more bytes per subject**, and that second factor is itself two sizes instead of one times roughly three times the pixels, partially offset by AVIF compressing photographs better per pixel than PNG compresses line art.
+
+Put plainly: the existing 1.10 MB is unusually small because item icons are wide, flat, mostly-empty line art at a median 256×128. Hunter portraits are tall, dense and photographic. Ten times the bytes for genuinely ten times the content, after three rounds of removing everything that was not content.
+
+11 MB is an ordinary size for a repository shipping an image-heavy web app, and committing keeps the build hermetic — no network dependency at build time, which is the price the release-artifact alternative would charge.
+
+**Alternatives considered**:
+- *Assets outside git, fetched from a release artifact at build*: rejected for now. It would keep the repository at its current size and preserve full quality, but it makes the build depend on the network and on an artifact staying available. Still viable if the repository size becomes a real problem rather than a projected one.
+- *Thumbnails only, dropping the full size*: rejected. It is the largest remaining lever — the full size is 6.7 MB of the 11 MB — and now that the full size is 320px rather than 440px, rendering a 192px thumbnail at 154px would be only slightly soft rather than visibly pixelated. Kept in reserve: if measurement against real art blows the 12 MB ceiling, dropping the full size is the fallback, not weakening the budget.
+
 ### sharp, as a devDependency the app can never reach
 
 **Choice**: `sharp`, declared in `devDependencies`, imported only by the scrape script.
@@ -186,5 +200,4 @@ Each step is independently useful and independently revertible. Step 3 changing 
 - Are descriptions consistently present, and how long? If they are several paragraphs, the "small next to the portraits" assumption ADR-0007 made stops holding and they may want their own file after all.
 - Should the scrape detect that a hunter's `sourceRevision` is unchanged and skip re-encoding its portraits? Cheap idempotence, but only worth it once a refresh cadence exists.
 - Do the 15 KB / 25 KB per-asset budgets survive contact with real art, and at what AVIF quality setting? If they do not, the 12 MB total is the constraint to hold and the per-asset figures are the ones to move.
-- Is ~11 MB of committed binaries acceptable, given the repository ships 1.10 MB of images today and `.git` is 6.4 MB? It is roughly a tenfold increase, permanent in history. The remaining lever is not committing them at all — self-hosting requires serving from the app's own origin, not storing in git, so a release artifact fetched at build would keep full quality at zero repository cost, at the price of a build-time network dependency. Worth deciding before #110 runs rather than after.
 - Progression hunters appear as Rookie / Survivor / Veteran variants of the same character. Are those three dataset entries or one entry with three assets? This spec assumes three entries, which is what the wiki lists, but it affects how the picker groups them.
