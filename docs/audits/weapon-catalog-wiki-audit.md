@@ -91,7 +91,7 @@ stale pre-`1896` display names left over from Update 2.0's brand-wide rename.
 
 | App id / name | File | Reason | Last patch valid | Wiki page path | Notes |
 |---|---|---|---|---|---|
-| `winfield-m1873c` / "Winfield M1873C" | `client/src/data/catalog.js:81` | **Duplicate row.** Same weapon as `frontier-73c`, which is already in the catalog under its current name. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Frontier_73C` | `scrape-images.mjs` already maps this name to `null` and lists it in `KNOWN_CATALOG_DUPLICATES`; it is why no `winfield-m1873c.png` exists. **Delete the row.** Confirm `loadoutCodec.js` handles the id disappearing the same way it handles the retired Choke/Stalker Beetle tool slots. |
+| `winfield-m1873c` / "Winfield M1873C" | `client/src/data/catalog.js:81` | **Duplicate row.** Same weapon as `frontier-73c`, which is already in the catalog under its current name. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Frontier_73C` | `scrape-images.mjs` maps it to `null` and lists it in `KNOWN_CATALOG_DUPLICATES`; it is why no `winfield-m1873c.png` exists. ⚠️ **Do not simply delete the row** — see the correction below. |
 | `winfield-m1873` / "Winfield M1873" | `client/src/data/catalog.js:82` | **Renamed to "Ranger 73".** The catalog has no `ranger-73` row, so this weapon currently has no valid entry. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Ranger_73` | ⚠️ `scrape-images.mjs` maps this to `null` with the comment *"the post-rename entry 'Ranger 73' covers this weapon"* — **that comment is wrong; no such entry exists.** The image scraper is therefore silently skipping a live weapon. Per ADR-0005, fix by keeping id `winfield-m1873` and setting name → `Ranger 73`; do **not** mint a new id. |
 | `bomb-lance` / "Bomb Lance" | `client/src/data/catalog.js:86` | **Reworked, not removed.** Update 2.1 promoted the **Bomb Launcher** to family base and demoted the Bomb Lance to an unlock within that family. | Still live | `/wiki/Weapons/Bomb_Lance` | The page still exists, so the row stays valid. But the app is now modelling a variant as if it were a base weapon, and is missing the family base (`/wiki/Weapons/Bomb_Launcher`, List 2). Also grouped `Melee` in-app while the wiki treats it as a special/large-slot weapon. |
 
@@ -604,18 +604,48 @@ Sequence the work: schema → parent map → bulk import. Not import-first.
 
 ---
 
+---
+
+## Correction (2026-08-10): deleting a duplicate row is not safe
+
+An earlier revision of this document recommended deleting the `winfield-m1873c` row. **That
+was wrong.** `client/src/utils/loadoutCodec.js`'s legacy (pre-versioning) decoder resolves
+weapons by **raw array position** — `fromLegacy()` returns the stored index and uses it
+directly against the current `WEAPONS` array. Removing a row at index 16 shifts every later
+weapon down one, so a legacy saved loadout referencing `romero-77` would silently resolve to
+`crossbow`. This is exactly the failure the `catalog.js` "appended, never inserted" rule
+exists to prevent.
+
+The current-format decoder (`fromV1`) is safe — it resolves by stable id and drops unknown
+ids. Only legacy records are at risk, and they are the ones with no version field to
+distinguish them.
+
+Retiring a weapon row therefore needs the same treatment the Choke/Stalker Beetle tool slots
+got: an explicit legacy-index carve-out (`LEGACY_DROPPED_TOOL_INDICES` is the precedent),
+which is a deliberate change with its own tests, not a splice. Until that lands the duplicate
+row stays and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
+
+---
+
 ## Recommended sequencing
 
-1. **Fix the two provable bugs now, by hand, no scrape needed** — delete `winfield-m1873c`
-   (duplicate), and correct `frontier-73c`'s `ammoClass` to `compact`. The second is a live
-   budget-math error. Also correct the wrong comment in
-   `scripts/scrape-images.mjs` `KNOWN_CATALOG_DUPLICATES` about "Ranger 73".
-2. **Extract `scripts/lib/wiki.mjs`** — ADR-0005 states this is a prerequisite, not a
+1. ✅ **Done — the two live defects, fixed by hand, no scrape needed.**
+   `frontier-73c`'s `ammoClass` corrected `medium` → `compact` (it was pricing ammo from the
+   wrong pool), and `scripts/scrape-images.mjs`'s incorrect "Ranger 73" duplicate mapping
+   replaced with the real `Weapons/Ranger_73` path, so that weapon is no longer skipped by
+   every run.
+2. ✅ **Done — `WIKI_TITLE_OVERRIDES` re-keyed by catalog `id`**, so ADR-0005's mandated
+   display-name write-through cannot silently invalidate the path map.
+3. **Extract `scripts/lib/wiki.mjs`** — ADR-0005 states this is a prerequisite, not a
    follow-up.
-3. **Crawl `Category:Weapons` and diff against the catalog.** Publish the delta. This
+4. **Crawl `Category:Weapons` and diff against the catalog.** Publish the delta. This
    supersedes List 2 with a complete, machine-generated inventory.
-4. **Run `scrape-stats.mjs` in additive mode** (no `--write-catalog`) to seed
+5. **Run `scrape-stats.mjs` in additive mode** (no `--write-catalog`) to seed
    `itemStats.json` with provenance, and review the proposed cost/name diffs as a `git diff`
    before applying — the guardrail ADR-0005 specifies precisely because a wrong cost is
-   invisible in the UI.
-5. **Then** design the variant schema and import List 2.
+   invisible in the UI. Note the image-slug hazard recorded in ADR-0005's amendment: a name
+   write-through renames the image path the UI requests, so name changes must not be applied
+   without renaming the assets alongside them.
+6. **Then** design the variant schema and import List 2.
+7. **Separately**, decide how to retire duplicate catalog rows given the legacy-index
+   constraint above.

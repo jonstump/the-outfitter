@@ -124,65 +124,86 @@ export const WIKI_CATEGORY = {
 };
 
 // ---------------------------------------------------------------------------
-// Catalog display name -> wiki page path.
+// Catalog id -> wiki page path.
 //
 // The wiki namespaces every item page under its category ("/wiki/Weapons/Nagant_M1895", not
-// "/wiki/Nagant_M1895"), so the default resolution is `${WIKI_CATEGORY[category]}/${title}`.
+// "/wiki/Nagant_M1895"), so the default resolution is `${WIKI_CATEGORY[category]}/${title}`,
+// derived from the item's display name.
 //
-// Two things break that default and need the override table below:
+// Three things break that default and need the override table below:
 //
 //   1. Hunt's Update 2.0 ("1896") renamed most branded weapons — the catalog still carries a
 //      number of pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved to
-//      the post-rename titles ("Sparks", "Pax"). Weapon *variants* also live on subpages
-//      ("Sparks/Pistol", "Mosin-Nagant/Avtomat"), which the flat display name can't express.
-//   2. A few catalog items sit under a different wiki category than the catalog's own — the
+//      the post-rename titles ("Sparks", "Pax").
+//   2. Weapon *variants* live on subpages ("Sparks/Pistol", "Mosin-Nagant/Avtomat",
+//      "Officer/Carbine"), which a flat display name can't express. Note the wiki flattens
+//      compound variants into ONE segment — "Sparks/Pistol_Silencer", never
+//      "Sparks/Pistol/Silencer" — so a path is at most three segments deep.
+//   3. A few catalog items sit under a different wiki category than the catalog's own — the
 //      Katana is a Tool here but a Weapon on the wiki.
 //
 // Values are paths relative to /wiki/ and INCLUDE the category segment, precisely so a cross-
 // category item can be expressed. A `null` value means "deliberately has no wiki page" — see
 // KNOWN_CATALOG_DUPLICATES below; those items are skipped without spending a request.
 //
+// KEYED BY CATALOG `id`, NOT BY DISPLAY NAME. This matters, and it is not stylistic:
+// ADR-0005 makes the wiki authoritative for display names and has scrape-stats.mjs write
+// renames back into catalog.js, while guaranteeing that `id` is never rewritten. A
+// name-keyed table silently stops matching the first time that write-through runs — and the
+// failure is invisible, because resolution then falls back to `Weapons/{new name}`, which is
+// *usually* right for a plain rename and wrong exactly where it matters. "Nagant Officer
+// Carbine" -> "Officer Carbine" would fall back to "Weapons/Officer_Carbine"; the real page is
+// "Weapons/Officer/Carbine". Keying on the one field the ADR promises never changes makes the
+// table survive its own success.
+//
 // Verified against the wiki's own sitemap (sitemap-huntshowdown_en-NS_0), not by probing URLs one
 // at a time. When a DLC ships or the catalog changes, re-verify the same way: pull the sitemap
 // index at /sitemaps/sitemap-index-huntshowdown_en.xml, expand the NS_0 gzip, and diff the
 // resolved paths against it — two requests instead of one per item. Note the sitemap lags live
 // edits by months, so treat "absent from the sitemap" as "check this one by hand", not "gone".
+// For discovering pages the catalog does not yet have (every variant, and a dozen-odd base
+// weapons), /wiki/Category:Weapons is the authority, not the sitemap — see
+// docs/audits/weapon-catalog-wiki-audit.md.
 // ---------------------------------------------------------------------------
 
 export const WIKI_TITLE_OVERRIDES = {
   weapons: {
-    "Caldwell Conversion Pistol": "Weapons/Conversion",
-    "Caldwell Conversion Uppercut": "Weapons/Uppercut",
-    "Caldwell Pax": "Weapons/Pax",
-    "Caldwell Rival 78": "Weapons/Rival_78",
-    "Crown & King Auto-5": "Weapons/Auto-5",
-    "Krag M1894": "Weapons/Krag",
-    "LeMat Mark II": "Weapons/LeMat",
-    "Martini-Henry IC1": "Weapons/Martini-Henry",
-    "Mosin-Nagant Avtomat": "Weapons/Mosin-Nagant/Avtomat",
-    "Mosin-Nagant M1891": "Weapons/Mosin-Nagant",
-    "Nagant Officer Carbine": "Weapons/Officer/Carbine",
-    "Scottfield Model 3": "Weapons/Scottfield",
-    "Sparks LRR": "Weapons/Sparks",
-    "Sparks Pistol": "Weapons/Sparks/Pistol",
-    "Vetterli 71 Karabiner": "Weapons/Vetterli_71",
-    "Winfield 1876 Centennial": "Weapons/Centennial",
-    // Stale pre-rename duplicates — see KNOWN_CATALOG_DUPLICATES.
-    "Winfield M1873": null,
-    "Winfield M1873C": null,
+    "caldwell-conversion-pistol": "Weapons/Conversion",
+    "caldwell-conversion-uppercut": "Weapons/Uppercut",
+    "caldwell-pax": "Weapons/Pax",
+    "caldwell-rival-78": "Weapons/Rival_78",
+    "crown-king-auto-5": "Weapons/Auto-5",
+    "krag-m1894": "Weapons/Krag",
+    "lemat-mark-ii": "Weapons/LeMat",
+    "martini-henry-ic1": "Weapons/Martini-Henry",
+    "mosin-nagant-avtomat": "Weapons/Mosin-Nagant/Avtomat",
+    "mosin-nagant-m1891": "Weapons/Mosin-Nagant",
+    "nagant-officer-carbine": "Weapons/Officer/Carbine",
+    "scottfield-model-3": "Weapons/Scottfield",
+    "sparks-lrr": "Weapons/Sparks",
+    "sparks-pistol": "Weapons/Sparks/Pistol",
+    "vetterli-71-karabiner": "Weapons/Vetterli_71",
+    "winfield-1876-centennial": "Weapons/Centennial",
+    // Not a duplicate: this IS the live weapon the wiki now calls "Ranger 73". It was mapped to
+    // null until the wiki audit, on the mistaken belief that a separate "Ranger 73" catalog row
+    // covered it — there is no such row, so the only entry for this weapon was being skipped
+    // outright. Per ADR-0005 the id stays `winfield-m1873`; only the display name is stale.
+    "winfield-m1873": "Weapons/Ranger_73",
+    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES.
+    "winfield-m1873c": null,
   },
   tools: {
     // The wiki files the Katana under Weapons even though the catalog treats it as a Tool.
-    Katana: "Weapons/Katana",
+    katana: "Weapons/Katana",
     // The wiki pluralizes the placeable trap pages; the catalog uses the singular in-game label.
-    "Alert Trip Mine": "Tools/Alert_Trip_Mines",
-    "Concertina Trip Mine": "Tools/Concertina_Trip_Mines",
-    "Poison Trip Mine": "Tools/Poison_Trip_Mines",
+    "alert-trip-mine": "Tools/Alert_Trip_Mines",
+    "concertina-trip-mine": "Tools/Concertina_Trip_Mines",
+    "poison-trip-mine": "Tools/Poison_Trip_Mines",
   },
   traits: {},
   consumables: {
     // Duplicate of the TOOLS entry "Choke Bombs" — see KNOWN_CATALOG_DUPLICATES.
-    "Choke Bomb": null,
+    "choke-bomb": null,
   },
 };
 
@@ -190,21 +211,34 @@ export const WIKI_TITLE_OVERRIDES = {
  * Catalog entries that have no wiki page of their own because they duplicate another entry.
  * These are skipped deliberately (no request spent, not counted as failures) and reported in the
  * run summary so the duplication stays visible rather than looking like a scrape bug.
+ *
+ * Keyed by catalog id, for the same reason WIKI_TITLE_OVERRIDES is.
+ *
+ * These rows cannot simply be deleted from catalog.js: loadoutCodec.js's legacy (pre-versioning)
+ * decoder resolves weapons by raw array position, so removing a row shifts every later weapon
+ * and silently remaps old saved loadouts to the wrong items. Retiring one needs the same
+ * treatment the Choke/Stalker Beetle tool slots got — an explicit legacy-index carve-out — not
+ * a splice.
  */
 export const KNOWN_CATALOG_DUPLICATES = {
-  "Winfield M1873": 'stale pre-1896 name; the post-rename entry "Ranger 73" covers this weapon',
-  "Winfield M1873C": 'stale pre-1896 name; the post-rename entry "Frontier 73C" is already in the catalog',
-  "Choke Bomb": 'duplicates the TOOLS entry "Choke Bombs", which maps to Tools/Choke_Bombs',
+  "winfield-m1873c":
+    'stale pre-1896 name; duplicates the "Frontier 73C" entry, which is already in the catalog ' +
+    "and maps to Weapons/Frontier_73C",
+  "choke-bomb": 'duplicates the TOOLS entry "Choke Bombs", which maps to Tools/Choke_Bombs',
 };
 
 /**
  * Resolve a catalog item to its wiki page path (relative to /wiki/, category segment included),
  * or null when the item is a known duplicate with no page of its own.
+ *
+ * `id` selects the override; `name` only feeds the default namespaced path. Passing an id with
+ * no override (or no id at all) falls back to the display name, which is correct for the
+ * majority of the catalog.
  */
-export function resolveWikiPath(category, name) {
+export function resolveWikiPath(category, id, name) {
   const overrides = WIKI_TITLE_OVERRIDES[category];
-  if (overrides && Object.prototype.hasOwnProperty.call(overrides, name)) {
-    return overrides[name];
+  if (overrides && Object.prototype.hasOwnProperty.call(overrides, id)) {
+    return overrides[id];
   }
   const namespace = WIKI_CATEGORY[category];
   if (!namespace) return null;
@@ -217,10 +251,18 @@ export function collectCatalogItems(categories = CATEGORIES) {
     const rows = CATEGORY_SOURCES[category];
     if (!rows) continue;
     for (const row of rows) {
-      // Catalog tuples are id-first ([id, name, ...]) since the stable-id
-      // refactor; the display name (row[1]) drives the wiki URL and slug.
+      // Catalog tuples are id-first ([id, name, ...]) since the stable-id refactor. The id
+      // selects any wiki-path override; the display name (row[1]) drives the default path and
+      // the on-disk image slug.
+      const id = row[0];
       const name = row[1];
-      items.push({ category, name, slug: slugify(name), wikiPath: resolveWikiPath(category, name) });
+      items.push({
+        category,
+        id,
+        name,
+        slug: slugify(name),
+        wikiPath: resolveWikiPath(category, id, name),
+      });
     }
   }
   return items;
@@ -474,14 +516,15 @@ export async function scrapeItem(target, deps) {
     dryRun = false,
   } = deps;
 
-  const { category, name: item, slug } = target;
-  const wikiPath = target.wikiPath !== undefined ? target.wikiPath : resolveWikiPath(category, item);
+  const { category, id, name: item, slug } = target;
+  const wikiPath =
+    target.wikiPath !== undefined ? target.wikiPath : resolveWikiPath(category, id, item);
   const destDir = path.join(imagesRoot, category);
 
   // Known catalog duplicates have no wiki page of their own. Skip them before spending a request
   // so they surface as an explained skip rather than a 404 in the failed bucket.
   if (wikiPath === null) {
-    const reason = KNOWN_CATALOG_DUPLICATES[item] || "no wiki page mapped for this catalog entry";
+    const reason = KNOWN_CATALOG_DUPLICATES[id] || "no wiki page mapped for this catalog entry";
     return { status: "skipped", category, item, slug, reason: `no wiki page: ${reason}` };
   }
 

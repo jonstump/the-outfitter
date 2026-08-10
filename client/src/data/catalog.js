@@ -82,7 +82,11 @@ export const WEAPONS = [
   ["winfield-m1873", "Winfield M1873", 3, 63, "compact", "Rifles"],
   ["romero-77", "Romero 77", 3, 60, "shotgun", "Shotguns"],
   ["crossbow", "Crossbow", 3, 60, "xbow", "Bows"],
-  ["frontier-73c", "Frontier 73C", 3, 72, "medium", "Rifles"],
+  // Compact, not medium: this entry and "Winfield M1873C" above are the same weapon under its
+  // post- and pre-1896 names, and they disagreed on ammo class. The wiki describes the Frontier
+  // 73C as a lightened Ranger 73 (a Compact rifle), so "medium" was wrong and was pricing this
+  // weapon's ammo out of the wrong AMMO pool. See docs/audits/weapon-catalog-wiki-audit.md.
+  ["frontier-73c", "Frontier 73C", 3, 72, "compact", "Rifles"],
   ["bomb-lance", "Bomb Lance", 3, 75, "none", "Melee"],
   ["caldwell-rival-78", "Caldwell Rival 78", 3, 125, "shotgun", "Shotguns"],
   ["vetterli-71-karabiner", "Vetterli 71 Karabiner", 3, 152, "medium", "Rifles"],

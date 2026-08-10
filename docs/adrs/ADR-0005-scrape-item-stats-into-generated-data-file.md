@@ -233,3 +233,133 @@ flowchart TD
 * Implementation order this implies: extract `scripts/lib/wiki.mjs` and re-point `scrape-images.mjs` at it (behavior-preserving, existing tests green) *before* writing `scrape-stats.mjs`. Writing the second script first guarantees a duplicated `slugify()`.
 * Out of scope, and left for at least one future ADR: the revision-history-driven incremental refresh sketched in the context above. Open questions it will have to settle include how change detection reads the wiki's histories (MediaWiki exposes revision and recent-changes data through an API, which is a different and much lighter client than the HTML page fetch used here — `scripts/lib/wiki.mjs` should not assume HTML scraping is the only access mode); where the ingested-revision watermark is persisted once the backend owns it rather than the repo; how a scrape run triggered by a server reaches the committed data this ADR chose as the data home, which may reopen the "server-side stat store" option rejected below; and what cadence and failure/retry behavior the scheduler needs. This decision deliberately does not prejudge any of those — it only ensures the fetchers have the per-item, per-payload granularity that design will need, and leaves behind the revision baseline it will start from.
 * Deferred, deliberately: whether per-weapon ammo compatibility from the wiki should replace the coarse `ammoClass` → `AMMO` pool model. The `AMMO.special` pool is a hand-curated divergence from the wiki (Dolch/Nitro variants excluded because they're Scarce and unpurchasable since Update 2.8) — a case where the hand-authored table encodes a judgment the wiki does not. That tension deserves its own decision rather than being settled implicitly by this one.
+
+---
+
+## Amendment (2026-08-10): findings from the weapon-catalog wiki audit
+
+A reconciliation audit of all 39 `WEAPONS` rows against the live arsenal
+(`docs/audits/weapon-catalog-wiki-audit.md`) surfaced facts about the wiki's page organization
+and about this repo's own coupling that the decision above did not account for. **None of them
+change the decision** — generated JSON, separate scripts, shared wiki client, wiki-authoritative,
+ids never rewritten all stand. They constrain how `scrape-stats.mjs` must be built, and they
+correct one sub-decision that is unsafe as written.
+
+Two findings were acted on immediately, because they were live defects rather than future risks:
+
+* `scripts/scrape-images.mjs` mapped the catalog's `winfield-m1873` to `null` as a "duplicate",
+  on the belief that a separate `Ranger 73` row covered it. **No such row exists.** The wiki
+  renamed Winfield M1873 → Ranger 73 in Update 2.0, so the only catalog entry for a live weapon
+  was being skipped by every run. Now mapped to `Weapons/Ranger_73`.
+* `WIKI_TITLE_OVERRIDES` and `KNOWN_CATALOG_DUPLICATES` are now **keyed by catalog `id`, not by
+  display name** — see "The name write-through hazard" below.
+
+### The name write-through hazard
+
+The "Precedence: the wiki is authoritative" sub-decision says a scraped display name is written
+through to `catalog.js`. That rule interacts badly with two name-derived contracts elsewhere in
+the repo, and the interaction is silent in both directions.
+
+**1. The wiki-path override table (fixed).** It was keyed by display name. The first successful
+name write-through would have stopped every key matching, and resolution would have fallen back
+to `Weapons/{new name}` — which is *usually* correct for a plain rename, and wrong exactly where
+it matters. `"Nagant Officer Carbine"` → `"Officer Carbine"` falls back to
+`Weapons/Officer_Carbine`; the real page is `Weapons/Officer/Carbine`. A mostly-working fallback
+is the worst possible failure mode, because the run summary still reports success for 37 of 39
+items. Keying on `id` — the one field this ADR guarantees is never rewritten — makes the table
+survive its own success. A test now asserts every override key is slug-shaped.
+
+**2. The on-disk image path (NOT fixed — a constraint on `--write-catalog`).** ADR-0002's asset
+contract is `client/public/images/{category}/{slug}.{ext}` where `slug = slugify(displayName)`,
+and `ItemThumb.jsx` derives the URL it requests the same way. **A display-name write-through
+therefore renames the image path the app asks for, while the file on disk keeps its old name.**
+Renaming `"Caldwell Pax"` → `"Pax"` makes the UI request `/images/weapons/pax.png` against a disk
+holding `caldwell-pax.png`; the `<img onError>` chain then falls through to the SVG icon and the
+art disappears with no error anywhere. Fourteen of the catalog's weapon rows carry stale
+pre-`1896` names, so a single unguarded `--write-catalog` run drops fourteen weapon images at
+once.
+
+Therefore: **`scrape-stats.mjs` MUST NOT apply a display-name change without also renaming the
+corresponding image assets in the same commit**, and its `--write-catalog` diff must list name
+changes separately from numeric ones, since only the name changes carry this side effect. The
+cleaner long-term fix — deriving the image slug from `id` rather than from the display name —
+would decouple the two permanently, but it re-opens ADR-0002's asset-path contract and would
+rename 37 committed files, so it belongs in its own decision rather than being smuggled in here.
+
+### The wiki's page organization, as the parser will meet it
+
+Recorded because each one is a way a reasonable parser gets a well-formed wrong answer, which is
+precisely the risk the original decision flagged and could not yet characterize.
+
+* **Everything is namespaced**: `/wiki/Weapons/{Title}`, never `/wiki/{Title}`.
+* **Variants are subpages** — `/wiki/Weapons/{Family}/{Variant}` — but **compound variants
+  collapse into one segment**: `Sparks/Pistol_Silencer`, `Centennial/Shorty_Silencer`,
+  `Officer/Carbine_Deadeye`, `Uppercut/Precision_Deadeye`. There is no
+  `Sparks/Pistol/Silencer`. Paths are at most three segments; the parent is always segment two.
+* **Family structure cannot be inferred from the URL, or from the name.** `Mosin_Obrez` is a
+  top-level family page with its own children (`Extended`, `Mace`, `Match`, `Sharpeye`) despite
+  being a Mosin; `Frontier_73C` and `Vandal_73C` are peers of `Ranger_73`, not its children.
+  Read family membership from the page's weapon-tree section, or accept a hand-maintained map.
+* **Weapon-tree unlock rows are not pages.** Ammo unlocks ("Pax High Velocity Ammo", "Centennial
+  Dumdum Ammo") and unlock ordering ("7th unlock in the LeMat Mark II family") live in a table on
+  the family page. They are the per-weapon ammo-compatibility data the "Neutral" note above
+  anticipated — scrape them into `itemStats.json` as a per-weapon list; do not mistake them for
+  variant pages, and do not derive catalog rows from them.
+* **Not every weapon page is a buyable item.** The Maxim (Update 2.8) is a *world weapon*: no
+  cost, no slot size, cannot be bought or carried. The range assertions this ADR specifies
+  (`cost > 0`, size in range) would reject it as a parse failure when it is really a category.
+  Classify and skip world weapons explicitly, or the run summary fills with false errors after
+  every event patch.
+* **Stats are infobox fields; description and background are body prose.** Two extractors, not
+  one. "Recommended traits" sections are wiki-editorial rather than game data and should not be
+  persisted as if they were.
+* **Hyphen versus underscore is not derivable.** `Mosin-Nagant` (hyphen, part of the name) but
+  `Mosin_Obrez` (underscore, a space); `Bornheim_No._3` carries a literal period. Titles must
+  come from the category listing, never be reconstructed from a display name.
+* **Discovery belongs to `/wiki/Category:Weapons`, not the sitemap.** The sitemap lags live edits
+  by months, which makes it least reliable for exactly the case that matters most — a
+  newly-added weapon. Keep using it for bulk verification of paths already known.
+
+### Coverage: `itemStats.json` keyed by catalog id covers a quarter of the arsenal
+
+`Category:Weapons` reports **146 pages**; the catalog has **39 weapon rows**. Every weapon
+variant in the game is absent, along with a dozen-plus base weapons (Ranger 73, Vandal 73C,
+Terminus, Marathon, New Army, Officer, 1865 Carbine, Mosin Obrez, Bomb Launcher, Machete, and
+others). The confirmation criterion "every key in `itemStats.json` resolves to a real item in
+`WEAPONS`/`TOOLS`/`TRAITS`/`CONS`" is still correct, but it is a one-way check: it proves nothing
+about the ~107 pages with no catalog row to key on, and it will pass at full green while three
+quarters of the arsenal is missing.
+
+The blocker is schema, not scraping. The weapon tuple `[id, name, size, cost, ammoClass, group]`
+has nowhere to record `variantOf`, and `group` is an app-side UI taxonomy with no wiki
+equivalent, so it cannot be scraped for a new row at all. Sequence accordingly: variant schema →
+family/parent map → bulk import. Importing first would triple the picker's length with no way to
+collapse families, and would need `group` invented by hand for every new row anyway.
+
+### Retiring a duplicate row is blocked by the wire format
+
+The audit recommended deleting `winfield-m1873c` (a duplicate of `frontier-73c`). **That is not
+safe as a plain deletion**, and the audit has been corrected. `loadoutCodec.js`'s legacy
+pre-versioning decoder resolves weapons by raw array position, so removing a row shifts every
+later weapon and silently remaps old saved loadouts to the wrong items — the failure the
+`catalog.js` "appended, never inserted" rule exists to prevent. Retiring a weapon row needs the
+same treatment the Choke/Stalker Beetle tool slots got: an explicit legacy-index carve-out.
+Until then the duplicate stays, and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
+
+Note this also means the id → wiki-path map is **not injective**: two catalog rows
+(`winfield-m1873c`, `frontier-73c`) describe one wiki page. A stats run will happily write two
+keys with identical scraped content, and the existing confirmation check will pass.
+
+### Additional confirmation criteria
+
+* Every key in `WIKI_TITLE_OVERRIDES` and `KNOWN_CATALOG_DUPLICATES` is a catalog `id`, asserted
+  by test — not a display name
+* Renaming an item's display name does not change the wiki path it resolves to, asserted by test
+* No catalog entry silently resolves to `null`: every `null` override names a real duplicate in
+  `KNOWN_CATALOG_DUPLICATES`, and that explanation is checked against the catalog rather than
+  taken on trust (this is what let the `Ranger 73` mistake survive)
+* A `--write-catalog` run that changes any display name either renames the matching image assets
+  or refuses to apply the name change, and reports name changes separately from numeric ones
+* World weapons are classified and skipped, not reported as parse failures
+* The run summary states coverage against `Category:Weapons` (pages seen vs. catalog rows), so a
+  green run over 39 of 146 pages cannot read as complete
