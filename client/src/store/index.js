@@ -3,6 +3,7 @@ import loadoutReducer from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 import savedLoadoutsReducer from "./savedLoadoutsSlice.js";
 import loadoutListsReducer from "./loadoutListsSlice.js";
+import hunterFavoritesReducer from "./hunterFavoritesSlice.js";
 import { writeStoredLoadout } from "../utils/loadoutCodec.js";
 
 export const store = configureStore({
@@ -11,6 +12,7 @@ export const store = configureStore({
     ui: uiReducer,
     savedLoadouts: savedLoadoutsReducer,
     loadoutLists: loadoutListsReducer,
+    hunterFavorites: hunterFavoritesReducer,
   },
 });
 

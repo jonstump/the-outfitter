@@ -5,13 +5,18 @@ import HunterPicker from "./HunterPicker.jsx";
 
 // Governing: ADR-0006, ADR-0007, SPEC-0003 REQ "The Hunter Picker Is Filterable and
 // Bounded", SPEC-0003 REQ "The Hunter Picker Does Not Restrict or Mark Reuse", SPEC-0003
-// REQ "Focus Management", SPEC-0003 REQ "Keyboard Navigation"
+// REQ "Favorite Hunters", SPEC-0003 REQ "Focus Management", SPEC-0003 REQ "Keyboard
+// Navigation"
 //
 // A five-entry fixture roster stands in for the 242. Two entries share a name prefix so
 // the free-text filter has something to actually narrow, and one has a null `acquisition`
 // and a null `obtainable` — the two live entries that shape do exist for, and the reason
 // the filters need an explicit Unknown bucket rather than dropping them.
-vi.mock("../../data/hunters.json", () => ({
+// The specifier must resolve to the SAME file `client/src/data/hunters.js` imports — the
+// repo-root `data/hunters.json`, not a client-workspace path. If the two ever disagree the
+// mock silently stops applying and this suite quietly runs against the real 242-hunter
+// roster instead of the five below.
+vi.mock("../../../../data/hunters.json", () => ({
   default: [
     { id: "the-rat", name: "The Rat", portrait: "the-rat", acquisition: "dlc", obtainable: true },
     { id: "the-raven", name: "The Raven", portrait: "the-raven", acquisition: "dlc", obtainable: true },
@@ -21,9 +26,16 @@ vi.mock("../../data/hunters.json", () => ({
   ],
 }));
 
-/** Trigger + picker, so focus-return has somewhere real to return to. */
-function Harness({ onSelect = () => {}, selectedHunterId = null }) {
+/**
+ * Trigger + picker, so focus-return has somewhere real to return to.
+ *
+ * `favorites` is stateful here rather than a fixed prop: favoriting is only meaningful if
+ * the answer comes back, and a static array would let a test pass against a component that
+ * never re-renders on a toggle. The harness stands in for the redux slice.
+ */
+function Harness({ onSelect = () => {}, selectedHunterId = null, initialFavorites = [], onToggle }) {
   const [open, setOpen] = useState(false);
+  const [favorites, setFavorites] = useState(initialFavorites);
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>
@@ -32,6 +44,15 @@ function Harness({ onSelect = () => {}, selectedHunterId = null }) {
       {open && (
         <HunterPicker
           selectedHunterId={selectedHunterId}
+          favorites={favorites}
+          onToggleFavorite={(payload) => {
+            onToggle?.(payload);
+            setFavorites((prev) =>
+              payload.favorite
+                ? [...prev, payload.hunterId]
+                : prev.filter((id) => id !== payload.hunterId)
+            );
+          }}
           onClose={() => setOpen(false)}
           onSelect={(chosen) => {
             onSelect(chosen);
@@ -50,10 +71,18 @@ const openPicker = () => {
   return trigger;
 };
 
-// Scoped to the listbox on purpose: the acquisition and availability filters are native
-// <select>s, so an unscoped role="option" query sweeps their <option>s in too.
-const tiles = () => within(screen.getByRole("listbox")).getAllByRole("option");
-const tileNames = () => tiles().map((o) => o.textContent.trim());
+// A tile is a grid ROW holding two cells — choose, and favorite. `tiles()` returns the
+// CHOOSE cells, which are the tiles as far as selection is concerned.
+//
+// Scoped to the grid on purpose: the acquisition and availability filters are native
+// <select>s, and an unscoped role query sweeps their <option>s in too.
+const grid = () => screen.getByRole("grid");
+const rows = () => within(grid()).getAllByRole("row");
+const tiles = () => rows().map((row) => within(row).getAllByRole("gridcell")[0]);
+// The name plate specifically: a tile's textContent would also pick up the "?" monogram on
+// the no-portrait tile, which is decoration rather than a name.
+const tileNames = () => tiles().map((o) => o.querySelector(".hp-tile-name").textContent.trim());
+const favButton = (hunterId) => screen.getByTestId(`hunter-fav-${hunterId}`);
 
 describe("HunterPicker filtering", () => {
   it("narrows to hunters whose name matches the free-text filter", () => {
@@ -151,11 +180,8 @@ describe("HunterPicker reuse", () => {
     render(<Harness />);
     openPicker();
     // Every hunter tile carries the same class list — no dimming, no badge, no variant.
-    const classes = new Set(
-      tiles()
-        .filter((o) => o.dataset.testid !== "hunter-tile-none")
-        .map((o) => o.className)
-    );
+    const hunterRows = rows().slice(0, -1); // the last row is the "no portrait" choice
+    const classes = new Set(hunterRows.map((row) => row.className));
     expect(classes).toEqual(new Set(["hp-tile"]));
   });
 
@@ -184,6 +210,190 @@ describe("HunterPicker reuse", () => {
     openPicker();
     fireEvent.click(screen.getByTestId("hunter-tile-none"));
     expect(onSelect).toHaveBeenCalledWith({ hunterId: null, hunterName: null });
+  });
+});
+
+// Governing: SPEC-0003 REQ "Favorite Hunters" — favorites FILTER AND SORT, never gate.
+describe("HunterPicker favorites", () => {
+  it("favorites nothing on its own, and offers the toggle inert until there is one", () => {
+    // "The system MUST NOT pre-populate favorites." Nothing here seeds one, and with an
+    // empty set the toggle cannot be switched into an empty picker.
+    render(<Harness />);
+    openPicker();
+    for (const id of ["the-rat", "the-raven", "bad-hand", "the-ol-cowpoke", "kingsnake"]) {
+      expect(favButton(id)).toHaveAttribute("aria-pressed", "false");
+    }
+    const toggle = screen.getByRole("checkbox", { name: /favorites only/i });
+    expect(toggle).toBeDisabled();
+    expect(tileNames()).toHaveLength(6); // five hunters + "No portrait"
+  });
+
+  it("names the favorite control by both the action and the hunter", () => {
+    render(<Harness initialFavorites={["the-rat"]} />);
+    openPicker();
+    // SPEC-0003 "Icon-Only Controls": never a bare star repeated once per hunter.
+    expect(screen.getByRole("button", { name: "Unfavorite The Rat" })).toBe(favButton("the-rat"));
+    expect(screen.getByRole("button", { name: "Favorite Bad Hand" })).toBe(favButton("bad-hand"));
+  });
+
+  it("toggles a favorite from the keyboard and reports the new state", () => {
+    const onToggle = vi.fn();
+    render(<Harness onToggle={onToggle} />);
+    openPicker();
+
+    // A real <button>, so Enter and Space activate it natively — fireEvent.click is what
+    // jsdom gives us for that activation, and it is reached by the grid's arrow keys
+    // (asserted in the keyboard suite) rather than by 242 Tab stops.
+    fireEvent.click(favButton("bad-hand"));
+    expect(onToggle).toHaveBeenCalledWith({
+      hunterId: "bad-hand",
+      hunterName: "Bad Hand",
+      favorite: true,
+    });
+    expect(favButton("bad-hand")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Unfavorite Bad Hand" })).toBeInTheDocument();
+
+    fireEvent.click(favButton("bad-hand"));
+    expect(onToggle).toHaveBeenLastCalledWith({
+      hunterId: "bad-hand",
+      hunterName: "Bad Hand",
+      favorite: false,
+    });
+    expect(favButton("bad-hand")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("favoriting neither chooses the hunter nor closes the picker", () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    openPicker();
+    fireEvent.click(favButton("kingsnake"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("sorts favorites ahead of the rest, without dropping anyone", () => {
+    render(<Harness initialFavorites={["kingsnake", "bad-hand"]} />);
+    openPicker();
+    // Dataset order within each group; the two favorites simply move to the front.
+    expect(tileNames()).toEqual([
+      "Bad Hand",
+      "Kingsnake",
+      "The Rat",
+      "The Raven",
+      "The Ol' Cowpoke",
+      "No portrait",
+    ]);
+  });
+
+  it("sorts favorites ahead WITHIN the active filter, showing no non-matching hunter", () => {
+    render(<Harness initialFavorites={["kingsnake", "the-raven"]} />);
+    openPicker();
+    fireEvent.change(screen.getByLabelText("Filter by acquisition"), { target: { value: "dlc" } });
+
+    // Kingsnake is favorited but is blood-bonds: a favorite must not survive a filter it
+    // fails. The Raven is both favorited and matching, so it leads.
+    expect(tileNames()).toEqual(["The Raven", "The Rat", "No portrait"]);
+  });
+
+  it("shows the roster in full while the toggle is off", () => {
+    render(<Harness initialFavorites={["kingsnake"]} />);
+    openPicker();
+    expect(screen.getByRole("checkbox", { name: /favorites only/i })).not.toBeChecked();
+    expect(tileNames()).toHaveLength(6);
+    expect(screen.getByText("5 of 5 hunters")).toBeInTheDocument();
+  });
+
+  it("narrows to favorites only when the toggle is on, and restores the roster when off", () => {
+    render(<Harness initialFavorites={["kingsnake", "bad-hand"]} />);
+    openPicker();
+    const toggle = screen.getByRole("checkbox", { name: /favorites only/i });
+
+    fireEvent.click(toggle);
+    expect(tileNames()).toEqual(["Bad Hand", "Kingsnake", "No portrait"]);
+
+    fireEvent.click(toggle);
+    expect(tileNames()).toHaveLength(6);
+  });
+
+  it("combines the favorites-only toggle with the other filters", () => {
+    render(<Harness initialFavorites={["kingsnake", "the-raven"]} />);
+    openPicker();
+    fireEvent.click(screen.getByRole("checkbox", { name: /favorites only/i }));
+    fireEvent.change(screen.getByLabelText("Filter by acquisition"), { target: { value: "dlc" } });
+    expect(tileNames()).toEqual(["The Raven", "No portrait"]);
+  });
+
+  it("cannot strand the user in an empty picker by unfavoriting the last favorite", () => {
+    // The toggle is on and the set empties beneath it. An empty favorites set behaves as no
+    // filter, so the roster comes back rather than the picker going blank.
+    render(<Harness initialFavorites={["kingsnake"]} />);
+    openPicker();
+    fireEvent.click(screen.getByRole("checkbox", { name: /favorites only/i }));
+    expect(tileNames()).toEqual(["Kingsnake", "No portrait"]);
+
+    fireEvent.click(favButton("kingsnake"));
+    expect(tileNames()).toHaveLength(6);
+    expect(screen.getByRole("checkbox", { name: /favorites only/i })).toBeDisabled();
+  });
+
+  it("does not let the emptied toggle re-engage itself when a new favorite arrives", () => {
+    // Regression, PR #133 review. `favoritesOnly` used to survive the set emptying: the
+    // checkbox renders `favoritesOnly && !noFavorites`, so it went disabled+unchecked and
+    // the roster came back — every visible sign of the filter being off — while the state
+    // stayed `true` and out of the user's reach. Favoriting anything else then reactivated
+    // it and collapsed the picker to that one hunter, with the box showing checked, without
+    // the user re-checking anything.
+    render(<Harness initialFavorites={["kingsnake"]} />);
+    openPicker();
+    const toggle = () => screen.getByRole("checkbox", { name: /favorites only/i });
+
+    fireEvent.click(toggle());
+    expect(tileNames()).toEqual(["Kingsnake", "No portrait"]);
+
+    // The last favorite goes away. The control must be genuinely off, not merely masked.
+    fireEvent.click(favButton("kingsnake"));
+    expect(toggle()).toBeDisabled();
+    expect(toggle()).not.toBeChecked();
+
+    // A different hunter is favorited. Nothing touched the checkbox, so nothing may filter.
+    fireEvent.click(favButton("bad-hand"));
+    expect(toggle()).toBeEnabled();
+    expect(toggle()).not.toBeChecked();
+    expect(tileNames()).toHaveLength(6);
+    expect(tileNames()).toContain("The Rat");
+
+    // …and re-checking it deliberately still works, so the reset disarmed the control
+    // rather than breaking it.
+    fireEvent.click(toggle());
+    expect(toggle()).toBeChecked();
+    expect(tileNames()).toEqual(["Bad Hand", "No portrait"]);
+  });
+
+  it("indicates a favorite and nothing else — never that a hunter is in use", () => {
+    // The picker is not told which hunters other lists reference, so a favorited hunter
+    // that is also in use can only carry the favorite marking. Nothing on a tile varies by
+    // anything except selection and the user's own favorite.
+    render(<Harness initialFavorites={["the-rat"]} />);
+    openPicker();
+    const byName = Object.fromEntries(
+      rows()
+        .slice(0, -1)
+        .map((r) => [r.querySelector(".hp-tile-name").textContent.trim(), r])
+    );
+    expect(byName["The Rat"].className.split(" ").sort()).toEqual(["hp-tile", "hp-tile-fav"]);
+    expect(byName["The Raven"].className).toBe("hp-tile");
+    expect(favButton("the-rat")).toHaveAttribute("aria-pressed", "true");
+    expect(favButton("the-raven")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps favoriting separate from choosing", () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} initialFavorites={["bad-hand"]} selectedHunterId="the-rat" />);
+    openPicker();
+    // Favorited and selected are independent axes, and neither implies the other.
+    expect(screen.getByTestId("hunter-tile-bad-hand")).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByTestId("hunter-tile-the-rat")).toHaveAttribute("aria-selected", "true");
+    expect(favButton("the-rat")).toHaveAttribute("aria-pressed", "false");
   });
 });
 
@@ -249,23 +459,33 @@ describe("HunterPicker focus and keyboard", () => {
   it("navigates the grid with arrow keys and Home/End", () => {
     render(<Harness />);
     openPicker();
-    const grid = screen.getByRole("listbox");
     const options = tiles();
 
-    // Roving tabindex: exactly one option is tabbable, so Tab reaches the grid in one stop.
-    expect(options.filter((o) => o.tabIndex === 0)).toHaveLength(1);
+    // Roving tabindex: exactly one cell in the whole grid is tabbable, so Tab reaches the
+    // grid in one stop rather than walking 242 tiles and their 242 favorite buttons.
+    const tabbable = within(grid())
+      .getAllByRole("gridcell")
+      .flatMap((cell) => [cell, ...cell.querySelectorAll("button")])
+      .filter((el) => el.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
 
     options[0].focus();
-    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    // Right walks the row's own cells first — this tile's favorite button — then on to the
+    // next tile, so Right always means "the next thing to the right".
+    fireEvent.keyDown(grid(), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(favButton("the-rat"));
+
+    fireEvent.keyDown(grid(), { key: "ArrowRight" });
     expect(document.activeElement).toBe(options[1]);
 
-    fireEvent.keyDown(grid, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(options[0]);
+    fireEvent.keyDown(grid(), { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(favButton("the-rat"));
 
-    fireEvent.keyDown(grid, { key: "End" });
+    fireEvent.keyDown(grid(), { key: "End" });
+    // The "no portrait" row has nothing to favorite, so its last cell is the tile itself.
     expect(document.activeElement).toBe(options[options.length - 1]);
 
-    fireEvent.keyDown(grid, { key: "Home" });
+    fireEvent.keyDown(grid(), { key: "Home" });
     expect(document.activeElement).toBe(options[0]);
   });
 
@@ -277,46 +497,44 @@ describe("HunterPicker focus and keyboard", () => {
   it("degrades Down/Up to Next/Previous when layout has not happened", () => {
     render(<Harness />);
     openPicker();
-    const grid = screen.getByRole("listbox");
     const options = tiles();
 
     options[0].focus();
-    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
     expect(document.activeElement).toBe(options[1]);
 
-    fireEvent.keyDown(grid, { key: "ArrowUp" });
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
     expect(document.activeElement).toBe(options[0]);
   });
 
   it("moves Down/Up by a whole row once the grid has been laid out", () => {
     render(<Harness />);
     openPicker();
-    const grid = screen.getByRole("listbox");
     const options = tiles();
 
     // Stand in for the layout jsdom will not do: two columns, so tiles 0/1 share a row,
     // 2/3 the next, and so on. A non-zero box is what tells columnCount() layout happened.
     const COLS = 2;
-    options.forEach((el, i) => {
+    rows().forEach((el, i) => {
       Object.defineProperty(el, "offsetWidth", { configurable: true, value: 120 });
       Object.defineProperty(el, "offsetHeight", { configurable: true, value: 80 });
       Object.defineProperty(el, "offsetTop", { configurable: true, value: Math.floor(i / COLS) * 80 });
     });
 
     options[0].focus();
-    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
     expect(document.activeElement).toBe(options[COLS]);
 
-    fireEvent.keyDown(grid, { key: "ArrowUp" });
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
     expect(document.activeElement).toBe(options[0]);
 
     // A single row is NOT the no-layout case: with every tile on one row the column count
     // is the tile count, so Down clamps to the last tile rather than stepping sideways.
-    options.forEach((el) => {
+    rows().forEach((el) => {
       Object.defineProperty(el, "offsetTop", { configurable: true, value: 0 });
     });
     options[0].focus();
-    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
     expect(document.activeElement).toBe(options[options.length - 1]);
   });
 
@@ -337,8 +555,7 @@ describe("HunterPicker focus and keyboard", () => {
   it("keeps the roving tabindex in range when a filter shortens the list", () => {
     render(<Harness />);
     openPicker();
-    const grid = screen.getByRole("listbox");
-    fireEvent.keyDown(grid, { key: "End" });
+    fireEvent.keyDown(grid(), { key: "End" });
     fireEvent.change(screen.getByLabelText("Filter hunters by name"), { target: { value: "rav" } });
     const options = tiles();
     expect(options.filter((o) => o.tabIndex === 0)).toHaveLength(1);

@@ -1249,20 +1249,85 @@ button {
   overflow-y: auto;
   padding: 2px;
 }
+/* A tile is a grid ROW holding two cells: choose, and favorite. The favorite cell is
+   positioned over the artwork's top-right corner, which is why the row is the positioning
+   context rather than the choose cell. */
 .hp-tile {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  cursor: pointer;
   background: var(--scroll-track);
   border: 2px solid var(--border);
   color: var(--text);
 }
+/* `:has(:focus-visible)`, not `:focus-within`. The tile is a row div and never takes focus
+   itself, so the original `.hp-tile:focus-visible` stopped matching once the cells became
+   the focusable things — but `:focus-within` overshot in the other direction and lit the
+   gold border on a plain mouse click, which is the state `.hp-tile-picked` means. `:has()`
+   keeps the highlight scoped to a KEYBOARD focus landing anywhere inside the tile, whether
+   that is the choose cell or the star button (PR #133 review). */
 .hp-tile:hover,
-.hp-tile:focus-visible {
+.hp-tile:has(:focus-visible) {
   border-color: var(--gold-border);
 }
 .hp-tile-picked {
   border-color: var(--gold);
+}
+.hp-tile-choose {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+/* Favorite control (SPEC-0003 REQ "Favorite Hunters"). A star over the portrait's corner.
+   Its accessible name is on the button; the glyph is decoration. Deliberately NOT a
+   "used by another list" marker — the picker is never told which those are, so no rule
+   here can ever style one. */
+.hp-fav-cell {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.hp-fav {
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1;
+  /* 28px is below the 44px WCAG 2.5.5 target, but this control sits inside a 96px tile
+     whose own hit area is the choose action; enlarging the star would eat the portrait.
+     2.5.5 is AAA — SC 2.5.8 (AA, 24px minimum) is what applies, and 28px clears it. */
+  min-width: 28px;
+  min-height: 28px;
+  cursor: pointer;
+  padding: 0;
+}
+.hp-fav:hover,
+.hp-fav:focus-visible {
+  color: var(--gold);
+}
+.hp-tile-fav .hp-fav {
+  color: var(--gold);
+}
+.hp-fav-only-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13.5px;
+}
+.hp-fav-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.hp-fav-only input[disabled] + span {
+  color: var(--text-dim);
+}
+.hp-fav-only-hint {
+  font-style: italic;
+  color: var(--text-dim);
 }
 .hp-tile-art {
   height: 96px;

@@ -102,3 +102,39 @@ export function updateList(id, patch) {
 export function retireList(id) {
   return fetch(`${LISTS_BASE}/${id}`, { method: "DELETE", headers: headers() }).then(asJson);
 }
+
+// ---------------------------------------------------------------------------
+// Favorite hunters (SPEC-0003 REQ "Favorite Hunters"). Same token header, same
+// scoping rules again — a favorite is only ever visible to the browser that made it.
+//
+// The hunter is addressed in the PATH, which is what makes both writes idempotent:
+// PUT twice is one favorite, DELETE on a hunter that was never favorited succeeds.
+// Retrying either after a flaky network is therefore always safe.
+//
+// Note what is NOT here: nothing sends the "favorites only" toggle. That is a view
+// preference, client state under the same rule as the selected list and the sort
+// order, and it never reaches the server.
+// ---------------------------------------------------------------------------
+
+const FAVORITES_BASE = (import.meta.env && import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "") + "/api/hunter-favorites";
+
+/** The caller's favorites, as full records. An empty array is the ordinary fresh state. */
+export function getFavorites() {
+  return fetch(FAVORITES_BASE, { headers: headers() }).then(asJson);
+}
+
+export function favoriteHunter(hunterId) {
+  return fetch(`${FAVORITES_BASE}/${encodeURIComponent(hunterId)}`, {
+    method: "PUT",
+    headers: headers(),
+  }).then(asJson);
+}
+
+export function unfavoriteHunter(hunterId) {
+  return fetch(`${FAVORITES_BASE}/${encodeURIComponent(hunterId)}`, {
+    method: "DELETE",
+    headers: headers(),
+  }).then(asJson);
+}

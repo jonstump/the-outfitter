@@ -20,7 +20,11 @@
 // /images/hunters/{portrait}-thumb.avif — derivable from the slug, with no manifest lookup
 // (SPEC-0004 REQ "Consumption Contract Compatibility").
 
-import hunters from "./hunters.json";
+// The dataset itself lives at the REPO ROOT (`data/hunters.json`), not beside this file.
+// It is a shared artifact: the server reads the same file to validate a favorited hunter
+// id, and a copy inside the client workspace was invisible to the server's production
+// image. Vite bundles it through this import exactly as it did when it was a sibling.
+import hunters from "../../../data/hunters.json";
 
 export const HUNTERS = hunters;
 
@@ -102,22 +106,47 @@ export function acquisitionLabel(value) {
 }
 
 /**
- * Narrow the roster to the hunters matching every supplied filter.
+ * Narrow the roster to the hunters matching every supplied filter, favorites first.
  *
- * Filtering narrows WHICH hunters are candidates and does nothing else: relative order is
- * the dataset's own, and no hunter is ever treated differently for being referenced by an
- * existing list. That separation is explicit in SPEC-0003 — "The Hunter Picker Is
- * Filterable and Bounded" narrows the candidate set; "The Hunter Picker Does Not Restrict
- * or Mark Reuse" governs how the survivors are presented — so this function is
- * deliberately not given the caller's lists to consult.
+ * Filtering narrows WHICH hunters are candidates: relative order is the dataset's own, and
+ * no hunter is ever treated differently for being referenced by an existing list. That
+ * separation is explicit in SPEC-0003 — "The Hunter Picker Is Filterable and Bounded"
+ * narrows the candidate set; "The Hunter Picker Does Not Restrict or Mark Reuse" governs
+ * how the survivors are presented — so this function is deliberately not given the caller's
+ * lists to consult, and cannot consult them.
  *
  * `obtainable` accepts "yes" / "no" / UNKNOWN_ACQUISITION, since the field is nullable for
  * the same two entries. It is 240/242 true and is near-useless alone; the free-text name
  * filter is what actually makes 242 tractable.
+ *
+ * ---------------------------------------------------------------------------------------
+ * Governing: SPEC-0003 REQ "Favorite Hunters" — favorites FILTER AND SORT, never gate.
+ *
+ * `favorites` is a Set (or array) of favorited hunter ids. It does two things and neither
+ * of them is a gate:
+ *
+ *   Sort.  Favorited matches are moved AHEAD of unfavorited ones, within whatever filter is
+ *     already active. This is applied AFTER narrowing, which is what makes "no non-matching
+ *     hunter is shown because it is favorited" true by construction: a favorite that fails
+ *     the acquisition filter was dropped before the sort ever saw it. The partition is
+ *     stable on both sides, so dataset order survives within each group.
+ *
+ *   Filter, only if asked.  `favoritesOnly` narrows to favorited hunters, and is the
+ *     picker's own toggle rather than anything persisted.
+ *
+ * An EMPTY favorites set behaves as no filter and no sort — identical output to calling
+ * this without the option at all — INCLUDING when `favoritesOnly` is true. That is the
+ * spec's "an empty favorites set is not an empty picker": you cannot favorite a hunter you
+ * have never seen, so a set that has never been populated must not be able to hide the
+ * roster that populates it.
  */
-export function filterHunters(hunters, { query = "", acquisition = "", obtainable = "" } = {}) {
+export function filterHunters(
+  hunters,
+  { query = "", acquisition = "", obtainable = "", favorites = null, favoritesOnly = false } = {}
+) {
   const q = query.trim().toLowerCase();
-  return hunters.filter((h) => {
+  const favored = favorites instanceof Set ? favorites : new Set(favorites || []);
+  const matched = hunters.filter((h) => {
     if (q && !h.name.toLowerCase().includes(q)) return false;
     if (acquisition) {
       const matches =
@@ -135,4 +164,12 @@ export function filterHunters(hunters, { query = "", acquisition = "", obtainabl
     }
     return true;
   });
+
+  // Nothing favorited: return the narrowed set untouched, so the feature is invisible to a
+  // user who has not used it rather than being an empty state they have to escape.
+  if (favored.size === 0) return matched;
+
+  const isFavorite = (h) => favored.has(h.id);
+  if (favoritesOnly) return matched.filter(isFavorite);
+  return [...matched.filter(isFavorite), ...matched.filter((h) => !isFavorite(h))];
 }

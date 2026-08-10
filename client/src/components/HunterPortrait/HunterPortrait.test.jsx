@@ -14,7 +14,9 @@ import HunterPortrait from "./HunterPortrait.jsx";
 // The mock is on hunters.JSON, not on hunters.js: the real seam logic (slug -> path
 // derivation, size ordering, the empty-array cases) is the thing under test, so mocking the
 // module that computes it would only test the mock.
-vi.mock("../../data/hunters.json", () => ({
+// Path is relative to THIS file and must resolve to the same repo-root artifact
+// `client/src/data/hunters.js` imports; a mismatch makes the mock a no-op.
+vi.mock("../../../../data/hunters.json", () => ({
   default: [
     {
       id: "two-sizes",

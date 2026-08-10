@@ -16,8 +16,9 @@ const dbFile = process.env.OUTFITTER_DB_FILE
   : path.join(__dirname, "..", "data", "db.json");
 
 // Governing: ADR-0006, SPEC-0003 REQ "List Identity Is User-Owned and Independent of
-// Portrait". `loadoutLists` is a second token-scoped collection alongside `loadouts`.
-const defaultData = { loadouts: [], loadoutLists: [] };
+// Portrait", SPEC-0003 REQ "Favorite Hunters". `loadoutLists` and `hunterFavorites` are
+// further token-scoped collections alongside `loadouts`, governed by identical rules.
+const defaultData = { loadouts: [], loadoutLists: [], hunterFavorites: [] };
 
 export const db = new Low(new JSONFile(dbFile), defaultData);
 
@@ -32,6 +33,10 @@ try {
   // starting state — there is nothing to migrate, since a loadout with no `listId` is
   // already Unassigned by definition.
   db.data.loadoutLists ||= [];
+  // Same shape, same reasoning, for favorites (SPEC-0003 REQ "Favorite Hunters"). An empty
+  // collection is the ONLY correct starting state here — the spec forbids pre-populating
+  // favorites, so there is nothing to seed and nothing to migrate.
+  db.data.hunterFavorites ||= [];
 
   // Records written before per-user ownership (issue #17) have no `owner` field.
   // They are marked with a `legacy` flag rather than folded into any named
@@ -50,7 +55,7 @@ try {
   const TOKEN_SHAPED_OWNER = /^(?=[a-f0-9-]{36}$|[tT]-[A-Za-z0-9]{10,}|request-scoped:[a-f0-9-]{36}$)/;
   // The same quarantine applies to every owned collection. A list whose owner is not
   // token-shaped can never be reached by any header value, exactly as for loadouts.
-  for (const record of [...db.data.loadouts, ...db.data.loadoutLists]) {
+  for (const record of [...db.data.loadouts, ...db.data.loadoutLists, ...db.data.hunterFavorites]) {
     if (!record.owner || !TOKEN_SHAPED_OWNER.test(record.owner)) {
       delete record.owner;
       record.legacy = true;
@@ -60,5 +65,8 @@ try {
   await db.write();
 } catch (err) {
   console.error("Unable to read/write JSON store; starting with empty data:", err);
-  db.data = { loadouts: [] };
+  // Every collection, not just `loadouts` — a handler that reads an absent collection
+  // throws a TypeError and turns a recoverable data-file problem into a 500 on a route
+  // that had nothing to do with it.
+  db.data = { loadouts: [], loadoutLists: [], hunterFavorites: [] };
 }

@@ -51,6 +51,65 @@ jobs:
       - name: Run the test suites
         run: npm test
 
+  # Governing: ADR-0006, ADR-0007, SPEC-0003 REQ "Favorite Hunters".
+  # Every suite above runs against the REPO TREE. The container runs against a different
+  # filesystem — a multi-stage build discards the build stage, so anything the Dockerfile
+  # does not COPY is simply absent. That gap shipped a favorites feature that returned 400
+  # on every write in the image while 275 client and 63 server tests stayed green and
+  # /healthz stayed 200 (PR #133 review). Nothing but exercising the packaged layout can
+  # see it, so this job builds the image, boots it, and drives one real favorite through.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No registry push and no cross-platform matrix — plain `docker build` on the runner's
+      # own daemon is the cheapest thing that produces the artifact under test.
+      - name: Build the image
+        run: docker build -t outfitter:ci .
+
+      - name: Run the container
+        run: |
+          docker run -d --name outfitter-ci -p 4100:4100 outfitter:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4100/healthz >/dev/null 2>&1; then
+              echo "healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the container never became healthy"
+          docker logs outfitter-ci
+          exit 1
+
+      # The actual regression test. A favorite is the one endpoint that reads a data file
+      # the runtime stage has to have been told to copy, so a 400 here means the image is
+      # mis-packaged even though the build succeeded.
+      - name: A favorite must round-trip against the packaged image
+        run: |
+          TOKEN=$(cat /proc/sys/kernel/random/uuid)
+          code=$(curl -s -o /tmp/put.json -w '%{http_code}' -X PUT \
+            -H "x-loadout-token: $TOKEN" \
+            http://localhost:4100/api/hunter-favorites/the-rat)
+          if [ "$code" != "201" ]; then
+            echo "::error::PUT /api/hunter-favorites/the-rat returned $code, expected 201"
+            cat /tmp/put.json; echo
+            docker logs outfitter-ci
+            exit 1
+          fi
+          # And it is readable back, so the write reached the store rather than just
+          # answering 201.
+          curl -fsS -H "x-loadout-token: $TOKEN" http://localhost:4100/api/hunter-favorites \
+            | grep -q 'the-rat' || {
+              echo "::error::the favorite did not come back from GET /api/hunter-favorites"
+              docker logs outfitter-ci
+              exit 1
+            }
+          echo "favorite round-tripped against the image"
+
+      - name: Container logs
+        if: always()
+        run: docker logs outfitter-ci || true
+
   # Governing: ADR-0004 (Confirmation), SPEC-0002 REQ "Toolchain Enforcement at Install Time".
   # `engine-strict=true` in .npmrc is what turns a wrong Node major into a failed install
   # rather than a warning nobody reads — but nothing proved it actually fires. This job
