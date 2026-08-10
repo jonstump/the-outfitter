@@ -1105,6 +1105,36 @@ button {
   border-color: var(--gold-border);
 }
 
+/* Governing: SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
+   The preview is the part of the row that yields, so it takes a line of its own
+   (`flex-basis: 100%`) and can never compete for width with the name, the cost or the move
+   control. `min-width: 0` + `overflow: hidden` make "the row never overflows" a property of
+   the box rather than a hope about content; WHAT survives is decided in JS by the specified
+   shedding order, not by wrapping, so the outcome is assertable. */
+.ll-row-preview {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.ll-row-preview-thumb {
+  width: 34px;
+  height: 24px;
+}
+.ll-row-preview-more {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ll-row-preview-empty {
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--text-dim);
+}
+
 .ll-create {
   display: flex;
   align-items: flex-end;

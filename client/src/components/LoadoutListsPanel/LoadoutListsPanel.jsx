@@ -21,6 +21,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import HunterPicker from "../HunterPicker/HunterPicker.jsx";
+import ItemThumb from "../ItemThumb/ItemThumb.jsx";
+import { CONS, TOOLS, WEAPONS, consThumb, toolThumb, weaponThumb } from "../../data/catalog.js";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
@@ -51,6 +53,133 @@ const monogram = (name) => (name || "?").trim().charAt(0).toUpperCase();
 function hunterLine(hunterId) {
   if (!hunterId) return "no portrait";
   return hunterNameFor(hunterId) ?? "hunter missing from roster";
+}
+
+// ---------------------------------------------------------------------------------------
+// Loadout row previews
+//
+// Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
+// Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents"
+//
+// Everything below derives from the loadout the row ALREADY decoded to show its cost. There
+// is no summary field, no second fetch and no write: design.md ("Loadout previews are
+// derived from the record, never stored") rejected caching precisely because a stored
+// summary is a second source of truth that goes stale the moment the catalog changes.
+//
+// Unresolvable items are not handled here on purpose. `fromData` drops ids the catalog no
+// longer carries — a weapon slot decodes to null, an equip entry is filtered out — so a
+// preview of a loadout referencing a removed item is simply a preview of what survives. Any
+// per-item placeholder written here would be a second, divergent copy of that rule.
+// ---------------------------------------------------------------------------------------
+
+/**
+ * The loadout's weapons and equipment, in DRAW order — which is also PRIORITY order.
+ *
+ * Weapons first (slot 0 then slot 1), then equipment in slot order. Because the shedding
+ * order the spec mandates is "equipment before weapons, and within each, later slots before
+ * earlier ones", that ranking is exactly this list reversed, and shedding is therefore a
+ * truncation from the tail rather than a second ordering that could drift from this one.
+ */
+export function previewEntries(loadout) {
+  const weapons = loadout.weapons
+    .map((w, slot) => {
+      if (!w) return null; // dropped by fromData: the id left the catalog
+      const def = WEAPONS[w.i];
+      return { key: `w${slot}`, kind: "weapon", category: "weapons", name: def[1], svgPath: weaponThumb(def) };
+    })
+    .filter(Boolean);
+
+  const equip = loadout.equip.map((e, slot) => {
+    const tool = e.t === "T";
+    const def = tool ? TOOLS[e.i] : CONS[e.i];
+    return {
+      key: `e${slot}`,
+      kind: tool ? "tool" : "consumable",
+      category: tool ? "tools" : "consumables",
+      name: def[1],
+      svgPath: tool ? toolThumb(def) : consThumb(def),
+    };
+  });
+
+  return [...weapons, ...equip];
+}
+
+/**
+ * The row's ONE text equivalent.
+ *
+ * Governing: SPEC-0003 Accessibility Requirements, "Loadout Previews Are Supplementary, Not
+ * the Row's Identity". A dozen tiles must not become a dozen announcements, and the text
+ * describes everything that RESOLVES rather than the subset currently drawn — so what a
+ * screen-reader user hears does not change when the viewport narrows.
+ *
+ * Weapons are named because a build is identified by them; equipment and traits summarise as
+ * counts because eight tool names in one label is not a summary. Traits appear here (and
+ * nowhere else in the preview) as the count the spec leaves open — they are textual rather
+ * than iconographic, so a strip of trait tiles would buy nothing.
+ */
+export function previewSummary(entries, traitCount = 0) {
+  const named = entries.filter((e) => e.kind === "weapon").map((e) => e.name);
+  const plural = (n, word) => `${n} ${n === 1 ? word : `${word}s`}`;
+  const tools = entries.filter((e) => e.kind === "tool").length;
+  const cons = entries.filter((e) => e.kind === "consumable").length;
+
+  const parts = [...named];
+  if (tools) parts.push(plural(tools, "tool"));
+  if (cons) parts.push(plural(cons, "consumable"));
+  if (traitCount) parts.push(plural(traitCount, "trait"));
+
+  return parts.length ? `Holds ${parts.join(", ")}` : "Holds nothing";
+}
+
+/**
+ * How many preview tiles a row may draw at a given viewport width.
+ *
+ * The spec deliberately specifies a shedding ORDER rather than a breakpoint table, so this
+ * table is an implementation detail and can move freely; what it may never do is return a
+ * number large enough to push the name, the cost or the move control out of the row. The
+ * floor is 2 — at most the two weapon slots — because weapons are the last thing to shed.
+ */
+const PREVIEW_CAPACITY = [
+  [1180, 10],
+  [980, 8],
+  [820, 6],
+  [660, 4],
+  [520, 3],
+  [0, 2],
+];
+
+export function previewCapacity(width) {
+  const w = Number.isFinite(width) ? width : 0;
+  return (PREVIEW_CAPACITY.find(([min]) => w >= min) ?? [0, 2])[1];
+}
+
+/**
+ * Truncate to `capacity`, reporting what was dropped so the row can summarise it as a count.
+ *
+ * Truncating the tail of `previewEntries` IS the specified order: equipment sits after
+ * weapons and later slots after earlier ones, so the last thing in the list is always the
+ * least identifying thing in the loadout.
+ */
+export function shedPreview(entries, capacity) {
+  const keep = Math.max(0, Math.min(entries.length, Number.isFinite(capacity) ? capacity : entries.length));
+  return { shown: entries.slice(0, keep), dropped: entries.length - keep };
+}
+
+/**
+ * Viewport width, as a re-rendering value.
+ *
+ * Read once per expanded list rather than once per row: a list of twenty loadouts would
+ * otherwise attach twenty identical resize listeners to compute twenty identical numbers.
+ */
+function useViewportWidth() {
+  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    onResize(); // the window may have been resized between the initial state and this effect
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
 }
 
 export default function LoadoutListsPanel() {
@@ -218,6 +347,8 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   const [draftName, setDraftName] = useState(list?.name ?? "");
   const inputRef = useRef(null);
   const rootRef = useRef(null);
+  // One subscription for the whole group; every row sheds against the same number.
+  const previewCap = previewCapacity(useViewportWidth());
 
   // The expanded panel renders below the whole grid; on a phone with several lists a tap
   // otherwise looks like it did nothing.
@@ -318,7 +449,9 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
         {loadouts.length === 0 ? (
           <p className="ll-empty">No loadouts filed yet. Save one while this list is open.</p>
         ) : (
-          loadouts.map((item) => <LoadoutRow key={item.id} item={item} lists={lists} />)
+          loadouts.map((item) => (
+            <LoadoutRow key={item.id} item={item} lists={lists} previewCap={previewCap} />
+          ))
         )}
       </div>
     </div>
@@ -362,9 +495,15 @@ function AccentPicker({ list }) {
   );
 }
 
-function LoadoutRow({ item, lists }) {
+function LoadoutRow({ item, lists, previewCap }) {
   const dispatch = useDispatch();
-  const cost = totalCost(fromData(item.data));
+  // One decode serves both the cost and the preview — the contents were already in hand,
+  // which is the whole reason the preview costs nothing (design.md).
+  const loadout = useMemo(() => fromData(item.data), [item.data]);
+  const cost = totalCost(loadout);
+  const entries = useMemo(() => previewEntries(loadout), [loadout]);
+  const summary = previewSummary(entries, loadout.traits.length);
+  const { shown, dropped } = shedPreview(entries, previewCap);
 
   return (
     <div className="ll-row">
@@ -412,6 +551,49 @@ function LoadoutRow({ item, lists }) {
       >
         ✕
       </button>
+
+      {/* Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
+          Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
+
+          Last in the row, and last in the tab/reading order: the name is the row's identity
+          and the preview only annotates it (SPEC-0003 "Loadout Previews Are Supplementary").
+
+          `role="img"` + `aria-label` is what makes the whole strip ONE announcement instead
+          of a dozen. It also makes the "+N more" count decorative by construction, which is
+          required rather than incidental — the label describes everything that resolves, so
+          it must not change when the viewport does. */}
+      {entries.length === 0 ? (
+        <span className="ll-row-preview ll-row-preview-empty" data-testid={`row-preview-${item.id}`}>
+          Empty — no weapons or equipment
+        </span>
+      ) : (
+        <span
+          className="ll-row-preview"
+          role="img"
+          aria-label={summary}
+          data-testid={`row-preview-${item.id}`}
+        >
+          {shown.map((e) => (
+            // Decorative: the summary above already names everything. Lazy, because an
+            // expanded list of twenty loadouts is well over a hundred icons and SPEC-0003
+            // requires the bytes to follow what was scrolled to.
+            <ItemThumb
+              key={e.key}
+              category={e.category}
+              name={e.name}
+              alt=""
+              svgPath={e.svgPath}
+              className="ll-row-preview-thumb"
+              loading="lazy"
+            />
+          ))}
+          {dropped > 0 && (
+            <span className="ll-row-preview-more" aria-hidden="true">
+              +{dropped} more
+            </span>
+          )}
+        </span>
+      )}
     </div>
   );
 }
