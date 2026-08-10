@@ -14,7 +14,7 @@ This spec covers **production**. SPEC-0003 specifies **consumption** — the fal
 
 See ADR-0007 for the decision record, including why this is one script rather than the images/stats split ADR-0005 established.
 
-**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.09× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
+**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.09× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. The re-scrape ran in #147, so the committed assets **are** the new pipeline: 242 trimmed portraits, no `-thumb` variants, 2.49 MB total against a 12 MB ceiling. One consumption-side clause remains outstanding (#148), and is marked where it appears.
 
 ## Requirements
 
@@ -99,7 +99,7 @@ The dataset SHALL cover the full roster the wiki lists, not a subset.
 
 ### Requirement: One Trimmed Portrait Per Hunter
 
-*(amended 2026-08-10; not yet implemented — replaces "Two Portrait Sizes Per Hunter")*
+*(amended 2026-08-10; implemented in #147 — replaces "Two Portrait Sizes Per Hunter")*
 
 The scrape SHALL emit exactly **one** self-hosted portrait asset per hunter under `client/public/images/hunters/`. It MUST NOT emit a second size.
 
@@ -174,7 +174,7 @@ The scrape MUST NOT upscale a subject to meet any of these figures. Where the so
 
 ### Requirement: The List Card Is Knowingly Upscaled
 
-*(added 2026-08-10; not yet implemented)*
+*(added 2026-08-10; implemented in #147)*
 
 The 154×220 list card SPEC-0003 renders needs **440px of subject height** at 2×. The wiki supplies at most 256px, and after trimming, subjects are 204–256px tall — **no hunter in the roster reaches it.**
 
@@ -201,7 +201,7 @@ The card is therefore rendered at roughly **1.9× upscale**. This SHALL be treat
 
 Portraits are the heaviest assets this application ships. The roster is **242 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by the roster.
 
-*(amended 2026-08-10; not yet implemented — the per-size ceilings are replaced by a single per-asset ceiling, since there is now one asset per hunter)*
+*(amended 2026-08-10; implemented in #147 — the per-size ceilings are replaced by a single per-asset ceiling, since there is now one asset per hunter)*
 
 **Per asset:** a hunter's portrait SHALL be at most **25 KB**.
 
@@ -234,7 +234,7 @@ Both are enforced by failing, not warning. An oversized asset is invisible in re
 
 The dataset and assets SHALL satisfy the contract SPEC-0003 states for consumers. Asset paths SHALL be derivable from the entry's `portrait` slug without a lookup manifest, so the scrape can add or replace assets with no code change at the render site.
 
-*(amended 2026-08-10; not yet implemented)* With one asset per hunter, the path SHALL be derivable from the `portrait` slug **alone**, and MUST NOT contain a size segment. SPEC-0003's cross-size fallback ordering has been amended in step: its ladder is now the portrait, then SPEC-0001's placeholder. That change is made in SPEC-0003 itself — this requirement states the production-side property, not a repeal of another spec's text.
+*(amended 2026-08-10; production half implemented in #147, consumption half outstanding — #148)* With one asset per hunter, the path SHALL be derivable from the `portrait` slug **alone**, and MUST NOT contain a size segment. The scrape emits exactly that; the scenario below requiring consumers to stop selecting a size is what #148 delivers. SPEC-0003's cross-size fallback ordering has been amended in step: its ladder is now the portrait, then SPEC-0001's placeholder. That change is made in SPEC-0003 itself — this requirement states the production-side property, not a repeal of another spec's text.
 
 The dataset MUST remain usable when a hunter has no portrait at all, and consumers MUST NOT be required to coalesce a missing field: absent imagery SHALL be representable in the dataset rather than implied by a missing file alone.
 

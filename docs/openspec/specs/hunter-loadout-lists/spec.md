@@ -21,13 +21,13 @@ See ADR-0006 for the decision record and the rejected alternatives.
 
 **Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
 
-Three **additive** changes were accepted on **2026-08-10** and are **not yet implemented**. Each is marked where it appears. (A fourth change of that date — dropping most-recently-used ordering — was a removal and is recorded in "List Ordering and Sorting".)
+Three **additive** changes were accepted on **2026-08-10**; **two have since shipped**. Each is marked where it appears. (A fourth change of that date — dropping most-recently-used ordering — was a removal and is recorded in "List Ordering and Sorting".)
 
-- **Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold — amends "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
-- **Loadout rows preview what they hold** — new requirement, "Filed Loadouts Preview Their Contents"
-- **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged"
+- ~~**Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold~~ — **implemented in #138.** Amended "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
+- ~~**Loadout rows preview what they hold**~~ — **implemented in #139.** New requirement, "Filed Loadouts Preview Their Contents"
+- **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged". **Still outstanding — #140.**
 
-A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is likewise not yet implemented. SPEC-0004 owns the production half; the consumption half is amended here rather than overridden from there.
+A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is **still outstanding — #148**. SPEC-0004 owns the production half, which shipped in #147; the consumption half is amended here rather than overridden from there, and is what #148 implements.
 
 ## Requirements
 
@@ -292,7 +292,7 @@ The picker SHALL provide a free-text filter matching on hunter name. It SHALL pr
 
 The picker MUST NOT load every hunter's portrait eagerly. Images SHALL be loaded lazily, so the bytes fetched are proportional to what the user has actually scrolled to rather than to the size of the roster.
 
-Filtering SHALL narrow which hunters are shown. Apart from the favorites sectioning that "Favorite Hunters" requires *(carve-out added 2026-08-10; not yet implemented)*, it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter, in whichever section it belongs to.
+Filtering SHALL narrow which hunters are shown. Apart from the favorites sectioning that "Favorite Hunters" requires *(carve-out added 2026-08-10; implemented in #138)*, it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter, in whichever section it belongs to.
 
 An empty result SHALL say so, rather than rendering an empty grid.
 
@@ -329,7 +329,7 @@ Favorites SHALL be token-scoped and persisted server-side, under the same owners
 
 Favorites SHALL act as a **filter and a grouping over the full roster**, never as a gate. Every hunter SHALL remain reachable regardless of what is favorited.
 
-The five sectioning rules below were **amended 2026-08-10 and are not yet implemented** — they replace an inline sort in which favorites simply sorted ahead of unfavorited hunters within one undivided grid:
+The five sectioning rules below were **amended 2026-08-10 and are implemented (#138)** — they replaced an inline sort in which favorites simply sorted ahead of unfavorited hunters within one undivided grid:
 
 - Favorited hunters SHALL be presented in their own labelled section, ahead of the rest of the roster
 - A hunter SHALL appear in exactly one section per render: in Favorites when favorited, in the main section otherwise. The picker MUST NOT render the same hunter twice
@@ -402,7 +402,7 @@ Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: 
 
 ### Requirement: Favorites-Only Becomes the Default Past a Threshold
 
-*(added 2026-08-10; not yet implemented)*
+*(added 2026-08-10; implemented in #138)*
 
 Curating past a certain number of favorites is itself evidence that the user has settled on who they care about. Once an owner's favorite count **exceeds 10**, the picker SHALL open with "favorites only" already enabled.
 
@@ -488,7 +488,7 @@ A user's chosen sort order SHALL be treated as client state under the same rules
 
 ### Requirement: Filed Loadouts Preview Their Contents
 
-*(added 2026-08-10; not yet implemented)*
+*(added 2026-08-10; implemented in #139)*
 
 A loadout row currently shows a name and a cost. Neither tells the user what the loadout actually holds, so choosing among a list's loadouts means loading each one in turn and undoing the ones that were wrong.
 
