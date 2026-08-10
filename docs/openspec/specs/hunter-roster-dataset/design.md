@@ -116,7 +116,7 @@ Put plainly: the existing 1.10 MB is unusually small because item icons are wide
 
 So the softness that prompted this was never a budget problem. The bytes were going to padding, and CSS was discarding much of what remained.
 
-Trimming changes what one asset can do. At native trimmed size every hunter clears the 192px a picker tile needs at 2× **in height (242 of 242), and 191 of 242 in width** — the 51 narrowest subjects upscale by at most 1.08× on a square tile, against 1.5× for every hunter under the padded thumbnail. The width qualification matters: an early draft of this decision claimed all 242 cleared it outright, which was the height range quietly standing in for a two-dimensional requirement. Meanwhile "full size" and "thumbnail" converge to 207px and 192px wide, 7% apart, and for the narrowest subjects `withoutEnlargement` emits the identical image twice. Two sizes had already stopped being two sizes; the amendment just says so.
+Trimming changes what one asset can do. At native trimmed size every hunter clears the 192px a picker tile needs at 2× **in height (242 of 242), and 191 of 242 in width** — the 51 narrowest subjects upscale by at most 1.09× on a square tile, against 1.5× for every hunter under the padded thumbnail. The width qualification matters, and it has now been wrong twice: an early draft claimed all 242 cleared it outright (the height range quietly standing in for a two-dimensional requirement), and the correction that followed said 1.08×, a figure derived by scaling the committed 320px assets rather than measuring the 384px originals. The first real run produced a 176px floor, so the true bound is 1.09×. Meanwhile "full size" and "thumbnail" converge to 207px and 192px wide, 7% apart, and for the narrowest subjects `withoutEnlargement` emits the identical image twice. Two sizes had already stopped being two sizes; the amendment just says so.
 
 **The result is smaller, sharper, and simpler at the same time**, which is unusual enough to state plainly: ~2.39 MB projected against 2.91 MB committed today, tiles sharp for the first time, one asset instead of two, and no size-selection rule at any render site.
 
@@ -129,6 +129,18 @@ Trimming changes what one asset can do. At native trimmed size every hunter clea
 - *Crop at scrape time to the card's aspect*: rejected — smallest files of any option, but it bakes one surface's geometry into the stored asset, so any future layout change means a full re-scrape.
 - *Upscale to reach the card's 440px*: rejected outright. It manufactures pixels without detail and multiplies the payload to do it.
 
+### The trim is a pre-encode property, and two numbers were wrong
+
+*Added 2026-08-10, after the first real run was reviewed against this spec.*
+
+Two requirements written here failed the artifact they were meant to govern, and both failed the same way — asserted from reasoning rather than measured from output.
+
+**The 1.08× tile bound.** Derived by scaling the committed 320px assets by 384/320 to estimate trimmed widths, which gave a 178px floor. The real run, working from the 384px originals, produced 176px — `the-rednecks-daughter` and `wight-raven` — so the true bound is 192/176 = 1.09×. A conforming run was failed by a number that was wrong by two pixels of source width.
+
+**The transparent-border scenario.** It asserted that an emitted asset contains no fully transparent border row or column — a *post-decode* condition. 26 of 242 assets violate it while their trims are exact: lossy AVIF alpha at quality 70 zeroes an edge band the trim correctly kept. The only ways to satisfy it as written are lossless alpha or a quality chosen to pass a test, and neither buys anything visible — a transparent edge row renders exactly like the margin it replaced. The assertion now targets the rectangle selected for encoding, which is the property the pipeline actually controls.
+
+The lesson worth keeping: a normative number derived from a projection should be marked as provisional until an artifact exists to measure, and a post-condition should be stated against the stage that owns it. Both of these were caught by review rather than by the tests, because the tests were written against the same wrong assumptions.
+
 ### The card cannot be made sharp, and the spec says so
 
 *Added 2026-08-10.*
@@ -139,7 +151,7 @@ Trimming changes what one asset can do. At native trimmed size every hunter clea
 
 That deserves to be written down rather than left as an unexplained blur. The previous spec asserted the opposite — a scenario titled "The full size stays crisp at the largest render" — and it was wrong on arithmetic that nobody had run: it compared the asset's width against the card's width while `object-fit: cover` was cropping the asset to 47% of that width first. A future reader who notices the softness deserves to find the ceiling documented, not to re-derive it.
 
-The gap is closable, but only in SPEC-0003: rendering the card's portrait area at **≤113px tall** would bring the card in line with the others, leaving the picker tile's bounded 1.08× as the only residual upscale anywhere. That is a visual redesign of the poster card the design handoff specifies, and it was declined as out of scope for a pipeline amendment.
+The gap is closable, but only in SPEC-0003: rendering the card's portrait area at **≤113px tall** would bring the card in line with the others, leaving the picker tile's bounded 1.09× as the only residual upscale anywhere. That is a visual redesign of the poster card the design handoff specifies, and it was declined as out of scope for a pipeline amendment.
 
 ### sharp, as a devDependency the app can never reach
 
@@ -261,7 +273,7 @@ The live migration is the 2026-08-10 amendment, and it is not additive. It chang
 
 ## Open Questions
 
-- ~~What does the wiki actually serve as a hunter's portrait — a consistent infobox image, or something that varies by page?~~ **Resolved by measurement (2026-08-10).** Entirely consistent: every original is **384×256 PNG with alpha**, 41–69 KB, across an even-stride sample of the roster. The variation is not in the canvas but in where the subject sits inside it — trimmed subjects run 178–334 wide and 204–256 tall. That consistency is what made the trim amendment safe to specify as a rule rather than as a per-hunter heuristic, and this question turning out to have a boring answer is exactly why it was worth asking.
+- ~~What does the wiki actually serve as a hunter's portrait — a consistent infobox image, or something that varies by page?~~ **Resolved by measurement (2026-08-10).** Entirely consistent: every original is **384×256 PNG with alpha**, 41–69 KB, across an even-stride sample of the roster. The variation is not in the canvas but in where the subject sits inside it — trimmed subjects run 176–333 wide and 205–256 tall (measured on the emitted set; an earlier estimate of 178–334 was scaled from the committed 320px assets rather than the originals). That consistency is what made the trim amendment safe to specify as a rule rather than as a per-hunter heuristic, and this question turning out to have a boring answer is exactly why it was worth asking.
 - Are descriptions consistently present, and how long? If they are several paragraphs, the "small next to the portraits" assumption ADR-0007 made stops holding and they may want their own file after all.
 - Should the scrape detect that a hunter's `sourceRevision` is unchanged and skip re-encoding its portraits? Cheap idempotence, but only worth it once a refresh cadence exists.
 - ~~Do the 15 KB / 25 KB per-asset budgets survive contact with real art, and at what AVIF quality setting?~~ **Resolved by the scrape.** They survive with wide margin: across 242 hunters the largest thumbnail is 6.7 KB against the 15 KB ceiling and the largest full size 14.9 KB against 25 KB, medians 4.1 KB and 7.9 KB. The 12 MB total was never approached — the committed payload is 2.91 MB, 24% of it.
