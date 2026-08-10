@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { slugify } from "../../utils/slugify.js";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
@@ -20,13 +21,11 @@ import { useState } from "react";
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
-export function slugify(name) {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-+|-+$)/g, "");
-}
+// Re-exported, not redefined. This component is the READER end of the asset-path contract;
+// scripts/lib/wiki.mjs is the writer. Both now import client/src/utils/slugify.js, because
+// the two local copies that used to live here and there had already drifted on apostrophes
+// and diacritics (issue #119). Callers that imported `slugify` from this module keep working.
+export { slugify };
 
 /**
  * `alt` defaults to `name`, which is right for every item call site — the thumb is the only
