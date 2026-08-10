@@ -268,7 +268,7 @@ The picker SHALL offer an explicit "no portrait" choice, so a list can be create
 
 ### Requirement: The Hunter Picker Is Filterable and Bounded
 
-The roster is roughly 285 hunters. A flat grid of every portrait is not a usable picker and is not a defensible payload, so filtering is a functional requirement rather than a refinement.
+The roster is 242 hunters. A flat grid of every portrait is not a usable picker and is not a defensible payload, so filtering is a functional requirement rather than a refinement.
 
 The picker SHALL provide a free-text filter matching on hunter name. It SHALL provide filtering by the classification SPEC-0004 supplies — at minimum `acquisition` and `obtainable`.
 
@@ -305,7 +305,7 @@ An empty result SHALL say so, rather than rendering an empty grid.
 
 ### Requirement: Favorite Hunters
 
-With a roster of roughly 285, finding the handful of hunters a user actually returns to is the picker's real cost. A user MAY mark any hunter as a favorite.
+With a roster of 242, finding the handful of hunters a user actually returns to is the picker's real cost. A user MAY mark any hunter as a favorite.
 
 Favorites SHALL be token-scoped and persisted server-side, under the same ownership rules as lists: a favorite belongs to the token that created it, and MUST NOT be visible to any other token.
 

@@ -138,15 +138,23 @@ The non-obvious cost is what happens *after* a successful move: the row leaves t
 - *Custom menu button*: rejected — every affordance the native select provides would have to be rebuilt and retested, for styling control this design does not need.
 - *Modal picker*: rejected — far too heavy for a per-row operation, and it hides the roster the user is choosing among.
 
-### The picker filters, because 285 portraits is not a grid
+### The picker filters, because 242 portraits is not a grid
 
 **Choice**: The picker requires name search, classification filters, and lazy-loaded imagery.
 
-**Rationale**: This was discovered by counting rather than reasoned from first principles. The wiki's roster page lists roughly **285 hunters**. A flat grid renders 285 tiles and, at the portrait budgets SPEC-0004 sets, loads several megabytes of images to let someone pick one.
+**Rationale**: This was discovered by counting rather than reasoned from first principles. The roster is **242 hunters** — this decision was originally taken against a ~285 estimate from the wiki's roster page, which the SPEC-0004 scrape later corrected downward. A flat grid renders 242 tiles and, at the portrait sizes SPEC-0004 measured, loads roughly 1 MB of thumbnails to let someone pick one. The correction does not touch the conclusion — 43 hunters fewer is still far past the point where a flat portrait grid stops being scannable.
 
 That is not a scale problem to solve later. It is the difference between a picker that works and one that hangs a phone, so filtering is specified as a functional requirement rather than an enhancement.
 
 It also changes what the SPEC-0004 classification fields are for. They were originally framed as preparation for future sorting; at this roster size they are what filtering *runs on*, which is why SPEC-0004 now requires `acquisition` and `obtainable` rather than leaving them optional.
+
+**The measured distribution argues for name search as the primary affordance.** With the real dataset in hand, the classification filters are weaker than this rationale assumed and free-text name matching is stronger:
+
+- `acquisition` is lopsided. Three of its nine values — `dlc` (65), `blood-bonds` (60) and `event` (50) — are **175 of 242, about 72%** of the roster. Selecting the largest bucket still leaves 65 tiles, a grid too big to scan, so the filter narrows without actually resolving the problem it was specified to solve. The other six values cover 65 hunters between them, and two hunters carry no value at all.
+- `acquisition` also splits characters against themselves. The ten Rookie / Survivor / Veteran families do not share a value: Survivor and Veteran are `progression` for nine of them while the matching Rookie is `bloodline`, `prestige` or `story-challenge`. A user hunting for a specific character is exactly the user an acquisition filter serves worst.
+- Name matching has neither problem. It is the only affordance that reliably takes 242 down to a handful, and the variant families make it the one that finds a character *and* their variants together.
+
+This does not demote the classification filters — they remain required, and `acquisition` is genuinely useful for browsing rather than searching. It does mean the name filter is the one to get right first, and the one whose absence would make the picker unusable.
 
 The requirement is written to not collide with "The Hunter Picker Does Not Restrict or Mark Reuse". Filtering narrows *which hunters are candidates*; it never distinguishes among the candidates it shows. A filtered-out hunter is out of scope for this selection, which is a different thing from a shown hunter being marked as already used.
 
@@ -154,9 +162,9 @@ The requirement is written to not collide with "The Hunter Picker Does Not Restr
 
 **Choice**: Favorites are a token-scoped server-side collection, surfaced as a sort priority plus an optional "favorites only" toggle over the full roster. Never pre-populated.
 
-**Rationale**: Favorites were proposed as a way to cut the picker's loading cost. They do not do that, and it is worth being precise about why: the picker requirement already mandates lazy loading, so bytes fetched are proportional to what the user scrolls to, not to the roster. A favorites-only picker and a lazily-loaded 285-hunter picker fetch roughly the same initial payload — whatever fills the viewport.
+**Rationale**: Favorites were proposed as a way to cut the picker's loading cost. They do not do that, and it is worth being precise about why: the picker requirement already mandates lazy loading, so bytes fetched are proportional to what the user scrolls to, not to the roster. A favorites-only picker and a lazily-loaded 242-hunter picker fetch roughly the same initial payload — whatever fills the viewport.
 
-What favorites actually solve is *finding* the handful of hunters someone returns to among 285. That is a real problem, and arguably the larger one, since 285 is tiresome to scroll even when it is cheap.
+What favorites actually solve is *finding* the handful of hunters someone returns to among 242. That is a real problem, and arguably the larger one, since 242 is tiresome to scroll even when it is cheap.
 
 Choosing filter-over-gate follows directly. A gate needs a seeding answer, because you cannot favorite a hunter you have never seen — which is what makes a brand-new user's picker empty. A filter has no cold start at all: an empty favorites set is simply no filter applied, and the picker behaves exactly as it would without the feature.
 
@@ -165,8 +173,8 @@ Not pre-populating is the same instinct. Seeding favorites randomly, as was floa
 Storage mirrors `loadoutLists` exactly — a token-scoped collection under the ownership rules issue #17 established — so the ownership checks and their tests carry over rather than being reinvented.
 
 **Alternatives considered**:
-- *Gate: show only favorites, with a "browse all" escape*: rejected — strongest at reducing 285 to a handful, but it hides hunters the user has not discovered, and discovery is the whole reason a picker exists.
-- *Pin only, no toggle*: viable and smaller, but with 285 hunters the "favorites only" view is the one a returning user wants most, and it costs one boolean.
+- *Gate: show only favorites, with a "browse all" escape*: rejected — strongest at reducing 242 to a handful, but it hides hunters the user has not discovered, and discovery is the whole reason a picker exists.
+- *Pin only, no toggle*: viable and smaller, but with 242 hunters the "favorites only" view is the one a returning user wants most, and it costs one boolean.
 - *Client-only, in localStorage*: rejected for the reason SPEC-0003 already gives about grouping — it would split the durability model, with lists surviving server-side while the preferences that organise them do not.
 
 ### List ordering is client-side, with alphabetical as the default
