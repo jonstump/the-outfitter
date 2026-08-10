@@ -8,9 +8,10 @@
 // Offline, on-demand scrape of huntshowdown.wiki.gg for catalog item images. This script is a
 // standalone tool, NOT part of the app's runtime or build path:
 //
-//   - It is NOT wired into `npm run build`, `npm run dev`, `npm start`, or any CI config (this
-//     repo has no CI yet — there is nothing to avoid wiring it into, but the constraint stands
-//     for whenever CI is added).
+//   - It is NOT wired into `npm run build`, `npm run dev`, or `npm start`. CI (.github/workflows/
+//     ci.yml) references it only through `npm run test:scrape-images`, which exercises the unit
+//     tests with an injected fetchFn — CI never invokes a live scrape and makes zero requests to
+//     huntshowdown.wiki.gg.
 //   - It must be invoked manually and deliberately by a human:
 //
 //       node scripts/scrape-images.mjs [options]

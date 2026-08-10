@@ -1,7 +1,10 @@
 // Governing: ADR-0005 (Scrape Item Stats and Descriptions into a Generated Data File — "two scripts,
-// one shared wiki client"), ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a
-// One-Time, Self-Hosted Scrape)
-// Implements: SPEC-0001 REQ "Ethical, Self-Hosted Image Sourcing", SPEC-0001 REQ "Error Handling Standards"
+// one shared wiki client"), ADR-0007 (Hunter Roster Dataset — extends ADR-0005 and consumes this same
+// module), ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
+// Self-Hosted Scrape)
+// Implements: SPEC-0001 REQ "Ethical, Self-Hosted Image Sourcing", SPEC-0001 REQ "Error Handling
+// Standards". This module is payload-agnostic — those requirements bind every consumer of it, not
+// just the image scrape.
 //
 // scripts/lib/wiki.mjs
 //
@@ -16,7 +19,14 @@
 // mean a second script quietly scraping on terms the first one honors.
 //
 // This module is import-only — it has no CLI entrypoint and performs no I/O on import. Consumers
-// today: scripts/scrape-images.mjs. Consumers planned: scripts/scrape-stats.mjs (ADR-0005).
+// today: scripts/scrape-images.mjs. Consumers planned: scripts/scrape-stats.mjs (ADR-0005) and
+// scripts/scrape-hunters.mjs (ADR-0007, whose confirmation criteria require it to import slug
+// derivation, robots handling, rate limiting, the user agent, and the sentinel errors from here).
+//
+// Note on USER_AGENT: the string still describes itself as an image scrape, which is accurate for
+// today's only consumer. It is deliberately left as-is here so this extraction stays byte-for-byte
+// behaviour-preserving; generalize it when the second consumer lands, since the wiki sees it on
+// every request either script makes.
 //
 // Note for future work: ADR-0005's out-of-scope section anticipates a revision-history-driven
 // refresh built on MediaWiki's API rather than HTML page fetches. Nothing here assumes HTML scraping
