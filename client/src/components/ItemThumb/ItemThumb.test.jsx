@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import ItemThumb, { slugify } from "./ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -104,5 +104,26 @@ describe("ItemThumb", () => {
   it("renders without an extra modifier class when none is passed", () => {
     const { container } = render(<ItemThumb name="Mystery Item" svgPath={SVG_PATH} />);
     expect(container.querySelector("span")).toHaveClass("item-thumb");
+  });
+});
+
+describe("decorative mode", () => {
+  it("labels the image with its name by default", () => {
+    render(<ItemThumb category="weapons" name="Winfield M1873" svgPath="M0 0h1v1H0z" />);
+    expect(screen.getByAltText("Winfield M1873")).toBeInTheDocument();
+  });
+
+  it('hides the SVG fallback from assistive tech when alt="" is passed', () => {
+    // Without this, a silhouette announces the raw internal id (e.g. "the-rat") next to a
+    // visible list name — read twice, and once meaninglessly.
+    const { container } = render(<ItemThumb name="the-rat" alt="" svgPath="M0 0h1v1H0z" />);
+    const svg = container.querySelector("svg");
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(svg).not.toHaveAttribute("aria-label");
+  });
+
+  it("labels the SVG fallback when no alt is given", () => {
+    const { container } = render(<ItemThumb name="Knife" svgPath="M0 0h1v1H0z" />);
+    expect(container.querySelector("svg")).toHaveAttribute("aria-label", "Knife");
   });
 });

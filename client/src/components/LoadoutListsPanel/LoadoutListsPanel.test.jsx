@@ -157,6 +157,26 @@ describe("LoadoutListsPanel", () => {
     expect(screen.getByLabelText("List for orphan").value).toBe("");
   });
 
+  // --- Portrait fallback ------------------------------------------------------------
+
+  it("draws a silhouette for a list with a hunter whose art is missing", () => {
+    renderPanel(base([list("a", "Rat builds", { hunterId: "the-rat" })], []));
+    expect(screen.getByTestId("list-art-a")).toBeInTheDocument();
+  });
+
+  it("keeps the list-name monogram when no hunter is chosen", () => {
+    // "shotgun experiments" has no hunter — drawing a figure would imply an identity the
+    // list never claimed, so it keeps its own initial instead.
+    renderPanel(base([list("a", "shotgun experiments")], []));
+    expect(screen.queryByTestId("list-art-a")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("list-card-a")).getByText("S")).toBeInTheDocument();
+  });
+
+  it("never draws a silhouette on the Unassigned card", () => {
+    renderPanel(base([], [loadout("1", "x", null)]));
+    expect(screen.queryByTestId("list-art-__unassigned__")).not.toBeInTheDocument();
+  });
+
   // --- REQ "The Selected List Is Client State" -------------------------------------
 
   it("expanding a card selects the list, and collapsing deselects", async () => {

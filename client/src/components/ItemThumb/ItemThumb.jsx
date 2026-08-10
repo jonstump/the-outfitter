@@ -28,7 +28,15 @@ export function slugify(name) {
     .replace(/(^-+|-+$)/g, "");
 }
 
-export default function ItemThumb({ category, name, svgPath, svgFill = "#8a6f42", className }) {
+/**
+ * `alt` defaults to `name`, which is right for every item call site — the thumb is the only
+ * thing identifying that row. Pass `alt=""` where the name is already visible adjacent to
+ * the image, so assistive tech does not announce it twice. An empty alt makes the SVG
+ * fallback decorative too, rather than leaving it labelled with a raw internal id.
+ */
+export default function ItemThumb({ category, name, alt, svgPath, svgFill = "#8a6f42", className }) {
+  const label = alt === undefined ? name : alt;
+  const decorative = label === "";
   const [extIndex, setExtIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -39,14 +47,17 @@ export default function ItemThumb({ category, name, svgPath, svgFill = "#8a6f42"
       {tryImage ? (
         <img
           src={`/images/${category}/${slugify(name)}.${IMAGE_EXTENSIONS[extIndex]}`}
-          alt={name}
+          alt={label}
           onError={() => {
             if (extIndex < IMAGE_EXTENSIONS.length - 1) setExtIndex((i) => i + 1);
             else setImageFailed(true);
           }}
         />
       ) : (
-        <svg viewBox="0 0 96 40" role="img" aria-label={name}>
+        <svg
+          viewBox="0 0 96 40"
+          {...(decorative ? { "aria-hidden": "true" } : { role: "img", "aria-label": label })}
+        >
           <path d={svgPath} fill={svgFill} />
         </svg>
       )}

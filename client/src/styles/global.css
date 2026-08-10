@@ -1064,3 +1064,30 @@ button {
   gap: 10px;
   margin-top: 18px;
 }
+
+/* Hunter art on a list card: fills the tile, with the name plate overlaying it.
+   Falls back to the schematic silhouette via ItemThumb (SPEC-0001's chain). */
+.ll-card-art {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ll-card-art .item-thumb {
+  /* The base .item-thumb carries a border and background for item rows, where the thumb is
+     a small framed tile. Here it is stretched over the whole card, so that framing renders
+     as an inset rectangle around the ~70%-wide SVG fallback. Reset both. */
+  background: none;
+  border: none;
+}
+.ll-card-art .item-thumb,
+.ll-card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ll-card-art svg {
+  width: 70%;
+  height: auto;
+}
