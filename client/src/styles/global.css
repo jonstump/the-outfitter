@@ -1105,6 +1105,43 @@ button {
   border-color: var(--gold-border);
 }
 
+/* Governing: SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
+   The preview is the part of the row that yields, so it takes a line of its own
+   (`flex-basis: 100%`) and can never compete for width with the name, the cost or the move
+   control. `min-width: 0` + `overflow: hidden` make "the row never overflows" a property of
+   the box rather than a hope about content; WHAT survives is decided in JS by the specified
+   shedding order, not by wrapping, so the outcome is assertable. */
+.ll-row-preview {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.ll-row-preview-thumb {
+  width: 34px;
+  height: 24px;
+}
+/* --text-muted, not --text-dim: both of these strings are the ONLY channel carrying a
+   requirement. "+N more" is aria-hidden by design (the label must not change with viewport),
+   so its pixels are the whole realization of "SHALL summarise whatever it dropped as a
+   count"; the empty statement is likewise the only realization of "an empty loadout says
+   so". --text-dim (#857659) on --scroll-track (#17130c) is 4.17:1, under SC 1.4.3's 4.5:1
+   at this size; --text-muted (#a3936f) is 6.13:1. SPEC-0003 Accessibility Requirements make
+   WCAG 2.1 AA the mandatory minimum. */
+.ll-row-preview-more {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ll-row-preview-empty {
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .ll-create {
   display: flex;
   align-items: flex-end;

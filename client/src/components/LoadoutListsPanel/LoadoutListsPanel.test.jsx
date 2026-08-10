@@ -1,10 +1,15 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { Provider } from "react-redux";
-import LoadoutListsPanel from "./LoadoutListsPanel.jsx";
+import LoadoutListsPanel, {
+  previewCapacity,
+  previewEntries,
+  shedPreview,
+} from "./LoadoutListsPanel.jsx";
 import { createTestStore } from "../../test/testStore.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
-import { emptyLoadout, toData } from "../../utils/loadoutCodec.js";
+import { slugify } from "../../utils/slugify.js";
+import { emptyLoadout, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
 import { HUNTERS } from "../../data/hunters.js";
@@ -560,5 +565,187 @@ describe("creating a list from the picker", () => {
     renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
     await act(async () => fireEvent.click(screen.getByRole("button", { name: /\+ New list/ })));
     expect(screen.getByTestId("create-accent-preview").style.background).toContain("--list-accent-2");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
+// Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents", SPEC-0003
+// Accessibility Requirements "Loadout Previews Are Supplementary, Not the Row's Identity"
+// ---------------------------------------------------------------------------------------
+
+// A raw v1 payload, written the way a stored record actually carries it. Built by hand
+// rather than through toData() so a test can reference an id the catalog does NOT have —
+// which is the whole point of the "unresolvable item" case.
+const v1 = ({ w = [], e = [], tr = [] }) => ({
+  v: 1,
+  w: [w[0] ?? null, w[1] ?? null],
+  e,
+  tr,
+  n: "",
+  b: 0,
+});
+
+const filed = (id, name, payload) => ({ id, name, data: payload, listId: null, updatedAt: "2026-01-01" });
+
+const setViewport = (width) =>
+  Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+
+const previewOf = (id) => screen.getByTestId(`row-preview-${id}`);
+const drawn = (id) => [...previewOf(id).querySelectorAll("img")].map((img) => img.getAttribute("src"));
+
+// Two weapons, five equipment — enough that every capacity in the table sheds something.
+const LOADED = v1({
+  w: [["sparks-lrr", -1], ["caldwell-conversion-pistol", -1]],
+  e: [
+    ["T", "first-aid-kit"],
+    ["T", "knife"],
+    ["C", "vitality-shot"],
+    ["C", "dynamite-stick"],
+    ["T", "throwing-knives"],
+  ],
+  tr: ["quartermaster"],
+});
+
+// Spelled out per category, not `expect.any(String)`: the /images/{category}/ segment is the
+// only place the tool/consumable split is observable from outside, so pinning it is what
+// stops TOOLS/toolThumb being substituted for CONS/consThumb without a test noticing
+// (SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback").
+const SPARKS = `/images/weapons/${slugify("Sparks LRR")}.jpg`;
+const CONVERSION = `/images/weapons/${slugify("Caldwell Conversion Pistol")}.jpg`;
+const FIRST_AID = `/images/tools/${slugify("First Aid Kit")}.jpg`;
+const KNIFE = `/images/tools/${slugify("Knife")}.jpg`;
+const VITALITY = `/images/consumables/${slugify("Vitality Shot")}.jpg`;
+const DYNAMITE = `/images/consumables/${slugify("Dynamite Stick")}.jpg`;
+const THROWING_KNIVES = `/images/tools/${slugify("Throwing Knives")}.jpg`;
+
+describe("LoadoutRow previews", () => {
+  beforeEach(() => {
+    setViewport(1280);
+    global.fetch = vi.fn(async () => {
+      throw new Error("no request may be issued to render a preview");
+    });
+  });
+
+  it("derives the preview from the record's own data, issuing no request", () => {
+    renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
+
+    // Everything drawn came out of `data`; nothing was fetched to learn what the loadout holds.
+    // Every tile is named, including both consumables — a consumable resolving under
+    // /images/tools/ is asserted against nowhere else in the suite.
+    expect(drawn("1")).toEqual([
+      SPARKS, CONVERSION, FIRST_AID, KNIFE, VITALITY, DYNAMITE, THROWING_KNIVES,
+    ]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("carries one text equivalent for the whole strip, and marks the imagery decorative", () => {
+    renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
+
+    // ONE announcement, not seven: the strip is a single role="img".
+    expect(screen.getByRole("img", { name: "Holds Sparks LRR, Caldwell Conversion Pistol, 3 tools, 2 consumables, 1 trait" }))
+      .toBe(previewOf("1"));
+    for (const img of previewOf("1").querySelectorAll("img")) {
+      expect(img).toHaveAttribute("alt", "");
+      expect(img).toHaveAttribute("loading", "lazy");
+    }
+  });
+
+  it("omits an item that no longer resolves, without a placeholder or a broken tile", () => {
+    const payload = v1({
+      w: [["sparks-lrr", -1], ["weapon-that-left-the-game", -1]],
+      e: [["T", "first-aid-kit"], ["T", "tool-that-left-the-game"]],
+    });
+    renderPanel(base([], [filed("1", "stale", payload)], { unassignedOpen: true }));
+
+    // fromData already dropped the unknown ids; the preview neither re-checks nor back-fills.
+    expect(drawn("1")).toEqual([SPARKS, FIRST_AID]);
+    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks LRR, 1 tool");
+    expect(screen.getByRole("button", { name: "stale" })).toBeInTheDocument();
+  });
+
+  it("states an empty loadout rather than rendering an empty strip", () => {
+    renderPanel(base([], [filed("1", "nothing yet", v1({}))], { unassignedOpen: true }));
+
+    expect(previewOf("1")).toHaveTextContent("Empty — no weapons or equipment");
+    expect(previewOf("1").querySelectorAll("img")).toHaveLength(0);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("keeps traits in the text when there is nothing to draw", () => {
+    renderPanel(base([], [filed("1", "perks only", v1({ tr: ["quartermaster"] }))], { unassignedOpen: true }));
+
+    // The strip is empty, the loadout is not. The empty branch is the one path where the
+    // text equivalent could have swallowed contents that resolve, so the count rides along.
+    expect(previewOf("1").querySelectorAll("img")).toHaveLength(0);
+    expect(previewOf("1")).toHaveTextContent("Empty — no weapons or equipment · 1 trait");
+  });
+
+  it("sheds equipment before weapons, later slots first, and counts the remainder", async () => {
+    setViewport(700); // capacity 4
+    renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
+
+    // Both weapons survive and the equipment that goes is the LAST-slotted equipment.
+    expect(drawn("1")).toEqual([SPARKS, CONVERSION, FIRST_AID, KNIFE]);
+    expect(previewOf("1")).toHaveTextContent("+3 more");
+
+    // Narrower still: all equipment is gone before either weapon is touched.
+    await act(async () => {
+      setViewport(380);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(drawn("1")).toEqual([SPARKS, CONVERSION]);
+    expect(previewOf("1")).toHaveTextContent("+5 more");
+
+    // The row's non-negotiables survive the narrowest width.
+    expect(screen.getByRole("button", { name: "long ammo" })).toBeInTheDocument();
+    expect(screen.getByText("$354")).toBeInTheDocument();
+    expect(screen.getByLabelText("List for long ammo")).toBeEnabled();
+  });
+
+  it("announces everything that resolves, whatever the viewport is drawing", async () => {
+    setViewport(1280);
+    renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
+    const wide = previewOf("1").getAttribute("aria-label");
+
+    await act(async () => {
+      setViewport(380);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // Five of the seven tiles are gone; what a screen reader hears is unchanged.
+    expect(drawn("1")).toHaveLength(2);
+    expect(previewOf("1").getAttribute("aria-label")).toBe(wide);
+  });
+
+  it("writes nothing and mutates nothing to render a preview", () => {
+    const store = renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
+
+    // The fetch assertion is cheap here (the fixture preloads status "succeeded", so no
+    // thunk runs regardless) but still catches a preview implemented WITH a request. The
+    // assertion actually carrying the "no write" AC is the next one: the stored record is
+    // byte-identical to the input after rendering.
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(store.getState().savedLoadouts.items[0].data).toEqual(LOADED);
+  });
+
+  // The shedding order is a pure function, so the tail of it is asserted directly rather
+  // than by hunting for a viewport narrow enough to reach it.
+  it("drops weapons last, and only once nothing else is left", () => {
+    const entries = previewEntries(fromData(LOADED));
+    expect(entries.map((e) => e.kind)).toEqual([
+      "weapon", "weapon", "tool", "tool", "consumable", "consumable", "tool",
+    ]);
+
+    expect(shedPreview(entries, 1).shown.map((e) => e.name)).toEqual(["Sparks LRR"]);
+    expect(shedPreview(entries, 1).dropped).toBe(6);
+    expect(shedPreview(entries, 0)).toEqual({ shown: [], dropped: 7 });
+    expect(shedPreview(entries, 99).dropped).toBe(0);
+  });
+
+  it("never grants more capacity than the narrowest row can hold", () => {
+    expect(previewCapacity(320)).toBe(2);
+    expect(previewCapacity(1440)).toBeGreaterThan(previewCapacity(700));
+    expect(previewCapacity(700)).toBeGreaterThan(previewCapacity(380));
   });
 });
