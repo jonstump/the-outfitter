@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { FORMAT_VERSION, emptyLoadout, fromData, toData } from "./loadoutCodec.js";
+import {
+  FORMAT_VERSION,
+  LEGACY_CONS_IDS,
+  LEGACY_TOOL_IDS,
+  LEGACY_TRAIT_IDS,
+  LEGACY_WEAPON_IDS,
+  emptyLoadout,
+  fromData,
+  toData,
+} from "./loadoutCodec.js";
 
 // Governing: issue #26 (stable catalog ids + schema versioning for saved/share encodings)
 //
@@ -78,12 +87,15 @@ describe("fromData (legacy index-based wire format)", () => {
     expect(dec.name).toBe("Old build");
   });
 
-  it("drops legacy tool positions that moved to Consumables instead of remapping them", () => {
-    // Pre-data-accuracy Tools index 18/19 were Choke Beetle / Stalker Beetle,
-    // which moved to Consumables; the new tools appended there must not be
-    // resolved in their place.
+  it("restores legacy tool positions that moved to Consumables as the items they were", () => {
+    // Pre-data-accuracy Tools index 18/19 were Choke Beetle / Stalker Beetle, which are
+    // Consumables now. They used to be dropped (issue #38), because the decoder had no
+    // way to tell them apart from the new tools appended in their place. The frozen
+    // legacy table names them, so they come back correctly instead — what the record
+    // meant is the item, not the category it sat in.
     const dec = fromData({ w: [null, null], e: [["T", 18], ["T", 19]], tr: [], n: "", b: 0 });
-    expect(dec.equip).toEqual([]);
+    expect(dec.equip.map((e) => e.t)).toEqual(["C", "C"]);
+    expect(dec.equip.map((e) => CONS[e.i][1])).toEqual(["Choke Beetle", "Stalker Beetle"]);
   });
 
   it("drops out-of-range legacy indices instead of remapping them", () => {
@@ -107,5 +119,80 @@ describe("fromData (legacy index-based wire format)", () => {
   it("returns an empty loadout for null/non-object input", () => {
     expect(fromData(null)).toEqual(emptyLoadout());
     expect(fromData("garbage")).toEqual(emptyLoadout());
+  });
+});
+
+// Governing: issue #68 (mid-array catalog deletes silently remapped legacy records)
+//
+// The Electric Lamp was deleted from TOOLS position 9 in e0076d3 without touching the
+// decoder, which resolved legacy indices against the live array. Everything after it slid
+// down one, so a legacy record meaning Spyglass (9) decoded as Decoys (10), and so on
+// through index 17. These pin the frozen legacy order that replaced that assumption.
+describe("fromData (legacy tool indices across the Electric Lamp removal)", () => {
+  const legacyTools = (...indices) =>
+    fromData({ w: [null, null], e: indices.map((i) => ["T", i]), tr: [], n: "", b: 0 });
+
+  const equipNames = (dec) =>
+    dec.equip.map((e) => (e.t === "T" ? TOOLS : CONS)[e.i][1]);
+
+  // Indices 0-8 predate the gap and were never wrong; 10-17 are the ones that were
+  // silently off by one. Asserted per index rather than as one record, because a
+  // legacy loadout only carries 8 equipment slots.
+  it.each([
+    [0, "First Aid Kit"], [4, "Throwing Knives"], [8, "Fusees"],
+    [10, "Spyglass"], [11, "Decoys"], [12, "Blank Fire Decoys"], [13, "Decoy Fuses"],
+    [14, "Alert Trip Mine"], [15, "Concertina Trip Mine"], [16, "Poison Trip Mine"],
+    [17, "Quad Derringer"],
+  ])("legacy tool index %i resolves to %s", (index, name) => {
+    expect(equipNames(legacyTools(index))).toEqual([name]);
+  });
+
+  it("drops the Electric Lamp's position rather than resolving its neighbour", () => {
+    // The item left the game; the honest outcome is a missing slot, not Spyglass.
+    expect(legacyTools(9).equip).toEqual([]);
+  });
+
+  it("restores the retired Choke Bomb consumable as the surviving Choke Bombs tool", () => {
+    // Issue #67 deleted CONS position 13. Same item as the tool, so the legacy slot
+    // resolves across categories instead of being dropped or shifting Flash Bomb up.
+    const dec = fromData({ w: [null, null], e: [["C", 13], ["C", 14], ["C", 15]], tr: [] });
+    expect(equipNames(dec)).toEqual(["Choke Bombs", "Flash Bomb", "Concertina Bomb"]);
+    expect(dec.equip[0].t).toBe("T");
+  });
+
+  it("resolves legacy trait positions across the in-place renames", () => {
+    // Iron Repeater (12) was merged into Iron Eye; Poison Sense (26) became Pain Sense.
+    const dec = fromData({ w: [null, null], e: [], tr: [12, 26, 31] });
+    expect(dec.traits).toEqual(["iron-eye", "pain-sense", "vigilant"]);
+  });
+
+  it("resolves the last legacy weapon position, unshifted by later appends", () => {
+    const dec = fromData({ w: [[36, -1], [16, 1]], e: [], tr: [] });
+    expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nitro Express");
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Winfield M1873C");
+  });
+});
+
+// This is the guard the old "positions still line up" comment could not be. A catalog row
+// that a legacy slot names cannot be deleted without failing here, which forces the person
+// deleting it to say what the legacy slot should do — repoint it, or set it to null.
+describe("frozen legacy catalog tables", () => {
+  const cases = [
+    ["weapons", LEGACY_WEAPON_IDS, [WEAPONS], 37],
+    ["tools", LEGACY_TOOL_IDS, [TOOLS, CONS], 20],
+    ["consumables", LEGACY_CONS_IDS, [CONS, TOOLS], 16],
+    ["traits", LEGACY_TRAIT_IDS, [TRAITS], 32],
+  ];
+
+  it.each(cases)("%s: every non-null legacy id still resolves", (_name, table, catalogs) => {
+    const known = new Set(catalogs.flat().map((t) => t[0]));
+    const unresolved = table.filter((id) => id !== null && !known.has(id));
+    expect(unresolved).toEqual([]);
+  });
+
+  it.each(cases)("%s: the table keeps its pre-versioning length", (_n, table, _c, length) => {
+    // Growing or shrinking a table shifts every position after the edit — the exact
+    // failure this whole mechanism exists to prevent. Append to catalog.js instead.
+    expect(table).toHaveLength(length);
   });
 });

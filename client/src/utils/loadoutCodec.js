@@ -67,42 +67,125 @@ function fromV1(d) {
 
 // Legacy pre-versioning encoding: items referenced by raw array index, e.g.
 // { w: [[3,-1],null], e: [["T",1]], tr: [0], n: "x", b: 0 } with no `v` field.
-// Array position was load-bearing then. The migration key to the current catalog
-// is the array order as it stood before any data-accuracy reorder landed (no
-// reorder has been merged between that format and this change, so positions
-// still line up). Kept deliberately conservative: out-of-range values are
-// dropped rather than remapped.
-const LEGACY_COUNTS = { w: WEAPONS.length, eT: TOOLS.length, eC: CONS.length, tr: TRAITS.length };
+//
+// Array position was load-bearing then, so the decoder needs the catalog order as
+// it stood while that format was live — NOT today's order. This used to read the
+// live arrays directly, on the stated assumption that "no reorder has been merged
+// between that format and this change, so positions still line up." That assumption
+// expired the moment a row was deleted from the middle of one: commit e0076d3 dropped
+// the Electric Lamp from TOOLS position 9, sliding legacy positions 9-17 down one, so
+// a legacy record meaning Spyglass came back as Decoys (issue #68). Nothing caught it,
+// because nothing could — the contract lived in a comment.
+//
+// The tables below are that contract, frozen. They are a historical record of the
+// pre-versioning catalog and MUST NOT be re-sorted or trimmed to match edits to
+// catalog.js; deleting or reordering a live catalog row is now free, because these
+// resolve through stable ids rather than through whatever the live arrays hold.
+// `null` means the item left the game entirely and has no current id to resolve to.
+//
+// Reconstructed from catalog.js at 2a6bd05^, the last commit before the versioned
+// format landed.
+//
+// Exported for the colocated test, which asserts every non-null entry still resolves
+// against the live catalog. That assertion is the enforcement the old comment lacked:
+// retiring a catalog row now fails a test until whoever retired it says here what the
+// legacy slot should do — resolve to a replacement id, or `null` to drop.
+export const LEGACY_WEAPON_IDS = [
+  "nagant-m1895", "caldwell-conversion-pistol", "scottfield-model-3", "bornheim-no-3",
+  "caldwell-pax", "hand-crossbow", "cavalry-saber", "combat-axe", "railroad-hammer",
+  "lemat-mark-ii", "sparks-pistol", "caldwell-conversion-uppercut", "nagant-officer-carbine",
+  "hunting-bow", "dolch-96", "springfield-1866", "winfield-m1873c", "winfield-m1873",
+  "romero-77", "crossbow", "frontier-73c", "bomb-lance", "caldwell-rival-78",
+  "vetterli-71-karabiner", "specter-1882", "slate", "sparks-lrr", "martini-henry-ic1",
+  "winfield-1876-centennial", "berthier-1892", "drilling", "krag-m1894",
+  "mosin-nagant-m1891", "lebel-1886", "crown-king-auto-5", "mosin-nagant-avtomat",
+  "nitro-express",
+];
 
-// Legacy tool-slot positions that no longer refer to what they did when the
-// pre-versioning format was last live. Choke Beetle / Stalker Beetle (Tools
-// indices 18/19 at the time) moved to Consumables in the data-accuracy update;
-// keeping them would silently resolve to the new tools appended in their place
-// (Throwing Spear / Knuckle Knife). Dropped explicitly instead (issue #38).
-const LEGACY_DROPPED_TOOL_INDICES = new Set([18, 19]);
+export const LEGACY_TOOL_IDS = [
+  "first-aid-kit", "knife", "heavy-knife", "dusters", "throwing-knives", "throwing-axes",
+  "katana", "flare-pistol", "fusees",
+  // Electric Lamp — removed from the game in e0076d3. This is the deletion that broke
+  // the old positional decoder; holding the slot is what keeps everything after it honest.
+  null,
+  "spyglass", "decoys", "blank-fire-decoys", "decoy-fuses", "alert-trip-mine",
+  "concertina-trip-mine", "poison-trip-mine", "quad-derringer",
+  // Choke Beetle / Stalker Beetle sat in Tools then and are Consumables now (issue #38).
+  // resolveLegacyEquip() looks the id up in both categories, so these come back as the
+  // items they always were rather than being dropped.
+  "choke-beetle", "stalker-beetle",
+];
 
-// Legacy encodings reference traits by array position; translate to the stable
-// catalog id the store now keys on (see catalog.js's trait tuple shape).
+export const LEGACY_CONS_IDS = [
+  "vitality-shot", "regeneration-shot", "stamina-shot", "antidote-shot", "dynamite-stick",
+  "dynamite-bundle", "big-dynamite-bundle", "frag-bomb", "sticky-bomb", "fire-bomb",
+  "liquid-fire-bomb", "hive-bomb", "chaos-bomb",
+  // "Choke Bomb" was a Consumables duplicate of the "Choke Bombs" tool and was deleted
+  // from CONS in issue #67. Same item, so the legacy slot resolves to the surviving
+  // tool id — not a reuse of the retired `choke-bomb` id, which stays retired.
+  "choke-bombs",
+  "flash-bomb", "concertina-bomb",
+];
+
+export const LEGACY_TRAIT_IDS = [
+  "quartermaster", "fanning", "levering", "doctor", "physician", "packmule", "frontiersman",
+  "greyhound", "kiteskin", "lightfoot", "pitcher", "bulletgrubber",
+  // "Iron Repeater" was merged into Iron Eye in Update 1.15 — edited in place in the
+  // live catalog, so this position always meant the trait that is Iron Eye today.
+  "iron-eye",
+  "bolt-thrower", "serpent", "ghoul", "determination", "resilience", "salveskin",
+  "necromancer", "beastface", "hundred-hands", "steady-aim", "silent-killer", "vulture",
+  "whispersmith",
+  // "Poison Sense" was renamed to Pain Sense in Update 2.1, likewise in place.
+  "pain-sense",
+  "conduit", "magpie", "ambidextrous", "dauntless", "vigilant",
+];
+
+// legacy array position -> the id it referred to, or null if that position is not one
+// the format ever had, or names something the catalog no longer carries.
+function legacyId(table, index) {
+  if (!inRange(index, table.length)) return null;
+  return table[index] ?? null;
+}
+
+// Resolve a legacy equipment slot to its current { t, i }.
+//
+// The lookup crosses categories on purpose. Tools and Consumables share one equipment
+// pool (loadoutSlice's slotMax), and the data-accuracy update moved items between the
+// two — the beetles out of Tools, Choke Bomb's duplicate out of Consumables. What the
+// record meant is the item, not the shelf it sat on, so an id found in the other
+// category is a correct restore rather than a swap. Anything that resolves to no id at
+// all is dropped, never remapped to a neighbouring position.
+function resolveLegacyEquip(t, index) {
+  const id = legacyId(t === "T" ? LEGACY_TOOL_IDS : LEGACY_CONS_IDS, index);
+  if (!id) return null;
+  if (TOOL_BY_ID.has(id)) return { t: "T", i: indexOfItem(TOOLS, id) };
+  if (CONS_BY_ID.has(id)) return { t: "C", i: indexOfItem(CONS, id) };
+  return null;
+}
+
 function fromLegacy(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
-    if (!w || !inRange(w[0], LEGACY_COUNTS.w)) return null;
-    return { i: w[0], a: inRange(w[1], 5) ? w[1] : -1 };
+    if (!w) return null;
+    const id = legacyId(LEGACY_WEAPON_IDS, w[0]);
+    if (!id || !WEAPON_BY_ID.has(id)) return null;
+    return { i: indexOfItem(WEAPONS, id), a: inRange(w[1], 5) ? w[1] : -1 };
   };
   const equip = (d.e || [])
     .filter((e) => e && (e[0] === "T" || e[0] === "C"))
-    .filter((e) => inRange(e[1], e[0] === "T" ? LEGACY_COUNTS.eT : LEGACY_COUNTS.eC))
-    .filter((e) => !(e[0] === "T" && LEGACY_DROPPED_TOOL_INDICES.has(e[1])))
-    .slice(0, 8)
-    .map((e) => ({ t: e[0], i: e[1] }));
+    .map((e) => resolveLegacyEquip(e[0], e[1]))
+    .filter(Boolean)
+    .slice(0, 8);
 
   return {
     weapons: [0, 1].map(slotWeapon),
     equip,
+    // Legacy encodings reference traits by array position; translate to the stable
+    // catalog id the store now keys on (see catalog.js's trait tuple shape).
     traits: (d.tr || [])
-      .filter((i) => inRange(i, LEGACY_COUNTS.tr))
-      .filter((i) => TRAITS[i])
-      .map((i) => TRAITS[i][0]),
+      .map((i) => legacyId(LEGACY_TRAIT_IDS, i))
+      .filter((id) => id && TRAIT_BY_ID.has(id)),
     name: d.n || "",
     blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
   };
