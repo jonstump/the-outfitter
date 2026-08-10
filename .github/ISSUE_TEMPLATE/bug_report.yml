@@ -1,0 +1,132 @@
+name: Bug report
+description: Something in The Outfitter is broken or behaves unexpectedly.
+title: "[area] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing. Pick your area below, then copy its bracket tag into the
+        title in place of `[area]` — `[lists]`, `[ui]`, `[a11y]` and friends are the
+        convention the existing issues already use.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: What went wrong, and what you expected instead.
+      placeholder: |
+        Retiring a loadout list removes it from the sidebar, but the loadouts it
+        held disappear from "All loadouts" too. I expected them to stay.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps someone can follow from a fresh page load.
+      placeholder: |
+        1. Open the app and pick a hunter
+        2. Save the loadout to a new list called "Test"
+        3. Retire the list from the lists panel
+        4. Open "All loadouts"
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: The saved loadouts remain, unassigned to any list.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: >
+        The tag in front of each option is what goes in the title. Best guess is
+        fine — pick "Not sure" if nothing fits, and we'll tag it during triage.
+      options:
+        - "[builder] Loadout builder — weapons, equipment, traits"
+        - "[hunters] Hunter picker or favorites"
+        - "[lists] Loadout lists"
+        - "[saved] Saved loadouts, share links, or the URL hash"
+        - "[catalog] Item images or catalog data"
+        - "[roster] Hunter roster data or portraits"
+        - "[api] Server or API"
+        - "[ui] Visual design, layout, or controls"
+        - "[a11y] Accessibility — keyboard, focus, screen readers"
+        - "[dev] Dev setup, build, Docker, or tests"
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: How are you running it?
+      options:
+        - "`npm run dev` (Vite dev server on :5173)"
+        - "`npm start` (production server on :4100)"
+        - Docker / docker-compose
+        - A deployed instance
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Output of `git rev-parse --short HEAD`, or the release you're on.
+      placeholder: a1b2c3d
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      description: Only needed for client-side bugs.
+      placeholder: Firefox 128 on Linux
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console or server output
+      description: >
+        Browser devtools console errors, failed network requests (method, path,
+        status), or terminal output from the server. Pasted text is auto-formatted
+        as code — no backticks needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, a share link that reproduces it, how often it happens.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for a duplicate.
+          required: true
+        - label: >
+            I left out anything private. Loadouts are scoped to an anonymous token
+            in browser storage — don't paste yours; a share link is enough.
+          required: false

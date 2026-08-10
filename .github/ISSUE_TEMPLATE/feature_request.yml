@@ -1,0 +1,69 @@
+name: Feature request
+description: Suggest a change or addition to The Outfitter.
+title: "[area] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pick your area below, then copy its bracket tag into the title in place of
+        `[area]` — the same convention the existing issues use.
+
+        Larger changes are usually governed by an ADR or spec under `docs/`. If
+        this reshapes existing behaviour rather than adding to it, say which spec
+        it touches so the decision gets recorded alongside the work.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: The situation you hit today, before any proposed solution.
+      placeholder: >
+        With more than a dozen lists the sidebar scrolls, and the list I use every
+        session ends up below the fold.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like instead?
+      placeholder: Let a list be pinned so it sorts above the rest.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: The tag in front of each option is what goes in the title.
+      options:
+        - "[builder] Loadout builder — weapons, equipment, traits"
+        - "[hunters] Hunter picker or favorites"
+        - "[lists] Loadout lists"
+        - "[saved] Saved loadouts, share links, or the URL hash"
+        - "[catalog] Item images or catalog data"
+        - "[roster] Hunter roster data or portraits"
+        - "[api] Server or API"
+        - "[ui] Visual design, layout, or controls"
+        - "[a11y] Accessibility — keyboard, focus, screen readers"
+        - "[dev] Dev setup, build, Docker, or tests"
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including workarounds you're using today.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for a duplicate.
+          required: true

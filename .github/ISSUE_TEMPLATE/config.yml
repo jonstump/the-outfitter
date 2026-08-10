@@ -1,0 +1,10 @@
+# Blank issues stay on: the SDD workflow (/sdd:plan, /sdd:work) files epics and
+# stories that don't fit either form, and those are filed by hand as often as by API.
+blank_issues_enabled: true
+contact_links:
+  - name: Setup and troubleshooting
+    url: https://github.com/jonstump/the-outfitter/blob/main/README.md
+    about: Node version, scripts, and how the data scrapes work — check here before filing a setup issue.
+  - name: Architecture decisions and specs
+    url: https://github.com/jonstump/the-outfitter/tree/main/docs
+    about: Why the app works the way it does. Behaviour that looks wrong may be a recorded decision.
