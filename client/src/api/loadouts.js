@@ -68,3 +68,37 @@ export function moveLoadout(id, listId) {
 export function deleteLoadout(id) {
   return fetch(`${BASE}/${id}`, { method: "DELETE", headers: headers() }).then(asJson);
 }
+
+// ---------------------------------------------------------------------------
+// Loadout lists (SPEC-0003). Same token header, same scoping rules — a list is
+// only ever visible to the browser that created it.
+// ---------------------------------------------------------------------------
+
+const LISTS_BASE = (import.meta.env && import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "") + "/api/loadout-lists";
+
+export function getLists() {
+  return fetch(LISTS_BASE, { headers: headers() }).then(asJson);
+}
+
+export function createList({ name, hunterId = null }) {
+  return fetch(LISTS_BASE, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ name, hunterId }),
+  }).then(asJson);
+}
+
+export function updateList(id, patch) {
+  return fetch(`${LISTS_BASE}/${id}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify(patch),
+  }).then(asJson);
+}
+
+/** Retire a list. The server drops its loadouts into Unassigned; it never deletes them. */
+export function retireList(id) {
+  return fetch(`${LISTS_BASE}/${id}`, { method: "DELETE", headers: headers() }).then(asJson);
+}

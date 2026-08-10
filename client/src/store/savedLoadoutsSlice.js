@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { deleteLoadout, getLoadouts, upsertLoadout } from "../api/loadouts.js";
+import { deleteLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
 import { uiActions } from "./uiSlice.js";
 
@@ -16,10 +16,12 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
 });
 
 export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
-  const { loadout } = getState();
+  const { loadout, ui } = getState();
   const name = loadout.name.trim() || "Unnamed loadout";
   try {
-    const record = await upsertLoadout(name, toData({ ...loadout, name }));
+    // SPEC-0003: while a list is selected, a new save files into it. Saving to Unassigned
+    // without deselecting is legitimate — selectedListId is simply null then.
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), ui.selectedListId ?? null);
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;
   } catch (err) {
@@ -37,6 +39,28 @@ export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id, {
     throw err;
   }
 });
+
+// Governing: SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference"
+//
+// Moving is an explicit, keyboard-operable control on the loadout row — a select, not
+// drag-and-drop. A successful move removes the row from the open list, so the outcome is
+// announced politely; a failure reverts and is announced assertively, because a row that
+// silently vanishes reads as data loss.
+export const moveSaved = createAsyncThunk(
+  "savedLoadouts/move",
+  async ({ id, listId, loadoutName, listName }, { dispatch }) => {
+    try {
+      const record = await moveLoadout(id, listId);
+      dispatch(
+        uiActions.setMessage(`Moved “${loadoutName}” to ${listName || "Unassigned"}.`)
+      );
+      return record;
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't move “${loadoutName}”: ${err.message}`));
+      throw err;
+    }
+  }
+);
 
 const savedLoadoutsSlice = createSlice({
   name: "savedLoadouts",
@@ -62,6 +86,10 @@ const savedLoadoutsSlice = createSlice({
       })
       .addCase(deleteSaved.fulfilled, (state, action) => {
         state.items = state.items.filter((l) => l.id !== action.payload);
+      })
+      .addCase(moveSaved.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
       });
   },
 });

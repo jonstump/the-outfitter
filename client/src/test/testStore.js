@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import loadoutReducer from "../store/loadoutSlice.js";
 import uiReducer from "../store/uiSlice.js";
 import savedLoadoutsReducer from "../store/savedLoadoutsSlice.js";
+import loadoutListsReducer from "../store/loadoutListsSlice.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -19,6 +20,7 @@ export function createTestStore(preloadedState) {
       loadout: loadoutReducer,
       ui: uiReducer,
       savedLoadouts: savedLoadoutsReducer,
+      loadoutLists: loadoutListsReducer,
     },
     preloadedState,
   });
