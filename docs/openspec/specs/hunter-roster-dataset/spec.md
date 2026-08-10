@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 date: 2026-08-10
 implements: [ADR-0007]
 ---
