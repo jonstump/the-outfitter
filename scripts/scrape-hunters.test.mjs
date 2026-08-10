@@ -1,4 +1,4 @@
-// Governing: ADR-0007 (Hunter Roster Dataset), ADR-0005 (shared wiki client)
+// Governing: ADR-0007 (as amended 2026-08-10), ADR-0005 (shared wiki client)
 // Implements: SPEC-0004 — every requirement's scenarios, exercised with an injected fetchFn.
 //
 // scripts/scrape-hunters.test.mjs
@@ -7,6 +7,12 @@
 // requests to huntshowdown.wiki.gg. The HTML fixtures below are reduced from real pages captured
 // while building the parser, preserving exactly the structure the parser keys on — both DRUID
 // infobox shapes, the tabbed Source row, the redirect-bearing RLCONF blob, and the roster gallery.
+//
+// Image behaviour is covered twice on purpose. `fakeSharp` drives the orchestration tests — budget
+// gates, disk state, failure isolation — because those care about control flow, not pixels. The
+// "trimming against real images" block below drives REAL sharp against generated PNGs, because
+// SPEC-0004's trimming requirement is a claim about pixels, and a fake that answers whatever the
+// implementation asks it would confirm the implementation rather than the requirement.
 
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
@@ -15,12 +21,14 @@ import {
   ACQUISITION_RULES,
   BudgetExceededError,
   ImageProcessingUnavailableError,
-  PORTRAIT_SIZES,
+  PORTRAIT_MAX_BYTES,
+  PortraitSourceUnusableError,
   TOTAL_BUDGET_BYTES,
   buildMediaUrl,
   decodeEntities,
   deriveObtainable,
-  encodePortraits,
+  encodePortrait,
+  findAlphaBoundingBox,
   formatSummary,
   loadImageProcessor,
   normaliseAcquisition,
@@ -32,13 +40,25 @@ import {
   portraitAssetPath,
   portraitSlugFromFile,
   readExistingIds,
+  removeStaleAssets,
   stripTags,
   readRlconf,
   runScrape,
   scrapeHunterPage,
 } from "./scrape-hunters.mjs";
 
-import { ItemPageNotFoundError, RateLimiter } from "./lib/wiki.mjs";
+import { ImageAssetNotFoundError, ItemPageNotFoundError, RateLimiter } from "./lib/wiki.mjs";
+
+/**
+ * Real sharp, if it is installed.
+ *
+ * SPEC-0004 REQ "Image Processing Dependency Is Development-Only" allows a contributor to work
+ * without it, so the pixel-level block skips rather than fails when it is absent. Every other test
+ * in this file runs regardless — which is what keeps names-only mode honestly covered.
+ */
+const realSharp = await import("sharp")
+  .then((m) => m.default ?? m)
+  .catch(() => null);
 
 // ---------------------------------------------------------------------------
 // Fixtures.
@@ -182,25 +202,84 @@ const DEFAULT_ROUTES = [
   [/\/images\/Hunter_[^/]+\.png$/, () => response(PNG_BYTES, { contentType: "image/png" })],
 ];
 
-/** A sharp stand-in: records calls and returns buffers of a controllable size. */
-function fakeSharp(bytesByWidth = { 192: 3000, 320: 6000 }, { sourceWidth = 384 } = {}) {
-  const calls = [];
+/**
+ * A sharp stand-in for the orchestration tests.
+ *
+ * It answers `metadata()`, serves raw pixels for the bounding-box scan, records `extract()`, and
+ * returns an encoded buffer of a controllable size. `box: null` produces a fully transparent
+ * source; `hasAlpha: false` produces one with no alpha channel at all.
+ */
+function fakeSharp({
+  width = 384,
+  height = 256,
+  hasAlpha = true,
+  box = { left: 90, top: 13, width: 207, height: 230 },
+  bytes = 8000,
+} = {}) {
+  const extracts = [];
   const factory = () => {
-    let width = null;
+    let raw = false;
     const api = {
-      metadata: async () => ({ width: sourceWidth, height: 256, format: "png" }),
-      resize: (opts) => {
-        width = opts.width;
-        calls.push(opts);
+      metadata: async () => ({
+        width,
+        height,
+        format: "png",
+        hasAlpha,
+        channels: hasAlpha ? 4 : 3,
+      }),
+      raw: () => {
+        raw = true;
+        return api;
+      },
+      extract: (opts) => {
+        extracts.push(opts);
         return api;
       },
       avif: () => api,
-      toBuffer: async () => Buffer.alloc(bytesByWidth[width] ?? 1000),
+      toBuffer: async (opts) => {
+        if (raw && opts?.resolveWithObject) {
+          const channels = hasAlpha ? 4 : 3;
+          const data = Buffer.alloc(width * height * channels);
+          if (hasAlpha && box) {
+            for (let y = box.top; y < box.top + box.height; y += 1) {
+              for (let x = box.left; x < box.left + box.width; x += 1) {
+                data[(y * width + x) * channels + channels - 1] = 255;
+              }
+            }
+          }
+          return { data, info: { width, height, channels } };
+        }
+        return Buffer.alloc(typeof bytes === "function" ? bytes() : bytes);
+      },
     };
     return api;
   };
-  factory.calls = calls;
+  factory.extracts = extracts;
   return factory;
+}
+
+/**
+ * A fakeSharp whose behaviour changes per variant, for the tabbed-page isolation tests.
+ *
+ * `metadata()` opens each variant's encode exactly once, so it — and nothing else — advances the
+ * sequence. Every later pipeline object in that variant's encode (the `.raw()` bounding-box scan
+ * and the `.extract().avif()` pass) delegates to the config metadata() selected, which is what a
+ * naive per-object closure gets wrong: `encodePortrait` calls the factory three times per variant.
+ */
+function sequencedSharp(configs) {
+  let idx = -1;
+  let current = fakeSharp(configs[0]);
+  return (buf) => ({
+    metadata: async (...args) => {
+      idx = Math.min(idx + 1, configs.length - 1);
+      current = fakeSharp(configs[idx]);
+      return current(buf).metadata(...args);
+    },
+    raw: () => current(buf).raw(),
+    extract: (opts) => current(buf).extract(opts),
+    avif: (opts) => current(buf).avif(opts),
+    toBuffer: (opts) => current(buf).toBuffer(opts),
+  });
 }
 
 function memoryFs() {
@@ -221,6 +300,16 @@ function memoryFs() {
     fsReadFile: async (p) => {
       if (!files.has(p)) throw new Error("ENOENT");
       return files.get(p);
+    },
+    fsReaddir: async (dir) => {
+      const prefix = `${dir.replace(/\/$/, "")}/`;
+      const names = [...files.keys()]
+        .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
+        .map((p) => p.slice(prefix.length));
+      if (names.length === 0 && ![...files.keys()].some((p) => p.startsWith(prefix))) {
+        throw new Error("ENOENT");
+      }
+      return names;
     },
   };
 }
@@ -430,38 +519,253 @@ describe("acquisition normalisation", () => {
 });
 
 describe("portrait encoding and budgets", () => {
-  it("produces both sizes at the specified widths", async () => {
-    const sharp = fakeSharp();
-    const out = await encodePortraits(PNG_BYTES, sharp, { hunter: "X" });
-    assert.deepEqual(
-      out.map((o) => [o.name, o.width]),
-      [["thumb", 192], ["full", 320]]
-    );
+  it("emits exactly one asset, at the trimmed bounding box, with no resize step", async () => {
+    const sharp = fakeSharp({ box: { left: 90, top: 13, width: 207, height: 230 } });
+    const out = await encodePortrait(PNG_BYTES, sharp, { hunter: "X" });
+
+    assert.equal(out.width, 207);
+    assert.equal(out.height, 230);
+    assert.equal(out.trimmed, true);
+    // The absence is the assertion: a `resize` on the pipeline would be an upscale or a downscale,
+    // and SPEC-0004 forbids both. `fakeSharp` has no resize() at all, so a reintroduced call throws.
+    assert.deepEqual(sharp.extracts, [{ left: 90, top: 13, width: 207, height: 230 }]);
   });
 
-  it("does not upscale a source narrower than the target width", async () => {
-    const sharp = fakeSharp({ 150: 900 }, { sourceWidth: 150 });
-    const out = await encodePortraits(PNG_BYTES, sharp, { hunter: "Tiny" });
-    assert.deepEqual(out.map((o) => o.width), [150, 150]);
+  it("finds the smallest rectangle containing every pixel with alpha above zero", async () => {
+    const sharp = fakeSharp({ width: 40, height: 30, box: { left: 4, top: 6, width: 11, height: 9 } });
+    assert.deepEqual(await findAlphaBoundingBox(PNG_BYTES, sharp), {
+      left: 4,
+      top: 6,
+      width: 11,
+      height: 9,
+    });
+  });
+
+  it("encodes a source with no alpha channel untrimmed at native resolution", async () => {
+    // SPEC-0004: "the hunter SHALL NOT be failed on that basis". There is no transparent margin to
+    // remove, and the hunter still needs a portrait.
+    const sharp = fakeSharp({ hasAlpha: false, width: 384, height: 256 });
+    const out = await encodePortrait(PNG_BYTES, sharp, { hunter: "Opaque" });
+
+    assert.equal(out.trimmed, false);
+    assert.equal(out.width, 384);
+    assert.equal(out.height, 256);
+    assert.deepEqual(sharp.extracts, [], "an alpha-less source is never extracted");
+  });
+
+  it("fails a fully transparent source with its own sentinel, not a missing-asset one", async () => {
+    const sharp = fakeSharp({ box: null });
+    await assert.rejects(
+      () => encodePortrait(PNG_BYTES, sharp, { hunter: "Ghost", url: "https://x/y.png" }),
+      (err) => {
+        // Distinguishability is the requirement: "the art is missing" and "the art is present and
+        // unusable" send a maintainer in opposite directions.
+        assert.ok(err instanceof PortraitSourceUnusableError, `got ${err.name}`);
+        assert.ok(!(err instanceof ImageAssetNotFoundError), "must not be a missing-asset error");
+        assert.match(err.message, /fully transparent/);
+        assert.equal(err.item, "Ghost");
+        return true;
+      }
+    );
   });
 
   it("rejects an oversized asset rather than returning it to be written", async () => {
-    const sharp = fakeSharp({ 192: 99_000, 320: 6000 });
+    const sharp = fakeSharp({ bytes: 99_000 });
     await assert.rejects(
-      () => encodePortraits(PNG_BYTES, sharp, { hunter: "Chonk" }),
-      (err) => err instanceof BudgetExceededError && /thumb.*99000.*15360/s.test(err.message)
+      () => encodePortrait(PNG_BYTES, sharp, { hunter: "Chonk" }),
+      (err) => err instanceof BudgetExceededError && /Chonk.*99000.*25600/s.test(err.message)
     );
   });
 
-  it("holds the thumbnail to a smaller budget than the full size", () => {
-    const [thumb, full] = PORTRAIT_SIZES;
-    assert.ok(thumb.maxBytes < full.maxBytes);
-    assert.ok(thumb.width < full.width);
+  it("holds the per-asset ceiling at the 25 KB SPEC-0004 specifies", () => {
+    assert.equal(PORTRAIT_MAX_BYTES, 25 * 1024);
   });
 
-  it("names assets so both URLs derive from the slug with no manifest", () => {
-    assert.equal(portraitAssetPath("/i", "bad-hand", "full"), "/i/bad-hand.avif");
-    assert.equal(portraitAssetPath("/i", "bad-hand", "thumb"), "/i/bad-hand-thumb.avif");
+  it("names the asset so its URL derives from the slug alone, with no size segment", () => {
+    assert.equal(portraitAssetPath("/i", "bad-hand"), "/i/bad-hand.avif");
+    assert.doesNotMatch(portraitAssetPath("/i", "bad-hand"), /-thumb|-full|\d+px/);
+  });
+});
+
+describe("trimming against real images", { skip: realSharp ? false : "sharp is not installed" }, () => {
+  /** A transparent canvas with one opaque rectangle at a known offset. */
+  async function canvasWithSubject({ width, height, left, top, boxWidth, boxHeight, alpha = 255 }) {
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    for (let y = top; y < top + boxHeight; y += 1) {
+      for (let x = left; x < left + boxWidth; x += 1) {
+        const i = (y * width + x) * channels;
+        data[i] = 200;
+        data[i + 1] = 60;
+        data[i + 2] = 40;
+        data[i + 3] = alpha;
+      }
+    }
+    return realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+  }
+
+  it("trims transparent margin down to the subject's exact bounding box", async () => {
+    const src = await canvasWithSubject({
+      width: 384, height: 256, left: 90, top: 13, boxWidth: 207, boxHeight: 230,
+    });
+    const out = await encodePortrait(src, realSharp, { hunter: "Trimmed" });
+    const meta = await realSharp(out.buffer).metadata();
+
+    assert.equal(meta.width, 207);
+    assert.equal(meta.height, 230);
+    // "no larger than the source in either dimension, strictly smaller in every dimension that
+    // carried margin" — both dimensions carried margin here.
+    assert.ok(meta.width < 384 && meta.height < 256);
+  });
+
+  it("keeps an antialiased edge pixel, which sharp's default threshold would shave off", async () => {
+    // The requirement is alpha > 0, not alpha > some-default. A one-pixel border at alpha 1 is
+    // subject: with sharp's own trim threshold it disappears, and the silhouette quietly shrinks by
+    // an amount that depends on the encoder version rather than on the image.
+    const width = 40;
+    const height = 40;
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    const setAlpha = (x, y, a) => {
+      data[(y * width + x) * channels + 3] = a;
+    };
+    for (let y = 10; y < 30; y += 1) for (let x = 10; x < 30; x += 1) setAlpha(x, y, 255);
+    // A single near-transparent pixel outside the solid block, still part of the subject.
+    setAlpha(5, 8, 1);
+    const src = await realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+
+    assert.deepEqual(await findAlphaBoundingBox(src, realSharp), {
+      left: 5,
+      top: 8,
+      width: 25,
+      height: 22,
+    });
+  });
+
+  it("retains the alpha channel through the AVIF encode", async () => {
+    const src = await canvasWithSubject({
+      width: 64, height: 64, left: 8, top: 8, boxWidth: 32, boxHeight: 24, alpha: 128,
+    });
+    const out = await encodePortrait(src, realSharp, { hunter: "Translucent" });
+    const meta = await realSharp(out.buffer).metadata();
+
+    assert.equal(meta.format, "heif");
+    assert.equal(meta.hasAlpha, true, "a portrait must composite onto the page, not onto a box");
+  });
+
+  it("writes a small subject at native size rather than upscaling it to a surface's needs", async () => {
+    // A picker tile wants 192px at 2× and the list card wants 440px of subject height. Neither is
+    // manufactured: SPEC-0004 records the shortfall as a source-resolution ceiling.
+    const src = await canvasWithSubject({
+      width: 384, height: 256, left: 100, top: 30, boxWidth: 178, boxHeight: 204,
+    });
+    const out = await encodePortrait(src, realSharp, { hunter: "Narrow" });
+    const meta = await realSharp(out.buffer).metadata();
+
+    assert.equal(meta.width, 178);
+    assert.equal(meta.height, 204);
+    assert.ok(meta.height < 440, "the fixture is below the card's 2x requirement, as every hunter is");
+  });
+
+  it("gives different hunters different dimensions and aspect ratios", async () => {
+    const wide = await encodePortrait(
+      await canvasWithSubject({ width: 384, height: 256, left: 25, top: 26, boxWidth: 334, boxHeight: 204 }),
+      realSharp,
+      { hunter: "Wide" }
+    );
+    const tall = await encodePortrait(
+      await canvasWithSubject({ width: 384, height: 256, left: 100, top: 0, boxWidth: 178, boxHeight: 256 }),
+      realSharp,
+      { hunter: "Tall" }
+    );
+
+    assert.notDeepEqual([wide.width, wide.height], [tall.width, tall.height]);
+    assert.notEqual(wide.width / wide.height, tall.width / tall.height);
+  });
+
+  it("fails a genuinely all-transparent PNG with the unusable-source sentinel", async () => {
+    const src = await realSharp(Buffer.alloc(32 * 32 * 4), { raw: { width: 32, height: 32, channels: 4 } })
+      .png()
+      .toBuffer();
+    await assert.rejects(
+      () => encodePortrait(src, realSharp, { hunter: "Ghost" }),
+      PortraitSourceUnusableError
+    );
+  });
+
+  it("encodes an alpha-less source untrimmed rather than failing it", async () => {
+    const src = await realSharp({
+      create: { width: 120, height: 90, channels: 3, background: { r: 30, g: 90, b: 140 } },
+    })
+      .png()
+      .toBuffer();
+    const out = await encodePortrait(src, realSharp, { hunter: "Opaque" });
+    const meta = await realSharp(out.buffer).metadata();
+
+    assert.equal(out.trimmed, false);
+    assert.equal(meta.width, 120);
+    assert.equal(meta.height, 90);
+  });
+});
+
+describe("stale asset removal", () => {
+  it("removes what the dataset does not claim and reports the count", async () => {
+    const fs = memoryFs();
+    for (const name of ["a.avif", "a-thumb.avif", "b.avif", "b-thumb.avif", "notes.txt"]) {
+      fs.files.set(`/images/hunters/${name}`, Buffer.alloc(1));
+    }
+
+    const result = await removeStaleAssets({
+      imagesRoot: "/images/hunters",
+      keepFiles: new Set(["a.avif", "b.avif"]),
+      ...fs,
+      log: () => {},
+    });
+
+    assert.equal(result.removed, 2);
+    assert.deepEqual(result.files.sort(), ["a-thumb.avif", "b-thumb.avif"]);
+    assert.ok(fs.files.has("/images/hunters/notes.txt"), "non-avif files are left alone");
+  });
+
+  it("reports zero on an already-clean directory", async () => {
+    const fs = memoryFs();
+    fs.files.set("/images/hunters/a.avif", Buffer.alloc(1));
+    const result = await removeStaleAssets({
+      imagesRoot: "/images/hunters",
+      keepFiles: new Set(["a.avif"]),
+      ...fs,
+      log: () => {},
+    });
+    assert.equal(result.removed, 0);
+  });
+
+  it("treats an absent images directory as nothing to remove, not an error", async () => {
+    const result = await removeStaleAssets({
+      imagesRoot: "/nope",
+      keepFiles: new Set(),
+      fsReaddir: async () => {
+        throw new Error("ENOENT");
+      },
+      fsUnlink: async () => {},
+      log: () => {},
+    });
+    assert.deepEqual(result, { removed: 0, files: [] });
+  });
+
+  it("logs an unlink failure and keeps going rather than discarding the run", async () => {
+    const events = [];
+    const result = await removeStaleAssets({
+      imagesRoot: "/images/hunters",
+      keepFiles: new Set(),
+      fsReaddir: async () => ["locked.avif", "free.avif"],
+      fsUnlink: async (p) => {
+        if (p.includes("locked")) throw new Error("EPERM");
+      },
+      log: (e) => events.push(e),
+    });
+
+    assert.deepEqual(result.files, ["free.avif"]);
+    assert.ok(events.some((e) => e.event === "stale-asset-remove-failed" && /EPERM/.test(e.reason)));
   });
 });
 
@@ -535,15 +839,18 @@ describe("scrapeHunterPage", () => {
     assert.equal(result.assets.length, 0);
   });
 
-  it("writes both sizes per variant when portraits are enabled", async () => {
+  it("writes exactly one asset per variant, with no second size on disk", async () => {
     const fs = memoryFs();
     const result = await scrapeHunterPage({ wikiPath: "Hunters/Caitlyn_Hammond" }, pageDeps(fs));
 
-    assert.deepEqual([...fs.files.keys()].sort(), [
-      "/images/hunters/caitlyn-hammond-thumb.avif",
-      "/images/hunters/caitlyn-hammond.avif",
-    ]);
-    assert.equal(result.bytes, 9000);
+    assert.deepEqual([...fs.files.keys()], ["/images/hunters/caitlyn-hammond.avif"]);
+    assert.equal(result.assets.length, 1);
+    assert.equal(result.bytes, 8000);
+    assert.deepEqual(
+      [result.assets[0].width, result.assets[0].height],
+      [207, 230],
+      "the asset is the trimmed bounding box, not a target width"
+    );
   });
 
   it("writes nothing under the images root in names-only mode", async () => {
@@ -556,7 +863,7 @@ describe("scrapeHunterPage", () => {
     const fs = memoryFs();
     const result = await scrapeHunterPage(
       { wikiPath: "Hunters/Caitlyn_Hammond" },
-      pageDeps({ ...fs, sharp: fakeSharp({ 192: 99_000, 320: 6000 }) })
+      pageDeps({ ...fs, sharp: fakeSharp({ bytes: 99_000 }) })
     );
 
     assert.equal(fs.files.size, 0, "nothing was written");
@@ -565,54 +872,57 @@ describe("scrapeHunterPage", () => {
     assert.deepEqual(result.entries, []);
     assert.equal(result.failures.length, 1);
     assert.equal(result.failures[0].errorType, "BudgetExceededError");
-    assert.match(result.failures[0].reason, /99000.*15360/s);
+    assert.match(result.failures[0].reason, /99000.*25600/s);
   });
 
-  it("leaves no orphaned art when a later variant on a tabbed page busts its budget", async () => {
-    // The regression: portraits are written variant by variant, so an earlier variant's files
-    // were already on disk when a later one threw — and the throw discarded the whole page's
-    // entries. That left committed AVIFs with no dataset row pointing at them, invisible in
-    // review because a reviewer sees a filename, not a catalogue.
+  it("fails only the variant whose source is unusable, keeping its siblings", async () => {
     const fs = memoryFs();
-    // metadata() runs exactly once per encodePortraits call, so it counts variants — keying off
-    // raw call count instead would straddle the resize calls and fail the wrong variant.
-    let variantIdx = -1;
-    const sharp = () => {
-      const api = {
-        metadata: async () => {
-          variantIdx += 1;
-          return { width: 384, height: 256, format: "png" };
-        },
-        resize: () => api,
-        avif: () => api,
-        // First variant encodes small; second blows its budget.
-        toBuffer: async () => Buffer.alloc(variantIdx === 0 ? 3000 : 99_000),
-      };
-      return api;
-    };
+    // First variant has a subject; the second is transparent end to end.
+    const sharp = sequencedSharp([
+      { box: { left: 10, top: 10, width: 100, height: 100 }, bytes: 3000 },
+      { box: null },
+    ]);
 
     const result = await scrapeHunterPage({ wikiPath: "Hunters/Bad_Hand" }, pageDeps({ ...fs, sharp }));
 
-    // The healthy variant survives, with both of its sizes.
+    assert.deepEqual(result.entries.map((e) => e.id), ["the-revenant"]);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].errorType, "PortraitSourceUnusableError");
+    assert.equal(result.failures[0].portrait, "bad-hand");
+
+    // Every file on disk is claimed by an entry — no orphans.
+    assert.deepEqual([...fs.files.keys()], ["/images/hunters/the-revenant.avif"]);
+  });
+
+  it("leaves no orphaned art when a later variant on a tabbed page busts its budget", async () => {
+    // The regression: portraits are written variant by variant, so an earlier variant's file was
+    // already on disk when a later one threw — and the throw discarded the whole page's entries.
+    // That left committed AVIFs with no dataset row pointing at them, invisible in review because
+    // a reviewer sees a filename, not a catalogue.
+    const fs = memoryFs();
+    // First variant encodes small; second blows its budget.
+    const sharp = sequencedSharp([{ bytes: 3000 }, { bytes: 99_000 }]);
+
+    const result = await scrapeHunterPage({ wikiPath: "Hunters/Bad_Hand" }, pageDeps({ ...fs, sharp }));
+
     assert.deepEqual(result.entries.map((e) => e.id), ["the-revenant"]);
     assert.equal(result.failures.length, 1);
     assert.equal(result.failures[0].errorType, "BudgetExceededError");
     assert.equal(result.failures[0].portrait, "bad-hand");
 
-    // Every file on disk is claimed by an entry — no orphans.
-    const cataloged = new Set(result.entries.flatMap((e) => [`${e.portrait}.avif`, `${e.portrait}-thumb.avif`]));
+    const cataloged = new Set(result.entries.map((e) => `${e.portrait}.avif`));
     for (const p of fs.files.keys()) {
       assert.ok(cataloged.has(p.split("/").pop()), `${p} is on disk but in no dataset entry`);
     }
     assert.ok(![...fs.files.keys()].some((p) => p.includes("bad-hand")), "failed variant wrote nothing");
   });
 
-  it("rolls back a half-written pair when the second size fails to write", async () => {
+  it("leaves nothing behind when the write itself fails", async () => {
     const fs = memoryFs();
-    let writes = 0;
     const fsWriteFile = async (p, data) => {
-      if (++writes === 2) throw new Error("ENOSPC");
+      // Simulate a truncated write: bytes land, then the call fails.
       fs.files.set(p, data);
+      throw new Error("ENOSPC");
     };
 
     const result = await scrapeHunterPage(
@@ -620,7 +930,7 @@ describe("scrapeHunterPage", () => {
       pageDeps({ ...fs, fsWriteFile })
     );
 
-    assert.equal(fs.files.size, 0, "the first-written size was removed again");
+    assert.equal(fs.files.size, 0, "the partial file was removed again");
     assert.equal(result.failures.length, 1);
     assert.deepEqual(result.entries, []);
   });
@@ -646,7 +956,7 @@ describe("scrapeHunterPage", () => {
     assert.equal(result.assets.length, 0);
 
     const forced = await scrapeHunterPage({ wikiPath: "Hunters/Caitlyn_Hammond" }, pageDeps({ ...fs, force: true }));
-    assert.equal(forced.assets.length, 2);
+    assert.equal(forced.assets.length, 1);
   });
 });
 
@@ -784,6 +1094,65 @@ describe("runScrape", () => {
     assert.ok([...deps.files.keys()].some((k) => k.endsWith(".avif")));
   });
 
+  it("deletes the previous pipeline's size variants and reports how many went", async () => {
+    // The state this run actually meets on disk: 242 hunters' worth of `-thumb` companions that
+    // the single-asset pipeline never emits. A run that only overwrote would leave them forever,
+    // and SPEC-0004's payload scenarios could never fail.
+    const deps = baseDeps();
+    for (const slug of ["bad-hand", "the-revenant", "caitlyn-hammond"]) {
+      deps.files.set(`/images/hunters/${slug}-thumb.avif`, Buffer.alloc(4000));
+      deps.files.set(`/images/hunters/${slug}.avif`, Buffer.alloc(8000));
+    }
+
+    const result = await runScrape(RUN_OPTS, deps);
+
+    assert.equal(result.staleRemoved, 3);
+    const onDisk = [...deps.files.keys()].filter((p) => p.endsWith(".avif"));
+    assert.deepEqual(onDisk.filter((p) => p.includes("-thumb")), [], "no stale variant survives");
+    // Exactly one asset per hunter that has one, and every one of them is claimed by an entry.
+    const claimed = new Set(
+      result.entries.filter((e) => e.portrait).map((e) => `/images/hunters/${e.portrait}.avif`)
+    );
+    assert.deepEqual(onDisk.sort(), [...claimed].sort());
+  });
+
+  it("reports zero removed on a second consecutive run", async () => {
+    const deps = baseDeps();
+    deps.files.set("/images/hunters/bad-hand-thumb.avif", Buffer.alloc(4000));
+
+    const first = await runScrape(RUN_OPTS, deps);
+    assert.ok(first.staleRemoved > 0);
+
+    const second = await runScrape(RUN_OPTS, deps);
+    assert.equal(second.staleRemoved, 0, "a clean directory stays clean");
+  });
+
+  it("deletes nothing in names-only or dry-run mode", async () => {
+    const namesOnlyDeps = baseDeps();
+    namesOnlyDeps.files.set("/images/hunters/bad-hand-thumb.avif", Buffer.alloc(4000));
+    const namesOnly = await runScrape({ ...RUN_OPTS, namesOnly: true }, namesOnlyDeps);
+    assert.equal(namesOnly.staleRemoved, 0);
+    assert.ok(namesOnlyDeps.files.has("/images/hunters/bad-hand-thumb.avif"));
+
+    const dryDeps = baseDeps();
+    dryDeps.files.set("/images/hunters/bad-hand-thumb.avif", Buffer.alloc(4000));
+    const dry = await runScrape({ ...RUN_OPTS, dryRun: true }, dryDeps);
+    assert.equal(dry.staleRemoved, 0);
+    assert.ok(dryDeps.files.has("/images/hunters/bad-hand-thumb.avif"));
+  });
+
+  it("does not sweep on a --limit run, whose dataset covers only a slice of the roster", async () => {
+    // Sweeping against a partial dataset would delete the art of every hunter past the limit,
+    // turning a development aid into a destructive one.
+    const deps = baseDeps();
+    deps.files.set("/images/hunters/somebody-else.avif", Buffer.alloc(8000));
+
+    const result = await runScrape({ ...RUN_OPTS, limit: 1 }, deps);
+
+    assert.equal(result.staleRemoved, 0);
+    assert.ok(deps.files.has("/images/hunters/somebody-else.avif"));
+  });
+
   it("fails the run when the accumulating payload breaches the total ceiling", async () => {
     // Every asset here is comfortably inside its per-asset budget — which is the whole point.
     // Per-asset compliance says nothing about aggregate weight, so the total needs its own gate.
@@ -841,13 +1210,14 @@ describe("CLI surface", () => {
     assert.equal(parseArgs(["--limit=nope"]).limit, Infinity);
   });
 
-  it("reports budget use and unmapped sources in the summary", () => {
+  it("reports budget use, stale removals and unmapped sources in the summary", () => {
     const text = formatSummary(
       { succeeded: [{ hunter: "A" }], failed: [{ hunter: "B", reason: "404" }], skipped: [] },
-      { entries: 3, assetBytes: 2 * 1024 * 1024, unmappedSources: ["Mystery Source"] }
+      { entries: 3, assetBytes: 2 * 1024 * 1024, staleRemoved: 242, unmappedSources: ["Mystery Source"] }
     );
     assert.match(text, /1 succeeded, 1 failed/);
     assert.match(text, /2\.00 MB of 12 MB budget/);
+    assert.match(text, /stale assets removed: 242/);
     assert.match(text, /Mystery Source/);
     assert.match(text, /FAILED\s+B: 404/);
   });

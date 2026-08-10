@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// Governing: ADR-0007 (Scrape the Full Hunter Roster into a Generated Dataset with Two-Size
-// Portraits), ADR-0005 (generated-committed data, revision provenance, shared wiki client),
-// ADR-0002 (offline, self-hosted, ethical scrape)
+// Governing: ADR-0007 (as amended 2026-08-10), ADR-0005 (generated-committed data, revision
+// provenance, shared wiki client), ADR-0002 (offline, self-hosted, ethical scrape)
+//
+// ADR-0007's title still says "Two-Size Portraits" — the amendment of 2026-08-10 deliberately kept
+// the title for referential stability and states that it is authoritative wherever it and the
+// decision body disagree. One trimmed portrait per hunter is what this script emits.
+//
 // Implements: SPEC-0004 REQ "Offline, Human-Invoked Scrape", REQ "One Visit Per Hunter Page Yields
-// Both Payloads", REQ "Generated, Committed Dataset File", REQ "Two Portrait Sizes Per Hunter",
-// REQ "Portrait Payload Budget", REQ "Consumption Contract Compatibility", REQ "Names-Only Mode",
-// REQ "Error Handling Standards", REQ "Image Processing Dependency Is Development-Only"
+// Both Payloads", REQ "Generated, Committed Dataset File", REQ "One Trimmed Portrait Per Hunter",
+// REQ "The List Card Is Knowingly Upscaled", REQ "Portrait Payload Budget",
+// REQ "Consumption Contract Compatibility", REQ "Names-Only Mode", REQ "Error Handling Standards",
+// REQ "Image Processing Dependency Is Development-Only"
 //
 // scripts/scrape-hunters.mjs
 //
@@ -80,7 +85,7 @@
 // rate limiter, the user agent, and the sentinel error classes are imported from scripts/lib/wiki.mjs
 // and defined nowhere here.
 
-import { mkdir, writeFile, readFile, access, unlink } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, access, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,43 +118,65 @@ export const HUNTERS_IMAGES_ROOT = path.join(REPO_ROOT, "client", "public", "ima
 export const ROSTER_PATH = "Hunters";
 
 // ---------------------------------------------------------------------------
-// Portrait sizing and budgets (SPEC-0004 REQ "Two Portrait Sizes Per Hunter", REQ "Portrait
-// Payload Budget"). These are the numbers ADR-0007 deliberately left to the spec, so they live
-// as named constants here rather than inline — moving one is a spec edit, not a code hunt.
+// Portrait budgets (SPEC-0004 REQ "One Trimmed Portrait Per Hunter", REQ "Portrait Payload
+// Budget"). These are the numbers ADR-0007 deliberately left to the spec, so they live as named
+// constants here rather than inline — moving one is a spec edit, not a code hunt.
+//
+// Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+//
+// There is no size table any more. The 2026-08-10 amendment replaced the thumbnail/full-size pair
+// with a single asset sized by its own subject, so a target width is not a thing this pipeline
+// has: the trimmed bounding box is the width. The 15 KB thumbnail ceiling is removed rather than
+// reassigned — it described an asset class that no longer exists, and holding the single asset to
+// it would fail hunters whose trimmed subject legitimately encodes above it.
 // ---------------------------------------------------------------------------
 
-export const PORTRAIT_SIZES = [
-  { name: "thumb", width: 192, maxBytes: 15 * 1024 },
-  { name: "full", width: 320, maxBytes: 25 * 1024 },
-];
+/** Per-asset ceiling. One asset per hunter, so this is the only per-asset budget there is. */
+export const PORTRAIT_MAX_BYTES = 25 * 1024;
 
-/** Total committed portrait payload ceiling, across every hunter and both sizes. */
+/** Total committed portrait payload ceiling, across every hunter. */
 export const TOTAL_BUDGET_BYTES = 12 * 1024 * 1024;
 
 /**
- * AVIF quality.
+ * AVIF quality. **Normative** — SPEC-0004 requires quality 70 explicitly, because the 25 KB
+ * per-asset budget below is derived from it. Changing this number is a spec edit.
  *
- * design.md leaves this open ("do the budgets survive contact with real art, and at what AVIF
- * quality setting?"). Measured against a real portrait (Hunter_The_Revenant.png, 384×256 PNG,
- * 58 KB) the answer is that the budgets are not close to binding:
+ * Measured against a real portrait (Hunter_The_Revenant.png, 384×256 PNG with alpha, 58 KB), the
+ * padded two-size pipeline this replaces landed at:
  *
  *   q=40  192px 2.4 KB   320px 4.1 KB
  *   q=70  192px 4.6 KB   320px 8.8 KB     <- chosen
  *   q=80  192px 5.4 KB   320px 10.8 KB
  *
- * against per-asset budgets of 15 KB and 25 KB. 70 buys visibly better fidelity than the quality
- * a bytes-first choice would pick while still leaving roughly 3× headroom on every asset, so a
- * busier-than-average portrait has room to be larger without failing its hunter.
+ * Trimming raises the per-asset figure — the asset is now all subject where before it was ~46%
+ * transparent padding — and sampled trimmed encodes at q=70 land at a mean of 10.1 KB and a
+ * maximum of 13.3 KB, projecting ~2.39 MB across the 242-hunter roster. That leaves roughly 2×
+ * headroom on the per-asset budget and 5× on the total, so a busier-than-average portrait has room
+ * to be larger without failing its hunter.
  */
 export const AVIF_QUALITY = 70;
 
 // ---------------------------------------------------------------------------
 // Sentinel errors specific to this payload. The shared client owns the ones every scrape needs;
-// SPEC-0004 adds "budget exceeded" to the list of modes callers must tell apart.
+// SPEC-0004 adds "budget exceeded" and "portrait source unusable" to the list of modes callers
+// must tell apart.
 // ---------------------------------------------------------------------------
 
 /** A generated asset exceeded its per-asset budget, or the run would exceed the total ceiling. */
 export class BudgetExceededError extends ScrapeError {}
+
+/**
+ * The portrait was fetched successfully but carries no subject to trim to: its alpha is zero at
+ * every pixel, so no bounding box exists.
+ *
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Error Handling Standards"
+ *
+ * Deliberately NOT folded into ImageAssetNotFoundError. The asset was found and fetched; it simply
+ * cannot be consumed. Collapsing the two would tell a maintainer the wiki is missing art when in
+ * fact the art is present and this pipeline cannot use it — which points at an entirely different
+ * remedy.
+ */
+export class PortraitSourceUnusableError extends ScrapeError {}
 
 /** The image-processing library is required for this mode but could not be loaded. */
 export class ImageProcessingUnavailableError extends ScrapeError {}
@@ -514,6 +541,11 @@ export function formatSummary(summary, extra = {}) {
       `  portrait payload: ${(extra.assetBytes / 1024 / 1024).toFixed(2)} MB of ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB budget`
     );
   }
+  // SPEC-0004 REQ "One Trimmed Portrait Per Hunter" requires the run to REPORT the count, not just
+  // perform the deletion — a silent cleanup is indistinguishable from no cleanup in a review.
+  if (extra.staleRemoved !== undefined) {
+    lines.push(`  stale assets removed: ${extra.staleRemoved}`);
+  }
   if (extra.unmappedSources?.length) {
     lines.push(`  UNMAPPED Source values (acquisition=null), ${extra.unmappedSources.length} distinct:`);
     for (const s of extra.unmappedSources) lines.push(`    - ${s}`);
@@ -543,40 +575,169 @@ export async function loadImageProcessor(importFn = (m) => import(m)) {
 }
 
 /**
- * Encode both portrait sizes from one source buffer.
+ * The smallest rectangle containing every pixel whose alpha is greater than zero.
  *
- * Returns [{ name, width, bytes, buffer }]. Throws BudgetExceededError if either size lands over
- * its per-asset budget — SPEC-0004 requires the oversized file NOT to be written, so the budget is
- * checked before anything reaches disk. A source narrower than a target width is re-encoded at its
- * native width rather than upscaled.
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+ *
+ * Returns { left, top, width, height }, or null when the source is fully transparent and therefore
+ * has no bounding box at all.
+ *
+ * The threshold is ZERO, and the box is computed here from raw pixels rather than delegated to
+ * sharp's `.trim()`. Two reasons, both required by the spec:
+ *
+ *   * sharp's trim defaults to a non-zero threshold and infers its background from the top-left
+ *     pixel. Both are heuristics. A near-transparent antialiased edge pixel (alpha 1..9) is subject
+ *     — discarding it shaves the silhouette, and it would do so by an amount that depends on the
+ *     encoder version rather than on the image.
+ *   * The spec requires that "two conforming implementations produce identical dimensions". An
+ *     explicit alpha > 0 scan is a definition; a library default is a moving target.
  */
-export async function encodePortraits(sourceBuffer, sharp, { hunter, url, quality = AVIF_QUALITY } = {}) {
+export async function findAlphaBoundingBox(sourceBuffer, sharp) {
+  const { data, info } = await sharp(sourceBuffer).raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+
+  // Raw output puts alpha last on every layout sharp emits (RGBA -> 4, grey+alpha -> 2). Callers
+  // only reach this for a source metadata() reported as having alpha, so the last channel is it.
+  const alpha = channels - 1;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width * channels;
+    for (let x = 0; x < width; x += 1) {
+      if (data[row + x * channels + alpha] > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < 0) return null;
+  return { left: minX, top: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+/**
+ * Encode one portrait from one source buffer: trim to the subject, then encode at native size.
+ *
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter",
+ * REQ "The List Card Is Knowingly Upscaled", REQ "Portrait Payload Budget"
+ *
+ * Returns { width, height, bytes, buffer, trimmed }. There is no resize step anywhere in here, by
+ * design: the trimmed subject is written at whatever resolution the wiki supplied. Where a surface
+ * wants more pixels than the source has — the 154×220 list card wants 440px of subject height and
+ * no hunter reaches it — the shortfall is a source-resolution ceiling, and manufacturing pixels to
+ * hide it would multiply the payload without adding detail.
+ *
+ * Two source shapes are handled explicitly rather than left to the image library:
+ *
+ *   * No alpha channel: nothing to trim, so it is encoded untrimmed at native resolution. Not a
+ *     failure — the hunter still needs a portrait.
+ *   * Alpha zero everywhere: no subject, so no bounding box. Fails with PortraitSourceUnusableError.
+ *
+ * Throws BudgetExceededError if the encode lands over the per-asset budget. SPEC-0004 requires the
+ * oversized file NOT to be written, so the budget is checked before anything reaches disk.
+ */
+export async function encodePortrait(
+  sourceBuffer,
+  sharp,
+  { hunter, url, quality = AVIF_QUALITY, maxBytes = PORTRAIT_MAX_BYTES } = {}
+) {
   const meta = await sharp(sourceBuffer).metadata();
-  const sourceWidth = meta.width || 0;
-  const encoded = [];
 
-  for (const size of PORTRAIT_SIZES) {
-    const targetWidth = sourceWidth > 0 ? Math.min(size.width, sourceWidth) : size.width;
-    const buffer = await sharp(sourceBuffer)
-      .resize({ width: targetWidth, withoutEnlargement: true })
-      .avif({ quality })
-      .toBuffer();
-
-    if (buffer.length > size.maxBytes) {
-      throw new BudgetExceededError(
-        `portrait "${size.name}" for "${hunter}" is ${buffer.length} bytes, over the ${size.maxBytes}-byte budget`,
+  let box = null;
+  if (meta.hasAlpha) {
+    box = await findAlphaBoundingBox(sourceBuffer, sharp);
+    if (!box) {
+      throw new PortraitSourceUnusableError(
+        `portrait source for "${hunter}" is fully transparent (alpha is zero at every pixel), ` +
+          `so it has no subject bounding box to trim to`,
         { item: hunter, url }
       );
     }
-    encoded.push({ name: size.name, width: targetWidth, bytes: buffer.length, buffer });
   }
 
-  return encoded;
+  // A fresh pipeline per stage: the bounding-box scan above consumed a `.raw()` one.
+  const pipeline = sharp(sourceBuffer);
+  const buffer = await (box ? pipeline.extract(box) : pipeline).avif({ quality }).toBuffer();
+
+  if (buffer.length > maxBytes) {
+    throw new BudgetExceededError(
+      `portrait for "${hunter}" is ${buffer.length} bytes, over the ${maxBytes}-byte budget`,
+      { item: hunter, url }
+    );
+  }
+
+  return {
+    width: box ? box.width : meta.width ?? null,
+    height: box ? box.height : meta.height ?? null,
+    bytes: buffer.length,
+    buffer,
+    trimmed: Boolean(box),
+  };
 }
 
-/** Asset path for a portrait slug and size — derivable by consumers without a manifest. */
-export function portraitAssetPath(imagesRoot, slug, sizeName) {
-  return path.join(imagesRoot, sizeName === "full" ? `${slug}.avif` : `${slug}-${sizeName}.avif`);
+/**
+ * Asset path for a portrait slug — derivable by consumers from the slug alone.
+ *
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption Contract Compatibility"
+ *
+ * No size segment, and no size argument: with one asset per hunter there is nothing to select
+ * between, so a consumer that held a `size` would be holding a parameter with one legal value.
+ */
+export function portraitAssetPath(imagesRoot, slug) {
+  return path.join(imagesRoot, `${slug}.avif`);
+}
+
+/**
+ * Delete every asset in the images root that the current run does not claim.
+ *
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+ *
+ * `keepFiles` is the set of file NAMES (not paths) the dataset points at. Anything else under the
+ * images root is an orphan: a `-thumb` variant from the two-size pipeline, or art for a hunter no
+ * longer in the roster. Both leave a file on disk that no dataset row references, and without this
+ * the 242 committed `-thumb` assets would survive every future run — which would make SPEC-0004's
+ * "only one asset per hunter remains" and total-payload scenarios permanently unfalsifiable.
+ *
+ * A removal failure is logged and counted as not-removed rather than thrown: a stale file the run
+ * could not unlink is a cleanup problem, not a reason to discard a successful scrape.
+ *
+ * Returns { removed, files }.
+ */
+export async function removeStaleAssets({
+  imagesRoot,
+  keepFiles,
+  fsReaddir = readdir,
+  fsUnlink = unlink,
+  log = logStructured,
+}) {
+  let names;
+  try {
+    names = await fsReaddir(imagesRoot);
+  } catch {
+    // No images directory yet — a names-only history, or a first run. Nothing stale by definition.
+    return { removed: 0, files: [] };
+  }
+
+  const files = [];
+  for (const name of names) {
+    if (!name.endsWith(".avif")) continue;
+    if (keepFiles.has(name)) continue;
+    try {
+      await fsUnlink(path.join(imagesRoot, name));
+      files.push(name);
+      log({ level: "info", event: "stale-asset-removed", file: name });
+    } catch (err) {
+      log({ level: "error", event: "stale-asset-remove-failed", file: name, reason: err.message });
+    }
+  }
+
+  return { removed: files.length, files };
 }
 
 // ---------------------------------------------------------------------------
@@ -593,12 +754,13 @@ async function pathExists(fsAccess, filePath) {
 }
 
 /**
- * Fetch, encode and write one variant's two portrait sizes.
+ * Fetch, trim, encode and write one variant's single portrait.
  *
- * All-or-nothing on disk. `encodePortraits` encodes and budget-checks both sizes before either is
- * written, and if the second write fails the first is removed again — so a variant never leaves a
- * half-written pair behind. Callers isolate this per variant so one variant's failure cannot
- * discard a sibling's work.
+ * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+ *
+ * All-or-nothing on disk. `encodePortrait` trims and budget-checks before anything is written, and
+ * a failed write unlinks whatever partial file it may have left. Callers isolate this per variant
+ * so one variant's failure cannot discard a sibling's work.
  *
  * Returns { assets, bytes, skipped }. Throws a sentinel with hunter/url context on failure.
  */
@@ -618,8 +780,8 @@ export async function producePortrait({ variant, name, portrait }, deps) {
     log = logStructured,
   } = deps;
 
-  const fullPath = portraitAssetPath(imagesRoot, portrait, "full");
-  if (!force && (await pathExists(fsAccess, fullPath))) {
+  const destPath = portraitAssetPath(imagesRoot, portrait);
+  if (!force && (await pathExists(fsAccess, destPath))) {
     log({ level: "info", event: "portrait-skipped", hunter: name, portrait, reason: "already on disk" });
     return { assets: [], bytes: 0, skipped: true };
   }
@@ -669,26 +831,17 @@ export async function producePortrait({ variant, name, portrait }, deps) {
     });
   }
 
-  // Throws BudgetExceededError before returning, so an over-budget size never reaches disk.
-  const encodedSizes = await encodePortraits(sourceBuffer, sharp, { hunter: name, url: mediaUrl });
-
-  const assets = [];
-  const written = [];
-  let bytes = 0;
+  // Throws BudgetExceededError (over budget) or PortraitSourceUnusableError (no subject) before
+  // returning, so neither an over-budget nor an unusable asset ever reaches disk.
+  const encoded = await encodePortrait(sourceBuffer, sharp, { hunter: name, url: mediaUrl });
 
   try {
     await fsMkdir(imagesRoot, { recursive: true });
-    for (const encoded of encodedSizes) {
-      const destPath = portraitAssetPath(imagesRoot, portrait, encoded.name);
-      await fsWriteFile(destPath, encoded.buffer);
-      written.push(destPath);
-      assets.push({ path: destPath, size: encoded.name, bytes: encoded.bytes });
-      bytes += encoded.bytes;
-    }
+    await fsWriteFile(destPath, encoded.buffer);
   } catch (err) {
-    // Roll back this variant's partial pair; a lone thumbnail with no full size is exactly the
-    // uncataloged orphan this function exists to prevent.
-    await Promise.all(written.map((p) => Promise.resolve(fsUnlink(p)).catch(() => {})));
+    // A failed write can still have created a truncated file; remove it rather than leave a
+    // corrupt asset that a later run would happily skip as "already on disk".
+    await Promise.resolve(fsUnlink(destPath)).catch(() => {});
     throw new ScrapeError(`failed to write portrait for "${name}" to ${imagesRoot}: ${err.message}`, {
       cause: err,
       item: name,
@@ -696,7 +849,30 @@ export async function producePortrait({ variant, name, portrait }, deps) {
     });
   }
 
-  return { assets, bytes, skipped: false };
+  log({
+    level: "info",
+    event: "portrait-written",
+    hunter: name,
+    portrait,
+    width: encoded.width,
+    height: encoded.height,
+    bytes: encoded.bytes,
+    trimmed: encoded.trimmed,
+  });
+
+  return {
+    assets: [
+      {
+        path: destPath,
+        bytes: encoded.bytes,
+        width: encoded.width,
+        height: encoded.height,
+        trimmed: encoded.trimmed,
+      },
+    ],
+    bytes: encoded.bytes,
+    skipped: false,
+  };
 }
 
 /**
@@ -921,6 +1097,8 @@ export async function runScrape(options = {}, deps = {}) {
     fsWriteFile = writeFile,
     fsMkdir = mkdir,
     fsReadFile = readFile,
+    fsReaddir = readdir,
+    fsUnlink = unlink,
     sharpLoader = loadImageProcessor,
     now = () => new Date().toISOString(),
   } = deps;
@@ -998,7 +1176,7 @@ export async function runScrape(options = {}, deps = {}) {
           fsMkdir,
           fsWriteFile,
           fsAccess: deps.fsAccess,
-          fsUnlink: deps.fsUnlink,
+          fsUnlink,
           sharp,
           namesOnly,
           force,
@@ -1087,6 +1265,28 @@ export async function runScrape(options = {}, deps = {}) {
   // Stable ordering by id keeps the committed diff readable across runs.
   allEntries.sort((a, b) => a.id.localeCompare(b.id));
 
+  // Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+  //
+  // Sweep orphans once the dataset is known, since the dataset is what defines "claimed". A file
+  // the run neither wrote nor skipped-because-present is either a `-thumb` variant from the
+  // two-size pipeline or art for a hunter the roster no longer lists; both are unreferenced.
+  //
+  // Deliberately confined to a full run. `--names-only` and `--dry-run` write no imagery and must
+  // delete none, and `--limit=N` is a development aid whose dataset covers a slice of the roster —
+  // sweeping against it would delete the assets for every hunter past N.
+  let staleRemoved = 0;
+  const sweepable = !namesOnly && !dryRun && limit === Infinity;
+  if (sweepable) {
+    const keepFiles = new Set(
+      allEntries
+        .filter((entry) => entry.portrait)
+        .map((entry) => path.basename(portraitAssetPath(imagesRoot, entry.portrait)))
+    );
+    const stale = await removeStaleAssets({ imagesRoot, keepFiles, fsReaddir, fsUnlink, log });
+    staleRemoved = stale.removed;
+    log({ level: "info", event: "stale-assets-swept", removed: stale.removed, kept: keepFiles.size });
+  }
+
   if (!dryRun) {
     try {
       await fsMkdir(path.dirname(datasetPath), { recursive: true });
@@ -1104,10 +1304,17 @@ export async function runScrape(options = {}, deps = {}) {
     skipped: summary.skipped.length,
     entries: allEntries.length,
     assetBytes: totalBytes,
+    staleRemoved,
     unmappedSources: unmappedSources.size,
   });
 
-  return { summary, entries: allEntries, assetBytes: totalBytes, unmappedSources: [...unmappedSources].sort() };
+  return {
+    summary,
+    entries: allEntries,
+    assetBytes: totalBytes,
+    staleRemoved,
+    unmappedSources: [...unmappedSources].sort(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1145,6 +1352,7 @@ async function main() {
     formatSummary(result.summary, {
       entries: result.entries.length,
       assetBytes: result.assetBytes,
+      staleRemoved: result.staleRemoved,
       unmappedSources: result.unmappedSources,
     })
   );
