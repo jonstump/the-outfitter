@@ -176,18 +176,25 @@ The set of a user's lists MUST NOT be derived from the distinct `listId` values 
 
 This capability consumes a hunters dataset; it does not specify how that dataset is produced. Scrape scope, field set, and refresh cadence are governed by a separate decision covering hunter data.
 
-The dataset SHALL provide, for each hunter, a stable identifier, a display name, and a portrait asset self-hosted under the application's own origin. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
+The dataset SHALL provide, for each hunter, a stable identifier, a display name, and portrait assets self-hosted under the application's own origin. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
-Consuming code MUST tolerate a dataset entry that lacks a portrait asset, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
+When the size appropriate to a context is unavailable, consuming code SHALL fall back to the other size before falling back to the placeholder. A too-large image is a performance cost; an empty tile is a defect.
+
+Consuming code MUST tolerate a dataset entry that lacks either or both portrait sizes, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
 
 #### Scenario: Portraits are served from the application's own origin
 
 - **WHEN** the application renders a list's portrait
 - **THEN** the image SHALL be served from the application's own origin, and no request SHALL be issued to the wiki
 
-#### Scenario: A portrait missing from disk falls back
+#### Scenario: A portrait missing from disk falls back across sizes
 
-- **WHEN** a list references a hunter whose portrait asset is absent
+- **WHEN** a context requests the thumbnail and only the full size exists, or requests the full size and only the thumbnail exists
+- **THEN** the UI SHALL render the size that does exist rather than a placeholder
+
+#### Scenario: Both portrait sizes missing falls back to a placeholder
+
+- **WHEN** a list references a hunter for which neither portrait size is present
 - **THEN** the UI SHALL fall back to a neutral placeholder using the same fallback mechanism SPEC-0001 defines for items, and SHALL NOT render a broken image
 
 #### Scenario: A list survives its hunter leaving the dataset
@@ -199,7 +206,11 @@ Consuming code MUST tolerate a dataset entry that lacks a portrait asset, and MU
 
 Because two lists MAY share a hunter, a list SHALL carry a distinguishing visual attribute that depends on neither its name nor its portrait. An accent colour SHALL be assigned at creation and SHALL be user-editable.
 
-Distinct lists SHOULD receive distinct accent colours on creation where any remain unused. The system MUST NOT reject or prevent a duplicate accent colour.
+The accent SHALL be drawn from the fixed six-value palette defined in design.md and exposed as CSS custom properties in `client/src/styles/global.css`. Ad-hoc colour values MUST NOT be used. Every palette value SHALL meet WCAG 2.1 SC 1.4.11 (3:1 non-text contrast) against the panel, card, and page backgrounds.
+
+Assignment on creation SHALL select the least-used palette value among the owner's existing lists. Distinct lists SHOULD therefore receive distinct accent colours while any remain unused. The system MUST NOT reject or prevent a duplicate accent colour.
+
+Because palette values are separated primarily by hue rather than luminance, the accent MUST NOT be the sole means of distinguishing one list from another; the list name remains the primary accessible identity.
 
 The accent attribute SHALL be persisted on the list record.
 
@@ -218,21 +229,28 @@ The accent attribute SHALL be persisted on the list record.
 - **WHEN** a user assigns an accent colour already used by another of their lists
 - **THEN** the assignment SHALL succeed without warning or rejection
 
-### Requirement: The Hunter Picker Indicates Reuse Without Restricting It
+### Requirement: The Hunter Picker Does Not Restrict or Mark Reuse
 
-The picker SHALL indicate which hunters are already referenced by the user's other lists. That indication SHALL be informational only: the picker MUST NOT disable, hide, reorder-away, or otherwise prevent selection of an already-used hunter.
+The picker MUST NOT disable, hide, reorder-away, or otherwise prevent selection of a hunter already referenced by the user's other lists. Every hunter in the dataset SHALL be selectable at all times.
 
-The indication MUST NOT be conveyed by colour alone, and MUST be exposed to assistive technology as part of the option's accessible name or description.
+The picker MUST NOT mark or otherwise call out which hunters are already in use. Reuse is an unremarkable state, and surfacing it invites a user to read an unmarked hunter as the "correct" choice — the opposite of the intent. Lists that share a hunter are distinguished by their accent colour and name instead.
+
+The picker SHALL offer an explicit "no portrait" choice, so a list can be created without selecting any hunter.
 
 #### Scenario: An already-used hunter remains selectable
 
 - **WHEN** a user opens the picker and selects a hunter already used by another of their lists
 - **THEN** the selection SHALL succeed, and a new list SHALL be created referencing that hunter
 
-#### Scenario: Reuse is visible before selection
+#### Scenario: The picker draws no distinction between used and unused hunters
 
 - **WHEN** the picker is displayed and at least one hunter is already used by another list
-- **THEN** those hunters SHALL be marked as in use, by a means that does not rely on colour alone
+- **THEN** those hunters SHALL be presented identically to unused hunters, with no badge, dimming, reordering, or count
+
+#### Scenario: A list can be created with no portrait
+
+- **WHEN** a user chooses the "no portrait" option in the picker
+- **THEN** a list SHALL be created with a null `hunterId`, rendering a monogram derived from its name
 
 ### Requirement: List Ordering and Sorting
 
@@ -240,8 +258,8 @@ Lists SHALL be presented in alphabetical order by list display name by default. 
 
 - alphabetical by the display name of the list's hunter, resolved through the hunters dataset
 - creation date
-- most recently used
-- number of loadouts held
+- most recently used, where "used" means the list was last opened by the user
+- number of loadouts held, descending, ties broken by list display name
 
 Under hunter-name ordering, a list that references no hunter, or whose `hunterId` is absent from the dataset, SHALL be grouped together after all lists that resolve to a hunter, ordered among themselves by list display name. Such lists MUST NOT be hidden, and MUST NOT be sorted as though their hunter name were an empty string interleaved with real names.
 
