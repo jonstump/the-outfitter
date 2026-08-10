@@ -31,10 +31,15 @@ export default function App() {
           <EquipmentPanel />
           <TraitsPanel />
           <ActionsPanel />
-          <LoadoutListsPanel />
         </section>
         <section className="right-column">
           <Picker />
+        </section>
+        {/* Full-width row beneath both columns: the roster is a grid of cards, so it wants
+            the whole page rather than a 400px column. .app-main already wraps, so a
+            flex-basis of 100% drops this onto its own line. */}
+        <section className="loadouts-row">
+          <LoadoutListsPanel />
         </section>
       </main>
       <footer className="app-footer">
