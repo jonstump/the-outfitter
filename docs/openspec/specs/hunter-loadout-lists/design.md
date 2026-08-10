@@ -138,6 +138,37 @@ The non-obvious cost is what happens *after* a successful move: the row leaves t
 - *Custom menu button*: rejected — every affordance the native select provides would have to be rebuilt and retested, for styling control this design does not need.
 - *Modal picker*: rejected — far too heavy for a per-row operation, and it hides the roster the user is choosing among.
 
+### The picker filters, because 285 portraits is not a grid
+
+**Choice**: The picker requires name search, classification filters, and lazy-loaded imagery.
+
+**Rationale**: This was discovered by counting rather than reasoned from first principles. The wiki's roster page lists roughly **285 hunters**. A flat grid renders 285 tiles and, at the portrait budgets SPEC-0004 sets, loads several megabytes of images to let someone pick one.
+
+That is not a scale problem to solve later. It is the difference between a picker that works and one that hangs a phone, so filtering is specified as a functional requirement rather than an enhancement.
+
+It also changes what the SPEC-0004 classification fields are for. They were originally framed as preparation for future sorting; at this roster size they are what filtering *runs on*, which is why SPEC-0004 now requires `acquisition` and `obtainable` rather than leaving them optional.
+
+The requirement is written to not collide with "The Hunter Picker Does Not Restrict or Mark Reuse". Filtering narrows *which hunters are candidates*; it never distinguishes among the candidates it shows. A filtered-out hunter is out of scope for this selection, which is a different thing from a shown hunter being marked as already used.
+
+### Favorites filter and sort; they do not gate
+
+**Choice**: Favorites are a token-scoped server-side collection, surfaced as a sort priority plus an optional "favorites only" toggle over the full roster. Never pre-populated.
+
+**Rationale**: Favorites were proposed as a way to cut the picker's loading cost. They do not do that, and it is worth being precise about why: the picker requirement already mandates lazy loading, so bytes fetched are proportional to what the user scrolls to, not to the roster. A favorites-only picker and a lazily-loaded 285-hunter picker fetch roughly the same initial payload — whatever fills the viewport.
+
+What favorites actually solve is *finding* the handful of hunters someone returns to among 285. That is a real problem, and arguably the larger one, since 285 is tiresome to scroll even when it is cheap.
+
+Choosing filter-over-gate follows directly. A gate needs a seeding answer, because you cannot favorite a hunter you have never seen — which is what makes a brand-new user's picker empty. A filter has no cold start at all: an empty favorites set is simply no filter applied, and the picker behaves exactly as it would without the feature.
+
+Not pre-populating is the same instinct. Seeding favorites randomly, as was floated, would write preferences the user never expressed and make their first action removing hunters they did not choose. If a head start is wanted later, "recently used" derives one from actual behaviour instead of inventing it.
+
+Storage mirrors `loadoutLists` exactly — a token-scoped collection under the ownership rules issue #17 established — so the ownership checks and their tests carry over rather than being reinvented.
+
+**Alternatives considered**:
+- *Gate: show only favorites, with a "browse all" escape*: rejected — strongest at reducing 285 to a handful, but it hides hunters the user has not discovered, and discovery is the whole reason a picker exists.
+- *Pin only, no toggle*: viable and smaller, but with 285 hunters the "favorites only" view is the one a returning user wants most, and it costs one boolean.
+- *Client-only, in localStorage*: rejected for the reason SPEC-0003 already gives about grouping — it would split the durability model, with lists surviving server-side while the preferences that organise them do not.
+
 ### List ordering is client-side, with alphabetical as the default
 
 **Choice**: Default alphabetical by list display name. Alternatives: alphabetical by hunter name, creation date, most-recently-used, and loadout-count. Unassigned holds a fixed position regardless of sort. The preference is client state.

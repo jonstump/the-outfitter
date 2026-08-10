@@ -247,14 +247,23 @@ change the decision** — generated JSON, separate scripts, shared wiki client, 
 ids never rewritten all stand. They constrain how `scrape-stats.mjs` must be built, and they
 correct one sub-decision that is unsafe as written.
 
+These findings landed alongside the shared-wiki-client extraction this ADR called for, which
+merged separately as PR #115. `WIKI_TITLE_OVERRIDES`, `KNOWN_CATALOG_DUPLICATES`,
+`resolveWikiPath()` and `collectCatalogItems()` therefore now live in **`scripts/lib/wiki.mjs`**,
+not in `scrape-images.mjs`; the extraction moved them verbatim, bug included, so the corrections
+below were applied in their new home.
+
 Two findings were acted on immediately, because they were live defects rather than future risks:
 
-* `scripts/scrape-images.mjs` mapped the catalog's `winfield-m1873` to `null` as a "duplicate",
-  on the belief that a separate `Ranger 73` row covered it. **No such row exists.** The wiki
-  renamed Winfield M1873 → Ranger 73 in Update 2.0, so the only catalog entry for a live weapon
-  was being skipped by every run. Now mapped to `Weapons/Ranger_73`.
+* The override table mapped the catalog's `winfield-m1873` to `null` as a "duplicate", on the
+  belief that a separate `Ranger 73` row covered it. **No such row exists.** The wiki renamed
+  Winfield M1873 → Ranger 73 in Update 2.0, so the only catalog entry for a live weapon was
+  being skipped by every run. Now mapped to `Weapons/Ranger_73`, taking weapon coverage from
+  37 of 39 rows to 38 (the remaining skip is the genuine duplicate).
 * `WIKI_TITLE_OVERRIDES` and `KNOWN_CATALOG_DUPLICATES` are now **keyed by catalog `id`, not by
-  display name** — see "The name write-through hazard" below.
+  display name** — see "The name write-through hazard" below. `resolveWikiPath()` takes
+  `(category, id, name)` accordingly: the id selects the override, the name only feeds the
+  default namespaced path.
 
 ### The name write-through hazard
 

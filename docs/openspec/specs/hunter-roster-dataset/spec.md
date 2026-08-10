@@ -54,6 +54,18 @@ The scrape SHALL write `client/src/data/hunters.json`, committed to the reposito
 
 Each entry SHALL carry: a stable `id`, a `name` for display, a `description`, a `portrait` slug, the `sourceRevision` the entry was derived from, and an `ingestedAt` timestamp.
 
+Each entry SHALL additionally carry the classification the picker filters on:
+
+- `source` — the wiki's own `Source` field, stored **verbatim** (e.g. `"Meridian Turncoat DLC"`)
+- `acquisition` — a normalised value derived from it, one of: `free`, `hunt-dollars`, `soul-survivor`, `dark-tribute`, `blood-bonds`, `dlc`, `event`, `mythic`, `story-challenge`, `twitch-drop`, `bloodline`, `prestige`, `progression`
+- `obtainable` — whether the hunter can still be acquired
+
+Both the raw and normalised forms are stored deliberately. `acquisition` is derived and can therefore be wrong; `source` is what the wiki asserts and cannot be. Keeping both means a miscategorisation is fixed by re-deriving from data already on disk rather than by re-scraping every page — the same reasoning ADR-0007 applies to revision provenance.
+
+`obtainable` is a separate field rather than an inference from `acquisition`, because "how was this obtained" and "can I still get it" are different questions: Mythic hunters are permanently unobtainable, and event and Twitch-drop hunters may or may not be, depending on whether that event returns.
+
+An entry whose `Source` cannot be parsed SHALL still be written, with `source` captured verbatim and `acquisition` null, rather than being dropped from the roster.
+
 Ids SHALL be produced by the shared slug derivation, so that re-running the scrape never re-keys an existing hunter.
 
 The dataset SHALL cover the full roster the wiki lists, not a subset.
@@ -73,18 +85,30 @@ The dataset SHALL cover the full roster the wiki lists, not a subset.
 - **WHEN** a hunter's wiki page title changes between runs
 - **THEN** the entry SHALL keep its original `id` and update only its `name`
 
+#### Scenario: Classification is captured raw and normalised
+
+- **WHEN** a hunter's page carries `Source: "Meridian Turncoat DLC"`
+- **THEN** the entry SHALL store that string verbatim in `source` and `dlc` in `acquisition`
+
+#### Scenario: An unparseable Source does not drop the hunter
+
+- **WHEN** a hunter's `Source` cannot be mapped to a known acquisition value
+- **THEN** the entry SHALL still be written with `source` verbatim and `acquisition` null, so the hunter remains selectable
+
 ### Requirement: Two Portrait Sizes Per Hunter
 
-The scrape SHALL emit two self-hosted portrait assets per hunter under `client/public/images/hunters/`: a thumbnail at **192px** wide and a full size at **440px** wide, each preserving the source aspect ratio.
+The scrape SHALL emit two self-hosted portrait assets per hunter under `client/public/images/hunters/`: a thumbnail at **192px** wide and a full size at **320px** wide, each preserving the source aspect ratio.
 
-Both sizes SHALL be downscaled and re-encoded from the wiki original rather than stored as served. Portraits SHALL be encoded as **WebP**.
+Both sizes SHALL be downscaled and re-encoded from the wiki original rather than stored as served. Portraits SHALL be encoded as **AVIF**.
+
+Both dimensions are derived from what actually renders, at 2× for high-DPI displays. The largest place a portrait appears is a 154×220 list card, which needs 308px wide; 320px gives modest headroom. Picker tiles are 96px, needing 192px. Storing detail beyond what any surface displays costs bytes across the whole roster and buys nothing — a full size at 440px wide would carry roughly twice the pixels of anything on screen.
 
 A source image narrower than a target width SHALL NOT be upscaled; it SHALL be re-encoded at its native width.
 
 #### Scenario: Both sizes are produced
 
 - **WHEN** a hunter with an available portrait is scraped
-- **THEN** both a 192px-wide and a 440px-wide WebP SHALL be written for that hunter
+- **THEN** both a 192px-wide and a 320px-wide AVIF SHALL be written for that hunter
 
 #### Scenario: The thumbnail is materially smaller
 
@@ -93,24 +117,42 @@ A source image narrower than a target width SHALL NOT be upscaled; it SHALL be r
 
 #### Scenario: Small sources are not upscaled
 
-- **WHEN** a source portrait is narrower than 440px
+- **WHEN** a source portrait is narrower than 320px
 - **THEN** the full-size asset SHALL be written at the source's native width rather than upscaled
+
+#### Scenario: The full size stays crisp at the largest render
+
+- **WHEN** the full size is displayed on the 154×220 list card on a 2× display
+- **THEN** the asset SHALL be at least as wide as the rendered CSS width doubled, so it is not upscaled by the browser
 
 ### Requirement: Portrait Payload Budget
 
-Portraits are the heaviest assets this application ships, and a picker renders many at once. The thumbnail SHALL be at most **40 KB** and the full size at most **150 KB** per hunter.
+Portraits are the heaviest assets this application ships. The roster is roughly **285 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by 285.
 
-A generated asset exceeding its budget SHALL fail that hunter with a recorded reason rather than being written, so an oversized asset cannot reach the repository unnoticed.
+**Per asset:** the thumbnail SHALL be at most **15 KB** and the full size at most **25 KB**.
+
+**In total:** the committed portrait payload SHALL NOT exceed **12 MB** across all hunters and both sizes.
+
+These follow from the dimensions and encoder above rather than being chosen independently: a 192px AVIF photograph and a 320px one are comfortably inside those figures at good quality. They remain estimates until measured against real art — see the open questions in design.md.
+
+A generated asset exceeding its per-asset budget SHALL fail that hunter with a recorded reason rather than being written. A run whose output would exceed the total ceiling SHALL fail with the projected total and the ceiling, rather than writing a partial set that silently breaches it.
+
+Both are enforced by failing, not warning. An oversized asset is invisible in review — a reviewer sees a filename, not a byte count — and a total overage is invisible in any single file.
 
 #### Scenario: An oversized asset is rejected, not written
 
-- **WHEN** encoding produces a thumbnail above 40 KB or a full size above 150 KB
+- **WHEN** encoding produces a thumbnail above 15 KB or a full size above 25 KB
 - **THEN** that hunter SHALL be recorded as failed with the measured size and the budget, and the oversized file SHALL NOT be written
+
+#### Scenario: A run exceeding the total ceiling fails
+
+- **WHEN** the projected total across all hunters and both sizes would exceed 12 MB
+- **THEN** the run SHALL fail, reporting the projected total and the ceiling, rather than committing a partial set
 
 #### Scenario: The committed set is within budget
 
 - **WHEN** the committed portrait assets are measured
-- **THEN** every thumbnail SHALL be at most 40 KB and every full size at most 150 KB
+- **THEN** every thumbnail SHALL be at most 15 KB, every full size at most 25 KB, and the total at most 12 MB
 
 ### Requirement: Consumption Contract Compatibility
 

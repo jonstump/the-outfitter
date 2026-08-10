@@ -12,8 +12,8 @@
 
 This audit was assembled from three sources, in descending order of reliability:
 
-1. **The repo itself.** `scripts/scrape-images.mjs` already carries a
-   `WIKI_TITLE_OVERRIDES` map that its own header documents as *"Verified against the
+1. **The repo itself.** The shared wiki client (`scripts/lib/wiki.mjs`, extracted from
+   `scrape-images.mjs` in PR #115) carries a `WIKI_TITLE_OVERRIDES` map that its own header documents as *"Verified against the
    wiki's own sitemap (sitemap-huntshowdown_en-NS_0)"*. Every rename in List 1 that
    appears in that map is therefore already sitemap-confirmed inside this codebase.
 2. **Wiki-derived search results.** Page titles, URL slugs, and variant names below were
@@ -91,15 +91,15 @@ stale pre-`1896` display names left over from Update 2.0's brand-wide rename.
 
 | App id / name | File | Reason | Last patch valid | Wiki page path | Notes |
 |---|---|---|---|---|---|
-| `winfield-m1873c` / "Winfield M1873C" | `client/src/data/catalog.js:81` | **Duplicate row.** Same weapon as `frontier-73c`, which is already in the catalog under its current name. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Frontier_73C` | `scrape-images.mjs` maps it to `null` and lists it in `KNOWN_CATALOG_DUPLICATES`; it is why no `winfield-m1873c.png` exists. ⚠️ **Do not simply delete the row** — see the correction below. |
-| `winfield-m1873` / "Winfield M1873" | `client/src/data/catalog.js:82` | **Renamed to "Ranger 73".** The catalog has no `ranger-73` row, so this weapon currently has no valid entry. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Ranger_73` | ⚠️ `scrape-images.mjs` maps this to `null` with the comment *"the post-rename entry 'Ranger 73' covers this weapon"* — **that comment is wrong; no such entry exists.** The image scraper is therefore silently skipping a live weapon. Per ADR-0005, fix by keeping id `winfield-m1873` and setting name → `Ranger 73`; do **not** mint a new id. |
+| `winfield-m1873c` / "Winfield M1873C" | `client/src/data/catalog.js:81` | **Duplicate row.** Same weapon as `frontier-73c`, which is already in the catalog under its current name. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Frontier_73C` | the shared wiki client maps it to `null` and lists it in `KNOWN_CATALOG_DUPLICATES`; it is why no `winfield-m1873c.png` exists. ⚠️ **Do not simply delete the row** — see the correction below. |
+| `winfield-m1873` / "Winfield M1873" | `client/src/data/catalog.js:82` | **Renamed to "Ranger 73".** The catalog has no `ranger-73` row, so this weapon currently has no valid entry. | Update 1.15 (pre-`1896`) | `/wiki/Weapons/Ranger_73` | ⚠️ The shared wiki client mapped this to `null` with the comment *"the post-rename entry 'Ranger 73' covers this weapon"* — **that comment is wrong; no such entry exists.** The image scraper is therefore silently skipping a live weapon. Per ADR-0005, fix by keeping id `winfield-m1873` and setting name → `Ranger 73`; do **not** mint a new id. |
 | `bomb-lance` / "Bomb Lance" | `client/src/data/catalog.js:86` | **Reworked, not removed.** Update 2.1 promoted the **Bomb Launcher** to family base and demoted the Bomb Lance to an unlock within that family. | Still live | `/wiki/Weapons/Bomb_Lance` | The page still exists, so the row stays valid. But the app is now modelling a variant as if it were a base weapon, and is missing the family base (`/wiki/Weapons/Bomb_Launcher`, List 2). Also grouped `Melee` in-app while the wiki treats it as a special/large-slot weapon. |
 
 ### 1B — Renamed in Update 2.0 (`1896`); id keeps, display name is stale
 
 All fourteen are the same failure: the catalog carries the pre-`1896` branded name, the wiki
 moved to the short post-rename title. All of these paths are **sitemap-verified in-repo** via
-`scripts/scrape-images.mjs` `WIKI_TITLE_OVERRIDES`. Last patch where the old name was valid:
+`scripts/lib/wiki.mjs` `WIKI_TITLE_OVERRIDES`. Last patch where the old name was valid:
 **Update 1.15**, superseded by **Update 2.0**.
 
 | App id / name | Current wiki title | Wiki page path |
@@ -161,7 +161,7 @@ precisely the ones a hand-written list would miss.
 | Bomb Launcher | `/wiki/Weapons/Bomb_Launcher` | Special, large slot | N/A — **family base; Bomb Lance became its unlock in Update 2.1** | Reclassification not tracked | projectile damage, blast radius, ammo pool, reload |
 | Mosin Obrez | `/wiki/Weapons/Mosin_Obrez` | Special Long. Wiki quotes cost **290**, size **2** `[VERIFY]` | N/A — **top-level family page, NOT a Mosin-Nagant subpage** | Never tracked | full rifle stat block |
 | Machete | `/wiki/Weapons/Machete` | Melee, small slot | N/A | Never tracked | light/heavy melee damage, stamina cost per heavy (wiki: 5 heavies), range, swing speed |
-| Katana | `/wiki/Weapons/Katana` | Melee, 2 slots | N/A | **Present in app as a TOOL, not a weapon** (`TOOLS`, cost 100). `scrape-images.mjs` already cross-maps it to the Weapons namespace. | light/heavy melee damage, sheathed first-strike bonus, stamina |
+| Katana | `/wiki/Weapons/Katana` | Melee, 2 slots | N/A | **Present in app as a TOOL, not a weapon** (`TOOLS`, cost 100). the shared wiki client already cross-maps it to the Weapons namespace. | light/heavy melee damage, sheathed first-strike bonus, stamina |
 | Chu Ko Nu | `/wiki/Weapons/Chu_Ko_Nu` `[VERIFY path]` | Hand-crossbow family, special ammo | `[VERIFY — sibling or variant of Hand Crossbow]` | Never tracked | bolt damage, velocity, magazine, reload, retrievable-bolt flag |
 | Talon | `[VERIFY — ambiguous]` | Melee `[VERIFY]` | `[VERIFY]` | Never tracked | **Do not add without resolving.** "Talon" is both a standalone melee weapon and a variant suffix on at least four families (Romero 77, Ranger 73, Lebel 1886). Resolve the bare `Talon` page before creating any row. |
 
@@ -306,7 +306,7 @@ Compact-ammo weapon, so its ammo pricing is wrong in the budget math today.
 Every row in **List 1B** is simultaneously a List 3 `name` discrepancy. Per ADR-0005, the fix
 is a name-only write-through — id preserved.
 
-**Confidence: HIGH** (sitemap-verified in `scripts/scrape-images.mjs`).
+**Confidence: HIGH** (sitemap-verified in `scripts/lib/wiki.mjs`).
 
 ### 3.5 — `sparks-pistol` / "Sparks Pistol"
 
@@ -539,8 +539,8 @@ revision-diff baseline ADR-0005 wants):
 These are the things that will break a naive crawler.
 
 **1. Everything is namespaced.** Pages are `/wiki/Weapons/{Title}`, never `/wiki/{Title}`.
-`scripts/scrape-images.mjs` already gets this right (`WIKI_CATEGORY`); `scrape-stats.mjs`
-must inherit it from the shared `scripts/lib/wiki.mjs` rather than reimplementing it. ADR-0005
+`scripts/lib/wiki.mjs` already gets this right (`WIKI_CATEGORY`); `scrape-stats.mjs`
+must import it from there rather than reimplementing it. ADR-0005
 makes this non-negotiable: a second `slugify()` is a listed failure mode.
 
 **2. Variants are subpages, and depth is not uniform.** `/wiki/Weapons/{Family}/{Variant}` is
@@ -582,7 +582,7 @@ description, historical background, and recommended-traits sections are body pro
 down the page. Two different extractors. Recommended traits are wiki-editorial, not game data
 — do not persist them as if they were.
 
-**9. The sitemap lags.** `scrape-images.mjs` already warns that the sitemap trails live edits
+**9. The sitemap lags.** `scripts/lib/wiki.mjs` already warns that the sitemap trails live edits
 by months. For a *new* weapon (the highest-value case) the sitemap is the least reliable
 source. Prefer `Category:Weapons` for discovery and reserve the sitemap for bulk path
 verification, exactly as the existing header describes.
@@ -631,13 +631,15 @@ row stays and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
 
 1. ✅ **Done — the two live defects, fixed by hand, no scrape needed.**
    `frontier-73c`'s `ammoClass` corrected `medium` → `compact` (it was pricing ammo from the
-   wrong pool), and `scripts/scrape-images.mjs`'s incorrect "Ranger 73" duplicate mapping
+   wrong pool), and the shared wiki client's incorrect "Ranger 73" duplicate mapping
    replaced with the real `Weapons/Ranger_73` path, so that weapon is no longer skipped by
    every run.
 2. ✅ **Done — `WIKI_TITLE_OVERRIDES` re-keyed by catalog `id`**, so ADR-0005's mandated
    display-name write-through cannot silently invalidate the path map.
-3. **Extract `scripts/lib/wiki.mjs`** — ADR-0005 states this is a prerequisite, not a
-   follow-up.
+3. ✅ **Done (PR #115, merged to `main` separately) — `scripts/lib/wiki.mjs` extracted.**
+   ADR-0005 required this before `scrape-stats.mjs` is written. Note the extraction moved the
+   override table verbatim, bug included, so items 1 and 2 above were re-applied in its new
+   home after merging `main` into this branch.
 4. **Crawl `Category:Weapons` and diff against the catalog.** Publish the delta. This
    supersedes List 2 with a complete, machine-generated inventory.
 5. **Run `scrape-stats.mjs` in additive mode** (no `--write-catalog`) to seed
