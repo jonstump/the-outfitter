@@ -651,3 +651,8 @@ row stays and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
 6. **Then** design the variant schema and import List 2.
 7. **Separately**, decide how to retire duplicate catalog rows given the legacy-index
    constraint above.
+8. **Separately**, decide whether saved loadouts should persist the ammo *id* rather than its
+   index into `AMMO[ammoClass]`. Today `loadoutCodec.js` stores `w.a` as a bare number, so
+   changing a weapon's `ammoClass` silently re-resolves every saved selection for it against a
+   different table — the one-time cost of item 1's `frontier-73c` fix, and a recurring hazard
+   once the scraper writes `ammoClass` through in bulk. See ADR-0005's amendment.

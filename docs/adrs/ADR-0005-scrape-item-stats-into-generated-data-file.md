@@ -297,6 +297,41 @@ cleaner long-term fix — deriving the image slug from `id` rather than from the
 would decouple the two permanently, but it re-opens ADR-0002's asset-path contract and would
 rename 37 committed files, so it belongs in its own decision rather than being smuggled in here.
 
+### The ammo-class write-through hazard
+
+Surfaced in review of the audit's `frontier-73c` fix, and it is the same shape as the name
+hazard above: a field this ADR makes scraper-writable is also a field something else silently
+depends on.
+
+"Precedence: the wiki is authoritative" names `ammoClass` explicitly as a write-through field.
+But a weapon's selected ammo is persisted as a **bare index** into `AMMO[ammoClass]` —
+`loadoutCodec.js` stores `w.a` as a number and `calc.js` reads it back as
+`AMMO[WEAPONS[w.i][4]][w.a][1]`. The index is resolved against whatever ammo class the catalog
+carries *now*, so changing a weapon's `ammoClass` re-points every saved selection for that
+weapon at a different row of a different table.
+
+Nothing catches it. `AMMO.compact` and `AMMO.medium` are both length 5, so no bounds check
+trips; `fromV1` only checks `Number.isInteger`. The one-time cost of the `frontier-73c`
+correction in this PR is exactly this, and index 1 is the worst case — Spitzer ($60) becomes
+High Velocity ($13), a $47 error in a budget calculator, with the ammo's *name* changing too.
+
+That instance is accepted rather than migrated: it needs a `FORMAT_VERSION` bump to fix
+properly, and the affected set is loadouts that both use that one weapon and picked a
+non-default ammo. **The general case is not acceptable**, because the scraper will be applying
+`ammoClass` changes in bulk and unattended. Therefore: `scrape-stats.mjs` MUST treat an
+`ammoClass` change as a breaking data migration, not a field update — it needs a
+`FORMAT_VERSION` bump with a migration that drops or remaps affected ammo selections, on the
+same reasoning that made `w.a`-by-index acceptable only while ammo classes were hand-frozen.
+The durable fix is to persist the ammo *id* rather than its index, which removes the coupling
+entirely; that is a wire-format decision and belongs in its own ADR.
+
+Two of this ADR's write-through fields have now turned out to carry hidden coupling — display
+name to the image path, ammo class to the saved-ammo index. That is a pattern, not two
+coincidences: "the wiki wins" is safe for fields nothing else keys on, and the guardrails this
+ADR specifies (reviewable diff, range assertions, explicit `--write-catalog`) check whether a
+value is *plausible*, never whether changing it invalidates something downstream. Before adding
+any further field to the write-through set, check what else reads it positionally.
+
 ### The wiki's page organization, as the parser will meet it
 
 Recorded because each one is a way a reasonable parser gets a well-formed wrong answer, which is
@@ -371,6 +406,8 @@ keys with identical scraped content, and the existing confirmation check will pa
   taken on trust (this is what let the `Ranger 73` mistake survive)
 * A `--write-catalog` run that changes any display name either renames the matching image assets
   or refuses to apply the name change, and reports name changes separately from numeric ones
+* A `--write-catalog` run that changes any `ammoClass` is gated behind a `FORMAT_VERSION` bump
+  and a migration for saved ammo selections, rather than applying as an ordinary field update
 * World weapons are classified and skipped, not reported as parse failures
 * The run summary states coverage against `Category:Weapons` (pages seen vs. catalog rows), so a
   green run over 39 of 146 pages cannot read as complete
