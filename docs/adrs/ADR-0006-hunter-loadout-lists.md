@@ -2,6 +2,7 @@
 status: proposed
 date: 2026-08-09
 decision-makers: [jmstump]
+consulted: ["Magno (Discord: magno2)"]
 extends: [ADR-0005]
 related: [ADR-0002]
 ---
@@ -12,9 +13,11 @@ related: [ADR-0002]
 
 Saved loadouts today are a flat list. A record is `{ id, owner, name, data, updatedAt }` in `server/data/db.json`, scoped to a client-issued token (issue #17), and `SavedLoadoutsPanel` renders every one of them in a single undifferentiated column. Once a user has more than a handful, the only organizing tool is the name field — people end up prefixing names by hand ("Rat — long ammo", "Rat — shotgun") to fake the grouping they actually want.
 
-The request is to group saves under hunters: pick a hunter, file as many loadouts under it as you like, with a catch-all for anything unfiled and a "retire" action to remove a group.
+The request came from **Magno** (Discord: `magno2`), a Hunt: Showdown player using the tool: group saves under hunters — pick a hunter, file as many loadouts under it as you like, with a catch-all for anything unfiled and a "retire" action to remove a group.
 
-**A hunter here is a list, not a simulation.** Nothing about in-game hunter mechanics — permadeath, procedural generation, recruitment cost, carried traits — is being modeled. The reason to involve hunters at all is that a folder with a face and a name is a better organizing affordance than a bare text label.
+That provenance is worth recording. This is the first feature request to reach the project from a player rather than from its author, which makes it evidence about real usage rather than a guess: the flat saved-loadouts list stopped scaling for someone who was actually living with it.
+
+**A hunter here is a playlist, not a simulation.** The analogy is exact and worth holding onto: a playlist has a name you choose and cover art you pick, two playlists may wear the same cover, a track may sit in one or in none, and deleting a playlist deletes the playlist rather than the tracks. Nothing about in-game hunter mechanics — permadeath, procedural generation, recruitment cost, carried traits — is being modeled. The reason to involve hunters at all is that a container with a face and a name is a better organizing affordance than a bare text label.
 
 That framing raises the question this ADR turns on. If the portrait is what makes a group feel like a hunter, does the *hunter* have to be the group's identity? Binding them one-to-one caps a user at as many lists as there are hunters and makes "shotgun experiments" inexpressible. So: how are lists identified, where do the portraits come from, and what happens to a list's loadouts when it's retired?
 
@@ -51,13 +54,17 @@ Chosen option: **user-named list records, each illustrated with a hunter portrai
 
 Eight sub-decisions follow.
 
-**The portrait library is generated, committed catalog data.** A new scrape payload writes `client/src/data/hunters.json` — id, display name, portrait slug — with portraits under `client/public/images/hunters/{slug}.{ext}`. Same shape as ADR-0005's `itemStats.json`: generated, committed, imported at build time, never hand-edited, carrying the revision provenance ADR-0005 requires. It is a third consumer of `scripts/lib/wiki.mjs`, which ADR-0005 already requires be extracted.
+**This decision consumes a hunters dataset; it does not specify one.** `client/src/data/hunters.json` — covering the full wiki roster, with names, portraits, and descriptions — is generated, committed catalog data on ADR-0005's pipeline. How it is scraped, how it is scoped, and what fields it carries belong to a separate ADR for hunter data, not this one. What this decision depends on is only the contract: a stable id per hunter, a display name, a self-hosted portrait asset, and the SPEC-0001 fallback behavior when an asset is missing.
 
-**The library is scoped to the base-game hunters, not the paid Legendary DLC skins.** This keeps the asset payload substantially smaller, avoids leading the UI with cosmetics most users don't own, and gives every user the same pool. The scope is a starting point, not a ceiling — nothing in the data model distinguishes a base hunter from a DLC one, so widening it later is a scrape-config change and a re-run, not a schema change.
+**`loadoutLists` is the group entity, and it is user-owned.** Records are `{ id, owner, name, hunterId, createdAt }` in `db.json`, token-scoped exactly like `loadouts`. `id` is a generated UUID — *not* a hunter id — because the list's identity is the user's, not the catalog's.
 
-**`hunterLists` is the group entity, and it is user-owned.** Records are `{ id, owner, name, portraitId, createdAt }` in `db.json`, token-scoped exactly like `loadouts`. `id` is a generated UUID — *not* a portrait id — because the list's identity is the user's, not the catalog's.
+The collection is named `loadoutLists` rather than `hunterLists` deliberately: a list need not correspond to a hunter at all ("shotgun experiments"), and a `hunters` dataset is coming that would make `hunterLists` actively misleading about which thing it stores. `hunterId` is a reference field on a list, not the list's identity.
 
-**Portraits are decoration, and `portraitId` is deliberately non-unique.** Any number of lists may share a portrait. This is the point of the whole restructure: the count of lists a user can have is bounded by nothing, and two lists wearing the same face is a legitimate, unremarkable state. There is no unique constraint on `(owner, portraitId)`, and adding one later would break the feature rather than tighten it.
+**Portraits are decoration, and `hunterId` is deliberately non-unique.** Any number of lists may share a hunter. This is the point of the whole restructure: the count of lists a user can have is bounded by nothing, and two lists wearing the same face is a legitimate, unremarkable state. There is no unique constraint on `(owner, hunterId)`, and adding one later would break the feature rather than tighten it.
+
+**Because portraits repeat, a list carries a second visual identifier.** Reuse is explicitly allowed, so the portrait alone cannot distinguish two lists. Each list therefore gets a distinguishing visual attribute independent of both its name and its portrait — an accent colour is the obvious candidate, assigned on creation and user-editable. The portrait picker also indicates which hunters are already used by other lists, as information rather than a restriction: it never blocks the choice.
+
+This is what makes reuse comfortable rather than merely permitted. Without it, "two Rat lists" is a design the data model allows and the interface punishes.
 
 **A new list defaults its name to its portrait's hunter name, and is immediately editable.** This preserves the fast path — pick a hunter, start saving, never think about naming — while leaving the name free text. It also blunts the drift problem: the default is well-formed, so lists only diverge from the roster's vocabulary when a user deliberately types something else.
 
@@ -65,7 +72,7 @@ Eight sub-decisions follow.
 
 **The wire format is untouched.** `FORMAT_VERSION` stays at 1, `toData()`/`fromData()` are unchanged, and `isValidData()` on the server needs no edit because `listId` never enters the `data` object. Share URLs stay exactly as long as they are today. A shared build is a build; the recipient's lists are their own business.
 
-**Retiring a list removes the list, never the loadouts.** Retire deletes the `hunterLists` row and clears `listId` on every loadout that referenced it, dropping those loadouts into Unassigned. There is no cascade delete anywhere in this feature. The confirm dialog says plainly that the list goes away and the loadouts don't.
+**Retiring a list removes the list, never the loadouts.** Retire deletes the `loadoutLists` row and clears `listId` on every loadout that referenced it, dropping those loadouts into Unassigned. There is no cascade delete anywhere in this feature. The confirm dialog says plainly that the list goes away and the loadouts don't.
 
 ### The selected list is client state, not server state
 
@@ -75,7 +82,7 @@ It's a cursor, not a fact. Persisting it server-side would mean a write on every
 
 ### On reusing the ownership model without reusing its reasoning
 
-`db.js` carries a pointed comment about issue #17: a well-known sentinel owner value (`"anon"`, `"unowned"`) is trivially forgeable via a header and recreates the cross-user leak that issue closed. `hunterLists` is subject to that rule in full — token-scoped, no shared bucket, same `callerToken()`, same exclusion of anything not token-shaped.
+`db.js` carries a pointed comment about issue #17: a well-known sentinel owner value (`"anon"`, `"unowned"`) is trivially forgeable via a header and recreates the cross-user leak that issue closed. `loadoutLists` is subject to that rule in full — token-scoped, no shared bucket, same `callerToken()`, same exclusion of anything not token-shaped.
 
 The Unassigned group is *not* an instance of that pattern, and the ADR says so explicitly to keep a future reader from conflating them. `listId: null` is a grouping key applied *within* an already-token-scoped result set; an unauthenticated caller cannot reach another user's unassigned loadouts any more than their assigned ones, because the owner filter has already run. Sentinel *owners* are a security boundary and are forbidden. Sentinel *group labels* inside an owned set are just UI.
 
@@ -90,15 +97,15 @@ One new integrity rule has no precedent in the current code and is easy to get w
 * Good, because no existing data migrates: absent `listId` already means Unassigned, so every record written before this change is correct as-is
 * Good, because share links and the codec are entirely untouched, so this feature cannot regress sharing
 * Good, because the roster rides the pipeline ADR-0005 already justified — no new argument about scraping, no new ethics posture, no new refresh story
-* Good, because scoping the library to base-game hunters cuts the asset payload and avoids fronting paid cosmetics
+* Good, because sourcing the hunters dataset is factored out into its own decision, so this one stays about filing and can proceed against a names-only dataset
 * Good, because the two halves are separable in the order given below, so a stalled portrait scrape doesn't block the grouping feature
-* Bad, because two lists sharing a portrait look alike at a glance, so the UI has to lean on the name rather than the image to distinguish them — the cost of allowing reuse
+* Bad, because two lists sharing a portrait would look alike at a glance; mitigated by the per-list accent colour and the picker's in-use indicator, but that is extra UI surface that exists solely because reuse is allowed
 * Bad, because it is more UI than picking a hunter would have been: create, name, pick a portrait, edit later
 * Bad, because free-text names can still drift; the portrait-derived default mitigates this but does not prevent it
-* Bad, because it introduces the first real asset weight in the app — portraits are photographic and a picker shows many at once
+* Bad, because it introduces the first real asset weight in the app — portraits are photographic, the picker shows many at once, and covering the full roster rather than a subset makes that heavier
 * Bad, because it adds a second collection, a second ownership surface, and a cross-collection ownership check to a server whose ownership model has already produced one security issue
 * Bad, because the library grows with the game, so a stale `hunters.json` shows an incomplete portrait pool, and unlike a missing item image there's no fallback that reads as "not scraped yet" rather than "doesn't exist"
-* Neutral, because `hunterLists` rows are created only when a user makes a list, so someone who never touches the feature adds no rows and sees only Unassigned
+* Neutral, because `loadoutLists` rows are created only when a user makes a list, so someone who never touches the feature adds no rows and sees only Unassigned
 * Neutral, because nothing about in-game hunter mechanics is modeled — no permadeath, no carried traits, no recruitment cost
 * Neutral, because list ordering (manual sort, most-recently-used) is unspecified; the initial implementation can order by creation date and revisit
 
@@ -109,13 +116,13 @@ One new integrity rule has no precedent in the current code and is easy to get w
 * `FORMAT_VERSION` is still `1` and `loadoutCodec.test.js` passes unmodified; a diff of `toData()`/`fromData()` against this commit's parent is empty
 * `isValidData()` in `server/src/routes/loadouts.js` is unchanged, and `listId` is validated separately on the record envelope
 * **A test asserts a loadout cannot be filed into a list owned by a different token** — POST with token A and a `listId` belonging to token B is rejected, not silently accepted. This is the new integrity rule and the one most likely to be missed
-* A test asserts two lists owned by the same user may share a `portraitId`, and that both persist independently
+* A test asserts two lists owned by the same user may share a `hunterId`, and that both persist independently
 * A test asserts a newly created list with zero loadouts persists and reappears on the next fetch — an empty list is a valid state, not a transient one
 * A test asserts many loadouts can carry the same `listId`; there is no cap
 * A test asserts retiring a list leaves its loadouts present with `listId` cleared — the loadout record count before and after is identical
 * An unknown or stale `listId` degrades rather than rejecting on read: a loadout referencing a deleted list renders as Unassigned, mirroring how `fromV1()` drops catalog items that no longer exist
-* Every `hunterLists` handler filters by `callerToken()` before doing anything else, and a test asserts token B cannot read, rename, or retire a list owned by token A
-* A request with no `x-loadout-token` header creates no durable `hunterLists` row visible to any later request, consistent with the request-scoped anonymous identity in `callerToken()`
+* Every `loadoutLists` handler filters by `callerToken()` before doing anything else, and a test asserts token B cannot read, rename, or retire a list owned by token A
+* A request with no `x-loadout-token` header creates no durable `loadoutLists` row visible to any later request, consistent with the request-scoped anonymous identity in `callerToken()`
 * The selected-list cursor appears nowhere in `db.json` — a grep of the server for `selectedList` returns nothing
 * Portraits load lazily and fall back cleanly when absent, following the `<img onError>` chain `ItemThumb` already uses
 
@@ -194,7 +201,7 @@ flowchart TD
     end
 
     subgraph generated["Generated, committed — shared by all users"]
-        ROSTER["client/src/data/hunters.json<br/>base-game hunters:<br/>id · name · portrait slug"]
+        ROSTER["client/src/data/hunters.json<br/>full roster — specified by a<br/>separate hunter-data ADR<br/>id · name · portrait · description"]
         PORTRAIT["client/public/images/hunters/<br/>{slug}.{ext}"]
     end
 
@@ -202,11 +209,11 @@ flowchart TD
     SH --> PORTRAIT
 
     subgraph server["server/data/db.json — token-scoped"]
-        HL["hunterLists[]<br/>{ id: uuid, owner,<br/>name, portraitId, createdAt }"]
+        HL["loadoutLists[]<br/>{ id: uuid, owner, name,<br/>hunterId, accent, createdAt }"]
         LO["loadouts[]<br/>{ id, owner, name, data,<br/>listId?, updatedAt }"]
     end
 
-    ROSTER -.->|"portraitId — decoration only,<br/>NON-unique: many lists<br/>may share one portrait"| HL
+    ROSTER -.->|"hunterId — decoration only,<br/>NON-unique: many lists<br/>may share one hunter"| HL
     HL -->|"listId — identity,<br/>one list holds<br/>many loadouts"| LO
 
     subgraph ui["UI"]
@@ -227,14 +234,16 @@ flowchart TD
 
 ## More Information
 
+* **Requested by Magno** (Discord: `magno2`), who raised it after using the tool. Credit where it's due — and a note for future readers that the driver here was observed friction, not a hypothetical.
 * Extends **ADR-0005** (Scrape Item Stats and Descriptions into a Generated, Committed Data File) — the portrait library is a third payload on the same pipeline, a third consumer of `scripts/lib/wiki.mjs`, and follows the same generated-committed-data and revision-provenance rules. It inherits ADR-0005's open question about how a backend-scheduled scrape reaches committed data.
 * Related to **ADR-0002** (Source Weapon/Equipment Images via a One-Time, Self-Hosted Scrape) — portraits are subject to its self-hosting and attribution rules, reached through ADR-0005 rather than built on directly.
 * Implementation touchpoints: `server/src/routes/loadouts.js` (ownership filtering, `isValidData`, rate limiters to mirror on new handlers), `server/src/db.js` (boot-time normalization and the issue #17 sentinel-owner reasoning), `client/src/store/savedLoadoutsSlice.js` and `client/src/components/SavedLoadoutsPanel/SavedLoadoutsPanel.jsx` (flat list to replace), `client/src/utils/loadoutCodec.js` (must remain unmodified), `client/src/components/ItemThumb/ItemThumb.jsx` (fallback pattern for portraits).
 * **Suggested sequencing**, because the grouping feature and the asset pipeline are separable and the second is the slower half:
   1. Scrape hunter *names only* — no portraits. Small payload, no asset weight, unblocks everything downstream.
-  2. Ship `hunterLists`, `listId`, the ownership tests (including the cross-collection check), and grouped UI against a text-only library. The feature is fully usable here; lists just have no faces yet.
+  2. Ship `loadoutLists`, `listId`, accent colours, the ownership tests (including the cross-collection check), and grouped UI against a names-only dataset. The feature is fully usable here; lists just have no faces yet.
   3. Add portrait scraping and lazy-loaded imagery as an enhancement.
-* **Scope assumption worth confirming:** "free hunter images" is read here as the base-game hunters rather than paid Legendary DLC skins. If the intent was the full roster including DLC, only the scrape's scope changes — no schema or UI consequence, since nothing in the model distinguishes the two.
+* **Hunter data is a separate decision.** The dataset this capability consumes — full wiki roster, with photos, names, and descriptions — will be specified by its own ADR covering scrape scope, fields, and refresh. This ADR deliberately owns only the filing model and the contract it needs from that dataset.
 * **Superseded direction, recorded for history:** an earlier draft of this decision bound lists one-to-one to roster hunters. It was rejected because that caps a user's list count at the library size and makes non-hunter groupings inexpressible. The "portrait as decoration, identity as user-owned UUID" split is what resolves both.
-* Deliberately out of scope, and worth being explicit since the entities share a name with game concepts: this decision models **filing, not hunters**. No permadeath, no carried traits, no recruitment cost, no per-hunter carry-limit validation, no health state. If a future feature wants to model an actual in-game hunter, that is a different entity than the list described here and deserves its own ADR rather than accreting fields onto `hunterLists`.
-* Also out of scope: list ordering, nested lists, and sharing a list with another user.
+* Deliberately out of scope, and worth being explicit since the entities share a name with game concepts: this decision models **filing, not hunters**. No permadeath, no carried traits, no recruitment cost, no per-hunter carry-limit validation, no health state. If a future feature wants to model an actual in-game hunter, that is a different entity than the list described here and deserves its own ADR rather than accreting fields onto `loadoutLists`.
+* List ordering is specified in SPEC-0003 rather than here: default alphabetical by list name, with additional sort options. Drag-and-drop for moving loadouts between lists is deferred as a future enhancement to that page; the initial move affordance is an explicit control.
+* Also out of scope: nested lists and sharing a list with another user.
