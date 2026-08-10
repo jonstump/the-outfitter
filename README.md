@@ -10,7 +10,11 @@ A Hunt: Showdown loadout builder — pick weapons, equipment, and traits, then s
 
 ## Requirements
 
-- Node.js 20 (see `.nvmrc`)
+- Node.js 20 — `.nvmrc` pins it as `lts/iron`, the LTS codename for the 20 line
+
+  `nvm use` (or `mise`) reads `.nvmrc` and selects the right version. Installs
+  are enforced, not merely documented: `engines.node` plus `engine-strict=true`
+  make `npm install` fail on any other major rather than warn.
 
 ## Getting started
 
