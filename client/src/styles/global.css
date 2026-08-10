@@ -131,7 +131,11 @@ button {
   flex-wrap: wrap;
   gap: 20px;
   padding: 26px 28px 48px;
-  align-items: flex-start;
+  /* stretch, not flex-start: the two columns are rarely the same natural height, and
+     flex-start left whatever gap the difference happened to be — 353px of dead space at
+     1440px. Stretching lets the picker use it. Each wrapped line stretches independently,
+     so the full-width loadouts row below is unaffected. */
+  align-items: stretch;
   max-width: 1440px;
   margin: 0 auto;
 }
@@ -720,7 +724,16 @@ button {
 .picker-list {
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: 680px;
+  /* Absorb whatever height the stretched column has left after the tabs, search and filter
+     rows, instead of capping at a fixed 680px and leaving the remainder empty.
+     flex-basis 0 is load-bearing: with basis auto the list contributed its full content
+     height (~2850px), making the picker the taller column and dragging the left one down
+     with it. Basis 0 means it claims only leftover space.
+     min-height keeps the old 680px as a FLOOR rather than a cap, so when the columns stack
+     on narrow viewports — where there is no leftover space to claim — the list is exactly
+     as tall as it was before. */
+  flex: 1 1 0;
+  min-height: 680px;
 }
 
 .picker-row {
