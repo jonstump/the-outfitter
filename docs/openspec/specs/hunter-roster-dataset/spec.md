@@ -127,13 +127,13 @@ A source image narrower than a target width SHALL NOT be upscaled; it SHALL be r
 
 ### Requirement: Portrait Payload Budget
 
-Portraits are the heaviest assets this application ships. The roster is roughly **285 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by 285.
+Portraits are the heaviest assets this application ships. The roster is **242 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by the roster.
 
 **Per asset:** the thumbnail SHALL be at most **15 KB** and the full size at most **25 KB**.
 
 **In total:** the committed portrait payload SHALL NOT exceed **12 MB** across all hunters and both sizes.
 
-These follow from the dimensions and encoder above rather than being chosen independently: a 192px AVIF photograph and a 320px one are comfortably inside those figures at good quality. They remain estimates until measured against real art — see the open questions in design.md.
+These follow from the dimensions and encoder above rather than being chosen independently: a 192px AVIF photograph and a 320px one are comfortably inside those figures at good quality. Measurement against the committed set bears that out with room to spare — the largest thumbnail is 6.7 KB and the largest full size 14.9 KB, and the whole payload is 2.91 MB against the 12 MB ceiling. The budgets are retained at their original figures rather than tightened to what was measured, so that re-scrapes and roster growth have headroom before they hit a spec edit.
 
 A generated asset exceeding its per-asset budget SHALL fail that hunter with a recorded reason rather than being written. A run whose output would exceed the total ceiling SHALL fail with the projected total and the ceiling, rather than writing a partial set that silently breaches it.
 

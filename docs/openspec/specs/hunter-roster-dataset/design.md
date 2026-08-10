@@ -33,18 +33,18 @@ ADR-0007 decided the shape: one script, two portrait sizes, generated-and-commit
 
 **Rationale**: The dimensions are derived from measurement rather than from the design mock. The largest place a portrait appears anywhere in the app is a **154×220 list card**, measured in the browser at a 1440px viewport. At 2× for high-DPI that needs 308px wide; 320px gives modest headroom.
 
-An earlier draft specified 440px, taken from the 220px card height rather than its width. For a portrait-orientation image that is roughly **twice the pixels of anything on screen** — invisible on any single asset and 8 MB across the roster.
+An earlier draft specified 440px, taken from the 220px card height rather than its width. For a portrait-orientation image that is roughly **twice the pixels of anything on screen** — invisible on any single asset, and across the roster a doubling of the full-size payload, which measurement has since put at 1.92 MB.
 
 AVIF is typically 25–30% smaller than WebP at equivalent quality and is universally supported by the browsers this app targets. It needs one render-site change: adding `avif` to `ItemThumb`'s extension chain, which SPEC-0003's dataset contract now requires.
 
-The through-line for both choices: **store what renders, not what the source happens to offer.** At one asset the difference is noise; at 285 it is the difference between 22 MB and 11 MB.
+The through-line for both choices: **store what renders, not what the source happens to offer.** At one asset the difference is noise; across a 242-hunter roster it was the difference between a projected 18.9 MB and 9.5 MB.
 
 **Alternatives considered**:
 - *WebP*: rejected only on size. It was the original choice and is a perfectly good format; AVIF is simply smaller for the same quality, and the extension chain makes the switch nearly free.
 - *AVIF plus a WebP fallback per size*: rejected — four files per hunter to serve browsers this app does not target, which is the same reason a PNG fallback was rejected before.
 - *PNG, matching the 121 committed item images*: rejected — those are small flat-colour icons where PNG is fine. Portraits are photographic, the case PNG handles worst.
 - *1× dimensions*: rejected — visibly soft on any retina display, which is most phones.
-- *Keeping 440px "for headroom"*: rejected — headroom for a surface that does not exist is 8 MB of speculation. If a larger render is ever added, re-running the scrape is cheap and idempotent by id.
+- *Keeping 440px "for headroom"*: rejected — headroom for a surface that does not exist would have roughly doubled the full-size payload on speculation. If a larger render is ever added, re-running the scrape is cheap and idempotent by id.
 
 ### A byte budget that fails the item rather than warning
 
@@ -62,30 +62,34 @@ These are starting values chosen to be enforceable, not sacred. Moving them is a
 
 **Rationale**: The original budgets were 40 KB and 150 KB, anchored on the 121 committed item images (median 7 KB, max 36 KB). That anchoring was sound for a single asset and meaningless in aggregate, because it was never multiplied by the roster.
 
-Counting the wiki's roster page gives roughly **285 hunters**. At the original numbers that is 11.1 MB of thumbnails and 41.7 MB of full sizes — **52.9 MB** committed, against a repository whose entire image payload today is 1.10 MB and whose `.git` is 6.4 MB. Roughly a fiftyfold increase, permanent, paid by every clone forever.
+The roster is **242 hunters**. At the original numbers that is 9.5 MB of thumbnails and 35.4 MB of full sizes — **44.9 MB** committed, against a repository whose entire image payload today is 1.10 MB and whose `.git` is 6.4 MB. Roughly a fortyfold increase, permanent, paid by every clone forever.
 
-The per-asset numbers follow from the dimensions and encoder rather than being chosen independently: a 192px AVIF photograph and a 320px one sit comfortably inside 15 KB and 25 KB at good quality. Successive revisions have moved this from 52.9 MB to 22.3 MB to **11 MB** — none of it by degrading what renders, all of it by removing pixels and bytes nothing displays.
+> The count this decision was made against was **~285**, taken from the wiki's roster page before a scrape existed to count properly. The scrape returned 242. The figures above are the original reasoning re-derived at the real count; the conclusion was never close enough to the ceiling for the difference to change it. Where this document once projected 52.9 MB, 22.3 MB and 11 MB, those were the same ladder computed at 285.
+
+The per-asset numbers follow from the dimensions and encoder rather than being chosen independently: a 192px AVIF photograph and a 320px one sit comfortably inside 15 KB and 25 KB at good quality. Successive revisions moved the projection from 44.9 MB to 18.9 MB to **9.5 MB** — none of it by degrading what renders, all of it by removing pixels and bytes nothing displays.
+
+Measurement has since undercut even that. The committed set is **2.91 MB** — 0.99 MB of thumbnails and 1.92 MB of full sizes across 484 assets — because the projection multiplied by the *ceilings* while real AVIF encodes land well inside them, at a median 4.1 KB and 7.9 KB. The ladder above is retained because it is why the budget is what it is, not a claim about what shipped.
 
 A total ceiling is the control that actually matters here, because per-asset compliance says nothing about aggregate weight — every file can pass and the repository still gain 50 MB. Failing the run rather than warning follows the same reasoning as the per-asset rule: a total overage is invisible in any single file, so nothing in review would catch it.
 
 **Alternatives considered**:
-- *Keep the per-asset budgets and accept the total*: rejected — 53 MB of binaries is a decision, and making it by not doing arithmetic is not making it.
-- *Scrape thumbnails only, defer full sizes*: viable, and still available if 25 MB proves too generous once real art is measured. Not taken now because it would leave the expanded list header rendering an upscaled thumbnail, and the two-size decision in ADR-0007 exists precisely to avoid that.
+- *Keep the per-asset budgets and accept the total*: rejected — 45 MB of binaries is a decision, and making it by not doing arithmetic is not making it.
+- *Scrape thumbnails only, defer full sizes*: viable, and was held in reserve in case the per-asset budgets proved too generous once real art was measured. Measurement made it unnecessary. Not taken because it would leave the expanded list header rendering an upscaled thumbnail, and the two-size decision in ADR-0007 exists precisely to avoid that.
 - *Narrow the roster scope*: rejected — the full roster is an explicit ADR-0007 decision, and the right lever is the budget, not the coverage.
 
-### ~11 MB of committed assets is accepted, and both sizes are kept
+### 2.91 MB of committed assets is accepted, and both sizes are kept
 
 **Choice**: The portrait assets are committed to the repository. Both sizes are retained.
 
-**Rationale**: The tenfold increase over today's 1.10 MB image payload is not evidence of waste — it is proportional to content. It decomposes as **2.4× more subjects** (285 hunters against 121 items) multiplied by **4.3× more bytes per subject**, and that second factor is itself two sizes instead of one times roughly three times the pixels, partially offset by AVIF compressing photographs better per pixel than PNG compresses line art.
+**Rationale**: The increase over today's 1.10 MB image payload is not evidence of waste — it is proportional to content. It decomposes as **2.0× more subjects** (242 hunters against 121 items) multiplied by **1.33× more bytes per subject**, for **2.66×** overall. That second factor is two sizes instead of one times roughly three times the pixels, very largely offset by AVIF compressing photographs better per pixel than PNG compresses line art — an offset that turned out to be much stronger than this document originally assumed.
 
-Put plainly: the existing 1.10 MB is unusually small because item icons are wide, flat, mostly-empty line art at a median 256×128. Hunter portraits are tall, dense and photographic. Ten times the bytes for genuinely ten times the content, after three rounds of removing everything that was not content.
+Put plainly: the existing 1.10 MB is unusually small because item icons are wide, flat, mostly-empty line art at a median 256×128. Hunter portraits are tall, dense and photographic, and still cost only 12.3 KB per hunter across both sizes against 9.3 KB per item icon. Under three times the bytes for genuinely more than twice the content, after three rounds of removing everything that was not content.
 
-11 MB is an ordinary size for a repository shipping an image-heavy web app, and committing keeps the build hermetic — no network dependency at build time, which is the price the release-artifact alternative would charge.
+2.91 MB is an unremarkable size for a repository shipping an image-heavy web app, and committing keeps the build hermetic — no network dependency at build time, which is the price the release-artifact alternative would charge.
 
 **Alternatives considered**:
 - *Assets outside git, fetched from a release artifact at build*: rejected for now. It would keep the repository at its current size and preserve full quality, but it makes the build depend on the network and on an artifact staying available. Still viable if the repository size becomes a real problem rather than a projected one.
-- *Thumbnails only, dropping the full size*: rejected. It is the largest remaining lever — the full size is 6.7 MB of the 11 MB — and now that the full size is 320px rather than 440px, rendering a 192px thumbnail at 154px would be only slightly soft rather than visibly pixelated. Kept in reserve: if measurement against real art blows the 12 MB ceiling, dropping the full size is the fallback, not weakening the budget.
+- *Thumbnails only, dropping the full size*: rejected. It is the largest remaining lever — the full size is 1.92 MB of the 2.91 MB — and now that the full size is 320px rather than 440px, rendering a 192px thumbnail at 154px would be only slightly soft rather than visibly pixelated. It was kept in reserve against measurement blowing the 12 MB ceiling; the committed set came in at 24% of that ceiling, so the lever stays unused and available for roster growth instead.
 
 ### sharp, as a devDependency the app can never reach
 
@@ -199,5 +203,5 @@ Each step is independently useful and independently revertible. Step 3 changing 
 - What does the wiki actually serve as a hunter's portrait — a consistent infobox image, or something that varies by page? The parser's shape depends on it, and it is the thing most likely to force a revision here.
 - Are descriptions consistently present, and how long? If they are several paragraphs, the "small next to the portraits" assumption ADR-0007 made stops holding and they may want their own file after all.
 - Should the scrape detect that a hunter's `sourceRevision` is unchanged and skip re-encoding its portraits? Cheap idempotence, but only worth it once a refresh cadence exists.
-- Do the 15 KB / 25 KB per-asset budgets survive contact with real art, and at what AVIF quality setting? If they do not, the 12 MB total is the constraint to hold and the per-asset figures are the ones to move.
-- Progression hunters appear as Rookie / Survivor / Veteran variants of the same character. Are those three dataset entries or one entry with three assets? This spec assumes three entries, which is what the wiki lists, but it affects how the picker groups them.
+- ~~Do the 15 KB / 25 KB per-asset budgets survive contact with real art, and at what AVIF quality setting?~~ **Resolved by the scrape.** They survive with wide margin: across 242 hunters the largest thumbnail is 6.7 KB against the 15 KB ceiling and the largest full size 14.9 KB against 25 KB, medians 4.1 KB and 7.9 KB. The 12 MB total was never approached — the committed payload is 2.91 MB, 24% of it.
+- ~~Progression hunters appear as Rookie / Survivor / Veteran variants of the same character. Are those three dataset entries or one entry with three assets?~~ **Resolved by the scrape: three entries**, as assumed. Ten characters have all three variants, for 30 of the 242 entries. One wrinkle the assumption did not anticipate — a family's variants do not share an `acquisition`. Survivor and Veteran are `progression` for nine of the ten families, while the matching Rookie is `bloodline`, `prestige` or `story-challenge`. Any picker grouping by acquisition therefore scatters a single character's own variants across buckets, which is a point in favour of name search over classification filtering as the primary affordance (see SPEC-0003's design).
