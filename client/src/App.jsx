@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { loadoutActions } from "./store/loadoutSlice.js";
 import { fetchLists } from "./store/loadoutListsSlice.js";
+import { fetchFavorites } from "./store/hunterFavoritesSlice.js";
 import { fetchSaved } from "./store/savedLoadoutsSlice.js";
 import { readHashLoadout, readStoredLoadout } from "./utils/loadoutCodec.js";
 import Header from "./components/Header/Header.jsx";
@@ -20,6 +21,10 @@ export default function App() {
     if (hydrated) dispatch(loadoutActions.setLoadout(hydrated));
     dispatch(fetchSaved());
     dispatch(fetchLists());
+    // Favorites are fetched on boot, not on picker-open: this is what makes them survive a
+    // reload (SPEC-0003 REQ "Favorite Hunters"), and it is a single small request that must
+    // already have landed by the time the picker sorts by it.
+    dispatch(fetchFavorites());
   }, [dispatch]);
 
   return (

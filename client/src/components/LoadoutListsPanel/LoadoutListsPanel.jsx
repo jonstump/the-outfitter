@@ -35,6 +35,7 @@ import {
   retireListThunk,
   setListAccentThunk,
 } from "../../store/loadoutListsSlice.js";
+import { favoriteHunterThunk, unfavoriteHunterThunk } from "../../store/hunterFavoritesSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 
 const monogram = (name) => (name || "?").trim().charAt(0).toUpperCase();
@@ -418,6 +419,10 @@ function LoadoutRow({ item, lists }) {
 function CreateList({ onDone }) {
   const dispatch = useDispatch();
   const lists = useSelector((s) => s.loadoutLists.items);
+  // Governing: SPEC-0003 REQ "Favorite Hunters". Read here and passed down rather than
+  // read inside HunterPicker, which stays presentational — the same discipline that keeps
+  // it unable to see `lists` and therefore unable to mark reuse.
+  const favorites = useSelector((s) => s.hunterFavorites.ids);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -516,6 +521,16 @@ function CreateList({ onDone }) {
       {picking && (
         <HunterPicker
           selectedHunterId={hunter?.hunterId ?? null}
+          favorites={favorites}
+          // Favoriting never closes the picker and never changes the chosen portrait: it is
+          // a preference about the roster, not a selection within it.
+          onToggleFavorite={({ hunterId, hunterName, favorite }) =>
+            dispatch(
+              favorite
+                ? favoriteHunterThunk({ hunterId, hunterName })
+                : unfavoriteHunterThunk({ hunterId, hunterName })
+            )
+          }
           onClose={() => setPicking(false)}
           onSelect={(chosen) => {
             setHunter(chosen.hunterId ? chosen : null);

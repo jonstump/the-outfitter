@@ -443,7 +443,12 @@ describe("creating a list from the picker", () => {
 
     const tile = screen.getByTestId(`hunter-tile-${REAL_HUNTER.id}`);
     expect(tile).not.toHaveAttribute("aria-disabled");
-    expect(tile.className).toBe("hp-tile"); // no in-use variant, badge or dimming
+    expect(tile.className).toBe("hp-tile-choose");
+    // The tile is the grid ROW around that cell (#114 — see the note in HunterPicker.jsx on
+    // why the tiles are a grid and no longer a listbox). Its class list is what would carry
+    // an in-use variant if one existed; the store above has a list referencing this hunter
+    // and nothing about the tile says so.
+    expect(tile.closest('[role="row"]').className).toBe("hp-tile");
     expect(within(tile).queryByText(/in use|used/i)).not.toBeInTheDocument();
 
     await act(async () => fireEvent.click(tile));

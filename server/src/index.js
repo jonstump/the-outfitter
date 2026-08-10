@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { loadoutsRouter } from "./routes/loadouts.js";
 import { loadoutListsRouter } from "./routes/loadoutLists.js";
+import { hunterFavoritesRouter } from "./routes/hunterFavorites.js";
 import { db } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +46,10 @@ app.use(express.json({ limit: "64kb" }));
 
 app.use("/api/loadouts", loadoutsRouter);
 app.use("/api/loadout-lists", loadoutListsRouter);
+// Governing: SPEC-0003 REQ "Favorite Hunters". Token-scoped like everything above it; the
+// 64kb body cap already declared covers it, and both writes address the hunter in the path
+// rather than the body, so neither carries one worth capping separately.
+app.use("/api/hunter-favorites", hunterFavoritesRouter);
 
 // Lightweight liveness endpoint for orchestrators/load balancers (issue #31).
 app.get("/healthz", (_req, res) => {
