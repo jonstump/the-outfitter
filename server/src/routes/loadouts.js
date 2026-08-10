@@ -56,6 +56,13 @@ function isValidData(data) {
 // so there is nothing to migrate.
 const isListRef = (v) => v === null || v === undefined || (typeof v === "string" && v.length > 0 && v.length <= 100);
 
+// Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
+// undefined rather than null. Serialise it explicitly so the API shape is uniform: every
+// loadout carries a `listId`, and "Unassigned" is always `null` rather than sometimes an
+// absent field. Without this, every consumer has to coalesce, and the no-op comparison in
+// PATCH below would miss the legacy shape.
+const publicLoadout = (rec) => ({ ...publicRecord(rec), listId: rec.listId ?? null });
+
 /**
  * Validate a caller-supplied listId against the lists the CALLER owns.
  *
@@ -98,7 +105,7 @@ loadoutsRouter.get("/", async (_req, res) => {
     const token = callerToken(_req);
     const mine = liveRecords(db.data.loadouts)
       .filter((l) => l.owner === token)
-      .map(publicRecord);
+      .map(publicLoadout);
     res.json(mine);
   } catch (err) {
     console.error("GET /api/loadouts failed:", err);
@@ -143,7 +150,7 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     }
 
     await db.write();
-    res.status(existing ? 200 : 201).json(publicRecord(record));
+    res.status(existing ? 200 : 201).json(publicLoadout(record));
   } catch (err) {
     console.error("POST /api/loadouts failed:", err);
     res.status(500).json({ error: "failed to save loadout" });
@@ -182,9 +189,11 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     const ref = validateListRef(body.listId, token, res);
     if (!ref.ok) return;
 
-    if (loadout.listId === ref.value) {
+    // Coalesce before comparing: a record predating SPEC-0003 has `listId` undefined, not
+    // null, so a plain === would miss "already Unassigned" and take the write path.
+    if ((loadout.listId ?? null) === ref.value) {
       // Selecting the list it is already in is a no-op, not an error and not a write.
-      return res.json(publicRecord(loadout));
+      return res.json(publicLoadout(loadout));
     }
 
     loadout.listId = ref.value;
@@ -192,7 +201,7 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     await db.write();
 
     console.info("loadout moved", { loadoutId: loadout.id, listId: ref.value });
-    res.json(publicRecord(loadout));
+    res.json(publicLoadout(loadout));
   } catch (err) {
     console.error("PATCH /api/loadouts/:id failed:", err);
     res.status(500).json({ error: "failed to move loadout" });

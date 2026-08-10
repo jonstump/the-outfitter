@@ -76,7 +76,10 @@ describe("filing loadouts into lists", () => {
     const listed = await request(app).get("/api/loadouts").set("x-loadout-token", TOKEN_A);
     const found = listed.body.find((l) => l.name === "__test__preexisting");
     expect(found).toBeDefined();
-    expect(found.listId ?? null).toBeNull(); // absent === Unassigned
+    // The stored record has no listId key at all, but the API serialises it explicitly, so
+    // no consumer has to coalesce. Unassigned is always null, never an absent field.
+    expect(found).toHaveProperty("listId");
+    expect(found.listId).toBeNull();
   });
 
   it("moves a loadout between lists, changing nothing else", async () => {
@@ -103,6 +106,34 @@ describe("filing loadouts into lists", () => {
     const moved = await move(app, TOKEN_A, saved.body.id, null);
     expect(moved.status).toBe(200);
     expect(moved.body.listId).toBeNull();
+  });
+
+  it("treats moving an already-unassigned legacy-shaped record to null as a no-op", async () => {
+    // A record predating SPEC-0003 has listId undefined, not null. A plain === would miss
+    // that and take the write path, bumping updatedAt for a move that changes nothing.
+    const app = makeApp();
+    await db.read();
+    db.data.loadouts.push({
+      id: "legacy-noop-1", owner: TOKEN_A, name: "__test__legacy-noop", data: validData, updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await db.write();
+
+    const res = await move(app, TOKEN_A, "legacy-noop-1", null);
+    expect(res.status).toBe(200);
+    expect(res.body.listId).toBeNull();
+    expect(res.body.updatedAt).toBe("2026-01-01T00:00:00.000Z"); // untouched — no write
+
+    await db.read();
+    expect(db.data.loadouts.find((l) => l.id === "legacy-noop-1").updatedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("always serialises listId, never omitting it", async () => {
+    const app = makeApp();
+    const saved = await save(app, TOKEN_A, { name: "__test__always-present", data: validData });
+    expect(saved.body).toHaveProperty("listId");
+
+    const listed = await request(app).get("/api/loadouts").set("x-loadout-token", TOKEN_A);
+    for (const l of listed.body) expect(l).toHaveProperty("listId");
   });
 
   it("treats selecting the current list as a no-op", async () => {
