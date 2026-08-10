@@ -117,7 +117,6 @@ export const TOOLS = [
   ["katana", "Katana", 100, "Melee"],
   ["flare-pistol", "Flare Pistol", 35, "Utility"],
   ["fusees", "Fusees", 20, "Utility"],
-  ["electric-lamp", "Electric Lamp", 20, "Utility"],
   ["spyglass", "Spyglass", 10, "Utility"],
   ["decoys", "Decoys", 10, "Utility"],
   ["blank-fire-decoys", "Blank Fire Decoys", 60, "Utility"],
