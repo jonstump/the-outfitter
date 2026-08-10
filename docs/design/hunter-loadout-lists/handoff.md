@@ -10,6 +10,12 @@
 >    `#b04a3e` `#7a8a4e` `#5a6e96` `#5e8a8a` `#8a5e86` `#a3703e`. The prototype's
 >    `PALETTE` constant and the token list below were updated to match; every other
 >    `#c4a05e` in the prototype is a legitimate `--gold` use (links, titles, cost).
+> 3. **Portrait fallback is split into two cases** (issue #100). § 2 and § Assets below
+>    use a monogram for both "no portrait" and "hunter missing from dataset". Those are
+>    different states: a chosen hunter whose art is absent has an identity to depict and
+>    now renders a schematic silhouette (mirroring SPEC-0001's item rule), while a list
+>    with no hunter keeps its list-name monogram, because drawing a figure there would
+>    imply an identity the list never claimed.
 > 2. **"Recently used"** is defined as *last opened*, resolving the open question this
 >    document notes in § State Management.
 >

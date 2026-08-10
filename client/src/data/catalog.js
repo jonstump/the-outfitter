@@ -231,6 +231,50 @@ const THUMBS = {
   xbow: "M14 18h64v5H36l-3 9h-9l3-9H14zM72 4h5v32h-5z",
 };
 
+// Governing: ADR-0001 (schematic SVG icons as the fallback tier), ADR-0006 (hunter
+// portraits illustrate loadout lists), SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+//
+// Schematic hunter silhouettes, on the same 0 0 96 40 viewBox as every other fallback here.
+// These stand in when a list references a real hunter whose portrait asset is absent —
+// mirroring SPEC-0001's item rule exactly: the item exists, the photo does not, so draw the
+// schematic rather than nothing.
+//
+// A list with NO hunter keeps its list-name monogram instead. The two states are different:
+// "hunter chosen, art missing" has an identity to depict, while "no hunter" does not, and
+// drawing a figure there would imply an identity the list never claimed. The design handoff
+// originally merged both cases; see docs/design/hunter-loadout-lists/handoff.md.
+const HUNTER_THUMBS = [
+  // Broad-brim hat, coat, shoulders squared.
+  "M48 4c-7 0-12 4-12 9H22v4h52v-4H60c0-5-5-9-12-9zM34 21h28l6 19H28z",
+  // Bowler hat, high collar, narrow frame.
+  "M40 3h16v6h6v4H34V9h6zM36 15h24l5 25H31z",
+  // Bare head, long hair, heavy shoulders.
+  "M48 2c-8 0-13 6-13 13 0 4 2 7 4 9H30l-6 16h48l-6-16h-9c2-2 4-5 4-9 0-7-5-13-13-13z",
+  // Hooded figure.
+  "M48 3c-11 0-19 8-19 18l-5 19h48l-5-19c0-10-8-18-19-18zm0 8a10 10 0 0 1 10 10H38a10 10 0 0 1 10-10z",
+  // Cap with brim, scarfed neck.
+  "M38 5h20v5h10v3H30v-3h8zM36 16h24l4 8H32zM32 26h32l4 14H28z",
+  // Feathered hat, sloped shoulders.
+  "M48 2l14 5-4 4h10v4H28v-4h10l-4-4zM34 17h28l7 23H27z",
+];
+
+/**
+ * Pick a silhouette for a hunter.
+ *
+ * Deterministic on `hunterId`, so a hunter always renders the same figure across reloads,
+ * sessions and browsers — a silhouette that shuffled would read as a loading glitch.
+ * Returns null when there is no hunter, which is the caller's signal to draw the list-name
+ * monogram instead.
+ */
+export function hunterThumb(hunterId) {
+  if (!hunterId) return null;
+  let hash = 0;
+  for (let i = 0; i < hunterId.length; i++) {
+    hash = (hash * 31 + hunterId.charCodeAt(i)) >>> 0;
+  }
+  return HUNTER_THUMBS[hash % HUNTER_THUMBS.length];
+}
+
 export function weaponThumb(w) {
   const cls = w[4];
   if (cls === "none") return THUMBS.melee;
