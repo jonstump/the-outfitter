@@ -11,13 +11,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Governing: ADR-0004, SPEC-0002 REQ "Canonical Node Version Pin".
+      # .nvmrc is the single canonical pin — resolve from it rather than
+      # hardcoding a literal, so bumping the Node major is a one-file change.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      # Governing: ADR-0004, SPEC-0002 REQ "Lockfile Integrity Verification".
+      # `npm ci` already refuses to install when package.json and the lockfile
+      # disagree on dependency ranges, but it cannot see root-manifest metadata
+      # drift: npm records fields like `engines` in the lock's "" entry, and that
+      # copy went stale unnoticed until 1fbd2b1. Regenerating the lock from the
+      # manifests and diffing catches both classes on the PR that introduced them.
+      # --package-lock-only leaves node_modules alone, so the install above still
+      # serves the build and test steps below.
+      - name: Verify package-lock.json is in sync with the manifests
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error file=package-lock.json::package-lock.json is out of sync with the manifests. Run 'npm install --package-lock-only' locally and commit the result."
+            exit 1
+          fi
 
       - name: Build the client
         run: npm run build -w client

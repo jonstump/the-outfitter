@@ -1,7 +1,15 @@
 # syntax=docker/dockerfile:1
 
+# Governing: ADR-0004, SPEC-0002 REQ "Canonical Node Version Pin".
+# .nvmrc is the canonical Node pin for this repo; this ARG mirrors it. A
+# Dockerfile cannot read .nvmrc without threading --build-arg through every call
+# site (CI, Compose, any deploy target), which spreads the coupling rather than
+# removing it — so the duplication is deliberate, declared exactly once here, and
+# consumed by both stages. Keep it in step with .nvmrc when bumping the major.
+ARG NODE_VERSION=20
+
 # --- Build the client -------------------------------------------------------
-FROM node:20-alpine AS client-build
+FROM node:${NODE_VERSION}-alpine AS client-build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/package.json
@@ -16,7 +24,7 @@ RUN npm run build -w client
 # lowdb keeps all saved loadouts in a single JSON file there, so ephemeral or
 # per-replica storage would silently lose user data on redeploy or scale-out
 # (issue #16).
-FROM node:20-alpine AS runtime
+FROM node:${NODE_VERSION}-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
