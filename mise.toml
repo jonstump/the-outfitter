@@ -1,6 +1,10 @@
 # Governing: ADR-0004 (pin-and-guard on the host), SPEC-0002 (Automatic Toolchain Activation).
 # Node major mirrors .nvmrc (canonical); npm version is the one shipped with the pinned Node.
 # Optional convenience layer: contributors without mise are unaffected (enforcement is .npmrc + engines).
+#
+# .nvmrc holds the LTS codename (`lts/iron`); the values below are the numeric
+# major it resolves to — Iron is 20. Keep them as numbers: `[engines]` is matched
+# against a resolved version, so a codename here would not compare as intended.
 [engines]
 node = "20"
 

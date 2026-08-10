@@ -5,7 +5,14 @@
 # Dockerfile cannot read .nvmrc without threading --build-arg through every call
 # site (CI, Compose, any deploy target), which spreads the coupling rather than
 # removing it — so the duplication is deliberate, declared exactly once here, and
-# consumed by both stages. Keep it in step with .nvmrc when bumping the major.
+# consumed by both stages.
+#
+# .nvmrc records the LTS *codename* (`lts/iron`), not a bare major. This ARG must
+# hold the numeric major that codename resolves to — Iron is 20 — because it is
+# interpolated into a Docker tag, and `node:lts/iron-alpine` is not a valid tag:
+# a slash there parses as a registry/repository separator, not part of the tag.
+# When bumping, resolve the new codename to its major first (Jod is 22, and so
+# on) rather than copying .nvmrc's contents verbatim.
 ARG NODE_VERSION=20
 
 # --- Build the client -------------------------------------------------------
