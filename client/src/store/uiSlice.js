@@ -26,7 +26,10 @@ const initialState = {
   budgetOn: false,
   budget: 800,
   upBudgetOn: false,
-  upBudget: 12,
+  // A Legendary Hunter starts with 10 upgrade points, so 10 is the budget a player
+  // actually has when they flip the cap on (issue #65). The field stays editable for
+  // planning around a leveled hunter; this is only the starting value.
+  upBudget: 10,
   message: "",
   // selectedListId holds a REAL list id or null — never a sentinel. Unassigned is a
   // separate boolean because it is a structural group, not a list: overloading one field

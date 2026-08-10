@@ -54,3 +54,20 @@ describe("selected-list reconciliation", () => {
     expect(localStorage.getItem(LS_SELECTED_LIST)).toBeNull();
   });
 });
+
+describe("budget defaults", () => {
+  // Issue #65: the trait cap defaulted to 12, two points richer than the 10 UP a
+  // Legendary Hunter actually starts with, so a fresh session green-lit loadouts that
+  // could not be built. Pinned here because nothing else asserts the default — every
+  // other test passes its own upBudget in.
+  it("seeds the trait cap at the 10 UP a Legendary Hunter starts with", () => {
+    const store = createTestStore();
+    expect(store.getState().ui.upBudget).toBe(10);
+  });
+
+  it("leaves both budgets off by default", () => {
+    const store = createTestStore();
+    expect(store.getState().ui.budgetOn).toBe(false);
+    expect(store.getState().ui.upBudgetOn).toBe(false);
+  });
+});
