@@ -8,3 +8,4 @@ server/data/db.test.json
 
 # Local environment overrides (copy of .env.example); never commit real values
 .env
+.claude/worktrees/
