@@ -268,7 +268,11 @@ The scrape SHALL support producing the dataset without portrait assets, so the r
 All error-producing operations MUST follow structured error handling:
 
 - Errors MUST be wrapped with contextual information at each layer boundary, naming the hunter, the URL, and the reason
-- Sentinel errors MUST distinguish the failure modes callers need to tell apart — at minimum: hunter page not found, portrait asset not found on an existing page, network or rate-limit failure, robots disallowed, and budget exceeded
+- Sentinel errors MUST distinguish the failure modes callers need to tell apart — at minimum: hunter page not found, portrait asset not found on an existing page, **portrait source unusable** (its alpha is zero at every pixel, so no subject bounding box exists), network or rate-limit failure, robots disallowed, and budget exceeded
+
+*(the unusable-source sentinel was added 2026-08-10 alongside the trimming requirement, which requires that condition to fail with a distinct sentinel; it is listed here so the two requirements agree)*
+
+An unusable source is deliberately **not** folded into "portrait asset not found". The asset was found and fetched; it simply carries no subject to trim to. Collapsing the two would tell a maintainer the wiki is missing art when in fact the art is present and the pipeline cannot use it, which points at entirely different remedies.
 - A single hunter's failure MUST NOT abort the run; it MUST be recorded in a structured per-run summary of succeeded, failed, and skipped, each with a reason
 - Silent error swallowing MUST NOT occur
 - Structured logging MUST be used, with key-value fields rather than string interpolation

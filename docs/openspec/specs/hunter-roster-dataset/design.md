@@ -227,7 +227,9 @@ No size selection appears anywhere in that graph. One asset leaves the scrape an
 
 ### Failure isolation
 
-Every per-hunter failure is recorded and the run continues. The distinctions that matter are between *page missing*, *portrait missing on a page that exists*, *network or rate-limit failure*, *robots disallowed*, and *over budget* — because they call for different responses. A missing page may mean the roster changed; an over-budget asset means the encoding settings need work; a robots failure means stop entirely.
+Every per-hunter failure is recorded and the run continues. The distinctions that matter are between *page missing*, *portrait missing on a page that exists*, *portrait present but unusable*, *network or rate-limit failure*, *robots disallowed*, and *over budget* — because they call for different responses. A missing page may mean the roster changed; an over-budget asset means the encoding settings need work; a robots failure means stop entirely.
+
+*Portrait present but unusable* was added 2026-08-10 with the trimming requirement: a source whose alpha is zero at every pixel has no subject bounding box to trim to. It is kept separate from *portrait missing* because the two send a maintainer in opposite directions — one says the wiki has no art for this hunter, the other says the art is there and this pipeline cannot consume it. Merging them would be the same mistake as a generic failure mode, one level down.
 
 Only the robots failure aborts the run, and it aborts before any hunter page is fetched.
 
