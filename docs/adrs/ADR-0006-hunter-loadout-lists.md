@@ -62,7 +62,7 @@ The collection is named `loadoutLists` rather than `hunterLists` deliberately: a
 
 **Portraits are decoration, and `hunterId` is deliberately non-unique.** Any number of lists may share a hunter. This is the point of the whole restructure: the count of lists a user can have is bounded by nothing, and two lists wearing the same face is a legitimate, unremarkable state. There is no unique constraint on `(owner, hunterId)`, and adding one later would break the feature rather than tighten it.
 
-**Because portraits repeat, a list carries a second visual identifier.** Reuse is explicitly allowed, so the portrait alone cannot distinguish two lists. Each list therefore gets a distinguishing visual attribute independent of both its name and its portrait — an accent colour is the obvious candidate, assigned on creation and user-editable. The portrait picker also indicates which hunters are already used by other lists, as information rather than a restriction: it never blocks the choice.
+**Because portraits repeat, a list carries a second visual identifier.** Reuse is explicitly allowed, so the portrait alone cannot distinguish two lists. Each list therefore gets a distinguishing visual attribute independent of both its name and its portrait — an accent colour is the obvious candidate, assigned on creation and user-editable. The portrait picker never blocks the choice of an already-used hunter. *(Amended 2026-08-09 — this sub-decision originally also required the picker to mark which hunters were already in use. See Amendments below.)*
 
 This is what makes reuse comfortable rather than merely permitted. Without it, "two Rat lists" is a design the data model allows and the interface punishes.
 
@@ -99,7 +99,7 @@ One new integrity rule has no precedent in the current code and is easy to get w
 * Good, because the roster rides the pipeline ADR-0005 already justified — no new argument about scraping, no new ethics posture, no new refresh story
 * Good, because sourcing the hunters dataset is factored out into its own decision, so this one stays about filing and can proceed against a names-only dataset
 * Good, because the two halves are separable in the order given below, so a stalled portrait scrape doesn't block the grouping feature
-* Bad, because two lists sharing a portrait would look alike at a glance; mitigated by the per-list accent colour and the picker's in-use indicator, but that is extra UI surface that exists solely because reuse is allowed
+* Bad, because two lists sharing a portrait would look alike at a glance; mitigated by the per-list accent colour, which is extra UI surface that exists solely because reuse is allowed
 * Bad, because it is more UI than picking a hunter would have been: create, name, pick a portrait, edit later
 * Bad, because free-text names can still drift; the portrait-derived default mitigates this but does not prevent it
 * Bad, because it introduces the first real asset weight in the app — portraits are photographic, the picker shows many at once, and covering the full roster rather than a subset makes that heavier
@@ -247,3 +247,17 @@ flowchart TD
 * Deliberately out of scope, and worth being explicit since the entities share a name with game concepts: this decision models **filing, not hunters**. No permadeath, no carried traits, no recruitment cost, no per-hunter carry-limit validation, no health state. If a future feature wants to model an actual in-game hunter, that is a different entity than the list described here and deserves its own ADR rather than accreting fields onto `loadoutLists`.
 * List ordering is specified in SPEC-0003 rather than here: default alphabetical by list name, with additional sort options. Drag-and-drop for moving loadouts between lists is deferred as a future enhancement to that page; the initial move affordance is an explicit control.
 * Also out of scope: nested lists and sharing a list with another user.
+
+## Amendments
+
+Recorded rather than silently rewritten, so the reversal is auditable and the original reasoning survives.
+
+### 2026-08-09 — the portrait picker no longer marks already-used hunters
+
+**Original:** the "second visual identifier" sub-decision required the picker to indicate which hunters were already referenced by the user's other lists — informational only, never restricting.
+
+**Amended to:** the picker neither restricts nor marks reuse.
+
+**Why:** the UI design handoff for this capability dropped the marker as a product call, and the reasoning survives scrutiny. Marking reuse implies an unmarked hunter is the *correct* choice, which inverts the intent — the whole point of decoupling identity from imagery was that reuse is unremarkable. The look-alike problem the marker was meant to solve is better handled by the accent colour, which distinguishes lists everywhere they appear rather than only at the moment of creation.
+
+**Blast radius:** SPEC-0003's requirement "The Hunter Picker Indicates Reuse Without Restricting It" was rewritten as "The Hunter Picker Does Not Restrict or Mark Reuse". No other artifact depended on the marker. The rest of this ADR — the identity/imagery split, non-unique `hunterId`, the accent colour itself — is unaffected.

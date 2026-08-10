@@ -20,7 +20,7 @@
 Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped loadout lists per ADR-0006 and SPEC-0003: a roster grid of portrait cards (one per list), expand-in-place to reveal that list's loadouts, inline create with a hunter-portrait picker, inline rename, retire confirmation, and five sort orders. Unassigned is a permanent group pinned first.
 
 ## About the Design Files
-`Loadout Lists Panel.dc.html` is a **design reference created in HTML** — an interactive prototype showing intended look and behavior, not production code. The task is to **recreate this design in the existing React + Redux client** (`client/src/`) using its established patterns: `global.css` variables/classes, `ItemThumb` for imagery fallback, existing slices/thunks, and the routes/spec work in `docs/openspec/specs/hunter-loadout-lists/`. The server model, endpoints, ownership rules, and error/a11y requirements are already specified there — this handoff covers the visual/UI layer only.
+`loadout-lists-panel.html` (delivered as `Loadout Lists Panel.dc.html`) is a **design reference created in HTML** — an interactive prototype showing intended look and behavior, not production code. The task is to **recreate this design in the existing React + Redux client** (`client/src/`) using its established patterns: `global.css` variables/classes, `ItemThumb` for imagery fallback, existing slices/thunks, and the routes/spec work in `docs/openspec/specs/hunter-loadout-lists/`. The server model, endpoints, ownership rules, and error/a11y requirements are already specified there — this handoff covers the visual/UI layer only.
 
 ## Fidelity
 **High-fidelity.** Colors, type, and spacing intentionally match the app's existing theme (`client/src/styles/global.css`). Recreate the UI using the existing CSS variables and class conventions rather than hardcoding hex values — every color below maps to a `global.css` token where one exists.
@@ -101,5 +101,5 @@ All from `client/src/styles/global.css` — use the variables:
 - No new icons; monogram/glyph fallbacks are plain text.
 
 ## Files
-- `Loadout Lists Panel.dc.html` — the interactive prototype (open in a browser; includes names-only-phase and thumb-strip toggles).
+- `docs/design/hunter-loadout-lists/loadout-lists-panel.html` — the interactive prototype (open in a browser; includes names-only-phase and thumb-strip toggles). Renamed from the delivered `Loadout Lists Panel.dc.html` on commit.
 - Repo references: `docs/adrs/ADR-0006-hunter-loadout-lists.md`, `docs/openspec/specs/hunter-loadout-lists/spec.md` + `design.md`, `client/src/styles/global.css`, `client/src/components/SavedLoadoutsPanel/SavedLoadoutsPanel.jsx` (component being replaced), `client/src/components/ItemThumb/ItemThumb.jsx`.

@@ -184,6 +184,7 @@ erDiagram
         string owner FK "client token"
         string name "free text, mutable"
         string hunterId FK "nullable, NON-unique"
+        string accent "palette value, least-used-first"
         string createdAt
     }
 
@@ -241,12 +242,12 @@ Both mutations are staged in memory and committed by one `write()`. There is no 
 ## Risks / Trade-offs
 
 - **Cross-collection ownership check is new and easy to omit** → It is called out as the first bold item in the spec's Confirmation list, and gets a dedicated scenario. The test asserting token A cannot file into token B's list should be written before the endpoint.
-- **Two lists sharing a portrait look alike at a glance** → Addressed by the per-list accent colour and the picker's in-use marker. Residual risk is that accent alone is not accessible, so the name remains the primary accessible identity and neither the accent nor the marker may be colour-only.
+- **Two lists sharing a portrait look alike at a glance** → Addressed by the per-list accent colour alone; the picker deliberately does not mark reuse. Residual risk is that the accent is not accessible on its own — the palette separates by hue rather than luminance — so the list name remains the primary accessible identity and the accent must never be the sole differentiator.
 - **`lowdb` read-modify-write interleaving under concurrent requests** → Pre-existing in the loadouts routes, but retirement's multi-step mutation raises the stakes. Addressed by the atomic-write requirement; if interleaving proves real in practice, serializing writes behind a queue is the smallest available fix.
 - **Free-text list names can still drift** → Blunted rather than solved by defaulting the name from the chosen portrait, so lists only diverge from the roster's vocabulary when the user deliberately types something else.
 - **First heavy image assets in the app** → Portraits are photographic, the picker shows many at once, and the dataset covers the full roster rather than a subset. Mitigated by lazy-loading and the SPEC-0001 fallback chain; the sequencing below defers assets entirely until the feature works, so the weight lands last and can be tuned independently.
 - **Hunters dataset refreshes independently of stored lists** → A list may outlive its hunter's dataset entry. The spec requires such a list stay fully usable behind a neutral placeholder rather than breaking or disappearing; this is the concrete reason `hunterId` resolution must never be treated as a hard reference.
-- **The `extends: [ADR-0005]` dependency is not yet merged** → ADR-0005 exists on an open pull request. Graph validation will flag the edge until it lands.
+- **Cross-artifact edges must stay in step with reversals** → SPEC-0003 `implements` ADR-0006, so a decision reversed here has to be reflected there or the graph reports two sources of truth. The in-use-marker reversal required an amendment to ADR-0006 for exactly this reason.
 
 ## Migration Plan
 
