@@ -60,6 +60,19 @@ test("slugify: is idempotent", () => {
   assert.equal(slugify(once), once);
 });
 
+// The writer end of the asset-path contract must be the SAME function as the reader end in
+// client/src/components/ItemThumb/ItemThumb.jsx — not merely one that agrees on the cases
+// above. Both previously carried their own copy and the copies had drifted on apostrophes
+// and diacritics, which is invisible at runtime: a mismatched slug renders the SVG fallback,
+// exactly like an item that has not been scraped yet (issue #119).
+//
+// Value equality would pass again the moment someone reintroduced a local copy that happened
+// to agree on the tested names. Identity is what fails.
+test("slugify: is the canonical shared definition, not a scripts-local copy", async () => {
+  const { slugify: canonical } = await import("../client/src/utils/slugify.js");
+  assert.equal(slugify, canonical);
+});
+
 // ---------------------------------------------------------------------------
 // buildItemPageUrl
 // ---------------------------------------------------------------------------

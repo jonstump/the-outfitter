@@ -68,25 +68,26 @@ export class NetworkFailureError extends ScrapeError {}
 export class RobotsDisallowedError extends ScrapeError {}
 
 // ---------------------------------------------------------------------------
-// Slugification — must match the {slug} half of the shared asset-path contract with issue #8:
+// Slugification — the {slug} half of the shared asset-path contract:
 // client/public/images/{category}/{slug}.{ext}, keyed by catalog item name (e.g.
-// "Nagant M1895" -> "nagant-m1895"). Do not change this without also updating #8's IMAGES lookup.
+// "Nagant M1895" -> "nagant-m1895").
 //
-// This is the single definition in the repo, by ADR-0005's confirmation criterion: grepping scripts/
-// for a second definition of it must return nothing.
+// IMPORTED, NOT DEFINED HERE. ADR-0005 requires one definition, and it was previously read as
+// "one definition under scripts/" — which the confirmation criterion literally says. That left
+// the reader end of the same contract, client/src/components/ItemThumb/ItemThumb.jsx, carrying
+// a second copy that had already drifted: it neither stripped diacritics nor dropped
+// apostrophes. A scrape writing hunters-respite.png against a client requesting
+// hunter-s-respite.png loses the art with no error anywhere (issue #119).
+//
+// The canonical definition therefore lives on the client side, which both ends can reach:
+// scripts/ may import from client/src/, but the client must never import from scripts/.
 // ---------------------------------------------------------------------------
 
-const COMBINING_DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+// Imported AND re-exported: this module uses it internally (collectCatalogItems), and every
+// existing consumer imports it from here rather than reaching past the wiki client.
+import { slugify } from "../../client/src/utils/slugify.js";
 
-export function slugify(name) {
-  return name
-    .normalize("NFKD")
-    .replace(COMBINING_DIACRITICS_RE, "") // strip combining diacritics
-    .toLowerCase()
-    .replace(/'/g, "") // drop apostrophes rather than turning them into hyphens
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+export { slugify };
 
 // ---------------------------------------------------------------------------
 // Catalog -> scrape target list. Deliberately narrow: only the four categories and the specific
