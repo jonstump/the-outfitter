@@ -86,6 +86,26 @@ export default function ItemThumb({
   const [imageFailed, setImageFailed] = useState(false);
 
   const candidates = candidateSources({ sources, category, name });
+
+  // How far the chain has walked is state ABOUT a particular candidate list, so it has to be
+  // discarded when that list changes. Without this, a component instance reused at a stable
+  // JSX position — `ExpandedList`'s header art as the open list switches, or the create-form
+  // preview across successive picks — carries one subject's exhausted chain onto the next,
+  // and a hunter whose portrait exists renders the silhouette because the PREVIOUS hunter's
+  // portrait failed.
+  //
+  // Reset during render rather than in an effect: an effect would paint one frame from the
+  // stale index first, which is the flash of a wrong portrait. This is React's documented
+  // "adjust state when a prop changes" pattern. Kept here rather than pushed onto callers as
+  // a `key` so the invariant holds for every call site, including ones not yet written.
+  const candidateKey = candidates.join("|");
+  const [renderedKey, setRenderedKey] = useState(candidateKey);
+  if (renderedKey !== candidateKey) {
+    setRenderedKey(candidateKey);
+    setSrcIndex(0);
+    setImageFailed(false);
+  }
+
   const tryImage = !imageFailed && srcIndex < candidates.length;
 
   return (

@@ -269,6 +269,57 @@ describe("HunterPicker focus and keyboard", () => {
     expect(document.activeElement).toBe(options[0]);
   });
 
+  // Up/Down read the column count back from layout, which jsdom does not perform: every
+  // element reports a zero-sized box. That is exactly the "no layout yet" case the picker
+  // promises to degrade — and it is also reachable in a browser, while the dialog is still
+  // transitioning in. Asserting it here pins the documented behaviour rather than leaving
+  // the axis untested because the environment makes it awkward.
+  it("degrades Down/Up to Next/Previous when layout has not happened", () => {
+    render(<Harness />);
+    openPicker();
+    const grid = screen.getByRole("listbox");
+    const options = tiles();
+
+    options[0].focus();
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(options[1]);
+
+    fireEvent.keyDown(grid, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(options[0]);
+  });
+
+  it("moves Down/Up by a whole row once the grid has been laid out", () => {
+    render(<Harness />);
+    openPicker();
+    const grid = screen.getByRole("listbox");
+    const options = tiles();
+
+    // Stand in for the layout jsdom will not do: two columns, so tiles 0/1 share a row,
+    // 2/3 the next, and so on. A non-zero box is what tells columnCount() layout happened.
+    const COLS = 2;
+    options.forEach((el, i) => {
+      Object.defineProperty(el, "offsetWidth", { configurable: true, value: 120 });
+      Object.defineProperty(el, "offsetHeight", { configurable: true, value: 80 });
+      Object.defineProperty(el, "offsetTop", { configurable: true, value: Math.floor(i / COLS) * 80 });
+    });
+
+    options[0].focus();
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(options[COLS]);
+
+    fireEvent.keyDown(grid, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(options[0]);
+
+    // A single row is NOT the no-layout case: with every tile on one row the column count
+    // is the tile count, so Down clamps to the last tile rather than stepping sideways.
+    options.forEach((el) => {
+      Object.defineProperty(el, "offsetTop", { configurable: true, value: 0 });
+    });
+    options[0].focus();
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(options[options.length - 1]);
+  });
+
   it("selects the focused option with Enter and with Space", () => {
     const onSelect = vi.fn();
     const { unmount } = render(<Harness onSelect={onSelect} />);

@@ -67,10 +67,18 @@ export default function HunterPicker({ selectedHunterId = null, onSelect, onClos
   // The grid is `auto-fill`, so the column count is decided by CSS at the current width and
   // can only be read back from layout. Falls back to a single column when layout has not
   // happened (which also makes Up/Down degrade to Previous/Next rather than misfire).
+  //
+  // "No layout yet" cannot be inferred from offsetTop alone: unlaid-out tiles all report 0,
+  // and so do the tiles of a genuine single row. Counting equal offsetTops would then yield
+  // the whole option count in BOTH cases — which is right for one row and badly wrong before
+  // layout, where it sends Up/Down to the last/first tile instead of one step. Ask about
+  // layout directly instead: an unlaid-out element has no box, so its offset size is 0.
   const columnCount = () => {
     const opts = optionEls();
     if (opts.length < 2) return 1;
-    const top = opts[0].offsetTop;
+    const first = opts[0];
+    if (first.offsetWidth === 0 && first.offsetHeight === 0) return 1;
+    const top = first.offsetTop;
     let n = 0;
     for (const el of opts) {
       if (el.offsetTop !== top) break;
