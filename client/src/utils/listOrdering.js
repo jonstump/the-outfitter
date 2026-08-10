@@ -3,8 +3,19 @@
 // Sort orders for the list roster. The preference is client state and is never persisted
 // server-side — see uiSlice.
 
-/** Sort keys, in the order they appear in the picker. */
+/** Every sort this module can perform. */
 export const SORT_KEYS = ["name", "hunter", "created", "recent", "count"];
+
+/**
+ * The subset actually offered in the UI today.
+ *
+ * "hunter" needs a hunters dataset to resolve ids to names (issue #88 / ADR-0007), and
+ * "recent" needs a `lastUsedAt` the server does not yet record. Both currently fall
+ * through to the name tiebreak, so offering them would ship two menu entries that
+ * silently duplicate the default. The comparators stay implemented and unit-tested so
+ * enabling them is a one-line change once the data exists.
+ */
+export const AVAILABLE_SORT_KEYS = ["name", "created", "count"];
 
 export const SORT_LABELS = {
   name: "List name",

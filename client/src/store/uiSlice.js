@@ -25,7 +25,12 @@ const initialState = {
   upBudgetOn: false,
   upBudget: 12,
   message: "",
+  // selectedListId holds a REAL list id or null — never a sentinel. Unassigned is a
+  // separate boolean because it is a structural group, not a list: overloading one field
+  // with both let the "__unassigned__" sentinel reach the API as a listId, which the
+  // server correctly rejected with a 404, breaking every save while that card was open.
   selectedListId: readSelectedList(),
+  unassignedOpen: false,
   listSort: DEFAULT_SORT,
   creatingList: false,
   renamingListId: null,
@@ -56,11 +61,23 @@ const uiSlice = createSlice({
     },
     selectList(state, action) {
       state.selectedListId = action.payload ?? null;
+      if (state.selectedListId) state.unassignedOpen = false;
       try {
         if (state.selectedListId) localStorage.setItem(LS_SELECTED_LIST, state.selectedListId);
         else localStorage.removeItem(LS_SELECTED_LIST);
       } catch {
         // Storage unavailable — selection still works for this session.
+      }
+    },
+    openUnassigned(state, action) {
+      state.unassignedOpen = Boolean(action.payload);
+      if (state.unassignedOpen) {
+        state.selectedListId = null;
+        try {
+          localStorage.removeItem(LS_SELECTED_LIST);
+        } catch {
+          // Storage unavailable — nothing to clear.
+        }
       }
     },
     setListSort(state, action) {

@@ -19,8 +19,9 @@ export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, {
   const { loadout, ui } = getState();
   const name = loadout.name.trim() || "Unnamed loadout";
   try {
-    // SPEC-0003: while a list is selected, a new save files into it. Saving to Unassigned
-    // without deselecting is legitimate — selectedListId is simply null then.
+    // SPEC-0003 line 318: the user SHALL be able to save to Unassigned without first
+    // deselecting. selectedListId is a real list id or null — Unassigned is tracked by
+    // ui.unassignedOpen and never travels as a listId, so this cannot send a sentinel.
     const record = await upsertLoadout(name, toData({ ...loadout, name }), ui.selectedListId ?? null);
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;

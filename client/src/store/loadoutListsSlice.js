@@ -89,6 +89,8 @@ const loadoutListsSlice = createSlice({
         state.status = "succeeded";
         state.items = action.payload;
       })
+      // Reconciliation lives in the panel (see selectedList resolution); the slice only
+      // owns the list data itself.
       .addCase(fetchLists.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;

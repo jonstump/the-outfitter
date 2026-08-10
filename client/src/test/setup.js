@@ -6,3 +6,10 @@
 // Vitest setup file: adds jest-dom's DOM matchers (toBeInTheDocument, toHaveClass, ...) to every
 // test file automatically, per client/vitest.config.js's `test.setupFiles`.
 import "@testing-library/jest-dom/vitest";
+
+// jsdom does not implement Element.prototype.scrollIntoView. The panel calls it to bring an
+// expanded list into view (a real-browser affordance), so stub it rather than weakening the
+// production call for a test-only gap.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

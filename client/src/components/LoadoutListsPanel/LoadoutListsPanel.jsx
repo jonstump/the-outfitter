@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
-import { groupByList, sortLists, SORT_KEYS, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
+import { groupByList, sortLists, AVAILABLE_SORT_KEYS, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
 import { loadSavedThunk } from "../../store/thunks.js";
 import { deleteSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
 import { createListThunk, renameListThunk, retireListThunk } from "../../store/loadoutListsSlice.js";
@@ -27,7 +27,14 @@ export default function LoadoutListsPanel() {
   const dispatch = useDispatch();
   const loadouts = useSelector((s) => s.savedLoadouts.items);
   const lists = useSelector((s) => s.loadoutLists.items);
-  const { selectedListId, listSort, creatingList, renamingListId, confirmRetireListId } = useSelector((s) => s.ui);
+  // Narrow selectors: subscribing to the whole ui slice re-rendered the entire roster on
+  // every tab switch, budget tweak and picker keystroke.
+  const selectedListId = useSelector((s) => s.ui.selectedListId);
+  const unassignedOpen = useSelector((s) => s.ui.unassignedOpen);
+  const listSort = useSelector((s) => s.ui.listSort);
+  const creatingList = useSelector((s) => s.ui.creatingList);
+  const renamingListId = useSelector((s) => s.ui.renamingListId);
+  const confirmRetireListId = useSelector((s) => s.ui.confirmRetireListId);
 
   const groups = useMemo(() => groupByList(loadouts, lists), [loadouts, lists]);
   const countFor = (id) => (groups.get(id) || []).length;
@@ -37,13 +44,17 @@ export default function LoadoutListsPanel() {
     [lists, listSort, groups]
   );
 
-  if (loadouts.length === 0 && lists.length === 0) return null;
-
   const unassigned = groups.get(UNASSIGNED) || [];
-  const openList = selectedListId === UNASSIGNED ? null : lists.find((l) => l.id === selectedListId);
-  const isOpen = (id) => selectedListId === id;
+  // Resolve rather than trust: a selectedListId can outlive its list (retired in another
+  // tab, or restored from localStorage against cleared server data). An unresolved id
+  // previously rendered a ghost panel with no title and no controls.
+  const openList = lists.find((l) => l.id === selectedListId) || null;
+  const isOpen = (id) => (id === UNASSIGNED ? unassignedOpen : selectedListId === id && Boolean(openList));
 
-  const toggle = (id) => dispatch(uiActions.selectList(isOpen(id) ? null : id));
+  const toggle = (id) =>
+    id === UNASSIGNED
+      ? dispatch(uiActions.openUnassigned(!unassignedOpen))
+      : dispatch(uiActions.selectList(isOpen(id) ? null : id));
 
   return (
     <div className="panel">
@@ -56,7 +67,7 @@ export default function LoadoutListsPanel() {
         <label className="ll-sort">
           <span className="sr-only">Order lists by</span>
           <select value={listSort} onChange={(e) => dispatch(uiActions.setListSort(e.target.value))}>
-            {SORT_KEYS.map((k) => (
+            {AVAILABLE_SORT_KEYS.map((k) => (
               <option key={k} value={k}>
                 Sort: {SORT_LABELS[k]}
               </option>
@@ -69,6 +80,13 @@ export default function LoadoutListsPanel() {
       </div>
 
       {creatingList && <CreateList onDone={() => dispatch(uiActions.setCreatingList(false))} />}
+
+      {lists.length === 0 && loadouts.length === 0 && !creatingList && (
+        <p className="ll-empty ll-empty-roster">
+          No lists yet. Create one to start filing loadouts, or just save — anything unfiled
+          lands in Unassigned.
+        </p>
+      )}
 
       <div className="ll-grid">
         {/* Unassigned is pinned first regardless of sort — it is a permanent structural
@@ -93,13 +111,13 @@ export default function LoadoutListsPanel() {
         ))}
       </div>
 
-      {selectedListId && (
+      {(unassignedOpen || openList) && (
         <ExpandedList
           list={openList}
-          unassigned={selectedListId === UNASSIGNED}
-          loadouts={groups.get(selectedListId) || []}
+          unassigned={unassignedOpen}
+          loadouts={unassignedOpen ? unassigned : groups.get(openList.id) || []}
           lists={lists}
-          renaming={renamingListId === selectedListId}
+          renaming={Boolean(openList) && renamingListId === openList.id}
         />
       )}
 
@@ -139,6 +157,13 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   const dispatch = useDispatch();
   const [draftName, setDraftName] = useState(list?.name ?? "");
   const inputRef = useRef(null);
+  const rootRef = useRef(null);
+
+  // The expanded panel renders below the whole grid; on a phone with several lists a tap
+  // otherwise looks like it did nothing.
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [list?.id, unassigned]);
 
   useEffect(() => {
     setDraftName(list?.name ?? "");
@@ -156,7 +181,7 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   };
 
   return (
-    <div className="ll-expanded">
+    <div className="ll-expanded" ref={rootRef}>
       <div className="ll-expanded-head">
         <div className="ll-expanded-title">
           {renaming ? (
@@ -185,7 +210,9 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
               )}
             </>
           )}
-          <span className="ll-badge">Default list for saved loadouts</span>
+          <span className="ll-badge">
+            {unassigned ? "Not filed into any list" : "Default list for saved loadouts"}
+          </span>
         </div>
         {!unassigned && list && (
           <button
@@ -229,7 +256,9 @@ function LoadoutRow({ item, lists }) {
       <label className="ll-row-move">
         <span className="sr-only">List for {item.name}</span>
         <select
-          value={item.listId ?? ""}
+          // Degrade exactly as groupByList does: a dangling listId matches no <option>, so
+          // the row would sit under Unassigned with a blank control.
+          value={item.listId && lists.some((l) => l.id === item.listId) ? item.listId : ""}
           onChange={(e) => {
             const next = e.target.value || null;
             dispatch(
@@ -267,14 +296,25 @@ function LoadoutRow({ item, lists }) {
 function CreateList({ onDone }) {
   const dispatch = useDispatch();
   const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     // An empty name with no hunter falls back to a generic default in the thunk. The
     // hunter picker that supplies hunterId/hunterName is issue #88.
-    dispatch(createListThunk({ name }));
-    setName("");
-    onDone();
+    //
+    // Await before closing: dismissing optimistically threw away the typed name whenever
+    // the request failed, and the banner error then referred to a form no longer on screen.
+    setSaving(true);
+    try {
+      await dispatch(createListThunk({ name })).unwrap();
+      setName("");
+      onDone();
+    } catch {
+      // Thunk already surfaced the failure; keep the form and the name intact.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -292,8 +332,8 @@ function CreateList({ onDone }) {
           }}
         />
       </label>
-      <button className="btn-primary" type="submit">
-        Create list
+      <button className="btn-primary" type="submit" disabled={saving}>
+        {saving ? "Creating…" : "Create list"}
       </button>
       <button className="btn-outline" type="button" onClick={onDone}>
         Cancel
@@ -305,25 +345,54 @@ function CreateList({ onDone }) {
 function RetireDialog({ list, count }) {
   const dispatch = useDispatch();
   const confirmRef = useRef(null);
-  const close = () => dispatch(uiActions.setConfirmRetireListId(null));
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(null);
+
+  const close = () => {
+    dispatch(uiActions.setConfirmRetireListId(null));
+    // Return focus to whatever opened the dialog, rather than dropping it on <body>.
+    returnFocusRef.current?.focus?.();
+  };
 
   useEffect(() => {
+    returnFocusRef.current = document.activeElement;
     confirmRef.current?.focus();
   }, []);
+
+  // aria-modal tells assistive tech the rest of the page does not exist; without a trap,
+  // Tab walks straight out of it. Keep Tab inside, and handle Escape at the dialog root so
+  // it works wherever focus currently sits.
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") {
+      close();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = dialogRef.current?.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   if (!list) return null;
 
   return (
     <div className="ll-overlay" onClick={close}>
       <div
+        ref={dialogRef}
         className="ll-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ll-retire-title"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") close();
-        }}
+        onKeyDown={onKeyDown}
       >
         <h2 id="ll-retire-title">Retire this list?</h2>
         <p>
@@ -339,10 +408,16 @@ function RetireDialog({ list, count }) {
           <button
             ref={confirmRef}
             className="btn-primary"
-            onClick={() => {
-              dispatch(retireListThunk({ id: list.id, name: list.name }));
-              dispatch(uiActions.selectList(null));
-              close();
+            onClick={async () => {
+              // Deselecting before the request resolved collapsed the list out from under
+              // the user on failure, when it was in fact still there.
+              try {
+                await dispatch(retireListThunk({ id: list.id, name: list.name })).unwrap();
+                dispatch(uiActions.selectList(null));
+                close();
+              } catch {
+                close(); // thunk surfaced the failure; leave the list selected
+              }
             }}
           >
             Retire list
