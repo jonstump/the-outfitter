@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import loadoutReducer from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 import savedLoadoutsReducer from "./savedLoadoutsSlice.js";
+import loadoutListsReducer from "./loadoutListsSlice.js";
 import { writeStoredLoadout } from "../utils/loadoutCodec.js";
 
 export const store = configureStore({
@@ -9,6 +10,7 @@ export const store = configureStore({
     loadout: loadoutReducer,
     ui: uiReducer,
     savedLoadouts: savedLoadoutsReducer,
+    loadoutLists: loadoutListsReducer,
   },
 });
 

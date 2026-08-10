@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { deleteLoadout, getLoadouts, upsertLoadout } from "../api/loadouts.js";
+import { deleteLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
 import { uiActions } from "./uiSlice.js";
 
@@ -16,10 +16,22 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
 });
 
 export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
-  const { loadout } = getState();
+  const { loadout, ui, loadoutLists } = getState();
   const name = loadout.name.trim() || "Unnamed loadout";
+
+  // SPEC-0003 line 318: the user SHALL be able to save to Unassigned without first
+  // deselecting. Unassigned is ui.unassignedOpen, never a listId, so no sentinel can
+  // travel here.
+  //
+  // Resolve rather than trust, symmetrically with the panel's render path: a stale
+  // selectedListId — retired in another tab, or restored from localStorage before
+  // fetchLists has resolved — would otherwise be sent as a real list id and 404 the save.
+  // uiSlice reconciles on fetchLists.fulfilled; this closes the window before that lands.
+  const selected = ui.selectedListId;
+  const listId = selected && (loadoutLists?.items || []).some((l) => l.id === selected) ? selected : null;
+
   try {
-    const record = await upsertLoadout(name, toData({ ...loadout, name }));
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId);
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;
   } catch (err) {
@@ -37,6 +49,28 @@ export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id, {
     throw err;
   }
 });
+
+// Governing: SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference"
+//
+// Moving is an explicit, keyboard-operable control on the loadout row — a select, not
+// drag-and-drop. A successful move removes the row from the open list, so the outcome is
+// announced politely; a failure reverts and is announced assertively, because a row that
+// silently vanishes reads as data loss.
+export const moveSaved = createAsyncThunk(
+  "savedLoadouts/move",
+  async ({ id, listId, loadoutName, listName }, { dispatch }) => {
+    try {
+      const record = await moveLoadout(id, listId);
+      dispatch(
+        uiActions.setMessage(`Moved “${loadoutName}” to ${listName || "Unassigned"}.`)
+      );
+      return record;
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't move “${loadoutName}”: ${err.message}`));
+      throw err;
+    }
+  }
+);
 
 const savedLoadoutsSlice = createSlice({
   name: "savedLoadouts",
@@ -62,6 +96,10 @@ const savedLoadoutsSlice = createSlice({
       })
       .addCase(deleteSaved.fulfilled, (state, action) => {
         state.items = state.items.filter((l) => l.id !== action.payload);
+      })
+      .addCase(moveSaved.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
       });
   },
 });

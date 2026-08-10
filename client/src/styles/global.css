@@ -800,3 +800,246 @@ button {
   color: var(--text-dim);
   font-style: italic;
 }
+
+/* ---------------------------------------------------------------------------
+   Loadout lists (SPEC-0003). Portraits and per-list accent colours are #88;
+   this is the names-only phase — monogram tiles stand in for portraits.
+   Every colour below is an existing token; no new palette is introduced here.
+   --------------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ll-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ll-header .panel-meta {
+  flex: 1;
+}
+
+.ll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.ll-card {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scroll-track);
+  border: 3px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+}
+.ll-card:hover,
+.ll-card:focus-visible {
+  border-color: var(--gold-border);
+}
+.ll-card-unassigned {
+  border-style: dashed;
+  border-color: var(--border);
+}
+.ll-card-open {
+  border-color: var(--gold);
+}
+.ll-card-mono {
+  font-family: "IM Fell English SC", serif;
+  font-size: 52px;
+  color: var(--border);
+}
+.ll-card-plate {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: block;
+  text-align: left;
+  padding: 36px 12px 12px;
+  background: linear-gradient(transparent, rgba(19, 16, 9, 0.95) 60%);
+}
+.ll-card-name {
+  display: block;
+  font-family: "IM Fell English SC", serif;
+  font-size: 19px;
+  letter-spacing: 1px;
+  line-height: 1.1;
+  color: var(--text-bright);
+}
+.ll-card-count {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ll-expanded {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  background: var(--scroll-track);
+}
+.ll-expanded-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+.ll-expanded-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ll-expanded-name {
+  font-family: "IM Fell English SC", serif;
+  font-size: 20px;
+  color: var(--text-bright);
+}
+.ll-rename,
+.ll-row-name {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.ll-rename {
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+.ll-rename:hover {
+  color: var(--gold-bright);
+}
+.ll-rename-input {
+  font-family: "IM Fell English SC", serif;
+  font-size: 18px;
+  background: var(--input-bg);
+  color: var(--text-bright);
+  border: 1px solid var(--gold-border);
+  padding: 4px 8px;
+}
+.ll-badge {
+  font-size: 12.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid var(--gold-border);
+  color: var(--gold-bright);
+  padding: 4px 10px;
+}
+.ll-retire:hover {
+  color: var(--red-bright);
+  border-color: var(--red-border);
+}
+
+.ll-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+}
+.ll-empty {
+  margin: 0;
+  font-style: italic;
+  color: var(--text-dim);
+}
+.ll-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--scroll-track);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-soft);
+}
+.ll-row-name {
+  flex: 1;
+  min-width: 180px;
+  text-align: left;
+  font-size: 16.5px;
+  color: var(--text-bright);
+}
+.ll-row-name:hover {
+  color: var(--gold-bright);
+}
+.ll-row-cost {
+  font-size: 14.5px;
+  color: var(--gold);
+}
+.ll-row-move select {
+  font-size: 13.5px;
+  padding: 4px 8px;
+  max-width: 160px;
+  text-overflow: ellipsis;
+}
+.ll-row-move select:hover,
+.ll-row-move select:focus-visible {
+  border-color: var(--gold-border);
+}
+
+.ll-create {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--scroll-track);
+  border: 1px solid var(--gold-border);
+}
+.ll-create-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.ll-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 4, 0.7);
+  z-index: 50;
+}
+.ll-dialog {
+  max-width: 400px;
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--gold-border);
+}
+.ll-dialog h2 {
+  margin: 0 0 10px;
+  font-family: "IM Fell English SC", serif;
+  font-size: 20px;
+  color: var(--text-bright);
+}
+.ll-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}

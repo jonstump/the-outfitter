@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { loadoutActions } from "./store/loadoutSlice.js";
+import { fetchLists } from "./store/loadoutListsSlice.js";
 import { fetchSaved } from "./store/savedLoadoutsSlice.js";
 import { readHashLoadout, readStoredLoadout } from "./utils/loadoutCodec.js";
 import Header from "./components/Header/Header.jsx";
@@ -8,7 +9,7 @@ import WeaponsPanel from "./components/WeaponsPanel/WeaponsPanel.jsx";
 import EquipmentPanel from "./components/EquipmentPanel/EquipmentPanel.jsx";
 import TraitsPanel from "./components/TraitsPanel/TraitsPanel.jsx";
 import ActionsPanel from "./components/ActionsPanel/ActionsPanel.jsx";
-import SavedLoadoutsPanel from "./components/SavedLoadoutsPanel/SavedLoadoutsPanel.jsx";
+import LoadoutListsPanel from "./components/LoadoutListsPanel/LoadoutListsPanel.jsx";
 import Picker from "./components/Picker/Picker.jsx";
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
     const hydrated = readHashLoadout() || readStoredLoadout();
     if (hydrated) dispatch(loadoutActions.setLoadout(hydrated));
     dispatch(fetchSaved());
+    dispatch(fetchLists());
   }, [dispatch]);
 
   return (
@@ -29,7 +31,7 @@ export default function App() {
           <EquipmentPanel />
           <TraitsPanel />
           <ActionsPanel />
-          <SavedLoadoutsPanel />
+          <LoadoutListsPanel />
         </section>
         <section className="right-column">
           <Picker />
