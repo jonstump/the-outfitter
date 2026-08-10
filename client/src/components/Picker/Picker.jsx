@@ -55,7 +55,7 @@ function buildRows(tab, ui, loadout, dispatch) {
           name: x.w[1],
           meta: AMMO_LABEL[x.w[4]],
           badge: "Size " + x.w[2],
-          badgeColor: "#b08d4f",
+          badgeColor: "#c4a05e",
           category: "weapons",
           thumb: weaponThumb(x.w),
           costStr: "$" + x.w[3],
@@ -112,7 +112,7 @@ function buildRows(tab, ui, loadout, dispatch) {
         name: x.t[1],
         meta: x.t[0] === QM ? "Raises weapon capacity to 6" : x.t[3] + " trait",
         badge: x.t[2] + " UP",
-        badgeColor: "#b08d4f",
+        badgeColor: "#c4a05e",
         category: "traits",
         thumb: traitThumb(x.t),
         costStr: "",
@@ -154,6 +154,8 @@ export default function Picker() {
   // Governing: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback" —
   // picker rows show imagery (scraped photo or SVG fallback) on all four tabs, not just Weapons.
   const showThumb = true;
+  // Weapon art is a wide silhouette; tools, consumables, and traits are roughly square.
+  const thumbVariant = tab === "Weapons" ? "wide" : "square";
 
   return (
     <>
@@ -227,7 +229,7 @@ export default function Picker() {
 
       <div className="picker-list">
         {rows.map((row) => (
-          <PickerRow key={row.key} row={row} showThumb={showThumb} />
+          <PickerRow key={row.key} row={row} showThumb={showThumb} thumbVariant={thumbVariant} />
         ))}
         {rows.length === 0 && <div className="picker-empty">Nothing matches.</div>}
       </div>

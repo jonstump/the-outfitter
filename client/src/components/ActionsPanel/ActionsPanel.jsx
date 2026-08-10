@@ -14,8 +14,8 @@ export default function ActionsPanel() {
 
   const overBudget = ui.budgetOn && total > ui.budget;
   const overUp = ui.upBudgetOn && up > ui.upBudget;
-  const budgetLabelColor = overBudget ? "#c96b5b" : "#d9cbab";
-  const upLabelColor = overUp ? "#c96b5b" : "#d9cbab";
+  const budgetLabelColor = overBudget ? "#c96b5b" : "#e6d9ba";
+  const upLabelColor = overUp ? "#c96b5b" : "#e6d9ba";
 
   // Governing: SPEC-0001 REQ "Accessibility Requirements" (Dynamic Content Regions).
   //
@@ -33,7 +33,7 @@ export default function ActionsPanel() {
   const messageText = ui.message.replace(/^!/, "");
 
   return (
-    <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="actions-row">
         <button className="btn-primary" style={{ flex: 1, minWidth: 150 }} onClick={() => dispatch(randomizeThunk())}>
           Random loadout
@@ -53,7 +53,7 @@ export default function ActionsPanel() {
           </button>
           {ui.budgetOn && (
             <span className="budget-input-wrap">
-              <span style={{ color: budgetLabelColor, fontSize: 15 }}>$</span>
+              <span style={{ color: budgetLabelColor, fontSize: 16.5 }}>$</span>
               <input
                 type="number"
                 min="0"
@@ -84,7 +84,7 @@ export default function ActionsPanel() {
                 value={ui.upBudget}
                 onChange={(e) => dispatch(uiActions.setUpBudget(parseInt(e.target.value, 10) || 0))}
               />
-              <span style={{ color: upLabelColor, fontSize: 14 }}>UP</span>
+              <span style={{ color: upLabelColor, fontSize: 15.5 }}>UP</span>
             </span>
           )}
         </span>

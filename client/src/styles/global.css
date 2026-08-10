@@ -4,12 +4,12 @@
   --border: #3a2f1e;
   --border-soft: #2a2216;
   --divider: #241d12;
-  --text: #d9cbab;
-  --text-bright: #e6dab9;
-  --text-muted: #8a7c5f;
-  --text-dim: #6b5f47;
-  --gold: #b08d4f;
-  --gold-bright: #d9b878;
+  --text: #e6d9ba;
+  --text-bright: #f0e6c8;
+  --text-muted: #a3936f;
+  --text-dim: #857659;
+  --gold: #c4a05e;
+  --gold-bright: #e5c78b;
   --gold-border: #8a6f42;
   --red: #7f2b26;
   --red-border: #a04338;
@@ -85,20 +85,20 @@ button {
   gap: 12px;
   align-items: baseline;
   justify-content: space-between;
-  padding: 18px 24px 14px;
+  padding: 22px 28px 18px;
   border-bottom: 1px solid var(--border);
 }
 
 .app-title {
   font-family: "IM Fell English SC", serif;
-  font-size: 30px;
+  font-size: 33px;
   line-height: 1;
   color: var(--text);
   letter-spacing: 2px;
 }
 
 .app-subtitle {
-  font-size: 13px;
+  font-size: 14.5px;
   color: var(--text-muted);
   font-style: italic;
   margin-top: 2px;
@@ -115,7 +115,7 @@ button {
 }
 
 .header-stat-label {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 2px;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -123,14 +123,14 @@ button {
 
 .header-stat-value {
   font-family: "IM Fell English SC", serif;
-  font-size: 26px;
+  font-size: 30px;
 }
 
 .app-main {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  padding: 20px 24px 40px;
+  padding: 26px 28px 48px;
   align-items: flex-start;
   max-width: 1440px;
   margin: 0 auto;
@@ -141,7 +141,7 @@ button {
   min-width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
 .right-column {
@@ -157,7 +157,7 @@ button {
   padding: 0 24px 28px;
   max-width: 1440px;
   margin: 0 auto;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
   font-style: italic;
 }
@@ -200,7 +200,7 @@ button {
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  padding: 16px;
+  padding: 20px;
 }
 
 .panel-header {
@@ -213,13 +213,13 @@ button {
 
 .panel-title {
   font-family: "IM Fell English SC", serif;
-  font-size: 17px;
+  font-size: 19px;
   letter-spacing: 1.5px;
   color: var(--gold);
 }
 
 .panel-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   letter-spacing: 1px;
 }
@@ -227,7 +227,7 @@ button {
 .empty-note {
   color: var(--text-dim);
   font-style: italic;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 /* Buttons */
@@ -237,7 +237,7 @@ button {
   border: 1px solid var(--border);
   color: var(--text-muted);
   padding: 10px 16px;
-  font-size: 15px;
+  font-size: 16.5px;
   cursor: pointer;
 }
 .btn:hover {
@@ -250,7 +250,7 @@ button {
   border: 1px solid var(--red-border);
   color: #f0e2c4;
   font-family: "IM Fell English SC", serif;
-  font-size: 16px;
+  font-size: 17.5px;
   letter-spacing: 1px;
   padding: 12px 16px;
 }
@@ -263,7 +263,7 @@ button {
   border: 1px solid var(--gold-border);
   color: var(--gold-bright);
   padding: 10px 18px;
-  font-size: 15px;
+  font-size: 16.5px;
   letter-spacing: 1px;
 }
 .btn-gold:hover {
@@ -275,7 +275,7 @@ button {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 10px 18px;
-  font-size: 15px;
+  font-size: 16.5px;
   letter-spacing: 1px;
 }
 .btn-outline:hover {
@@ -288,7 +288,7 @@ button {
   color: var(--text-muted);
   width: 28px;
   height: 28px;
-  font-size: 14px;
+  font-size: 15.5px;
   line-height: 1;
 }
 .icon-btn:hover {
@@ -299,7 +299,7 @@ button {
 .toggle-btn {
   border: 1px solid var(--border);
   padding: 9px 14px;
-  font-size: 14px;
+  font-size: 15.5px;
   letter-spacing: 1px;
   background: transparent;
   color: var(--text-muted);
@@ -313,8 +313,8 @@ button {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 7px 12px;
-  font-size: 13.5px;
+  padding: 9px 14px;
+  font-size: 15px;
   font-family: "Alegreya", Georgia, serif;
 }
 .chip.active {
@@ -329,7 +329,7 @@ button {
   color: var(--text-muted);
   min-width: 34px;
   height: 34px;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 .size-chip.active {
   background: var(--input-bg);
@@ -342,7 +342,7 @@ button {
   border: 1px solid var(--border);
   color: var(--text-bright);
   padding: 10px 12px;
-  font-size: 15px;
+  font-size: 16.5px;
 }
 
 /* Weapons panel */
@@ -366,14 +366,14 @@ button {
 .weapon-slots {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .weapon-slot {
   border: 1px solid var(--border);
-  padding: 12px 14px;
-  min-height: 52px;
+  padding: 14px 16px;
+  min-height: 60px;
 }
 .weapon-slot.empty-slot {
   border-style: dashed;
@@ -390,25 +390,29 @@ button {
   align-items: flex-start;
 }
 
+/* The thumb stacks above the name/meta block as a full-width band so the weapon photo is the
+   slot's centerpiece; the remove button and cost stay in .weapon-slot-side to the right. */
 .weapon-slot-main {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1;
   gap: 12px;
-  align-items: center;
 }
 
 .weapon-thumb {
-  width: 74px;
-  height: 31px;
+  width: 100%;
+  height: 112px;
 }
 
 .weapon-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-bright);
 }
 
 .weapon-meta {
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -421,7 +425,7 @@ button {
 }
 
 .weapon-cost {
-  font-size: 14px;
+  font-size: 15.5px;
   color: var(--gold);
 }
 
@@ -434,7 +438,7 @@ button {
 
 .over-capacity-warning {
   margin-top: 10px;
-  font-size: 13px;
+  font-size: 14.5px;
   color: var(--red-bright);
 }
 
@@ -442,14 +446,14 @@ button {
 
 .equip-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
   margin-top: 12px;
 }
 
 .equip-slot {
   text-align: left;
-  min-height: 76px;
+  min-height: 92px;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -474,7 +478,7 @@ button {
   align-items: center;
   justify-content: center;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 14.5px;
   font-style: italic;
 }
 .equip-slot.empty-slot:hover {
@@ -487,7 +491,7 @@ button {
 }
 
 .equip-name {
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 700;
   line-height: 1.25;
   color: var(--text-bright);
@@ -497,7 +501,7 @@ button {
   display: flex;
   justify-content: space-between;
   width: 100%;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .equip-cat {
@@ -509,8 +513,8 @@ button {
 }
 
 .equip-thumb {
-  width: 44px;
-  height: 32px;
+  width: 100%;
+  height: 96px;
 }
 
 /* Traits panel */
@@ -526,8 +530,8 @@ button {
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 8px 12px;
-  font-size: 14px;
+  padding: 10px 14px;
+  font-size: 15.5px;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -538,12 +542,12 @@ button {
 
 .trait-chip-up {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .trait-thumb {
-  width: 30px;
-  height: 24px;
+  width: 56px;
+  height: 48px;
 }
 
 /* Actions panel */
@@ -578,7 +582,7 @@ button {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 8px 10px;
-  font-size: 15px;
+  font-size: 16.5px;
 }
 
 .save-row {
@@ -590,7 +594,7 @@ button {
 }
 
 .share-message {
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--olive);
   font-style: italic;
 }
@@ -602,10 +606,10 @@ button {
 /* Governing: SPEC-0001 REQ "Accessibility Requirements" (Dynamic Content Regions).
    ActionsPanel keeps both live regions mounted while empty so screen readers announce
    updates (see the comment there). An empty region has no height, but it is still a flex
-   item of the surrounding .panel, so it would collect that container's 14px gap and pad
+   item of the surrounding .panel, so it would collect that container's 16px gap and pad
    the panel whenever there's no message. Cancel the gap while empty. */
 .share-message:empty {
-  margin-top: -14px;
+  margin-top: -16px;
 }
 
 /* Saved loadouts */
@@ -623,7 +627,7 @@ button {
   gap: 10px;
   border: 1px solid var(--border);
   background: var(--scroll-track);
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 
 .saved-row-name {
@@ -632,7 +636,7 @@ button {
   background: none;
   border: none;
   color: var(--text-bright);
-  font-size: 15px;
+  font-size: 16.5px;
   padding: 6px 2px;
   font-family: "Alegreya", Georgia, serif;
 }
@@ -641,7 +645,7 @@ button {
 }
 
 .saved-row-cost {
-  font-size: 13px;
+  font-size: 14.5px;
   color: var(--gold);
 }
 
@@ -658,9 +662,9 @@ button {
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-muted);
-  padding: 13px 6px;
+  padding: 16px 8px;
   font-family: "IM Fell English SC", serif;
-  font-size: 16px;
+  font-size: 17.5px;
   letter-spacing: 1px;
 }
 .picker-tab.active {
@@ -699,7 +703,7 @@ button {
 }
 
 .picker-filter-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   letter-spacing: 1px;
   margin-right: 4px;
@@ -707,6 +711,7 @@ button {
 
 .picker-list {
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: 680px;
 }
 
@@ -719,8 +724,8 @@ button {
   background: none;
   border: none;
   border-bottom: 1px solid var(--divider);
-  padding: 11px 16px;
-  min-height: 48px;
+  padding: 14px 18px;
+  min-height: 56px;
 }
 .picker-row:hover {
   background: var(--row-hover);
@@ -730,9 +735,31 @@ button {
 }
 
 .picker-row-thumb {
-  width: 58px;
-  height: 24px;
   flex: none;
+}
+
+/* Weapons read as wide silhouettes; everything else is roughly square, so the picker
+   asks for the shape that suits the active tab (see thumbVariant in Picker.jsx). */
+.picker-row-thumb.wide {
+  width: 176px;
+  height: 44px;
+}
+
+.picker-row-thumb.square {
+  width: 56px;
+  height: 56px;
+}
+
+/* Once the two columns stack, the picker is only as wide as the viewport, and the 176px
+   Weapons band leaves the badge and cost with nowhere to go — .picker-list would clip them
+   rather than reflow. The widest weapon row needs ~435px of row width, so clipping starts
+   around a 493px viewport; break at 600px for headroom, where a band that wide has stopped
+   earning its space anyway. Below this the Weapons tab uses the square shape. */
+@media (max-width: 600px) {
+  .picker-row-thumb.wide {
+    width: 56px;
+    height: 56px;
+  }
 }
 
 .picker-row-body {
@@ -741,7 +768,7 @@ button {
 
 .picker-row-name {
   display: block;
-  font-size: 15.5px;
+  font-size: 17px;
   font-weight: 500;
   color: var(--text-bright);
   font-family: "Alegreya", Georgia, serif;
@@ -749,20 +776,20 @@ button {
 
 .picker-row-meta {
   display: block;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-muted);
   margin-top: 1px;
 }
 
 .picker-row-badge {
-  font-size: 13px;
+  font-size: 14.5px;
   border: 1px solid var(--border);
   padding: 3px 8px;
   white-space: nowrap;
 }
 
 .picker-row-cost {
-  font-size: 14.5px;
+  font-size: 16px;
   color: var(--gold);
   min-width: 54px;
   text-align: right;

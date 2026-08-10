@@ -5,7 +5,7 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
 // SPEC-0001 REQ "Consistent Visual Presentation"
 
-export default function PickerRow({ row, showThumb }) {
+export default function PickerRow({ row, showThumb, thumbVariant = "square" }) {
   return (
     <button
       className={`picker-row${row.enabled ? "" : " disabled"}`}
@@ -18,7 +18,7 @@ export default function PickerRow({ row, showThumb }) {
           name={row.name}
           svgPath={row.thumb}
           svgFill="#6b5a3a"
-          className="picker-row-thumb"
+          className={`picker-row-thumb ${thumbVariant}`}
         />
       )}
       <span className="picker-row-body">
