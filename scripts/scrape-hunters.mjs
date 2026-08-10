@@ -22,7 +22,12 @@
 //   --names-only        Write hunters.json only; touch nothing under client/public/images/hunters/.
 //                       Runs without `sharp` installed (SPEC-0004 REQ "Names-Only Mode").
 //   --delay-ms=1500     Minimum delay between requests to the wiki (default: 1500ms)
-//   --force             Re-encode portraits that already exist on disk
+//   --force             Re-encode portraits that already exist on disk. REQUIRED TO APPLY A
+//                       PIPELINE CHANGE: without it a run skips every hunter whose `{slug}.avif`
+//                       is already present, without fetching it, so re-running after changing the
+//                       trim, the encoder or the quality is a no-op on the committed assets and
+//                       reports a clean summary. The run summary counts those skips explicitly so
+//                       "nothing changed" is visible rather than inferred.
 //   --dry-run           Resolve the roster and check robots.txt, but fetch no hunter page and
 //                       write no file
 //   --limit=N           Stop after N hunter pages (development aid, not a production mode)
@@ -85,7 +90,7 @@
 // rate limiter, the user agent, and the sentinel error classes are imported from scripts/lib/wiki.mjs
 // and defined nowhere here.
 
-import { mkdir, writeFile, readFile, readdir, access, unlink } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, access, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -541,9 +546,18 @@ export function formatSummary(summary, extra = {}) {
       `  portrait payload: ${(extra.assetBytes / 1024 / 1024).toFixed(2)} MB of ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB budget`
     );
   }
+  // A run that skipped every asset because it was already on disk otherwise looks identical to one
+  // that re-encoded them all: same entry count, same clean summary. Say so, and name the flag.
+  if (extra.portraitsSkipped) {
+    lines.push(
+      `  portraits left untouched (already on disk): ${extra.portraitsSkipped} — re-run with --force to re-encode`
+    );
+  }
   // SPEC-0004 REQ "One Trimmed Portrait Per Hunter" requires the run to REPORT the count, not just
   // perform the deletion — a silent cleanup is indistinguishable from no cleanup in a review.
-  if (extra.staleRemoved !== undefined) {
+  if (extra.staleSweepSkipped) {
+    lines.push(`  stale asset sweep SKIPPED: ${extra.staleSweepSkipped}`);
+  } else if (extra.staleRemoved !== undefined) {
     lines.push(`  stale assets removed: ${extra.staleRemoved}`);
   }
   if (extra.unmappedSources?.length) {
@@ -762,7 +776,13 @@ async function pathExists(fsAccess, filePath) {
  * a failed write unlinks whatever partial file it may have left. Callers isolate this per variant
  * so one variant's failure cannot discard a sibling's work.
  *
- * Returns { assets, bytes, skipped }. Throws a sentinel with hunter/url context on failure.
+ * Returns { assets, bytes, skipped }. `bytes` is the asset's committed weight either way: an asset
+ * skipped because it is already on disk reports its ON-DISK size, not zero. The total-payload gate
+ * measures what the repository will carry, and a non-`--force` run that reported zero for every
+ * skipped asset could never trip a ceiling the committed set had already breached (PR #152 review).
+ * `assets` stays empty on a skip — nothing was produced — so per-asset reporting is unaffected.
+ *
+ * Throws a sentinel with hunter/url context on failure.
  */
 export async function producePortrait({ variant, name, portrait }, deps) {
   const {
@@ -774,6 +794,7 @@ export async function producePortrait({ variant, name, portrait }, deps) {
     fsMkdir = mkdir,
     fsWriteFile = writeFile,
     fsAccess = access,
+    fsStat = stat,
     fsUnlink = unlink,
     sharp = null,
     force = false,
@@ -782,8 +803,23 @@ export async function producePortrait({ variant, name, portrait }, deps) {
 
   const destPath = portraitAssetPath(imagesRoot, portrait);
   if (!force && (await pathExists(fsAccess, destPath))) {
-    log({ level: "info", event: "portrait-skipped", hunter: name, portrait, reason: "already on disk" });
-    return { assets: [], bytes: 0, skipped: true };
+    // An unreadable size is counted as zero rather than failing the hunter: the asset is present
+    // and usable, and a stat failure is a budget-accounting gap, not a reason to discard art.
+    let onDiskBytes = 0;
+    try {
+      onDiskBytes = (await fsStat(destPath))?.size ?? 0;
+    } catch {
+      onDiskBytes = 0;
+    }
+    log({
+      level: "info",
+      event: "portrait-skipped",
+      hunter: name,
+      portrait,
+      bytes: onDiskBytes,
+      reason: "already on disk — re-run with --force to re-encode",
+    });
+    return { assets: [], bytes: onDiskBytes, skipped: true };
   }
 
   const mediaUrl = buildMediaUrl(variant.file);
@@ -878,8 +914,10 @@ export async function producePortrait({ variant, name, portrait }, deps) {
 /**
  * Scrape one hunter page.
  *
- * Returns { entries, assets, bytes, failures } where `entries` is one dataset row per variant that
- * succeeded. Page-level failures (fetch, 404) throw a sentinel and runScrape catches per page;
+ * Returns { entries, assets, bytes, skippedAssets, failures } where `entries` is one dataset row
+ * per variant that succeeded and `skippedAssets` counts variants whose art was already on disk (see
+ * producePortrait: their weight is still in `bytes`). Page-level failures (fetch, 404) throw a
+ * sentinel and runScrape catches per page;
  * per-variant portrait failures are isolated and reported in `failures` without discarding the
  * variants that did succeed.
  */
@@ -893,6 +931,7 @@ export async function scrapeHunterPage(target, deps) {
     fsMkdir = mkdir,
     fsWriteFile = writeFile,
     fsAccess = access,
+    fsStat = stat,
     fsUnlink = unlink,
     sharp = null,
     namesOnly = false,
@@ -968,6 +1007,7 @@ export async function scrapeHunterPage(target, deps) {
   const assets = [];
   const failures = [];
   let bytes = 0;
+  let skippedAssets = 0;
 
   for (const variant of variants) {
     // The gallery's qualified label ("Union Suit: Red Drawers") beats anything constructible here.
@@ -1022,6 +1062,7 @@ export async function scrapeHunterPage(target, deps) {
           fsMkdir,
           fsWriteFile,
           fsAccess,
+          fsStat,
           fsUnlink,
           sharp,
           force,
@@ -1030,6 +1071,7 @@ export async function scrapeHunterPage(target, deps) {
       );
       assets.push(...produced.assets);
       bytes += produced.bytes;
+      if (produced.skipped) skippedAssets += 1;
       entries.push(entry);
     } catch (err) {
       // SPEC-0004: an over-budget asset "SHALL fail that hunter with a recorded reason rather than
@@ -1054,7 +1096,7 @@ export async function scrapeHunterPage(target, deps) {
     }
   }
 
-  return { entries, assets, bytes, failures, pageTitle, revision, canonicalPage, duplicate: false };
+  return { entries, assets, bytes, skippedAssets, failures, pageTitle, revision, canonicalPage, duplicate: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -1162,6 +1204,7 @@ export async function runScrape(options = {}, deps = {}) {
   const unmappedSources = new Set();
   const seenCanonical = new Set();
   let totalBytes = 0;
+  let portraitsSkipped = 0;
 
   for (const wikiPath of pages) {
     try {
@@ -1176,6 +1219,7 @@ export async function runScrape(options = {}, deps = {}) {
           fsMkdir,
           fsWriteFile,
           fsAccess: deps.fsAccess,
+          fsStat: deps.fsStat,
           fsUnlink,
           sharp,
           namesOnly,
@@ -1212,9 +1256,13 @@ export async function runScrape(options = {}, deps = {}) {
       }
 
       totalBytes += result.bytes;
+      portraitsSkipped += result.skippedAssets ?? 0;
 
       // The total ceiling is checked as the run proceeds so it fails before committing a set that
-      // breaches it, rather than after every page has been fetched.
+      // breaches it, rather than after every page has been fetched. `result.bytes` counts assets
+      // skipped-because-already-present at their on-disk size, so this measures the payload the
+      // repository will carry rather than only the payload this invocation wrote — otherwise a
+      // non-`--force` run reports 0.00 MB and the only aggregate gate left can never trip.
       if (!namesOnly && !dryRun && totalBytes > totalBudgetBytes) {
         throw new BudgetExceededError(
           `portrait payload reached ${totalBytes} bytes, over the ${totalBudgetBytes}-byte total ceiling`,
@@ -1271,20 +1319,36 @@ export async function runScrape(options = {}, deps = {}) {
   // the run neither wrote nor skipped-because-present is either a `-thumb` variant from the
   // two-size pipeline or art for a hunter the roster no longer lists; both are unreferenced.
   //
-  // Deliberately confined to a full run. `--names-only` and `--dry-run` write no imagery and must
-  // delete none, and `--limit=N` is a development aid whose dataset covers a slice of the roster —
-  // sweeping against it would delete the assets for every hunter past N.
+  // Deliberately confined to a full, COMPLETE run. `--names-only` and `--dry-run` write no imagery
+  // and must delete none, and `--limit=N` is a development aid whose dataset covers a slice of the
+  // roster — sweeping against it would delete the assets for every hunter past N.
+  //
+  // A run with ANY failure is a partial dataset in exactly the same sense (PR #152 review). Both
+  // failure paths deliberately produce no dataset row — a page-level failure never reaches the
+  // `allEntries.push` above, and a per-variant portrait failure omits the row on purpose so a
+  // budget failure is not misreported as "hunter has no art" — so the failed hunter's previously
+  // committed portrait would be unclaimed, and swept. One transient ECONNRESET would delete good,
+  // committed art.
+  //
+  // The alternative was to widen `keepFiles` to cover attempted-but-failed hunters. It is rejected:
+  // a page that failed to fetch never yields its variant list, so for exactly the hunters at risk
+  // the set of files to keep cannot be reconstructed — the roster gallery is joined on file name
+  // but is explicitly NOT authoritative for what variants a page has (see ENTRY GRANULARITY above),
+  // so a gallery-derived keep-set would still delete the art of any gallery-omitted variant. A
+  // widened keep-set narrows the hole; skipping is the only option that cannot delete art it should
+  // have kept. The cost is that a genuine orphan survives until a clean run, which is reported in
+  // the summary rather than left silent — an orphan that outlives a failed run is recoverable, a
+  // deleted asset is only recoverable from git.
   let staleRemoved = 0;
-  const sweepable = !namesOnly && !dryRun && limit === Infinity;
-  if (sweepable) {
-    const keepFiles = new Set(
-      allEntries
-        .filter((entry) => entry.portrait)
-        .map((entry) => path.basename(portraitAssetPath(imagesRoot, entry.portrait)))
-    );
-    const stale = await removeStaleAssets({ imagesRoot, keepFiles, fsReaddir, fsUnlink, log });
-    staleRemoved = stale.removed;
-    log({ level: "info", event: "stale-assets-swept", removed: stale.removed, kept: keepFiles.size });
+  let staleSweepSkipped = null;
+  if (namesOnly || dryRun) staleSweepSkipped = "names-only/dry-run writes no imagery";
+  else if (limit !== Infinity) staleSweepSkipped = `--limit=${limit} covers only part of the roster`;
+  else if (summary.failed.length > 0) {
+    staleSweepSkipped = `${summary.failed.length} hunter(s) failed this run, so the dataset is partial`;
+  }
+
+  if (staleSweepSkipped !== null) {
+    log({ level: "info", event: "stale-sweep-skipped", reason: staleSweepSkipped });
   }
 
   if (!dryRun) {
@@ -1296,6 +1360,20 @@ export async function runScrape(options = {}, deps = {}) {
     }
   }
 
+  // Sweeps AFTER the dataset is committed, so a dataset write that fails cannot leave disk swept
+  // against a roster that was never written (PR #152 review). Deleting files the committed dataset
+  // does not reference is safe in a way the reverse ordering is not.
+  if (staleSweepSkipped === null) {
+    const keepFiles = new Set(
+      allEntries
+        .filter((entry) => entry.portrait)
+        .map((entry) => path.basename(portraitAssetPath(imagesRoot, entry.portrait)))
+    );
+    const stale = await removeStaleAssets({ imagesRoot, keepFiles, fsReaddir, fsUnlink, log });
+    staleRemoved = stale.removed;
+    log({ level: "info", event: "stale-assets-swept", removed: stale.removed, kept: keepFiles.size });
+  }
+
   log({
     level: "info",
     event: "run-summary",
@@ -1304,7 +1382,9 @@ export async function runScrape(options = {}, deps = {}) {
     skipped: summary.skipped.length,
     entries: allEntries.length,
     assetBytes: totalBytes,
+    portraitsSkipped,
     staleRemoved,
+    staleSweepSkipped,
     unmappedSources: unmappedSources.size,
   });
 
@@ -1312,7 +1392,9 @@ export async function runScrape(options = {}, deps = {}) {
     summary,
     entries: allEntries,
     assetBytes: totalBytes,
+    portraitsSkipped,
     staleRemoved,
+    staleSweepSkipped,
     unmappedSources: [...unmappedSources].sort(),
   };
 }
@@ -1352,7 +1434,9 @@ async function main() {
     formatSummary(result.summary, {
       entries: result.entries.length,
       assetBytes: result.assetBytes,
+      portraitsSkipped: result.portraitsSkipped,
       staleRemoved: result.staleRemoved,
+      staleSweepSkipped: result.staleSweepSkipped,
       unmappedSources: result.unmappedSources,
     })
   );

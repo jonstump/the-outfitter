@@ -25,6 +25,7 @@ import {
   PortraitSourceUnusableError,
   TOTAL_BUDGET_BYTES,
   buildMediaUrl,
+  createSummary,
   decodeEntities,
   deriveObtainable,
   encodePortrait,
@@ -300,6 +301,12 @@ function memoryFs() {
     fsReadFile: async (p) => {
       if (!files.has(p)) throw new Error("ENOENT");
       return files.get(p);
+    },
+    // Defined so the skipped-asset budget accounting is measured against the fake disk rather than
+    // falling through to the real one, where every fixture path is an ENOENT that reads as 0 bytes.
+    fsStat: async (p) => {
+      if (!files.has(p)) throw new Error("ENOENT");
+      return { size: files.get(p).length };
     },
     fsReaddir: async (dir) => {
       const prefix = `${dir.replace(/\/$/, "")}/`;
@@ -1153,6 +1160,109 @@ describe("runScrape", () => {
     assert.ok(deps.files.has("/images/hunters/somebody-else.avif"));
   });
 
+  it("does not sweep when a hunter's page failed, so her committed art survives a flaky run", async () => {
+    // The regression PR #152's review reproduced: one ECONNRESET on one page dropped that hunter's
+    // dataset row, and the sweep then deleted her previously committed portrait. A run with
+    // failures is a partial dataset in exactly the way a --limit run is.
+    const routes = DEFAULT_ROUTES.map(([p, v]) =>
+      String(p).includes("Caitlyn")
+        ? [
+            p,
+            () => {
+              const err = new Error("read ECONNRESET");
+              err.code = "ECONNRESET";
+              throw err;
+            },
+          ]
+        : [p, v]
+    );
+    const deps = baseDeps({ fetchFn: makeFetch(routes) });
+    deps.files.set("/images/hunters/caitlyn-hammond.avif", Buffer.alloc(8000));
+    deps.files.set("/images/hunters/bad-hand-thumb.avif", Buffer.alloc(4000));
+
+    const result = await runScrape(RUN_OPTS, deps);
+
+    assert.equal(result.summary.failed.length, 1, "the flaky page is still reported as failed");
+    assert.ok(
+      !result.entries.some((e) => e.portrait === "caitlyn-hammond"),
+      "and still produces no dataset row"
+    );
+    assert.ok(
+      deps.files.has("/images/hunters/caitlyn-hammond.avif"),
+      "but her committed art is NOT deleted by the sweep"
+    );
+    assert.equal(result.staleRemoved, 0);
+    assert.match(result.staleSweepSkipped, /failed this run/);
+    // The cost of the safe choice, asserted so it is a decision rather than an oversight: a real
+    // orphan outlives a failed run. Recoverable; a deleted asset is only recoverable from git.
+    assert.ok(deps.files.has("/images/hunters/bad-hand-thumb.avif"), "a genuine orphan waits for a clean run");
+  });
+
+  it("does not sweep when a single variant's portrait failed under --force", async () => {
+    // The other no-row path: the page parsed, but one variant's asset could not be produced, so
+    // SPEC-0004's "fail that hunter" rule omits the row. That must not read as "unclaimed art".
+    const routes = [
+      [/\/images\/Hunter_Caitlyn_Hammond\.png$/, () => response("gone", { status: 404 })],
+      ...DEFAULT_ROUTES,
+    ];
+    const deps = baseDeps({ fetchFn: makeFetch(routes) });
+    deps.files.set("/images/hunters/caitlyn-hammond.avif", Buffer.alloc(8000));
+
+    const result = await runScrape({ ...RUN_OPTS, force: true }, deps);
+
+    assert.equal(result.summary.failed.length, 1);
+    assert.equal(result.summary.failed[0].errorType, "ImageAssetNotFoundError");
+    assert.ok(deps.files.has("/images/hunters/caitlyn-hammond.avif"), "her committed art survives");
+    assert.equal(result.staleRemoved, 0);
+  });
+
+  it("sweeps normally once the failures are gone", async () => {
+    // The guard must be a gate on failure, not a permanent disabling of the sweep: the orphan a
+    // failed run preserved has to actually go on the next clean run.
+    const routes = DEFAULT_ROUTES.map(([p, v]) =>
+      String(p).includes("Caitlyn") ? [p, () => response("gone", { status: 404 })] : [p, v]
+    );
+    const deps = baseDeps({ fetchFn: makeFetch(routes) });
+    deps.files.set("/images/hunters/bad-hand-thumb.avif", Buffer.alloc(4000));
+
+    const failedRun = await runScrape(RUN_OPTS, deps);
+    assert.equal(failedRun.staleRemoved, 0);
+
+    deps.fetchFn = makeFetch(DEFAULT_ROUTES);
+    const cleanRun = await runScrape(RUN_OPTS, deps);
+
+    assert.equal(cleanRun.summary.failed.length, 0);
+    assert.equal(cleanRun.staleSweepSkipped, null);
+    assert.equal(cleanRun.staleRemoved, 1);
+    assert.ok(!deps.files.has("/images/hunters/bad-hand-thumb.avif"), "the orphan goes on the clean run");
+  });
+
+  it("counts assets left on disk toward the payload, so a non-force run can still breach the ceiling", async () => {
+    // Skipped-because-present used to report 0 bytes, which made the only aggregate gate left
+    // unable to trip on anything but a --force run (PR #152 review).
+    // Every asset this run would claim is already present, so the run writes nothing at all — the
+    // exact shape that used to report 0.00 MB however heavy the committed set actually was.
+    const deps = baseDeps();
+    const committed = await runScrape(RUN_OPTS, deps);
+    assert.ok(committed.assetBytes > 10_000, "the committed set is over the ceiling used below");
+
+    await assert.rejects(
+      () => runScrape({ ...RUN_OPTS, totalBudgetBytes: 10_000 }, deps),
+      (err) => err instanceof BudgetExceededError && /total ceiling/.test(err.message)
+    );
+  });
+
+  it("reports the portraits a plain re-run left untouched", async () => {
+    const deps = baseDeps();
+    const first = await runScrape(RUN_OPTS, deps);
+    assert.equal(first.portraitsSkipped, 0, "the first run encodes them");
+
+    const second = await runScrape(RUN_OPTS, deps);
+
+    assert.ok(second.portraitsSkipped > 0, "the second run touches none of them");
+    assert.equal(second.assetBytes, first.assetBytes, "and still weighs the payload it left on disk");
+  });
+
   it("fails the run when the accumulating payload breaches the total ceiling", async () => {
     // Every asset here is comfortably inside its per-asset budget — which is the whole point.
     // Per-asset compliance says nothing about aggregate weight, so the total needs its own gate.
@@ -1220,6 +1330,21 @@ describe("CLI surface", () => {
     assert.match(text, /stale assets removed: 242/);
     assert.match(text, /Mystery Source/);
     assert.match(text, /FAILED\s+B: 404/);
+  });
+
+  it("says the sweep was skipped instead of reporting a reassuring zero", () => {
+    const text = formatSummary(
+      { succeeded: [], failed: [{ hunter: "B", reason: "ECONNRESET" }], skipped: [] },
+      { staleRemoved: 0, staleSweepSkipped: "1 hunter(s) failed this run, so the dataset is partial" }
+    );
+    assert.match(text, /stale asset sweep SKIPPED: 1 hunter\(s\) failed this run/);
+    assert.doesNotMatch(text, /stale assets removed/, "a skipped sweep never reads as a clean one");
+  });
+
+  it("names --force when a run left every portrait untouched", () => {
+    const text = formatSummary(createSummary(), { portraitsSkipped: 242 });
+    assert.match(text, /portraits left untouched \(already on disk\): 242/);
+    assert.match(text, /--force/);
   });
 });
 
