@@ -136,6 +136,48 @@ describe("hunter portraits (SPEC-0004 assets)", () => {
   });
 });
 
+describe("explicit source chain (SPEC-0003 portraits)", () => {
+  // Hunter portraits need the chain to walk two SIZES rather than two extensions, so the
+  // caller supplies the candidates instead of having them derived from category + name.
+  // Same onError machinery, different candidate list.
+  it("walks the caller's candidates in order before the SVG", () => {
+    const { container } = render(
+      <ItemThumb sources={["/a.avif", "/b.avif"]} name="x" alt="" svgPath={SVG_PATH} />
+    );
+    expect(container.querySelector("img")).toHaveAttribute("src", "/a.avif");
+    fireEvent.error(container.querySelector("img"));
+    expect(container.querySelector("img")).toHaveAttribute("src", "/b.avif");
+    fireEvent.error(container.querySelector("img"));
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders the SVG immediately for an empty candidate list, issuing no request", () => {
+    const { container } = render(<ItemThumb sources={[]} name="x" alt="" svgPath={SVG_PATH} />);
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("lets sources override the category derivation rather than racing it", () => {
+    const { container } = render(
+      <ItemThumb category="hunters" sources={["/explicit.avif"]} name="the-rat" alt="" svgPath={SVG_PATH} />
+    );
+    expect(container.querySelector("img")).toHaveAttribute("src", "/explicit.avif");
+  });
+
+  it("defers loading only when asked", () => {
+    // 242 picker tiles must load what was scrolled to; a handful of item rows should not
+    // pay the deferral cost, so eager stays the default.
+    const { container: lazy } = render(
+      <ItemThumb sources={["/a.avif"]} name="x" alt="" svgPath={SVG_PATH} loading="lazy" />
+    );
+    expect(lazy.querySelector("img")).toHaveAttribute("loading", "lazy");
+
+    const { container: eager } = render(<ItemThumb category="weapons" name="Winfield" svgPath={SVG_PATH} />);
+    expect(eager.querySelector("img")).not.toHaveAttribute("loading");
+  });
+});
+
 describe("decorative mode", () => {
   it("labels the image with its name by default", () => {
     render(<ItemThumb category="weapons" name="Winfield M1873" svgPath="M0 0h1v1H0z" />);

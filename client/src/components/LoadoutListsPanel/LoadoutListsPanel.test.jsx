@@ -7,6 +7,7 @@ import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { emptyLoadout, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
+import { HUNTERS } from "../../data/hunters.js";
 
 // Governing: ADR-0006, SPEC-0003 REQ "List Ordering and Sorting", REQ "The Selected List
 // Is Client State", REQ "New Lists Default Their Name from the Chosen Portrait"
@@ -271,5 +272,239 @@ describe("LoadoutListsPanel", () => {
   it("marks the retire dialog as a modal", () => {
     renderPanel(base([list("a", "Alpha")], [], { selectedListId: "a", confirmRetireListId: "a" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+  });
+});
+
+// --- Issue #88: portraits, accents, and the picker ---------------------------------
+// Governing: SPEC-0003 REQ "Hunter Dataset Consumption Contract", REQ "Lists Are Visually
+// Distinguishable Independent of Portrait and Name", REQ "The Hunter Picker Does Not
+// Restrict or Mark Reuse", REQ "The Hunter Picker Is Filterable and Bounded"
+
+const REAL_HUNTER = HUNTERS[0];
+
+describe("a list whose hunter is not in the dataset", () => {
+  // No live entry can produce this — all 242 resolve. It arises over TIME: the dataset and
+  // a user's stored lists refresh independently, so a list outlives the hunter it names.
+  const orphan = () => list("a", "Rat builds", { hunterId: "retired-last-season" });
+
+  it("still renders, with a neutral placeholder and its own name", () => {
+    renderPanel(base([orphan()], []));
+    const card = screen.getByTestId("list-card-a");
+    expect(within(card).getByText("Rat builds")).toBeInTheDocument();
+    // Placeholder art, and no <img> — there is no slug to derive a URL from, so no request.
+    expect(screen.getByTestId("list-art-a").querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByTestId("list-art-a").querySelector("img")).not.toBeInTheDocument();
+  });
+
+  it("stays selectable and renameable", async () => {
+    const store = renderPanel(base([orphan()], []));
+    await act(async () => fireEvent.click(screen.getByTestId("list-card-a")));
+    expect(store.getState().ui.selectedListId).toBe("a");
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "rename" })));
+    expect(screen.getByLabelText("List name")).toBeInTheDocument();
+  });
+
+  it("can still hold loadouts, and says why the hunter is missing rather than claiming none was chosen", () => {
+    renderPanel(base([orphan()], [loadout("1", "My build", "a")], { selectedListId: "a" }));
+    expect(within(screen.getByTestId("list-expanded")).getByText("My build")).toBeInTheDocument();
+    // "no portrait" would rewrite the user's choice; they picked a hunter that has since gone.
+    expect(screen.getByText("hunter missing from roster")).toBeInTheDocument();
+  });
+
+  it("distinguishes it from a list that chose no portrait at all", () => {
+    renderPanel(base([list("a", "Alpha")], [], { selectedListId: "a" }));
+    expect(screen.getByText("no portrait")).toBeInTheDocument();
+  });
+});
+
+describe("portrait sizes across contexts", () => {
+  it("asks for the thumbnail on a card and the full size in the expanded header", () => {
+    renderPanel(
+      base([list("a", "Rat builds", { hunterId: REAL_HUNTER.id })], [], { selectedListId: "a" })
+    );
+    expect(screen.getByTestId("list-art-a").querySelector("img")).toHaveAttribute(
+      "src",
+      `/images/hunters/${REAL_HUNTER.portrait}-thumb.avif`
+    );
+    expect(screen.getByTestId("list-expanded-art").querySelector("img")).toHaveAttribute(
+      "src",
+      `/images/hunters/${REAL_HUNTER.portrait}.avif`
+    );
+  });
+
+  it("falls back to the other size before the placeholder", () => {
+    renderPanel(base([list("a", "Rat builds", { hunterId: REAL_HUNTER.id })], []));
+    const art = screen.getByTestId("list-art-a");
+    fireEvent.error(art.querySelector("img"));
+    expect(art.querySelector("img")).toHaveAttribute("src", `/images/hunters/${REAL_HUNTER.portrait}.avif`);
+    fireEvent.error(art.querySelector("img"));
+    expect(art.querySelector("img")).not.toBeInTheDocument();
+    expect(art.querySelector("svg")).toBeInTheDocument();
+  });
+});
+
+describe("list accents", () => {
+  it("renders the accent on the card and on the group heading", () => {
+    renderPanel(base([list("a", "Alpha", { accent: "#5a6e96" })], [], { selectedListId: "a" }));
+    expect(screen.getByTestId("list-card-a")).toHaveAttribute("data-accent", "#5a6e96");
+    expect(screen.getByTestId("list-expanded")).toHaveAttribute("data-accent", "#5a6e96");
+    // Painted through the custom property, never as a raw hex, so hover/focus can still win.
+    expect(screen.getByTestId("list-card-a").style.getPropertyValue("--ll-accent")).toBe(
+      "var(--list-accent-3)"
+    );
+  });
+
+  it("never gives Unassigned an accent — it is structural, not a peer list", () => {
+    renderPanel(base([], [loadout("1", "x", null)]));
+    expect(screen.getByTestId("list-card-__unassigned__")).not.toHaveAttribute("data-accent");
+  });
+
+  it("keeps the list name visible everywhere the accent appears", () => {
+    // Load-bearing: the palette separates by hue, not luminance (olive vs teal is 1.02:1),
+    // so a colour-blind user distinguishes lists by name or not at all.
+    renderPanel(
+      base([list("a", "Alpha", { accent: "#7a8a4e" }), list("b", "Beta", { accent: "#5e8a8a" })], [], {
+        selectedListId: "a",
+      })
+    );
+    expect(within(screen.getByTestId("list-card-a")).getByText("Alpha")).toBeInTheDocument();
+    expect(within(screen.getByTestId("list-card-b")).getByText("Beta")).toBeInTheDocument();
+    expect(within(screen.getByTestId("list-expanded")).getByText("Alpha")).toBeInTheDocument();
+  });
+
+  it("persists an accent change and reflects it wherever the list renders", async () => {
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    const store = renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], [], { selectedListId: "a" }));
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Teal" })));
+
+    const [url, opts] = global.fetch.mock.calls[0];
+    expect(String(url)).toContain("/api/loadout-lists/a");
+    expect(opts.method).toBe("PATCH");
+    expect(JSON.parse(opts.body)).toEqual({ accent: "#5e8a8a" });
+
+    expect(store.getState().loadoutLists.items[0].accent).toBe("#5e8a8a");
+    expect(screen.getByTestId("list-card-a")).toHaveAttribute("data-accent", "#5e8a8a");
+    expect(screen.getByTestId("list-expanded")).toHaveAttribute("data-accent", "#5e8a8a");
+  });
+
+  it("accepts an accent another list already uses, with no warning", async () => {
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    const store = renderPanel(
+      base([list("a", "Alpha", { accent: "#b04a3e" }), list("b", "Beta", { accent: "#7a8a4e" })], [], {
+        selectedListId: "a",
+      })
+    );
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Olive" })));
+
+    expect(store.getState().loadoutLists.items[0].accent).toBe("#7a8a4e");
+    // Six values against an unbounded number of lists: a collision is ordinary, not an error.
+    expect(store.getState().ui.message).not.toMatch(/^!/);
+    expect(screen.queryByText(/already/i)).not.toBeInTheDocument();
+  });
+
+  it("marks exactly one swatch as the current value", () => {
+    renderPanel(base([list("a", "Alpha", { accent: "#8a5e86" })], [], { selectedListId: "a" }));
+    const checked = screen.getAllByRole("radio").filter((r) => r.getAttribute("aria-checked") === "true");
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toHaveAccessibleName("Plum");
+  });
+});
+
+describe("creating a list from the picker", () => {
+  const openPickerFromCreateForm = async () => {
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /\+ New list/ })));
+    const trigger = screen.getByRole("button", { name: /^Portrait:/ });
+    // fireEvent.click does not move focus the way a real click (or Enter on a focused
+    // button) does, and the trap captures whatever is focused at open — so focus it first
+    // or the test measures a jsdom artifact rather than the focus-return behaviour.
+    trigger.focus();
+    await act(async () => fireEvent.click(trigger));
+    return trigger;
+  };
+
+  it("lets a hunter another list already uses be picked again, unmarked", async () => {
+    const created = { id: "new", name: REAL_HUNTER.name, hunterId: REAL_HUNTER.id, accent: "#7a8a4e" };
+    global.fetch = vi.fn(async () => ({ ok: true, status: 201, json: async () => created }));
+
+    // "a" already references this hunter. Reuse is unrestricted and unmarked.
+    const store = renderPanel(base([list("a", "First rat", { hunterId: REAL_HUNTER.id })], []));
+    await openPickerFromCreateForm();
+
+    const tile = screen.getByTestId(`hunter-tile-${REAL_HUNTER.id}`);
+    expect(tile).not.toHaveAttribute("aria-disabled");
+    expect(tile.className).toBe("hp-tile"); // no in-use variant, badge or dimming
+    expect(within(tile).queryByText(/in use|used/i)).not.toBeInTheDocument();
+
+    await act(async () => fireEvent.click(tile));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Create list" })));
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.hunterId).toBe(REAL_HUNTER.id);
+    // Name defaulted from the hunter, since the user typed none.
+    expect(body.name).toBe(REAL_HUNTER.name);
+    expect(store.getState().loadoutLists.items).toHaveLength(2);
+  });
+
+  it("does not overwrite a name the user already typed", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "new", name: "My own name", hunterId: REAL_HUNTER.id, accent: "#b04a3e" }),
+    }));
+
+    renderPanel(base([], []));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /\+ New list/ })));
+    await act(async () =>
+      fireEvent.change(screen.getByLabelText("New list name"), { target: { value: "My own name" } })
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /^Portrait:/ })));
+    await act(async () => fireEvent.click(screen.getByTestId(`hunter-tile-${REAL_HUNTER.id}`)));
+
+    expect(screen.getByLabelText("New list name").value).toBe("My own name");
+  });
+
+  it("creates a list with a null hunterId from the explicit no-portrait option", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "new", name: "New list", hunterId: null, accent: "#b04a3e" }),
+    }));
+
+    renderPanel(base([], []));
+    await openPickerFromCreateForm();
+    await act(async () => fireEvent.click(screen.getByTestId("hunter-tile-none")));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Create list" })));
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).hunterId).toBeNull();
+    // …and it renders a monogram from its own name, not a stranger's silhouette.
+    expect(screen.queryByTestId("list-art-new")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("list-card-new")).getByText("N")).toBeInTheDocument();
+  });
+
+  it("returns focus to the trigger when the picker is dismissed with Escape", async () => {
+    renderPanel(base([], []));
+    const trigger = await openPickerFromCreateForm();
+
+    await act(async () => fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("previews the accent the new list will be assigned", async () => {
+    // Preview only — the server assigns least-used-first and the created record wins.
+    renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /\+ New list/ })));
+    expect(screen.getByTestId("create-accent-preview").style.background).toContain("--list-accent-2");
   });
 });

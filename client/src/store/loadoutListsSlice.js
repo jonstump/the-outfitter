@@ -62,6 +62,31 @@ export const renameListThunk = createAsyncThunk(
  * loadouts survive and land in Unassigned. Nothing here deletes a loadout, and the
  * confirmation copy says so.
  */
+/**
+ * Change a list's accent colour.
+ *
+ * Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait
+ * and Name".
+ *
+ * There is deliberately no duplicate check anywhere on this path — not here, not in the
+ * component, not on the server. Assigning an accent another list already uses is a
+ * permitted outcome the spec requires to succeed "without warning or rejection", and six
+ * palette values against an unbounded number of lists makes collision inevitable rather
+ * than exceptional. The accent is a secondary identity channel; the list NAME is the
+ * primary one, which is why a collision costs nothing.
+ */
+export const setListAccentThunk = createAsyncThunk(
+  "loadoutLists/setAccent",
+  async ({ id, accent }, { dispatch }) => {
+    try {
+      return await updateList(id, { accent });
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't change the accent colour: ${err.message}`));
+      throw err;
+    }
+  }
+);
+
 export const retireListThunk = createAsyncThunk(
   "loadoutLists/retire",
   async ({ id, name }, { dispatch }) => {
@@ -99,7 +124,13 @@ const loadoutListsSlice = createSlice({
       .addCase(createListThunk.fulfilled, (state, action) => {
         state.items.push(action.payload);
       })
+      // Rename and accent both PATCH the record and get the whole updated record back, so
+      // they reconcile identically — replace in place, keep position, never re-sort here.
       .addCase(renameListThunk.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
+      })
+      .addCase(setListAccentThunk.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
       })

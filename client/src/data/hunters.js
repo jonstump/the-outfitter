@@ -37,3 +37,102 @@ export function hunterNameFor(hunterId) {
   if (!hunterId) return null;
   return NAME_BY_ID.get(hunterId) ?? null;
 }
+
+const BY_ID = new Map(HUNTERS.map((h) => [h.id, h]));
+
+/** The full dataset entry for an id, or null when the dataset does not carry it. */
+export function hunterFor(hunterId) {
+  if (!hunterId) return null;
+  return BY_ID.get(hunterId) ?? null;
+}
+
+// Governing: SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+//
+// Asset paths are DERIVED from the entry's `portrait` slug, not looked up in a manifest —
+// the same property that lets the item scrape add or replace images with no code change
+// here (see the note in catalog.js). Both sizes live under the application's own origin;
+// nothing in this file, or downstream of it, ever addresses the wiki at runtime.
+const PORTRAIT_BASE = "/images/hunters";
+
+/**
+ * Ordered portrait URLs for a hunter, best-fit size first.
+ *
+ * SPEC-0003 requires falling back to the OTHER size before the placeholder: "a too-large
+ * image is a performance cost; an empty tile is a defect." So a thumbnail request that
+ * 404s retries the full size, and vice versa, and only then does the caller's placeholder
+ * take over.
+ *
+ * Returns an EMPTY array — not a guessed URL — for a hunter absent from the dataset or
+ * carrying no `portrait`. That is the difference between "no asset" and "asset missing":
+ * with no slug there is no path to derive, so issuing a request would be guessing, and a
+ * guaranteed 404 per unknown hunter is a cost with no upside. The caller renders its
+ * neutral placeholder immediately instead.
+ *
+ * @param size "thumb" for picker tiles and list cards, "full" for an expanded header.
+ */
+export function portraitSources(hunterId, size = "thumb") {
+  const portrait = hunterFor(hunterId)?.portrait;
+  if (!portrait) return [];
+  const full = `${PORTRAIT_BASE}/${portrait}.avif`;
+  const thumb = `${PORTRAIT_BASE}/${portrait}-thumb.avif`;
+  return size === "full" ? [full, thumb] : [thumb, full];
+}
+
+// Governing: SPEC-0003 REQ "The Hunter Picker Is Filterable and Bounded"
+//
+// Sentinel for the two roster entries whose `acquisition` is null. They are ordinary,
+// selectable hunters, so they need a filter bucket of their own — silently dropping them
+// from every acquisition filter would make two hunters unreachable by that control.
+export const UNKNOWN_ACQUISITION = "__unknown__";
+
+/** Distinct acquisition values present in the dataset, alphabetical, nulls excluded. */
+export const ACQUISITIONS = [...new Set(HUNTERS.map((h) => h.acquisition).filter(Boolean))].sort();
+
+/** True when at least one entry has no acquisition — i.e. the Unknown bucket is worth offering. */
+export const HAS_UNKNOWN_ACQUISITION = HUNTERS.some((h) => !h.acquisition);
+
+const ACQUISITION_LABELS = { dlc: "DLC" };
+
+/** Display label for an acquisition value: "blood-bonds" -> "Blood bonds", "dlc" -> "DLC". */
+export function acquisitionLabel(value) {
+  if (!value || value === UNKNOWN_ACQUISITION) return "Unknown";
+  if (ACQUISITION_LABELS[value]) return ACQUISITION_LABELS[value];
+  const spaced = value.replace(/-/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Narrow the roster to the hunters matching every supplied filter.
+ *
+ * Filtering narrows WHICH hunters are candidates and does nothing else: relative order is
+ * the dataset's own, and no hunter is ever treated differently for being referenced by an
+ * existing list. That separation is explicit in SPEC-0003 — "The Hunter Picker Is
+ * Filterable and Bounded" narrows the candidate set; "The Hunter Picker Does Not Restrict
+ * or Mark Reuse" governs how the survivors are presented — so this function is
+ * deliberately not given the caller's lists to consult.
+ *
+ * `obtainable` accepts "yes" / "no" / UNKNOWN_ACQUISITION, since the field is nullable for
+ * the same two entries. It is 240/242 true and is near-useless alone; the free-text name
+ * filter is what actually makes 242 tractable.
+ */
+export function filterHunters(hunters, { query = "", acquisition = "", obtainable = "" } = {}) {
+  const q = query.trim().toLowerCase();
+  return hunters.filter((h) => {
+    if (q && !h.name.toLowerCase().includes(q)) return false;
+    if (acquisition) {
+      const matches =
+        acquisition === UNKNOWN_ACQUISITION ? !h.acquisition : h.acquisition === acquisition;
+      if (!matches) return false;
+    }
+    if (obtainable) {
+      const actual =
+        h.obtainable === null || h.obtainable === undefined
+          ? UNKNOWN_ACQUISITION
+          : h.obtainable
+            ? "yes"
+            : "no";
+      if (actual !== obtainable) return false;
+    }
+    return true;
+  });
+}
