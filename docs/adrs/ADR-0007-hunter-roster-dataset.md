@@ -56,9 +56,9 @@ Six sub-decisions follow.
 
 Hunters do not work that way. A hunter's portrait and description are two facts about one entity that change together — when a hunter's wiki entry is edited at all, which is rare — and the dominant change event is a new hunter appearing, which produces both payloads at once. Splitting here would pay a second page fetch for two things that are never separately stale. Applying ADR-0005's actual rule to hunter-shaped facts yields one script, and copying its *split* rather than its *reasoning* would be cargo cult.
 
-**Two portrait sizes per hunter.** The scrape emits a thumbnail and a full-size image, downscaled and re-encoded from the wiki original rather than stored as served. The picker grid and list-selector rows use the thumbnail; a list header or hunter detail view uses the full size. This is where the payload actually lives: a grid of full-size portraits rendered at thumbnail dimensions is the single worst thing this feature could do to page weight, and it is exactly what "store as scraped" would produce.
+**Two portrait sizes per hunter.** *(Superseded 2026-08-10 — see Amendments.)* The scrape emits a thumbnail and a full-size image, downscaled and re-encoded from the wiki original rather than stored as served. The picker grid and list-selector rows use the thumbnail; a list header or hunter detail view uses the full size. This is where the payload actually lives: a grid of full-size portraits rendered at thumbnail dimensions is the single worst thing this feature could do to page weight, and it is exactly what "store as scraped" would produce.
 
-**Size selection falls back across sizes before falling back to a placeholder.** Two assets per hunter means three new failure states — thumb missing, full missing, both missing — and the naive implementation renders nothing when only one is absent. The rule is: request the size appropriate to the context; if it is absent, use the other size; only if both are absent fall through to SPEC-0003's neutral placeholder. A too-large image is a performance problem, a blank grid cell is a broken one, and this ordering prefers the former.
+**Size selection falls back across sizes before falling back to a placeholder.** *(Superseded 2026-08-10 — with one asset the ladder is portrait, then placeholder. See Amendments.)* Two assets per hunter means three new failure states — thumb missing, full missing, both missing — and the naive implementation renders nothing when only one is absent. The rule is: request the size appropriate to the context; if it is absent, use the other size; only if both are absent fall through to SPEC-0003's neutral placeholder. A too-large image is a performance problem, a blank grid cell is a broken one, and this ordering prefers the former.
 
 **The dataset is `client/src/data/hunters.json`, generated and committed.** Per hunter: a stable id, display name, description, portrait slug, and the source revision plus ingestion timestamp ADR-0005 requires. Generated, committed, imported at build time, never hand-edited — the same discipline `itemStats.json` is held to. Ids follow the existing slug derivation so they stay stable across scrapes.
 
@@ -87,8 +87,8 @@ Hunters do not work that way. A hunter's portrait and description are two facts 
 * The script is not referenced by `npm run build`, `npm run dev`, `npm start`, or any future CI config — the ADR-0002 invariant is re-verified, not assumed
 * A grep for `huntshowdown.wiki.gg` in `client/src/` returns only attribution text and comments, never a fetch or an `<img src>`
 * `client/src/data/hunters.json` exists, is generated, carries per-entry source revision and ingestion timestamp, and is not hand-edited
-* Every hunter with imagery has both a thumbnail and a full-size asset on disk, and the thumbnail is materially smaller — a byte budget assertion, not merely a different filename
-* A test covers each of the three degradation paths: thumb missing falls back to full, full missing falls back to thumb, both missing falls through to SPEC-0003's placeholder
+* Exactly one portrait asset per hunter with imagery exists on disk, trimmed to the subject, and no `-thumb` variant remains *(amended 2026-08-10 — this criterion previously required both sizes and asserted the thumbnail was materially smaller)*
+* A test covers both degradation paths: the portrait renders when present, and falls through to SPEC-0003's neutral placeholder when absent *(amended 2026-08-10 — there were three paths while there were two sizes)*
 * SPEC-0003's tolerance requirements still hold against the real dataset: a list referencing a hunter absent from `hunters.json` stays fully usable, and a hunter with no portrait asset renders the placeholder rather than a broken image
 * Per-hunter failures follow SPEC-0001's error handling standard — recorded in the run summary with hunter, URL, and reason, never silently swallowed, never aborting the run
 * Ids produced by the scrape match the existing slug derivation, so re-running the scrape never re-keys an existing hunter
@@ -200,3 +200,36 @@ flowchart TD
 * **SPEC-0003's dataset contract has been amended to match this decision.** It previously said the dataset provides "a portrait asset" — singular, which could express neither two sizes nor the cross-size fallback rule. Its "Hunter Dataset Consumption Contract" requirement now names both sizes, the rule that a consumer requests the size appropriate to its context, and the fallback ordering (other size before placeholder).
 * **Deliberately left to the spec, not fixed here:** exact thumbnail and full-size dimensions, the image encoder and any format fallback chain, and the byte budget the confirmation criterion asserts against. Those are tuning decisions that want measurement, and pinning them in an ADR would force an ADR revision every time a number moves.
 * **Open question worth settling early:** which image-processing library. It is the first such dependency in the repo, it only ever runs in a human-invoked script rather than in the app or the build, and it should be a devDependency for that reason. Worth choosing deliberately rather than by whichever example gets copied first.
+
+## Amendments
+
+Recorded rather than silently rewritten, so the reversal is auditable and the original reasoning survives.
+
+### 2026-08-10 — one trimmed portrait per hunter, not two sizes
+
+**Original:** the scrape emits a thumbnail and a full-size image per hunter, downscaled and re-encoded from the wiki original. The picker grid uses the thumbnail; a list header uses the full size. Two sizes were justified by the payload: "a grid of full-size portraits rendered at thumbnail dimensions is the single worst thing this feature could do to page weight."
+
+**Amended to:** the scrape emits **one** portrait per hunter — the wiki original trimmed to the subject's bounding box and re-encoded at its native trimmed resolution, with no second size and no downscale.
+
+**Why:** the two-size decision assumed the stored image is mostly hunter. Measurement says otherwise. Every wiki original is 384×256 with an alpha channel, and the subject occupies only about 54% of that width — the rest is transparent padding. The pipeline was therefore spending its byte budget, and its resolution, on empty space, then cropping away more of it in CSS.
+
+Trimming that padding changes the arithmetic the original decision rested on:
+
+* The subject is **204–256px tall at native** across all 242 hunters, so a single trimmed asset is large enough for every surface that renders one except the list card (see *Known limit* below). A picker tile needs 192px at 2×: **all 242 clear it in height, and 191 of 242 in width** — the 51 narrowest upscale by at most 1.08× on a square tile, against 1.5× for every hunter today.
+* Once trimmed, "full size" and "thumbnail" are 207px and 192px wide — 7% apart. For the narrowest subjects the two encodes are byte-identical, because `withoutEnlargement` produces the same image twice. Two sizes had stopped being two sizes.
+* One asset per hunter projects to **~2.39 MB across the roster, below the 2.91 MB two-size padded set it replaces**, while making every picker tile sharp for the first time.
+
+So the amendment is not a trade of weight against quality. It is smaller *and* sharper *and* simpler, because the original weight problem was padding rather than resolution.
+
+**What did not change:** the wiki is still visited once per hunter, output is still generated-committed and self-hosted, AVIF is still the encoding, and the offline human-invoked posture and its robots/rate-limit rules are untouched. The dataset file is unaffected.
+
+**Known limit, accepted:** the 154×220 list card cannot be made sharp by any storage decision. It needs 440px of subject height at 2× and the wiki supplies at most 256 — **0 of 242 hunters clear it.** Fixing that would mean rendering the card art at ≤113px tall, which is a change to SPEC-0003's card design rather than to this pipeline, and was declined as out of scope. The card is upscaled roughly 1.9× and this is a source-resolution ceiling, not a pipeline defect.
+
+**Blast radius:**
+
+* This ADR's title, and the two-size sub-decisions in Decision Outcome, are retained for referential stability and auditability — the title is cited by SPEC-0003, SPEC-0004 and governing comments in the scrape. **This amendment is authoritative wherever it and the decision body disagree.**
+* **SPEC-0004** loses "Two Portrait Sizes Per Hunter" and its per-size budgets, gains a trimming requirement and a single-asset budget. Its scenario asserting the thumbnail is *materially smaller in bytes* than the full size is removed rather than reworded — with one asset there is nothing to compare.
+* **SPEC-0003's** "Hunter Dataset Consumption Contract" loses the cross-size fallback ordering (request the size appropriate to the context, other size before placeholder). With one asset the ladder has one rung: the portrait, then the placeholder. The bullet in More Information above describing that contract is superseded by this amendment.
+* **This ADR's own Confirmation criteria** are amended in place: the two that asserted both sizes on disk and three degradation paths described a pipeline this amendment removes, and would have been unsatisfiable by a conforming implementation.
+* Consuming code no longer selects a size, so the `size` argument threaded through the render sites disappears. That work is owned by **SPEC-0003's** amended consumption contract, which states it as a requirement — this ADR records the consequence, not the obligation.
+* **484 assets are already committed**, 242 of them `-thumb` variants that the new pipeline never emits. SPEC-0004 therefore requires the scrape to delete stale variants rather than leaving orphans, since a re-scrape that only overwrites would leave the payload assertions permanently unfalsifiable.

@@ -27,6 +27,8 @@ Three **additive** changes were accepted on **2026-08-10** and are **not yet imp
 - **Loadout rows preview what they hold** — new requirement, "Filed Loadouts Preview Their Contents"
 - **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged"
 
+A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is likewise not yet implemented. SPEC-0004 owns the production half; the consumption half is amended here rather than overridden from there.
+
 ## Requirements
 
 ### Requirement: List Identity Is User-Owned and Independent of Portrait
@@ -184,13 +186,21 @@ The set of a user's lists MUST NOT be derived from the distinct `listId` values 
 
 This capability consumes a hunters dataset; it does not specify how that dataset is produced. Production is specified by SPEC-0004 (Hunter Roster Dataset), which realizes ADR-0007.
 
-The dataset SHALL provide, for each hunter, a stable identifier, a display name, a description, and portrait assets self-hosted under the application's own origin *(description added 2026-08-10, consumed by "Loadouts Carry an Editable Description")*. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
+The dataset SHALL provide, for each hunter, a stable identifier, a display name, a description, and a portrait asset self-hosted under the application's own origin *(description added 2026-08-10, consumed by "Loadouts Carry an Editable Description")*.
+
+*(amended 2026-08-10; not yet implemented)* Per the ADR-0007 amendment of that date, a hunter has **one** portrait asset, trimmed to the subject and stored at its native resolution. Consuming code SHALL request that single asset and MUST NOT select between sizes. The `size` argument currently threaded through the portrait render path SHALL be removed rather than defaulted, so no call site can ask for a size that no longer exists.
+
+Because each asset is trimmed to its own subject, portraits SHALL vary in dimensions and aspect ratio between hunters. Consuming code MUST NOT assume a uniform portrait aspect, and SHALL continue to size portraits by their container rather than by intrinsic dimensions.
+
+The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
 Portraits are encoded as AVIF (SPEC-0004). The render site's extension-resolution chain SHALL include `avif`, so that adding portraits requires no change at the call site — the same property that lets the item scrape replace or re-extension its images freely.
 
-When the size appropriate to a context is unavailable, consuming code SHALL fall back to the other size before falling back to the placeholder. A too-large image is a performance cost; an empty tile is a defect.
+*(amended 2026-08-10; not yet implemented)* With one asset per hunter the fallback ladder has two rungs: the portrait, then the placeholder. The cross-size ordering this requirement previously stated — request the size appropriate to the context, fall back to the other size before the placeholder — no longer has two sizes to order and is removed. An empty tile remains a defect.
 
-Consuming code MUST tolerate a dataset entry that lacks either or both portrait sizes, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
+**The list card is knowingly upscaled.** SPEC-0003's 154×220 list card needs 440px of subject height at 2×, and the source supplies at most 256px, so no hunter's portrait reaches it. The card SHALL render the portrait upscaled by roughly 1.9× rather than the pipeline manufacturing pixels to close the gap. This is a source-resolution ceiling recorded in SPEC-0004, not a defect in either spec. Closing it would require rendering the card's portrait area at 113px tall or less, which is a card redesign and is not required here.
+
+Consuming code MUST tolerate a dataset entry whose portrait asset is absent, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
 
 Consuming code MUST likewise tolerate a dataset entry whose description is absent or empty, rendering no description rather than an empty element or a placeholder *(added 2026-08-10)*. Every entry carries one today; the tolerance exists because the dataset refreshes independently of this spec.
 
@@ -199,15 +209,15 @@ Consuming code MUST likewise tolerate a dataset entry whose description is absen
 - **WHEN** the application renders a list's portrait
 - **THEN** the image SHALL be served from the application's own origin, and no request SHALL be issued to the wiki
 
-#### Scenario: A portrait missing from disk falls back across sizes
+#### Scenario: A missing portrait falls back to a placeholder
 
-- **WHEN** a context requests the thumbnail and only the full size exists, or requests the full size and only the thumbnail exists
-- **THEN** the UI SHALL render the size that does exist rather than a placeholder
-
-#### Scenario: Both portrait sizes missing falls back to a placeholder
-
-- **WHEN** a list references a hunter for which neither portrait size is present
+- **WHEN** a list references a hunter for which no portrait asset is present
 - **THEN** the UI SHALL fall back to a neutral placeholder using the same fallback mechanism SPEC-0001 defines for items, and SHALL NOT render a broken image
+
+#### Scenario: No consumer selects a portrait size
+
+- **WHEN** the portrait render path is inspected
+- **THEN** no call site SHALL pass a size, and the asset URL SHALL be derived from the hunter's `portrait` slug alone
 
 #### Scenario: The extension chain resolves AVIF portraits
 

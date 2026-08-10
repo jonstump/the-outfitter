@@ -8,11 +8,13 @@ implements: [ADR-0007]
 
 ## Overview
 
-Produces the hunter dataset and portrait assets that SPEC-0003's loadout lists consume. A single offline, human-invoked scrape visits each hunter page on huntshowdown.wiki.gg once and emits both payloads: a generated `client/src/data/hunters.json` and two self-hosted portrait sizes per hunter.
+Produces the hunter dataset and portrait assets that SPEC-0003's loadout lists consume. A single offline, human-invoked scrape visits each hunter page on huntshowdown.wiki.gg once and emits both payloads: a generated `client/src/data/hunters.json` and one self-hosted portrait per hunter.
 
-This spec covers **production**. SPEC-0003 already specifies **consumption** — the fallback chain, the tolerance for missing assets, and the placeholder behaviour — and this spec must satisfy the contract stated there.
+This spec covers **production**. SPEC-0003 specifies **consumption** — the fallback chain, the tolerance for missing assets, and the placeholder behaviour — and this spec SHALL satisfy that contract as amended on 2026-08-10. Where the amendment changes what consumers do, SPEC-0003 is amended in the same commit rather than overridden from here.
 
 See ADR-0007 for the decision record, including why this is one script rather than the images/stats split ADR-0005 established.
+
+**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset larger than every surface needs except one, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
 
 ## Requirements
 
@@ -41,12 +43,12 @@ The script SHALL import slug derivation, robots handling, rate limiting, the use
 
 ### Requirement: One Visit Per Hunter Page Yields Both Payloads
 
-The scrape SHALL fetch each hunter's page at most once per run and derive both the dataset entry and the portrait assets from that single response.
+The scrape SHALL fetch each hunter's page at most once per run and derive both the dataset entry and the portrait asset from that single response.
 
 #### Scenario: A full run fetches each page once
 
 - **WHEN** a full scrape runs across the roster
-- **THEN** each hunter page SHALL be requested at most once, and both the dataset row and the portraits for that hunter SHALL be produced from that response
+- **THEN** each hunter page SHALL be requested at most once, and both the dataset row and the portrait for that hunter SHALL be produced from that response
 
 ### Requirement: Generated, Committed Dataset File
 
@@ -95,68 +97,135 @@ The dataset SHALL cover the full roster the wiki lists, not a subset.
 - **WHEN** a hunter's `Source` cannot be mapped to a known acquisition value
 - **THEN** the entry SHALL still be written with `source` verbatim and `acquisition` null, so the hunter remains selectable
 
-### Requirement: Two Portrait Sizes Per Hunter
+### Requirement: One Trimmed Portrait Per Hunter
 
-The scrape SHALL emit two self-hosted portrait assets per hunter under `client/public/images/hunters/`: a thumbnail at **192px** wide and a full size at **320px** wide, each preserving the source aspect ratio.
+*(amended 2026-08-10; not yet implemented — replaces "Two Portrait Sizes Per Hunter")*
 
-Both sizes SHALL be downscaled and re-encoded from the wiki original rather than stored as served. Portraits SHALL be encoded as **AVIF**.
+The scrape SHALL emit exactly **one** self-hosted portrait asset per hunter under `client/public/images/hunters/`. It MUST NOT emit a second size.
 
-Both dimensions are derived from what actually renders, at 2× for high-DPI displays. The largest place a portrait appears is a 154×220 list card, which needs 308px wide; 320px gives modest headroom. Picker tiles are 96px, needing 192px. Storing detail beyond what any surface displays costs bytes across the whole roster and buys nothing — a full size at 440px wide would carry roughly twice the pixels of anything on screen.
+Before encoding, the scrape SHALL **trim the source to the subject's bounding box**. The bounding box SHALL be the smallest rectangle containing every pixel whose alpha is greater than zero; a pixel with alpha exactly zero is *fully transparent*. The trim threshold SHALL be zero rather than the image library's default, so that two conforming implementations produce identical dimensions and antialiased edge pixels are never discarded.
 
-A source image narrower than a target width SHALL NOT be upscaled; it SHALL be re-encoded at its native width.
+The trimmed subject SHALL then be encoded at its **native trimmed resolution**: neither downscaled nor upscaled.
 
-#### Scenario: Both sizes are produced
+Portraits SHALL be encoded as **AVIF at quality 70**, and the encoding SHALL preserve the source's alpha channel so a portrait composites onto the page background rather than carrying an opaque box. The quality value is normative because the per-asset budget below is derived from it; changing it is a spec edit.
+
+Two source shapes fall outside the trim and SHALL be handled explicitly rather than left to the image library:
+
+- A source with **no alpha channel** SHALL be encoded untrimmed at its native resolution rather than failing. There is no transparent margin to remove, and the hunter still needs a portrait.
+- A source whose alpha is **zero at every pixel** has no subject and therefore no bounding box. It SHALL fail that hunter with a distinct sentinel error and SHALL NOT be written.
+
+Because each hunter's subject occupies a different region of the source, the emitted assets SHALL vary in both dimensions and aspect ratio between hunters. Consuming code MUST NOT assume a uniform portrait aspect.
+
+Trimming rather than downscaling is what makes one asset sufficient. Every stored pixel is subject rather than padding, so the single asset covers what each surface needs at 2×, measured across the roster:
+
+| Surface | Needs at 2× | Trimmed subject provides |
+|---|---|---|
+| Picker tile (96px square) | 192×192 | 204–256 tall for all 242; **178–334 wide, so 51 fall short on width** and upscale by at most 1.08× |
+| Expanded list header (52×68) | 104×136 | clears both dimensions for every hunter |
+| List card (154×220) | 308×440 | **no hunter reaches it — see the next requirement** |
+
+The scrape MUST NOT upscale a subject to meet any of these figures. Where the source cannot supply what a surface wants, the shortfall SHALL be accepted as a source-resolution limit rather than manufactured. The 1.08× worst case on a narrow tile is recorded rather than hidden: it is an improvement on the 1.5× every hunter is upscaled by today, but it is not zero, and a requirement claiming otherwise would be false.
+
+**Stale size variants SHALL be removed.** The scrape SHALL delete any previously emitted asset for a hunter that does not match the current single-asset path, so that a run leaves no orphaned size variant behind, and SHALL report the count of stale assets removed. Without this the 242 `-thumb` assets already committed would survive every future run, and the disk-state and payload scenarios below could never pass.
+
+#### Scenario: One asset per hunter, trimmed to the subject
 
 - **WHEN** a hunter with an available portrait is scraped
-- **THEN** both a 192px-wide and a 320px-wide AVIF SHALL be written for that hunter
+- **THEN** exactly one AVIF SHALL be written for that hunter, its dimensions SHALL equal the source's trimmed subject bounding box, and no second size SHALL exist on disk
 
-#### Scenario: The thumbnail is materially smaller
+#### Scenario: Transparent margin is removed
 
-- **WHEN** both sizes for a hunter are compared
-- **THEN** the thumbnail SHALL be smaller in bytes than the full size — a byte assertion, not merely a differing filename
+- **WHEN** a source portrait carries fully transparent margin around the subject
+- **THEN** the emitted asset SHALL be no larger than the source in either dimension, SHALL be strictly smaller in every dimension that carried margin, and SHALL contain no fully transparent border row or column
 
-#### Scenario: Small sources are not upscaled
+#### Scenario: Alpha survives encoding
 
-- **WHEN** a source portrait is narrower than 320px
-- **THEN** the full-size asset SHALL be written at the source's native width rather than upscaled
+- **WHEN** a source portrait has an alpha channel
+- **THEN** the emitted AVIF SHALL retain it, so the portrait composites onto the page background rather than onto an opaque rectangle
 
-#### Scenario: The full size stays crisp at the largest render
+#### Scenario: A source with no alpha channel is still emitted
 
-- **WHEN** the full size is displayed on the 154×220 list card on a 2× display
-- **THEN** the asset SHALL be at least as wide as the rendered CSS width doubled, so it is not upscaled by the browser
+- **WHEN** a source portrait has no alpha channel
+- **THEN** it SHALL be encoded untrimmed at its native resolution, and the hunter SHALL NOT be failed on that basis
+
+#### Scenario: A fully transparent source fails its hunter
+
+- **WHEN** a source portrait's alpha is zero at every pixel
+- **THEN** that hunter SHALL be failed with a distinct sentinel error naming the condition, and no asset SHALL be written
+
+#### Scenario: Stale size variants are removed
+
+- **WHEN** the scrape runs against a directory containing assets from the previous two-size pipeline
+- **THEN** every stale variant SHALL be deleted, the run SHALL report how many were removed, and only one asset per hunter SHALL remain
+
+#### Scenario: Subjects are never upscaled
+
+- **WHEN** a trimmed subject is smaller than what a rendering surface would need at 2×
+- **THEN** the asset SHALL be written at its native trimmed size rather than upscaled, and the run SHALL NOT fail on that basis
+
+#### Scenario: Aspect ratio varies between hunters
+
+- **WHEN** the emitted assets across the roster are compared
+- **THEN** their widths, heights and aspect ratios SHALL differ between hunters, and nothing in the pipeline SHALL pad them back to a common shape
+
+### Requirement: The List Card Is Knowingly Upscaled
+
+*(added 2026-08-10; not yet implemented)*
+
+The 154×220 list card SPEC-0003 renders needs **440px of subject height** at 2×. The wiki supplies at most 256px, and after trimming, subjects are 204–256px tall — **no hunter in the roster reaches it.**
+
+The scrape MUST NOT upscale a trimmed subject to reach the card's requirement, because upscaling manufactures pixels without adding detail while multiplying the committed payload.
+
+The card is therefore rendered at roughly **1.9× upscale**. This SHALL be treated as a **source-resolution ceiling rather than a pipeline defect**, and SPEC-0003's "Hunter Dataset Consumption Contract" records the same ceiling on the consuming side so that a reader of either spec finds it. Closing it would require rendering the card's portrait area at 113px tall or less, which is a change to SPEC-0003's card design and is out of scope here.
+
+#### Scenario: The ceiling is not closed by upscaling
+
+- **WHEN** the scrape produces a portrait for a hunter whose trimmed subject is shorter than 440px
+- **THEN** the asset SHALL be written at native size, and the scrape MUST NOT upscale it to satisfy the card
+
+#### Scenario: Every other surface is served without upscaling
+
+- **WHEN** the emitted portrait is rendered in the picker tile or the expanded list header
+- **THEN** the asset SHALL be at least as large as those surfaces require at 2×, so the browser does not upscale it
 
 ### Requirement: Portrait Payload Budget
 
 Portraits are the heaviest assets this application ships. The roster is **242 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by the roster.
 
-**Per asset:** the thumbnail SHALL be at most **15 KB** and the full size at most **25 KB**.
+*(amended 2026-08-10; not yet implemented — the per-size ceilings are replaced by a single per-asset ceiling, since there is now one asset per hunter)*
 
-**In total:** the committed portrait payload SHALL NOT exceed **12 MB** across all hunters and both sizes.
+**Per asset:** a hunter's portrait SHALL be at most **25 KB**.
 
-These follow from the dimensions and encoder above rather than being chosen independently: a 192px AVIF photograph and a 320px one are comfortably inside those figures at good quality. Measurement against the committed set bears that out with room to spare — the largest thumbnail is 6.7 KB and the largest full size 14.9 KB, and the whole payload is 2.91 MB against the 12 MB ceiling. The budgets are retained at their original figures rather than tightened to what was measured, so that re-scrapes and roster growth have headroom before they hit a spec edit.
+**In total:** the committed portrait payload SHALL NOT exceed **12 MB** across all hunters.
 
-A generated asset exceeding its per-asset budget SHALL fail that hunter with a recorded reason rather than being written. A run whose output would exceed the total ceiling SHALL fail with the projected total and the ceiling, rather than writing a partial set that silently breaches it.
+Both figures are retained from the two-size pipeline deliberately. Trimming raises the per-asset size — the asset is now all subject, where before it was around 46% transparent padding — but removes the second file entirely. Sampled encodes at AVIF quality 70 land at a mean of 10.1 KB and a maximum of 13.3 KB, projecting **~2.39 MB across the roster against the 12 MB ceiling**, which is *below* the 2.91 MB the two-size padded set occupies today. Keeping the ceilings unchanged leaves headroom for roster growth before a number becomes a spec edit.
+
+The 15 KB thumbnail ceiling SHALL NOT apply to the single asset, and is **removed** rather than reassigned. It described an asset class that no longer exists, and retaining it against the single asset would fail hunters whose trimmed subject legitimately encodes above it.
+
+A generated asset exceeding the per-asset budget SHALL fail that hunter with a recorded reason rather than being written. A run whose output would exceed the total ceiling SHALL fail with the projected total and the ceiling, rather than writing a partial set that silently breaches it.
 
 Both are enforced by failing, not warning. An oversized asset is invisible in review — a reviewer sees a filename, not a byte count — and a total overage is invisible in any single file.
 
 #### Scenario: An oversized asset is rejected, not written
 
-- **WHEN** encoding produces a thumbnail above 15 KB or a full size above 25 KB
+- **WHEN** encoding produces a portrait above 25 KB
 - **THEN** that hunter SHALL be recorded as failed with the measured size and the budget, and the oversized file SHALL NOT be written
 
 #### Scenario: A run exceeding the total ceiling fails
 
-- **WHEN** the projected total across all hunters and both sizes would exceed 12 MB
+- **WHEN** the projected total across all hunters would exceed 12 MB
 - **THEN** the run SHALL fail, reporting the projected total and the ceiling, rather than committing a partial set
 
 #### Scenario: The committed set is within budget
 
 - **WHEN** the committed portrait assets are measured
-- **THEN** every thumbnail SHALL be at most 15 KB, every full size at most 25 KB, and the total at most 12 MB
+- **THEN** every portrait SHALL be at most 25 KB and the total SHALL be at most 12 MB
 
 ### Requirement: Consumption Contract Compatibility
 
 The dataset and assets SHALL satisfy the contract SPEC-0003 states for consumers. Asset paths SHALL be derivable from the entry's `portrait` slug without a lookup manifest, so the scrape can add or replace assets with no code change at the render site.
+
+*(amended 2026-08-10; not yet implemented)* With one asset per hunter, the path SHALL be derivable from the `portrait` slug **alone**, and MUST NOT contain a size segment. SPEC-0003's cross-size fallback ordering has been amended in step: its ladder is now the portrait, then SPEC-0001's placeholder. That change is made in SPEC-0003 itself — this requirement states the production-side property, not a repeal of another spec's text.
 
 The dataset MUST remain usable when a hunter has no portrait at all, and consumers MUST NOT be required to coalesce a missing field: absent imagery SHALL be representable in the dataset rather than implied by a missing file alone.
 
@@ -168,7 +237,12 @@ The dataset MUST remain usable when a hunter has no portrait at all, and consume
 #### Scenario: Asset paths are derivable
 
 - **WHEN** a consumer holds a dataset entry
-- **THEN** it SHALL be able to construct both asset URLs from the entry's `portrait` slug and the known size names, without consulting a separate manifest
+- **THEN** it SHALL be able to construct the asset URL from the entry's `portrait` slug alone, without a size segment and without consulting a separate manifest
+
+#### Scenario: Consumers no longer choose a size
+
+- **WHEN** a consumer renders a hunter portrait in any surface
+- **THEN** it SHALL request the single asset, and no code path SHALL select between a thumbnail and a full size
 
 ### Requirement: Names-Only Mode
 
