@@ -189,10 +189,7 @@ export const WIKI_TITLE_OVERRIDES = {
     "poison-trip-mine": "Tools/Poison_Trip_Mines",
   },
   traits: {},
-  consumables: {
-    // Duplicate of the TOOLS entry "Choke Bombs" — see KNOWN_CATALOG_DUPLICATES.
-    "choke-bomb": null,
-  },
+  consumables: {},
 };
 
 /**
@@ -202,17 +199,17 @@ export const WIKI_TITLE_OVERRIDES = {
  *
  * Keyed by catalog id, for the same reason WIKI_TITLE_OVERRIDES is.
  *
- * These rows cannot simply be deleted from catalog.js: loadoutCodec.js's legacy (pre-versioning)
- * decoder resolves weapons by raw array position, so removing a row shifts every later weapon
- * and silently remaps old saved loadouts to the wrong items. Retiring one needs the same
- * treatment the Choke/Stalker Beetle tool slots got — an explicit legacy-index carve-out — not
- * a splice.
+ * Skipping a duplicate here is a stopgap, not the fix — the entry still shows up in the picker
+ * with a fallback thumb. Deleting the row from catalog.js is the real remedy and is now safe to
+ * do: loadoutCodec.js pins the pre-versioning catalog order in its own frozen table (issue #68),
+ * so a mid-array delete no longer shifts what a legacy record resolves to. This used to warn the
+ * opposite, because the legacy decoder read the live arrays positionally and a splice silently
+ * remapped old saved loadouts. "Choke Bomb" was the first entry retired that way (issue #67).
  */
 export const KNOWN_CATALOG_DUPLICATES = {
   "winfield-m1873c":
     'stale pre-1896 name; duplicates the "Frontier 73C" entry, which is already in the catalog ' +
     "and maps to Weapons/Frontier_73C",
-  "choke-bomb": 'duplicates the TOOLS entry "Choke Bombs", which maps to Tools/Choke_Bombs',
 };
 
 /**

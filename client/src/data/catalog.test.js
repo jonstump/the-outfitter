@@ -93,6 +93,15 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
       expect(entry(CONS, name), name).toEqual(tuple);
     });
   });
+
+  it("carries Choke Bombs once, as a Tool (#67)", () => {
+    // The catalog listed the same item twice: "Choke Bombs" under Tools and a stale
+    // "Choke Bomb" under Consumables, which had no wiki page and let a player fill a
+    // consumable slot with something the game only offers as a tool.
+    expect(entry(TOOLS, "Choke Bombs")).toEqual(["choke-bombs", "Choke Bombs", 25, "Utility"]);
+    expect(CONS.some((c) => c[0] === "choke-bomb")).toBe(false);
+    expect(CONS.some((c) => c[1] === "Choke Bomb")).toBe(false);
+  });
 });
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
