@@ -115,6 +115,102 @@ export const CATEGORY_SOURCES = {
 
 export const CATEGORIES = Object.keys(CATEGORY_SOURCES);
 
+/** Catalog category -> the wiki's own top-level namespace segment for that category. */
+export const WIKI_CATEGORY = {
+  weapons: "Weapons",
+  tools: "Tools",
+  traits: "Traits",
+  consumables: "Consumables",
+};
+
+// ---------------------------------------------------------------------------
+// Catalog display name -> wiki page path.
+//
+// The wiki namespaces every item page under its category ("/wiki/Weapons/Nagant_M1895", not
+// "/wiki/Nagant_M1895"), so the default resolution is `${WIKI_CATEGORY[category]}/${title}`.
+//
+// Two things break that default and need the override table below:
+//
+//   1. Hunt's Update 2.0 ("1896") renamed most branded weapons — the catalog still carries a
+//      number of pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved to
+//      the post-rename titles ("Sparks", "Pax"). Weapon *variants* also live on subpages
+//      ("Sparks/Pistol", "Mosin-Nagant/Avtomat"), which the flat display name can't express.
+//   2. A few catalog items sit under a different wiki category than the catalog's own — the
+//      Katana is a Tool here but a Weapon on the wiki.
+//
+// Values are paths relative to /wiki/ and INCLUDE the category segment, precisely so a cross-
+// category item can be expressed. A `null` value means "deliberately has no wiki page" — see
+// KNOWN_CATALOG_DUPLICATES below; those items are skipped without spending a request.
+//
+// Verified against the wiki's own sitemap (sitemap-huntshowdown_en-NS_0), not by probing URLs one
+// at a time. When a DLC ships or the catalog changes, re-verify the same way: pull the sitemap
+// index at /sitemaps/sitemap-index-huntshowdown_en.xml, expand the NS_0 gzip, and diff the
+// resolved paths against it — two requests instead of one per item. Note the sitemap lags live
+// edits by months, so treat "absent from the sitemap" as "check this one by hand", not "gone".
+// ---------------------------------------------------------------------------
+
+export const WIKI_TITLE_OVERRIDES = {
+  weapons: {
+    "Caldwell Conversion Pistol": "Weapons/Conversion",
+    "Caldwell Conversion Uppercut": "Weapons/Uppercut",
+    "Caldwell Pax": "Weapons/Pax",
+    "Caldwell Rival 78": "Weapons/Rival_78",
+    "Crown & King Auto-5": "Weapons/Auto-5",
+    "Krag M1894": "Weapons/Krag",
+    "LeMat Mark II": "Weapons/LeMat",
+    "Martini-Henry IC1": "Weapons/Martini-Henry",
+    "Mosin-Nagant Avtomat": "Weapons/Mosin-Nagant/Avtomat",
+    "Mosin-Nagant M1891": "Weapons/Mosin-Nagant",
+    "Nagant Officer Carbine": "Weapons/Officer/Carbine",
+    "Scottfield Model 3": "Weapons/Scottfield",
+    "Sparks LRR": "Weapons/Sparks",
+    "Sparks Pistol": "Weapons/Sparks/Pistol",
+    "Vetterli 71 Karabiner": "Weapons/Vetterli_71",
+    "Winfield 1876 Centennial": "Weapons/Centennial",
+    // Stale pre-rename duplicates — see KNOWN_CATALOG_DUPLICATES.
+    "Winfield M1873": null,
+    "Winfield M1873C": null,
+  },
+  tools: {
+    // The wiki files the Katana under Weapons even though the catalog treats it as a Tool.
+    Katana: "Weapons/Katana",
+    // The wiki pluralizes the placeable trap pages; the catalog uses the singular in-game label.
+    "Alert Trip Mine": "Tools/Alert_Trip_Mines",
+    "Concertina Trip Mine": "Tools/Concertina_Trip_Mines",
+    "Poison Trip Mine": "Tools/Poison_Trip_Mines",
+  },
+  traits: {},
+  consumables: {
+    // Duplicate of the TOOLS entry "Choke Bombs" — see KNOWN_CATALOG_DUPLICATES.
+    "Choke Bomb": null,
+  },
+};
+
+/**
+ * Catalog entries that have no wiki page of their own because they duplicate another entry.
+ * These are skipped deliberately (no request spent, not counted as failures) and reported in the
+ * run summary so the duplication stays visible rather than looking like a scrape bug.
+ */
+export const KNOWN_CATALOG_DUPLICATES = {
+  "Winfield M1873": 'stale pre-1896 name; the post-rename entry "Ranger 73" covers this weapon',
+  "Winfield M1873C": 'stale pre-1896 name; the post-rename entry "Frontier 73C" is already in the catalog',
+  "Choke Bomb": 'duplicates the TOOLS entry "Choke Bombs", which maps to Tools/Choke_Bombs',
+};
+
+/**
+ * Resolve a catalog item to its wiki page path (relative to /wiki/, category segment included),
+ * or null when the item is a known duplicate with no page of its own.
+ */
+export function resolveWikiPath(category, name) {
+  const overrides = WIKI_TITLE_OVERRIDES[category];
+  if (overrides && Object.prototype.hasOwnProperty.call(overrides, name)) {
+    return overrides[name];
+  }
+  const namespace = WIKI_CATEGORY[category];
+  if (!namespace) return null;
+  return `${namespace}/${name.trim().replace(/\s+/g, "_")}`;
+}
+
 export function collectCatalogItems(categories = CATEGORIES) {
   const items = [];
   for (const category of categories) {
@@ -124,7 +220,7 @@ export function collectCatalogItems(categories = CATEGORIES) {
       // Catalog tuples are id-first ([id, name, ...]) since the stable-id
       // refactor; the display name (row[1]) drives the wiki URL and slug.
       const name = row[1];
-      items.push({ category, name, slug: slugify(name) });
+      items.push({ category, name, slug: slugify(name), wikiPath: resolveWikiPath(category, name) });
     }
   }
   return items;
@@ -160,20 +256,30 @@ export function parseRobotsTxt(text) {
   return groups;
 }
 
-function selectRobotsGroup(groups, userAgent) {
+/**
+ * Collect the rules that apply to `userAgent`, merging EVERY matching group rather than taking
+ * the first.
+ *
+ * The strict reading of the standard is "one group wins", but real files routinely split the same
+ * agent across several blocks — huntshowdown.wiki.gg publishes a Cloudflare-managed `User-agent: *`
+ * block containing only `Allow: /`, followed by wiki.gg's own `User-agent: *` block with ~99
+ * Disallow rules. Taking the first match would silently discard the second block and let us fetch
+ * paths the site explicitly disallows (e.g. /wiki/File:, /wiki/Special:). Merging fails closed.
+ */
+function selectRobotsRules(groups, userAgent) {
   const uaLower = userAgent.toLowerCase();
-  const specific = groups.find((g) => g.userAgents.some((a) => a !== "*" && uaLower.includes(a.toLowerCase())));
-  if (specific) return specific;
-  return groups.find((g) => g.userAgents.includes("*")) || null;
+  const specific = groups.filter((g) => g.userAgents.some((a) => a !== "*" && uaLower.includes(a.toLowerCase())));
+  const matched = specific.length > 0 ? specific : groups.filter((g) => g.userAgents.includes("*"));
+  return matched.flatMap((g) => g.rules);
 }
 
 /** Longest-matching-prefix rule, ties broken in favor of Allow (standard robots.txt semantics). */
 export function isAllowedByRobots(groups, userAgent, pathToCheck) {
-  const group = selectRobotsGroup(groups, userAgent);
-  if (!group) return true;
+  const rules = selectRobotsRules(groups, userAgent);
+  if (rules.length === 0) return true;
 
   let winner = null;
-  for (const rule of group.rules) {
+  for (const rule of rules) {
     if (rule.path === "") continue; // "Disallow:" with no path means "allow everything"
     if (pathToCheck.startsWith(rule.path)) {
       if (
@@ -239,9 +345,18 @@ export class RateLimiter {
 // Wiki page / image URL resolution.
 // ---------------------------------------------------------------------------
 
-export function buildItemPageUrl(itemName) {
-  const title = itemName.trim().replace(/\s+/g, "_");
-  return `${WIKI_ORIGIN}/wiki/${encodeURIComponent(title)}`;
+/**
+ * Build the wiki URL for a page path produced by resolveWikiPath (e.g. "Weapons/Sparks/Pistol").
+ *
+ * Each path segment is encoded independently: encodeURIComponent over the whole path would turn
+ * the namespace and variant separators into %2F and 404 every namespaced page.
+ */
+export function buildItemPageUrl(wikiPath) {
+  const encoded = wikiPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment.trim().replace(/\s+/g, "_")))
+    .join("/");
+  return `${WIKI_ORIGIN}/wiki/${encoded}`;
 }
 
 /**
@@ -360,8 +475,15 @@ export async function scrapeItem(target, deps) {
   } = deps;
 
   const { category, name: item, slug } = target;
-  const destPath = path.join(imagesRoot, category, `${slug}.jpg`); // extension resolved after fetch; placeholder for existence probing below
+  const wikiPath = target.wikiPath !== undefined ? target.wikiPath : resolveWikiPath(category, item);
   const destDir = path.join(imagesRoot, category);
+
+  // Known catalog duplicates have no wiki page of their own. Skip them before spending a request
+  // so they surface as an explained skip rather than a 404 in the failed bucket.
+  if (wikiPath === null) {
+    const reason = KNOWN_CATALOG_DUPLICATES[item] || "no wiki page mapped for this catalog entry";
+    return { status: "skipped", category, item, slug, reason: `no wiki page: ${reason}` };
+  }
 
   // Skip re-downloading if any extension of this slug already exists on disk, unless --force.
   if (!force) {
@@ -374,7 +496,7 @@ export async function scrapeItem(target, deps) {
     }
   }
 
-  const pageUrl = buildItemPageUrl(item);
+  const pageUrl = buildItemPageUrl(wikiPath);
   const pagePath = new URL(pageUrl).pathname;
 
   if (!isAllowedByRobots(robotsGroups, userAgent, pagePath)) {

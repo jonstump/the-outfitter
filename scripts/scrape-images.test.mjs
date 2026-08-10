@@ -19,6 +19,9 @@ import {
   fetchRobotsTxt,
   RateLimiter,
   collectCatalogItems,
+  resolveWikiPath,
+  WIKI_TITLE_OVERRIDES,
+  KNOWN_CATALOG_DUPLICATES,
   CATEGORIES,
   scrapeItem,
   runScrape,
@@ -62,16 +65,81 @@ test("slugify: is idempotent", () => {
 // ---------------------------------------------------------------------------
 
 test("buildItemPageUrl: spaces become underscores under /wiki/", () => {
-  assert.equal(buildItemPageUrl("Nagant M1895"), "https://huntshowdown.wiki.gg/wiki/Nagant_M1895");
+  assert.equal(buildItemPageUrl("Weapons/Nagant M1895"), "https://huntshowdown.wiki.gg/wiki/Weapons/Nagant_M1895");
 });
 
-test("buildItemPageUrl: special characters are percent-encoded", () => {
-  const url = buildItemPageUrl("Crown & King Auto-5");
-  assert.ok(url.startsWith("https://huntshowdown.wiki.gg/wiki/"));
+test("buildItemPageUrl: namespace and variant separators survive encoding", () => {
+  // Regression: encodeURIComponent over the whole path turned every "/" into %2F, which 404s.
+  assert.equal(buildItemPageUrl("Weapons/Sparks/Pistol"), "https://huntshowdown.wiki.gg/wiki/Weapons/Sparks/Pistol");
+  assert.ok(!buildItemPageUrl("Weapons/Mosin-Nagant/Avtomat").includes("%2F"));
+});
+
+test("buildItemPageUrl: special characters inside a segment are percent-encoded", () => {
+  const url = buildItemPageUrl("Weapons/Crown & King Auto-5");
+  assert.ok(url.startsWith("https://huntshowdown.wiki.gg/wiki/Weapons/"));
   assert.ok(!url.includes(" "));
+  assert.ok(url.includes("%26"), "the ampersand should be encoded");
   // Round-trips back to the original title once decoded.
-  const decoded = decodeURIComponent(url.replace("https://huntshowdown.wiki.gg/wiki/", "")).replace(/_/g, " ");
+  const decoded = decodeURIComponent(url.replace("https://huntshowdown.wiki.gg/wiki/Weapons/", "")).replace(/_/g, " ");
   assert.equal(decoded, "Crown & King Auto-5");
+});
+
+// ---------------------------------------------------------------------------
+// resolveWikiPath / override table
+// ---------------------------------------------------------------------------
+
+test("resolveWikiPath: defaults to the item's own category namespace", () => {
+  assert.equal(resolveWikiPath("weapons", "Nagant M1895"), "Weapons/Nagant_M1895");
+  assert.equal(resolveWikiPath("traits", "Bulletgrubber"), "Traits/Bulletgrubber");
+});
+
+test("resolveWikiPath: applies pre-1896 rename overrides", () => {
+  assert.equal(resolveWikiPath("weapons", "Sparks LRR"), "Weapons/Sparks");
+  assert.equal(resolveWikiPath("weapons", "Caldwell Pax"), "Weapons/Pax");
+  assert.equal(resolveWikiPath("weapons", "Winfield 1876 Centennial"), "Weapons/Centennial");
+});
+
+test("resolveWikiPath: maps weapon variants to their subpage", () => {
+  assert.equal(resolveWikiPath("weapons", "Sparks Pistol"), "Weapons/Sparks/Pistol");
+  assert.equal(resolveWikiPath("weapons", "Mosin-Nagant Avtomat"), "Weapons/Mosin-Nagant/Avtomat");
+  assert.equal(resolveWikiPath("weapons", "Nagant Officer Carbine"), "Weapons/Officer/Carbine");
+});
+
+test("resolveWikiPath: can cross categories (the Katana is a Tool here, a Weapon on the wiki)", () => {
+  assert.equal(resolveWikiPath("tools", "Katana"), "Weapons/Katana");
+});
+
+test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
+  assert.equal(resolveWikiPath("tools", "Alert Trip Mine"), "Tools/Alert_Trip_Mines");
+  assert.equal(resolveWikiPath("tools", "Poison Trip Mine"), "Tools/Poison_Trip_Mines");
+});
+
+test("resolveWikiPath: returns null for known catalog duplicates", () => {
+  assert.equal(resolveWikiPath("weapons", "Winfield M1873"), null);
+  assert.equal(resolveWikiPath("weapons", "Winfield M1873C"), null);
+  assert.equal(resolveWikiPath("consumables", "Choke Bomb"), null);
+});
+
+test("every null override has an explanation in KNOWN_CATALOG_DUPLICATES", () => {
+  for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
+    for (const [name, target] of Object.entries(overrides)) {
+      if (target === null) {
+        assert.ok(
+          KNOWN_CATALOG_DUPLICATES[name],
+          `${category}/"${name}" is mapped to null but has no KNOWN_CATALOG_DUPLICATES entry`
+        );
+      }
+    }
+  }
+});
+
+test("every override key names a real catalog item", () => {
+  for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
+    const names = new Set(collectCatalogItems([category]).map((i) => i.name));
+    for (const name of Object.keys(overrides)) {
+      assert.ok(names.has(name), `override ${category}/"${name}" does not match any catalog item`);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -160,6 +228,25 @@ test("isAllowedByRobots: longest-prefix match wins, Allow overrides a shorter Di
 
 test("isAllowedByRobots: no groups at all means allow-all", () => {
   assert.equal(isAllowedByRobots([], "AnyBot", "/wiki/Anything"), true);
+});
+
+test("isAllowedByRobots: merges every matching '*' group, not just the first", () => {
+  // Regression: huntshowdown.wiki.gg publishes a Cloudflare-managed "User-agent: *" block with
+  // only "Allow: /", then wiki.gg's own "User-agent: *" block with the real Disallow list.
+  // Taking the first matching group silently discarded the second one.
+  const groups = parseRobotsTxt(
+    ["User-agent: *", "Allow: /", "", "User-agent: *", "Disallow: /wiki/File:", "Disallow: /wiki/Special:"].join("\n")
+  );
+  assert.equal(groups.filter((g) => g.userAgents.includes("*")).length, 2, "fixture should have two '*' groups");
+  assert.equal(isAllowedByRobots(groups, "AnyBot", "/wiki/File:Foo.png"), false);
+  assert.equal(isAllowedByRobots(groups, "AnyBot", "/wiki/Special:Search"), false);
+  assert.equal(isAllowedByRobots(groups, "AnyBot", "/wiki/Weapons/Nagant_M1895"), true);
+});
+
+test("isAllowedByRobots: a UA-specific group still wins over the wildcard groups", () => {
+  const groups = parseRobotsTxt(["User-agent: *", "Disallow: /", "", "User-agent: GoodBot", "Allow: /"].join("\n"));
+  assert.equal(isAllowedByRobots(groups, "GoodBot/1.0", "/wiki/Anything"), true);
+  assert.equal(isAllowedByRobots(groups, "OtherBot/1.0", "/wiki/Anything"), false);
 });
 
 test("fetchRobotsTxt: parses a successful response", async () => {
@@ -343,6 +430,37 @@ test("scrapeItem: skips when a file for the slug already exists and force is not
   assert.match(result.reason, /already exists/);
 });
 
+test("scrapeItem: skips a known catalog duplicate without spending a request", async () => {
+  const fetchFn = async () => {
+    throw new Error("should not be called for an item with no wiki page");
+  };
+  const fs = makeFsStub();
+  const result = await scrapeItem(
+    { category: "weapons", name: "Winfield M1873C", slug: "winfield-m1873c", wikiPath: null },
+    { fetchFn, rateLimiter: okRateLimiter, robotsGroups: okRobots, ...fs }
+  );
+  assert.equal(result.status, "skipped");
+  assert.match(result.reason, /no wiki page/);
+  assert.match(result.reason, /Frontier 73C/);
+  assert.equal(fs.written.length, 0);
+});
+
+test("scrapeItem: requests the namespaced page URL, not the bare item name", async () => {
+  // Regression: the script used to build /wiki/Nagant_M1895, which 404s for every catalog item.
+  const requested = [];
+  const html = `<meta property="og:image" content="https://huntshowdown.wiki.gg/images/x.png">`;
+  const fetchFn = async (url) => {
+    requested.push(url);
+    return { ok: true, status: 200, text: async () => html };
+  };
+  const fs = makeFsStub();
+  await scrapeItem(
+    { category: "weapons", name: "Nagant M1895", slug: "nagant-m1895" },
+    { fetchFn, rateLimiter: okRateLimiter, robotsGroups: okRobots, dryRun: true, ...fs }
+  );
+  assert.equal(requested[0], "https://huntshowdown.wiki.gg/wiki/Weapons/Nagant_M1895");
+});
+
 test("scrapeItem: throws ItemPageNotFoundError on a 404 page", async () => {
   const fetchFn = async () => ({ ok: false, status: 404, text: async () => "" });
   const fs = makeFsStub();
@@ -443,7 +561,7 @@ test("runScrape: one item's failure does not abort the run; summary captures bot
     if (url === "https://huntshowdown.wiki.gg/robots.txt") {
       return { ok: true, status: 200, text: async () => "User-agent: *\n" };
     }
-    if (url.includes("/wiki/Quartermaster")) {
+    if (url.includes("/wiki/Traits/Quartermaster")) {
       return { ok: false, status: 404, text: async () => "" };
     }
     if (url.includes("/wiki/")) {
