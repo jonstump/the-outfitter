@@ -2,7 +2,7 @@
 status: approved
 date: 2026-08-09
 implements: [ADR-0006]
-requires: [SPEC-0001]
+requires: [SPEC-0001, SPEC-0004]
 ---
 
 # SPEC-0003: Hunter Loadout Lists
@@ -174,7 +174,7 @@ The set of a user's lists MUST NOT be derived from the distinct `listId` values 
 
 ### Requirement: Hunter Dataset Consumption Contract
 
-This capability consumes a hunters dataset; it does not specify how that dataset is produced. Scrape scope, field set, and refresh cadence are governed by a separate decision covering hunter data.
+This capability consumes a hunters dataset; it does not specify how that dataset is produced. Production is specified by SPEC-0004 (Hunter Roster Dataset), which realizes ADR-0007.
 
 The dataset SHALL provide, for each hunter, a stable identifier, a display name, and portrait assets self-hosted under the application's own origin. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
