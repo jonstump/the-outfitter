@@ -178,6 +178,8 @@ This capability consumes a hunters dataset; it does not specify how that dataset
 
 The dataset SHALL provide, for each hunter, a stable identifier, a display name, and portrait assets self-hosted under the application's own origin. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
+Portraits are encoded as AVIF (SPEC-0004). The render site's extension-resolution chain SHALL include `avif`, so that adding portraits requires no change at the call site — the same property that lets the item scrape replace or re-extension its images freely.
+
 When the size appropriate to a context is unavailable, consuming code SHALL fall back to the other size before falling back to the placeholder. A too-large image is a performance cost; an empty tile is a defect.
 
 Consuming code MUST tolerate a dataset entry that lacks either or both portrait sizes, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
@@ -196,6 +198,11 @@ Consuming code MUST tolerate a dataset entry that lacks either or both portrait 
 
 - **WHEN** a list references a hunter for which neither portrait size is present
 - **THEN** the UI SHALL fall back to a neutral placeholder using the same fallback mechanism SPEC-0001 defines for items, and SHALL NOT render a broken image
+
+#### Scenario: The extension chain resolves AVIF portraits
+
+- **WHEN** a portrait exists only as AVIF
+- **THEN** the render site SHALL resolve and display it without any per-hunter configuration
 
 #### Scenario: A list survives its hunter leaving the dataset
 
@@ -251,6 +258,94 @@ The picker SHALL offer an explicit "no portrait" choice, so a list can be create
 
 - **WHEN** a user chooses the "no portrait" option in the picker
 - **THEN** a list SHALL be created with a null `hunterId`, rendering a monogram derived from its name
+
+### Requirement: The Hunter Picker Is Filterable and Bounded
+
+The roster is roughly 285 hunters. A flat grid of every portrait is not a usable picker and is not a defensible payload, so filtering is a functional requirement rather than a refinement.
+
+The picker SHALL provide a free-text filter matching on hunter name. It SHALL provide filtering by the classification SPEC-0004 supplies — at minimum `acquisition` and `obtainable`.
+
+The picker MUST NOT load every hunter's portrait eagerly. Images SHALL be loaded lazily, so the bytes fetched are proportional to what the user has actually scrolled to rather than to the size of the roster.
+
+Filtering SHALL narrow which hunters are shown; it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter.
+
+An empty result SHALL say so, rather than rendering an empty grid.
+
+#### Scenario: Name filtering narrows the roster
+
+- **WHEN** a user types into the picker's filter
+- **THEN** only hunters whose name matches SHALL be shown, and the count of shown hunters SHALL decrease
+
+#### Scenario: Classification filtering uses the dataset's own values
+
+- **WHEN** a user filters by an acquisition value
+- **THEN** only hunters whose `acquisition` matches SHALL be shown
+
+#### Scenario: Portraits are not loaded eagerly
+
+- **WHEN** the picker is opened against the full roster
+- **THEN** portraits outside the visible area SHALL NOT be fetched, and the bytes loaded SHALL be proportional to what has been scrolled to rather than to the roster size
+
+#### Scenario: Filtering does not mark reuse
+
+- **WHEN** a filter is applied and some matching hunters are already used by the user's other lists
+- **THEN** those hunters SHALL be presented identically to unused ones, with no badge, dimming, reordering, or count
+
+#### Scenario: An empty result is stated
+
+- **WHEN** a filter matches no hunters
+- **THEN** the picker SHALL say that nothing matched rather than rendering an empty grid
+
+### Requirement: Favorite Hunters
+
+With a roster of roughly 285, finding the handful of hunters a user actually returns to is the picker's real cost. A user MAY mark any hunter as a favorite.
+
+Favorites SHALL be token-scoped and persisted server-side, under the same ownership rules as lists: a favorite belongs to the token that created it, and MUST NOT be visible to any other token.
+
+Favorites SHALL act as a **filter and sort over the full roster**, never as a gate. Every hunter SHALL remain reachable regardless of what is favorited:
+
+- Favorited hunters SHALL sort ahead of unfavorited ones within whatever filter is active
+- The picker SHALL offer a "favorites only" toggle
+- With that toggle off, the roster SHALL be shown in full
+
+An empty favorites set SHALL therefore behave as no filter at all, not as an empty picker. The system MUST NOT pre-populate favorites — a favorite records a choice the user made, and seeding it with arbitrary hunters would require the user to remove preferences they never expressed.
+
+Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: a favorite is the user's own preference, whereas reuse is a fact about their other lists, which "The Hunter Picker Does Not Restrict or Mark Reuse" requires stay unmarked.
+
+#### Scenario: A favorite persists for its owner
+
+- **WHEN** a user favorites a hunter and reloads the application
+- **THEN** that hunter SHALL still be favorited
+
+#### Scenario: Favorites are private to their token
+
+- **WHEN** a request bearing token A fetches favorites
+- **THEN** the response SHALL contain only token A's favorites, and SHALL NOT reveal any favorite belonging to another token
+
+#### Scenario: Favorites sort ahead within the active filter
+
+- **WHEN** a user filters by an acquisition value and some matching hunters are favorited
+- **THEN** the favorited matches SHALL be shown before the unfavorited matches, and no non-matching hunter SHALL be shown
+
+#### Scenario: The full roster stays reachable
+
+- **WHEN** a user has favorites and the "favorites only" toggle is off
+- **THEN** every hunter SHALL be shown, favorited or not
+
+#### Scenario: An empty favorites set is not an empty picker
+
+- **WHEN** a user who has favorited nothing opens the picker
+- **THEN** the full roster SHALL be shown, and no favorites filter SHALL be applied
+
+#### Scenario: Favorites are never pre-populated
+
+- **WHEN** a user opens the picker for the first time
+- **THEN** no hunter SHALL be favorited on their behalf
+
+#### Scenario: Favoriting does not mark reuse
+
+- **WHEN** a favorited hunter is also already used by one of the user's lists
+- **THEN** the picker SHALL indicate only that it is favorited, and SHALL NOT indicate that it is in use
 
 ### Requirement: List Ordering and Sorting
 
