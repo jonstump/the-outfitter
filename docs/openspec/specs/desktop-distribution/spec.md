@@ -16,6 +16,10 @@ The decision rests on the desktop backend *being* `server/src/`, not resembling 
 
 **The load-bearing requirement is "Authenticated Loopback Boundary."** In the hosted model the operator controls the network boundary; on a desktop machine there is none. An in-process HTTP listener is reachable by every other local process and by any web page that scripts `fetch` at `127.0.0.1`. Electron IPC would avoid this by construction — ADR-0008 accepted the HTTP path for its code-sharing property *on the condition that this requirement is met*. Shipping the desktop app without it is worse than not shipping it.
 
+**Amended 2026-08-10 — unsigned publication is permitted when the bypass is documented.** This spec originally forbade publishing unsigned macOS and Windows artifacts outright. That rule assumed a project reaching non-technical users at scale, and it blocks the actual near-term goal: shipping for free to see whether anyone wants this. Signing is now required before *broad promotion* rather than before any publication, and an unsigned release is permitted provided its download page documents the per-platform bypass. The rule's real purpose — preventing a *silent* downgrade to unsigned artifacts through misconfiguration — is preserved and stated separately below, because a deliberate documented choice and a broken signing config must not be allowed to look alike.
+
+Two factual corrections accompany the amendment. **Windows signing does not reliably remove the SmartScreen warning**: SmartScreen keys on reputation, and a new OV certificate has none, so signed builds keep warning until downloads accumulate — only EV certificates carry instant reputation. **Signing credentials can no longer be a file in CI secrets**: publicly-trusted code-signing certificates, OV included, must keep private keys on a hardware token or cloud HSM, so CI signing means a cloud signing service (Azure Trusted Signing, SSL.com eSigner, DigiCert KeyLocker) rather than a committed or uploaded certificate.
+
 **Implementation status.** Nothing in this capability is implemented. No `desktop/` workspace exists; `server/src/index.js` still calls `app.listen()` at module scope.
 
 ## Requirements
@@ -150,9 +154,19 @@ The pipeline SHALL produce an NSIS installer for Windows, a DMG for macOS, and A
 
 The full test suite SHALL pass before any packaging job runs.
 
-macOS artifacts SHALL be signed with a Developer ID and notarized. Windows artifacts SHALL be Authenticode signed. Unsigned artifacts for these two platforms MUST NOT be published to users — Gatekeeper blocks them outright and SmartScreen flags them, so an unsigned release is a worse user experience than no release. A pre-signing development build MAY be produced locally or as an unpublished CI artifact, provided it is not offered as a download.
+*(signing requirements amended 2026-08-10 — see Overview)*
 
-Signing credentials SHALL be held as CI secrets. They MUST NOT be committed, and a build without them SHALL fail the release rather than silently emitting unsigned artifacts.
+Every release SHALL be designated either **unsigned** or **signed**, and the designation SHALL be explicit in the release configuration rather than inferred from whether credentials happened to be present.
+
+An **unsigned** release MAY be published for any platform, provided its download page satisfies the "Documented Bypass Instructions" requirement below. Linux artifacts are unaffected by any of this — AppImage and deb require no signing.
+
+A **signed** release SHALL sign macOS artifacts with a Developer ID and notarize them, and SHALL Authenticode sign Windows artifacts.
+
+Signing SHALL be in place before **broad promotion**, which means any of: naming a desktop installer as the primary install path in the README, announcing the app to a community that is not already testing it, or submitting it to a package index, app directory, or store. Circulating a build to named testers, linking it from an issue or PR, and publishing it as a GitHub Release that the README describes as unsigned all fall short of broad promotion and MAY proceed unsigned.
+
+Signing credentials MUST NOT be committed to the repository. Because publicly-trusted code-signing certificates must keep private keys on a hardware token or cloud HSM, the Windows credential SHALL be a cloud signing service accessed by CI, not a certificate file held as a secret.
+
+A release designated **signed** SHALL fail if its credentials are unavailable. It MUST NOT fall back to emitting unsigned artifacts — that fallback is the failure mode this requirement exists to prevent, and it is precisely what makes a deliberate unsigned release safe to permit.
 
 #### Scenario: A tagged release produces all three platforms
 
@@ -164,15 +178,66 @@ Signing credentials SHALL be held as CI secrets. They MUST NOT be committed, and
 - **WHEN** the test job fails on a release tag
 - **THEN** no packaging job SHALL run and no artifact SHALL be published
 
-#### Scenario: Missing signing credentials fail loudly
+#### Scenario: A signed release with missing credentials fails loudly
 
-- **WHEN** a release build runs without the signing credentials available
+- **WHEN** a release designated `signed` runs without its signing credentials available
 - **THEN** the job SHALL fail, and it MUST NOT publish an unsigned artifact in their place
+
+#### Scenario: An unsigned release publishes when its bypass is documented
+
+- **WHEN** a release designated `unsigned` runs and its download page carries the per-platform bypass instructions
+- **THEN** the artifacts SHALL be published, and the release SHALL be labelled unsigned
+
+#### Scenario: An unsigned release without instructions does not publish
+
+- **WHEN** a release designated `unsigned` runs and its download page carries no bypass instructions
+- **THEN** the release SHALL fail rather than publish artifacts users cannot open
+
+#### Scenario: Broad promotion requires signing
+
+- **WHEN** the README is changed to name a desktop installer as the primary install path, or the app is submitted to a package index or store
+- **THEN** the artifacts referenced SHALL be from a `signed` release
 
 #### Scenario: The client build is not forked
 
 - **WHEN** the desktop packaging pipeline is inspected
 - **THEN** it SHALL consume the output of the existing client build, and `client/vite.config.js` SHALL carry no desktop-specific branch
+
+### Requirement: Documented Bypass Instructions for Unsigned Builds
+
+*(added 2026-08-10)*
+
+An unsigned release's download page SHALL state plainly that the build is unsigned, and SHALL document what the user will see and what to do about it, per platform. The instructions are what makes an unsigned release honest rather than broken, so they are a release gate, not documentation nicety.
+
+For **Windows**, the page SHALL describe the SmartScreen "Windows protected your PC" dialog and name the two steps that dismiss it — **More info**, then **Run anyway** — since the second is hidden until the first is clicked. It SHALL also note that the browser may separately warn about the download, and that managed corporate machines may block it outright with no user-side override.
+
+For **macOS**, the page SHALL describe the "could not verify … free of malware" block and the route through **System Settings → Privacy & Security → Open Anyway**. It MUST NOT instruct users to Control-click and choose Open: that override was removed in macOS 15, so on current systems it is advice that silently does not work.
+
+The page SHOULD offer the Homebrew cask install as a lower-friction macOS path, since Homebrew removes the quarantine attribute and an unsigned app installed that way launches normally.
+
+The page MUST NOT instruct users to disable Gatekeeper or SmartScreen system-wide, or to run `xattr` against a broad path. A per-app bypass is the most the instructions may ask for — turning the protection off entirely is a worse outcome for the user than not shipping.
+
+Instructions SHALL be reviewed when a targeted OS major changes its flow. A step that no longer matches what the user sees is a defect in this requirement, not merely stale prose.
+
+#### Scenario: The unsigned state is disclosed
+
+- **WHEN** a user reaches the download page for an unsigned release
+- **THEN** it SHALL state that the build is unsigned before the download links
+
+#### Scenario: Windows instructions name the hidden step
+
+- **WHEN** the Windows instructions are read
+- **THEN** they SHALL name both **More info** and **Run anyway**, in that order
+
+#### Scenario: macOS instructions match current behaviour
+
+- **WHEN** the macOS instructions are read
+- **THEN** they SHALL route through System Settings → Privacy & Security, and SHALL NOT tell the user to Control-click and choose Open
+
+#### Scenario: Instructions never ask users to disable protections
+
+- **WHEN** the bypass instructions are reviewed
+- **THEN** they SHALL contain no step disabling Gatekeeper or SmartScreen system-wide
 
 ### Requirement: Self-Hosting Remains a Supported Target
 
