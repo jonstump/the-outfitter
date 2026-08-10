@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { groupByList, sortLists, UNASSIGNED } from "./listOrdering.js";
+import { groupByList, sortLists, availableSortKeys, SORT_KEYS, SORT_LABELS, UNASSIGNED } from "./listOrdering.js";
+import { HUNTERS, hunterNameFor } from "../data/hunters.js";
 
 // Governing: ADR-0006, SPEC-0003 REQ "List Ordering and Sorting"
 
@@ -60,12 +61,11 @@ describe("sortLists", () => {
     expect(sortLists(lists, "created").map((l) => l.id)).toEqual(["new", "old"]);
   });
 
-  it("puts never-opened lists after opened ones under recently-used", () => {
-    const lists = [
-      L("never", "never opened"),
-      L("used", "used", { lastUsedAt: "2026-06-01T00:00:00Z" }),
-    ];
-    expect(sortLists(lists, "recent").map((l) => l.id)).toEqual(["used", "never"]);
+  it("falls back to list name for an unknown sort key", () => {
+    // "recent" was a real key until 2026-08-10. A persisted or hand-crafted value naming it
+    // must degrade to the default rather than throwing or returning an unsorted array.
+    const lists = [L("1", "z"), L("2", "a")];
+    expect(sortLists(lists, "recent").map((l) => l.id)).toEqual(["2", "1"]);
   });
 
   it("does not mutate the input array", () => {
@@ -104,5 +104,52 @@ describe("groupByList", () => {
     const g = groupByList([], lists);
     expect(g.has("a")).toBe(true);
     expect(g.get("a")).toEqual([]);
+  });
+});
+
+describe("availableSortKeys", () => {
+  it("withholds hunter ordering while the dataset resolves nothing", () => {
+    expect(availableSortKeys({ hasHunterData: false })).toEqual(["name", "created", "count"]);
+  });
+
+  it("offers hunter ordering as soon as the dataset carries a roster", () => {
+    // The whole point of deriving this: populating client/src/data/hunters.js is the only
+    // step needed to light the ordering up. No edit here, none in the panel (issue #120).
+    expect(availableSortKeys({ hasHunterData: true })).toContain("hunter");
+  });
+
+  it("defaults to withholding when told nothing", () => {
+    expect(availableSortKeys()).not.toContain("hunter");
+  });
+
+  it("labels every key it can offer", () => {
+    for (const key of SORT_KEYS) expect(SORT_LABELS[key]).toBeTruthy();
+  });
+
+  it("no longer carries the dropped recently-used ordering", () => {
+    // SPEC-0003 removed it on 2026-08-10 rather than deferring it indefinitely.
+    expect(SORT_KEYS).not.toContain("recent");
+    expect(SORT_LABELS.recent).toBeUndefined();
+  });
+});
+
+describe("hunterNameFor", () => {
+  it("resolves nothing while the roster is empty, which is the specified state", () => {
+    // SPEC-0003 requires consumers to tolerate a hunterId absent from the dataset. With no
+    // dataset every id is absent, so this is correct behaviour rather than a stub.
+    expect(HUNTERS).toEqual([]);
+    expect(hunterNameFor("the-rat")).toBeNull();
+  });
+
+  it("returns null for a missing or empty id without throwing", () => {
+    expect(hunterNameFor(null)).toBeNull();
+    expect(hunterNameFor(undefined)).toBeNull();
+    expect(hunterNameFor("")).toBeNull();
+  });
+
+  it("drives hunter ordering into the unresolved bucket rather than erroring", () => {
+    const lists = [L("1", "b", { hunterId: "the-rat" }), L("2", "a", { hunterId: "unknown" })];
+    const out = sortLists(lists, "hunter", { hunterNameFor });
+    expect(out.map((l) => l.name)).toEqual(["a", "b"]);
   });
 });

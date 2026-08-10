@@ -4,24 +4,31 @@
 // server-side — see uiSlice.
 
 /** Every sort this module can perform. */
-export const SORT_KEYS = ["name", "hunter", "created", "recent", "count"];
+export const SORT_KEYS = ["name", "hunter", "created", "count"];
 
 /**
- * The subset actually offered in the UI today.
+ * The subset offered in the UI, given what data exists.
  *
- * "hunter" needs a hunters dataset to resolve ids to names (issue #88 / ADR-0007), and
- * "recent" needs a `lastUsedAt` the server does not yet record. Both currently fall
- * through to the name tiebreak, so offering them would ship two menu entries that
- * silently duplicate the default. The comparators stay implemented and unit-tested so
- * enabling them is a one-line change once the data exists.
+ * "hunter" resolves ids through the hunters dataset, which SPEC-0004's scrape has not
+ * produced yet. With an empty roster nothing resolves, so every list would land in the
+ * unresolved bucket and the ordering would silently duplicate the default — a menu entry
+ * that appears to do nothing is worse than one that is absent.
+ *
+ * This is derived rather than hardcoded on purpose. The previous hardcoded list claimed in
+ * a comment that enabling "hunter" was a one-line change; it was in fact two, because the
+ * panel also had to start passing `hunterNameFor` (issue #120). Deriving it means populating
+ * `client/src/data/hunters.js` is genuinely the only step.
+ *
+ * "recent" was removed rather than deferred — see SPEC-0003 REQ "List Ordering and Sorting".
  */
-export const AVAILABLE_SORT_KEYS = ["name", "created", "count"];
+export function availableSortKeys({ hasHunterData = false } = {}) {
+  return SORT_KEYS.filter((key) => key !== "hunter" || hasHunterData);
+}
 
 export const SORT_LABELS = {
   name: "List name",
   hunter: "Hunter name",
   created: "Creation date",
-  recent: "Recently used",
   count: "Loadouts held",
 };
 
@@ -69,13 +76,6 @@ export function sortLists(lists, sortKey, { hunterNameFor = () => null, countFor
     case "created":
       // Newest first — a list you just made is the one you are most likely to want.
       return items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || byName(a, b));
-
-    case "recent":
-      // "Used" means last opened (SPEC-0003). A list never opened sorts after every list
-      // that has been, rather than jumping to the top on a missing value.
-      return items.sort(
-        (a, b) => String(b.lastUsedAt || "").localeCompare(String(a.lastUsedAt || "")) || byName(a, b)
-      );
 
     case "count":
       // Descending, ties broken by name.

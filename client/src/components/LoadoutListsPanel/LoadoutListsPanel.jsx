@@ -17,7 +17,8 @@ import { hunterThumb } from "../../data/catalog.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
-import { groupByList, sortLists, AVAILABLE_SORT_KEYS, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
+import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
+import { HUNTERS, hunterNameFor } from "../../data/hunters.js";
 import { loadSavedThunk } from "../../store/thunks.js";
 import { deleteSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
 import { createListThunk, renameListThunk, retireListThunk } from "../../store/loadoutListsSlice.js";
@@ -41,10 +42,15 @@ export default function LoadoutListsPanel() {
   const groups = useMemo(() => groupByList(loadouts, lists), [loadouts, lists]);
   const countFor = (id) => (groups.get(id) || []).length;
   const ordered = useMemo(
-    () => sortLists(lists, listSort, { countFor }),
+    // hunterNameFor is passed unconditionally. It resolves nothing until SPEC-0004's dataset
+    // lands, which is exactly what the "hunter" comparator is specified to handle — and
+    // wiring it now is what makes populating hunters.js the only remaining step (issue #120).
+    () => sortLists(lists, listSort, { countFor, hunterNameFor }),
     // countFor closes over groups; recompute whenever either input changes.
     [lists, listSort, groups]
   );
+  // The roster is module-level and cannot change within a session, so this is computed once.
+  const sortKeys = useMemo(() => availableSortKeys({ hasHunterData: HUNTERS.length > 0 }), []);
 
   const unassigned = groups.get(UNASSIGNED) || [];
   // Resolve rather than trust: a selectedListId can outlive its list (retired in another
@@ -69,7 +75,7 @@ export default function LoadoutListsPanel() {
         <label className="ll-sort">
           <span className="sr-only">Order lists by</span>
           <select value={listSort} onChange={(e) => dispatch(uiActions.setListSort(e.target.value))}>
-            {AVAILABLE_SORT_KEYS.map((k) => (
+            {sortKeys.map((k) => (
               <option key={k} value={k}>
                 Sort: {SORT_LABELS[k]}
               </option>

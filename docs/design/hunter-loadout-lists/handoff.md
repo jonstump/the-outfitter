@@ -16,14 +16,19 @@
 >    now renders a schematic silhouette (mirroring SPEC-0001's item rule), while a list
 >    with no hunter keeps its list-name monogram, because drawing a figure there would
 >    imply an identity the list never claimed.
-> 2. **"Recently used"** is defined as *last opened*, resolving the open question this
->    document notes in § State Management.
+> 2. **"Recently used"** was defined as *last opened*, resolving the open question this
+>    document notes in § State Management. **Superseded 2026-08-10 (issue #120): the
+>    ordering was removed from SPEC-0003 altogether.** It needs a persisted `lastUsedAt`
+>    — a server write on every list open — and it sits awkwardly beside "The Selected List
+>    Is Client State". The definition is kept above because it is the part worth reusing
+>    if the ordering ever returns. The prototype below still offers the option; the spec
+>    wins.
 >
 > The "no in-use marker" product decision in § 5 was **accepted**, and SPEC-0003's
 > picker requirement was amended to match.
 
 ## Overview
-Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped loadout lists per ADR-0006 and SPEC-0003: a roster grid of portrait cards (one per list), expand-in-place to reveal that list's loadouts, inline create with a hunter-portrait picker, inline rename, retire confirmation, and five sort orders. Unassigned is a permanent group pinned first.
+Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped loadout lists per ADR-0006 and SPEC-0003: a roster grid of portrait cards (one per list), expand-in-place to reveal that list's loadouts, inline create with a hunter-portrait picker, inline rename, retire confirmation, and sort orders. Unassigned is a permanent group pinned first.
 
 ## About the Design Files
 `loadout-lists-panel.html` (delivered as `Loadout Lists Panel.dc.html`) is a **design reference created in HTML** — an interactive prototype showing intended look and behavior, not production code. The task is to **recreate this design in the existing React + Redux client** (`client/src/`) using its established patterns: `global.css` variables/classes, `ItemThumb` for imagery fallback, existing slices/thunks, and the routes/spec work in `docs/openspec/specs/hunter-loadout-lists/`. The server model, endpoints, ownership rules, and error/a11y requirements are already specified there — this handoff covers the visual/UI layer only.
@@ -80,7 +85,7 @@ Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped lo
 
 ## Interactions & Behavior
 - Expand/collapse: instant swap (no animation in prototype); expanding marks the list selected and bumps its `lastUsed`.
-- Sort menu options and rules (SPEC-0003): List name (default, alphabetical) · Hunter name (lists without a resolvable hunter grouped AFTER all resolved, ordered by list name among themselves) · Creation date · Recently used · Loadouts held (desc, ties by name). Unassigned position is fixed and unaffected. Sort preference is client state only.
+- Sort menu options and rules (SPEC-0003): List name (default, alphabetical) · Hunter name (lists without a resolvable hunter grouped AFTER all resolved, ordered by list name among themselves) · Creation date · Loadouts held (desc, ties by name). Unassigned position is fixed and unaffected. Sort preference is client state only. *(Recently used was dropped from the spec on 2026-08-10 — see deviation 2 above. Hunter name is withheld from the menu until the roster dataset resolves names.)*
 - Rename: inline, Enter/blur commit, Escape cancels, empty input = no-op. UUID and filed loadouts unchanged.
 - Retire: atomic server-side (delete list row + null `listId` on its loadouts in one write). UI drops the card and grows Unassigned's count; polite confirmation message.
 - Move-between-lists: NOT in this prototype (explicit control deferred per user scope; spec requires a keyboard-operable explicit control when built — not drag-and-drop).
