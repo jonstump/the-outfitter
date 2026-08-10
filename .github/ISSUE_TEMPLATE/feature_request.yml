@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Replace `[area]` in the title with the part of the app involved — e.g.
-        `[lists]`, `[ui]`, `[hunters]`, `[api]`.
+        Pick your area below, then copy its bracket tag into the title in place of
+        `[area]` — the same convention the existing issues use.
 
         Larger changes are usually governed by an ADR or spec under `docs/`. If
         this reshapes existing behaviour rather than adding to it, say which spec
@@ -36,15 +36,18 @@ body:
     id: area
     attributes:
       label: Area
+      description: The tag in front of each option is what goes in the title.
       options:
-        - Loadout builder (weapons, equipment, traits)
-        - Hunter picker or favorites
-        - Loadout lists
-        - Saved loadouts, share links, or the URL hash
-        - Item images or catalog data
-        - Hunter roster data or portraits
-        - Server / API
-        - Dev setup, build, Docker, or tests
+        - "[builder] Loadout builder — weapons, equipment, traits"
+        - "[hunters] Hunter picker or favorites"
+        - "[lists] Loadout lists"
+        - "[saved] Saved loadouts, share links, or the URL hash"
+        - "[catalog] Item images or catalog data"
+        - "[roster] Hunter roster data or portraits"
+        - "[api] Server or API"
+        - "[ui] Visual design, layout, or controls"
+        - "[a11y] Accessibility — keyboard, focus, screen readers"
+        - "[dev] Dev setup, build, Docker, or tests"
         - Not sure
     validations:
       required: true

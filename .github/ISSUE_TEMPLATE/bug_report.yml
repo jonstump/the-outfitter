@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for filing. Replace `[area]` in the title with the part of the app
-        involved — e.g. `[lists]`, `[ui]`, `[a11y]`, `[hunters]`, `[api]` — matching
-        the convention the existing issues use.
+        Thanks for filing. Pick your area below, then copy its bracket tag into the
+        title in place of `[area]` — `[lists]`, `[ui]`, `[a11y]` and friends are the
+        convention the existing issues already use.
 
   - type: textarea
     id: summary
@@ -50,16 +50,20 @@ body:
     id: area
     attributes:
       label: Area
-      description: Best guess is fine — pick "Not sure" if nothing fits.
+      description: >
+        The tag in front of each option is what goes in the title. Best guess is
+        fine — pick "Not sure" if nothing fits, and we'll tag it during triage.
       options:
-        - Loadout builder (weapons, equipment, traits)
-        - Hunter picker or favorites
-        - Loadout lists
-        - Saved loadouts, share links, or the URL hash
-        - Item images or catalog data
-        - Hunter roster data or portraits
-        - Server / API
-        - Dev setup, build, Docker, or tests
+        - "[builder] Loadout builder — weapons, equipment, traits"
+        - "[hunters] Hunter picker or favorites"
+        - "[lists] Loadout lists"
+        - "[saved] Saved loadouts, share links, or the URL hash"
+        - "[catalog] Item images or catalog data"
+        - "[roster] Hunter roster data or portraits"
+        - "[api] Server or API"
+        - "[ui] Visual design, layout, or controls"
+        - "[a11y] Accessibility — keyboard, focus, screen readers"
+        - "[dev] Dev setup, build, Docker, or tests"
         - Not sure
     validations:
       required: true
