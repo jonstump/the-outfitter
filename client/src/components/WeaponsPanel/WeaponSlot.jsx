@@ -58,7 +58,7 @@ export default function WeaponSlot({ slot }) {
             onChange={(e) =>
               dispatch(loadoutActions.setAmmo({ slot, ammoIndex: parseInt(e.target.value, 10) }))
             }
-            style={{ flex: 1, maxWidth: 260, fontSize: 14 }}
+            style={{ flex: 1, maxWidth: 260, fontSize: 15.5 }}
           >
             <option value="-1">Standard</option>
             {variants.map((v, idx) => (

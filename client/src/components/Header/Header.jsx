@@ -17,13 +17,13 @@ export default function Header() {
       <div className="header-stats">
         <div className="header-stat">
           <div className="header-stat-label">Total cost</div>
-          <div className="header-stat-value" style={{ color: overBudget ? "#c96b5b" : "#e6dab9" }}>
+          <div className="header-stat-value" style={{ color: overBudget ? "#c96b5b" : "#f0e6c8" }}>
             ${total}
           </div>
         </div>
         <div className="header-stat">
           <div className="header-stat-label">Trait points</div>
-          <div className="header-stat-value" style={{ color: "#b08d4f" }}>
+          <div className="header-stat-value" style={{ color: "#c4a05e" }}>
             {up} UP
           </div>
         </div>
