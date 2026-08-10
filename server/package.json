@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "cross-env NODE_ENV=production node src/index.js",
-    "test": "vitest run"
+    "test": "cross-env OUTFITTER_DB_FILE=./data/db.test.json vitest run"
   },
   "dependencies": {
     "cors": "^2.8.5",

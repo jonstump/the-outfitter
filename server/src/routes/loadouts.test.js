@@ -32,9 +32,13 @@ describe("loadouts API", () => {
     await db.read();
   });
   afterEach(async () => {
-    // Remove anything this suite created.
+    // Remove anything this suite created — i.e. DROP the __test__ records and KEEP
+    // everything else. The predicate was inverted here, which meant every run wiped
+    // the developer's real saved loadouts and retained every fixture instead. Tests
+    // now run against their own data file (see server/src/db.js and the `test`
+    // script), so this is a second line of defence rather than the only one.
     await db.read();
-    db.data.loadouts = db.data.loadouts.filter((l) => l.name.startsWith("__test__"));
+    db.data.loadouts = db.data.loadouts.filter((l) => !l.name.startsWith("__test__"));
     await db.write();
   });
 
