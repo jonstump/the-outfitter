@@ -43,11 +43,25 @@ export function getLoadouts() {
   return fetch(BASE, { headers: headers() }).then(asJson);
 }
 
-export function upsertLoadout(name, data) {
+// Governing: ADR-0006, SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference"
+//
+// `listId` rides on the request envelope alongside `name`, never inside `data`. Omitting
+// it leaves an existing loadout's filing untouched; passing null files it to Unassigned.
+export function upsertLoadout(name, data, listId) {
+  const body = listId === undefined ? { name, data } : { name, data, listId };
   return fetch(BASE, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ name, data }),
+    body: JSON.stringify(body),
+  }).then(asJson);
+}
+
+/** Move a loadout between lists. `listId: null` moves it to Unassigned. */
+export function moveLoadout(id, listId) {
+  return fetch(`${BASE}/${id}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify({ listId }),
   }).then(asJson);
 }
 

@@ -6,8 +6,11 @@ import {
   ipLimiter,
   liveRecords,
   publicRecord,
+  RecordNotFoundError,
+  RecordNotOwnedError,
   tokenLimiter,
 } from "../lib/ownership.js";
+import { resolveOwnedList } from "./loadoutLists.js";
 
 // Ownership primitives (callerToken, liveRecords, the stacked rate limiters) moved to
 // ../lib/ownership.js when SPEC-0003 added a second owned collection. Both routers MUST
@@ -43,6 +46,55 @@ function isValidData(data) {
   return true;
 }
 
+// Governing: ADR-0006, SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable
+// Reference", SPEC-0003 REQ "Cross-Collection Ownership Enforcement"
+//
+// `listId` lives on the record ENVELOPE, as a sibling of name/updatedAt — never inside
+// `data`. That is what keeps FORMAT_VERSION at 1: toData()/fromData() never see it, share
+// URLs are unchanged, and isValidData() above needs no edit. Null or absent means the
+// loadout is Unassigned, which is also what every record written before SPEC-0003 means,
+// so there is nothing to migrate.
+const isListRef = (v) => v === null || v === undefined || (typeof v === "string" && v.length > 0 && v.length <= 100);
+
+// Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
+// undefined rather than null. Serialise it explicitly so the API shape is uniform: every
+// loadout carries a `listId`, and "Unassigned" is always `null` rather than sometimes an
+// absent field. Without this, every consumer has to coalesce, and the no-op comparison in
+// PATCH below would miss the legacy shape.
+const publicLoadout = (rec) => ({ ...publicRecord(rec), listId: rec.listId ?? null });
+
+/**
+ * Validate a caller-supplied listId against the lists the CALLER owns.
+ *
+ * This is the cross-collection ownership check. Without it a caller could file a loadout
+ * into a stranger's list by guessing a UUID — every prior ownership check in this codebase
+ * compares a record's own `owner` to the caller, so this is the first that reaches across
+ * collections. resolveOwnedList is imported from #85 rather than reimplemented.
+ *
+ * Rejection is loud (4xx), never a silent downgrade to Unassigned: a silent downgrade
+ * would mask an attack and hide a legitimate client bug.
+ *
+ * Returns the normalized value to store (null when unassigned).
+ */
+function validateListRef(listId, token, res) {
+  if (listId === null || listId === undefined) return { ok: true, value: null };
+  if (!isListRef(listId)) {
+    res.status(400).json({ error: "listId must be null or a string of at most 100 characters" });
+    return { ok: false };
+  }
+  try {
+    resolveOwnedList(db.data.loadoutLists, listId, token);
+    return { ok: true, value: listId };
+  } catch (err) {
+    if (err instanceof RecordNotFoundError || err instanceof RecordNotOwnedError) {
+      console.warn("loadout filing denied", { listId, reason: err.name });
+      res.status(404).json({ error: "loadout list not found" });
+      return { ok: false };
+    }
+    throw err;
+  }
+}
+
 // Express 4 does not forward rejected promises from async handlers to the error
 // middleware, so every handler wraps its body in try/catch (issue #18) — a
 // corrupt data file, disk-full, or permission error returns a clean 500 instead
@@ -53,7 +105,7 @@ loadoutsRouter.get("/", async (_req, res) => {
     const token = callerToken(_req);
     const mine = liveRecords(db.data.loadouts)
       .filter((l) => l.owner === token)
-      .map(publicRecord);
+      .map(publicLoadout);
     res.json(mine);
   } catch (err) {
     console.error("GET /api/loadouts failed:", err);
@@ -63,7 +115,7 @@ loadoutsRouter.get("/", async (_req, res) => {
 
 loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
   try {
-    const { name, data } = req.body || {};
+    const { name, data, listId } = req.body || {};
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name must be a non-empty string" });
     }
@@ -76,6 +128,10 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 
     const token = callerToken(req);
     await db.read();
+
+    const ref = validateListRef(listId, token, res);
+    if (!ref.ok) return;
+
     const trimmedName = name.trim();
     const now = new Date().toISOString();
     const existing = liveRecords(db.data.loadouts).find((l) => l.owner === token && l.name === trimmedName);
@@ -84,17 +140,71 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     if (existing) {
       existing.data = data;
       existing.updatedAt = now;
+      // Only re-file when the caller said something about it. An upsert that omits listId
+      // is updating the loadout, not moving it out of its list.
+      if (listId !== undefined) existing.listId = ref.value;
       record = existing;
     } else {
-      record = { id: randomUUID(), owner: token, name: trimmedName, data, updatedAt: now };
+      record = { id: randomUUID(), owner: token, name: trimmedName, data, listId: ref.value, updatedAt: now };
       db.data.loadouts.push(record);
     }
 
     await db.write();
-    res.status(existing ? 200 : 201).json(publicRecord(record));
+    res.status(existing ? 200 : 201).json(publicLoadout(record));
   } catch (err) {
     console.error("POST /api/loadouts failed:", err);
     res.status(500).json({ error: "failed to save loadout" });
+  }
+});
+
+/**
+ * Move a loadout between lists.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference".
+ *
+ * The only mutable field is `listId` — a move changes where a loadout is filed and
+ * nothing else about it. Both sides are ownership-checked: the loadout must belong to
+ * the caller, and so must the destination list.
+ *
+ * `listId: null` moves the loadout to Unassigned, which is an ordinary destination and
+ * not a special case.
+ */
+loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!("listId" in body)) {
+      return res.status(400).json({ error: "listId is required" });
+    }
+
+    const token = callerToken(req);
+    await db.read();
+
+    const loadout = liveRecords(db.data.loadouts).find((l) => l.id === req.params.id && l.owner === token);
+    if (!loadout) {
+      // Same 404 whether it does not exist or belongs to someone else — see
+      // resolveOwnedList in loadoutLists.js for why this must not be an oracle.
+      return res.status(404).json({ error: "loadout not found" });
+    }
+
+    const ref = validateListRef(body.listId, token, res);
+    if (!ref.ok) return;
+
+    // Coalesce before comparing: a record predating SPEC-0003 has `listId` undefined, not
+    // null, so a plain === would miss "already Unassigned" and take the write path.
+    if ((loadout.listId ?? null) === ref.value) {
+      // Selecting the list it is already in is a no-op, not an error and not a write.
+      return res.json(publicLoadout(loadout));
+    }
+
+    loadout.listId = ref.value;
+    loadout.updatedAt = new Date().toISOString();
+    await db.write();
+
+    console.info("loadout moved", { loadoutId: loadout.id, listId: ref.value });
+    res.json(publicLoadout(loadout));
+  } catch (err) {
+    console.error("PATCH /api/loadouts/:id failed:", err);
+    res.status(500).json({ error: "failed to move loadout" });
   }
 });
 
