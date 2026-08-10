@@ -171,10 +171,17 @@ export const AVIF_QUALITY = 70;
 export class BudgetExceededError extends ScrapeError {}
 
 /**
- * The portrait was fetched successfully but carries no subject to trim to: its alpha is zero at
- * every pixel, so no bounding box exists.
+ * The portrait was fetched successfully but carries no subject to trim to: no pixel reaches
+ * ALPHA_TRIM_THRESHOLD, so no bounding box exists.
  *
- * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Error Handling Standards"
+ * Governing: ADR-0007 (as amended 2026-08-10, trim threshold),
+ * SPEC-0004 REQ "Error Handling Standards"
+ *
+ * The condition widened with the trim-threshold amendment of 2026-08-10: it used to mean "alpha
+ * is zero everywhere" and now means "nothing in this image is visible". A source consisting entirely of
+ * the alpha 1..3 wash that motivated the threshold is exactly as unusable as a blank one — it
+ * renders as nothing either way — so failing it is the honest outcome. Before the change such a
+ * source would have "succeeded", emitting a full-canvas asset of empty space.
  *
  * Deliberately NOT folded into ImageAssetNotFoundError. The asset was found and fetched; it simply
  * cannot be consumed. Collapsing the two would tell a maintainer the wiki is missing art when in
@@ -589,24 +596,53 @@ export async function loadImageProcessor(importFn = (m) => import(m)) {
 }
 
 /**
- * The smallest rectangle containing every pixel whose alpha is greater than zero.
+ * Minimum alpha, of 255, at which a pixel counts as subject for the purpose of the trim.
  *
- * Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+ * Governing: ADR-0007 (as amended 2026-08-10, trim threshold),
+ * SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
  *
- * Returns { left, top, width, height }, or null when the source is fully transparent and therefore
- * has no bounding box at all.
+ * **Normative** — the spec fixes this value so that two conforming implementations produce
+ * identical dimensions. It is 8/255, or 3.1% opacity: below that a pixel is imperceptible over
+ * any background the app renders onto, so nothing a reader could see is ever discarded.
  *
- * The threshold is ZERO, and the box is computed here from raw pixels rather than delegated to
- * sharp's `.trim()`. Two reasons, both required by the spec:
+ * WHY IT IS NOT ZERO, WHICH IS WHAT THIS PIPELINE ORIGINALLY REQUIRED. A zero threshold takes
+ * "not fully transparent" to mean "subject". That holds for most of the roster and fails badly
+ * for the rest: 21 of 242 wiki sources carry a near-invisible alpha wash spread across nearly the
+ * whole 384×256 canvas, at alpha 1..3 (one reaches 7). Every one of those pixels is > 0, so the
+ * bounding box expanded to almost the full canvas and the trim became a no-op — those assets
+ * committed at 322..333px wide against a ~207px median, i.e. 30..46% dead space by width. Since
+ * every surface renders portraits with `object-fit: cover` into a fixed box, dead space eats the
+ * frame and the hunter is drawn proportionally smaller than his neighbours. That is a visible
+ * defect in the picker, and it was specified rather than coded by accident.
  *
- *   * sharp's trim defaults to a non-zero threshold and infers its background from the top-left
- *     pixel. Both are heuristics. A near-transparent antialiased edge pixel (alpha 1..9) is subject
- *     — discarding it shaves the silhouette, and it would do so by an amount that depends on the
- *     encoder version rather than on the image.
- *   * The spec requires that "two conforming implementations produce identical dimensions". An
- *     explicit alpha > 0 scan is a definition; a library default is a moving target.
+ * The original zero-threshold reasoning is still half right and is deliberately preserved: the
+ * box is computed here from raw pixels rather than delegated to sharp's `.trim()`, whose default
+ * threshold is a heuristic and whose background is inferred from the top-left pixel. What changed
+ * is only the constant. An explicit, spec-fixed number is still a definition; a library default
+ * is still a moving target.
  */
-export async function findAlphaBoundingBox(sourceBuffer, sharp) {
+export const ALPHA_TRIM_THRESHOLD = 8;
+
+/**
+ * The smallest rectangle containing every pixel whose alpha is at or above `threshold`.
+ *
+ * Governing: ADR-0007 (as amended 2026-08-10, trim threshold),
+ * SPEC-0004 REQ "One Trimmed Portrait Per Hunter"
+ *
+ * Returns { left, top, width, height }, or null when no pixel reaches the threshold and the
+ * source therefore has no visible subject to trim to.
+ *
+ * `threshold` is injectable so a test can drive the comparison at a value the pipeline never
+ * ships, showing the scan is genuinely parameterised rather than agreeing with the constant by
+ * coincidence. Production callers take the default: the value is normative, and a caller choosing
+ * its own would be the "moving target" the explicit scan exists to avoid.
+ *
+ * The shipped value is pinned against a literal in the test suite rather than here. Every
+ * assertion that derives its fixture from ALPHA_TRIM_THRESHOLD follows the constant wherever it
+ * goes, so none of them can catch it being edited — which is a property worth stating, because it
+ * was true of every threshold test in this suite until it was measured.
+ */
+export async function findAlphaBoundingBox(sourceBuffer, sharp, { threshold = ALPHA_TRIM_THRESHOLD } = {}) {
   const { data, info } = await sharp(sourceBuffer).raw().toBuffer({ resolveWithObject: true });
   const { width, height, channels } = info;
 
@@ -622,7 +658,7 @@ export async function findAlphaBoundingBox(sourceBuffer, sharp) {
   for (let y = 0; y < height; y += 1) {
     const row = y * width * channels;
     for (let x = 0; x < width; x += 1) {
-      if (data[row + x * channels + alpha] > 0) {
+      if (data[row + x * channels + alpha] >= threshold) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -651,7 +687,8 @@ export async function findAlphaBoundingBox(sourceBuffer, sharp) {
  *
  *   * No alpha channel: nothing to trim, so it is encoded untrimmed at native resolution. Not a
  *     failure — the hunter still needs a portrait.
- *   * Alpha zero everywhere: no subject, so no bounding box. Fails with PortraitSourceUnusableError.
+ *   * No pixel at or above ALPHA_TRIM_THRESHOLD: nothing visible, so no bounding box. Fails with
+ *     PortraitSourceUnusableError.
  *
  * Throws BudgetExceededError if the encode lands over the per-asset budget. SPEC-0004 requires the
  * oversized file NOT to be written, so the budget is checked before anything reaches disk.
@@ -668,8 +705,8 @@ export async function encodePortrait(
     box = await findAlphaBoundingBox(sourceBuffer, sharp);
     if (!box) {
       throw new PortraitSourceUnusableError(
-        `portrait source for "${hunter}" is fully transparent (alpha is zero at every pixel), ` +
-          `so it has no subject bounding box to trim to`,
+        `portrait source for "${hunter}" has no visible subject (no pixel reaches alpha ` +
+          `${ALPHA_TRIM_THRESHOLD} of 255), so it has no bounding box to trim to`,
         { item: hunter, url }
       );
     }

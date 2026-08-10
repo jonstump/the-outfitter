@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 
 import {
   ACQUISITION_RULES,
+  ALPHA_TRIM_THRESHOLD,
   BudgetExceededError,
   ImageProcessingUnavailableError,
   PORTRAIT_MAX_BYTES,
@@ -526,6 +527,16 @@ describe("acquisition normalisation", () => {
 });
 
 describe("portrait encoding and budgets", () => {
+  it("pins the trim threshold to the value the spec fixes", () => {
+    // Deliberately a LITERAL, and deliberately outside the sharp-dependent block so it runs on any
+    // machine. Every other threshold assertion in this file derives its fixture from the constant
+    // and therefore follows it anywhere: editing 8 to 32 left the whole suite green, which is how
+    // this gap was found. SPEC-0004 makes the value normative — "two conforming implementations
+    // produce identical dimensions" is a claim about the number, not about the comparison — so
+    // changing it is a spec edit, and this is the assertion that says so out loud.
+    assert.equal(ALPHA_TRIM_THRESHOLD, 8);
+  });
+
   it("emits exactly one asset, at the trimmed bounding box, with no resize step", async () => {
     const sharp = fakeSharp({ box: { left: 90, top: 13, width: 207, height: 230 } });
     const out = await encodePortrait(PNG_BYTES, sharp, { hunter: "X" });
@@ -560,7 +571,7 @@ describe("portrait encoding and budgets", () => {
     assert.deepEqual(sharp.extracts, [], "an alpha-less source is never extracted");
   });
 
-  it("fails a fully transparent source with its own sentinel, not a missing-asset one", async () => {
+  it("fails a source with no visible subject using its own sentinel, not a missing-asset one", async () => {
     const sharp = fakeSharp({ box: null });
     await assert.rejects(
       () => encodePortrait(PNG_BYTES, sharp, { hunter: "Ghost", url: "https://x/y.png" }),
@@ -569,7 +580,10 @@ describe("portrait encoding and budgets", () => {
         // unusable" send a maintainer in opposite directions.
         assert.ok(err instanceof PortraitSourceUnusableError, `got ${err.name}`);
         assert.ok(!(err instanceof ImageAssetNotFoundError), "must not be a missing-asset error");
-        assert.match(err.message, /fully transparent/);
+        // The reason names the threshold, so a maintainer reading the run summary can tell an
+        // all-transparent source from one carrying only the sub-threshold wash.
+        assert.match(err.message, /no visible subject/);
+        assert.match(err.message, new RegExp(`alpha ${ALPHA_TRIM_THRESHOLD} of 255`));
         assert.equal(err.item, "Ghost");
         return true;
       }
@@ -625,10 +639,50 @@ describe("trimming against real images", { skip: realSharp ? false : "sharp is n
     assert.ok(meta.width < 384 && meta.height < 256);
   });
 
-  it("keeps an antialiased edge pixel, which sharp's default threshold would shave off", async () => {
-    // The requirement is alpha > 0, not alpha > some-default. A one-pixel border at alpha 1 is
-    // subject: with sharp's own trim threshold it disappears, and the silhouette quietly shrinks by
-    // an amount that depends on the encoder version rather than on the image.
+  /**
+   * A canvas carrying an opaque subject over an invisible alpha wash covering every pixel.
+   *
+   * This is the shape 21 of 242 wiki sources actually have, and the reason the trim threshold is
+   * no longer zero: the wash is alpha 1..3, imperceptible at any background, and under a `> 0`
+   * rule every one of those pixels counted as subject.
+   */
+  async function canvasWithInvisibleWash({ width, height, left, top, boxWidth, boxHeight, washAlpha }) {
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    for (let i = 0; i < width * height; i += 1) data[i * channels + 3] = washAlpha;
+    for (let y = top; y < top + boxHeight; y += 1) {
+      for (let x = left; x < left + boxWidth; x += 1) {
+        const i = (y * width + x) * channels;
+        data[i] = 200;
+        data[i + 1] = 60;
+        data[i + 2] = 40;
+        data[i + 3] = 255;
+      }
+    }
+    return realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+  }
+
+  it("ignores an invisible alpha wash that would otherwise defeat the trim entirely", async () => {
+    // The regression this threshold exists for. Measured on the committed set: the affected assets
+    // landed 322..333px wide against a ~207px median, so `cover` drew those hunters visibly smaller
+    // than their neighbours in the picker. Under a `> 0` rule the box here would be the full
+    // 384×256 canvas and the trim a no-op.
+    const src = await canvasWithInvisibleWash({
+      width: 384, height: 256, left: 102, top: 30, boxWidth: 180, boxHeight: 215, washAlpha: 2,
+    });
+
+    assert.deepEqual(await findAlphaBoundingBox(src, realSharp), {
+      left: 102,
+      top: 30,
+      width: 180,
+      height: 215,
+    });
+  });
+
+  it("keeps a faint but visible edge pixel rather than shaving the silhouette", async () => {
+    // The half of the original zero-threshold reasoning that survives: a genuinely visible edge
+    // pixel is subject and must not be discarded, and the boundary must not be a library default.
+    // A pixel AT the threshold is kept.
     const width = 40;
     const height = 40;
     const channels = 4;
@@ -637,8 +691,7 @@ describe("trimming against real images", { skip: realSharp ? false : "sharp is n
       data[(y * width + x) * channels + 3] = a;
     };
     for (let y = 10; y < 30; y += 1) for (let x = 10; x < 30; x += 1) setAlpha(x, y, 255);
-    // A single near-transparent pixel outside the solid block, still part of the subject.
-    setAlpha(5, 8, 1);
+    setAlpha(5, 8, ALPHA_TRIM_THRESHOLD);
     const src = await realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
 
     assert.deepEqual(await findAlphaBoundingBox(src, realSharp), {
@@ -647,6 +700,90 @@ describe("trimming against real images", { skip: realSharp ? false : "sharp is n
       width: 25,
       height: 22,
     });
+  });
+
+  /** A solid block, plus one stray pixel at a caller-chosen alpha well outside it. */
+  async function blockWithStrayPixel(alpha) {
+    const width = 20;
+    const height = 20;
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    for (let y = 8; y < 12; y += 1) for (let x = 8; x < 12; x += 1) data[(y * width + x) * channels + 3] = 255;
+    data[(3 * width + 2) * channels + 3] = alpha;
+    return realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+  }
+
+  const BLOCK_ONLY = { left: 8, top: 8, width: 4, height: 4 };
+  const BLOCK_PLUS_STRAY = { left: 2, top: 3, width: 10, height: 9 };
+
+  it("treats the comparison as inclusive of the threshold and exclusive below it", async () => {
+    // The RELATION, not the value: whatever the constant is, one below it is margin and the value
+    // itself is subject. Asserting only one side would let any larger threshold pass.
+    //
+    // Note what this deliberately does NOT cover. Both fixtures are derived from the constant, so
+    // this test follows it anywhere — it stays green if someone edits 8 to 32. The value is pinned
+    // separately, against a literal, in "the trim threshold is the value the spec fixes".
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(ALPHA_TRIM_THRESHOLD - 1), realSharp),
+      BLOCK_ONLY,
+      "below the threshold is margin"
+    );
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(ALPHA_TRIM_THRESHOLD), realSharp),
+      BLOCK_PLUS_STRAY,
+      "at the threshold is subject"
+    );
+  });
+
+  it("applies an injected threshold rather than the shipped constant", async () => {
+    // Exercises the `threshold` option itself, at a value the pipeline never ships, so the scan is
+    // shown to be genuinely parameterised rather than comparing against a hardcoded 8 that happens
+    // to agree with the constant. Without this the option is API surface no caller uses.
+    const injected = 64;
+    assert.notEqual(injected, ALPHA_TRIM_THRESHOLD, "the point is to differ from the default");
+
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(injected - 1), realSharp, { threshold: injected }),
+      BLOCK_ONLY,
+      "below the INJECTED threshold is margin, even though it is above the default"
+    );
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(injected), realSharp, { threshold: injected }),
+      BLOCK_PLUS_STRAY,
+      "at the injected threshold is subject"
+    );
+  });
+
+  it("encodes the wash-carrying source at the subject's size, not the canvas's", async () => {
+    // End-to-end through the encoder, because the bounding box is only half the fix: what reaches
+    // disk is what a surface renders, and that is the dimension pair the defect was visible in.
+    const src = await canvasWithInvisibleWash({
+      width: 384, height: 256, left: 102, top: 30, boxWidth: 180, boxHeight: 215, washAlpha: 3,
+    });
+    const out = await encodePortrait(src, realSharp, { hunter: "Washed" });
+    const meta = await realSharp(out.buffer).metadata();
+
+    assert.equal(out.trimmed, true);
+    assert.equal(meta.width, 180);
+    assert.equal(meta.height, 215);
+  });
+
+  it("fails a source that is nothing but the invisible wash", async () => {
+    // Widened condition (2026-08-10, trim threshold): an image whose every pixel is below the threshold renders as
+    // nothing, exactly like a blank one. Before the threshold change this "succeeded" and emitted a
+    // full-canvas asset of empty space, which is the worse outcome — a portrait of nothing, sized
+    // like a portrait of something.
+    const width = 32;
+    const height = 32;
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    for (let i = 0; i < width * height; i += 1) data[i * channels + 3] = 2;
+    const src = await realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+
+    await assert.rejects(
+      () => encodePortrait(src, realSharp, { hunter: "Wash" }),
+      PortraitSourceUnusableError
+    );
   });
 
   it("retains the alpha channel through the AVIF encode", async () => {

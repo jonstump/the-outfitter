@@ -16,6 +16,8 @@ See ADR-0007 for the decision record, including why this is one script rather th
 
 **Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.09× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. The re-scrape ran in #147, so the committed assets **are** the new pipeline: 242 trimmed portraits, no `-thumb` variants, 2.49 MB total against a 12 MB ceiling. One consumption-side clause remains outstanding (#148), and is marked where it appears.
 
+**Amended again 2026-08-10 — the trim threshold is 8, not zero.** QA of #147's output found 21 of the 242 assets barely trimmed at all: their sources carry an invisible alpha wash that a `> 0` threshold counts as subject, so those hunters render visibly smaller than the rest wherever `object-fit: cover` fits a portrait to a box. The threshold clause under "One Trimmed Portrait Per Hunter" carries the measurement and the reasoning. **The committed assets are NOT yet this pipeline** — the code and this spec are, and a `node scripts/scrape-hunters.mjs --force` run is what reconciles disk to both. The width figures in the surface table are projections until then, and are marked as such.
+
 ## Requirements
 
 ### Requirement: Offline, Human-Invoked Scrape
@@ -103,7 +105,17 @@ The dataset SHALL cover the full roster the wiki lists, not a subset.
 
 The scrape SHALL emit exactly **one** self-hosted portrait asset per hunter under `client/public/images/hunters/`. It MUST NOT emit a second size.
 
-Before encoding, the scrape SHALL **trim the source to the subject's bounding box**. The bounding box SHALL be the smallest rectangle containing every pixel whose alpha is greater than zero; a pixel with alpha exactly zero is *fully transparent*. The trim threshold SHALL be zero rather than the image library's default, so that two conforming implementations produce identical dimensions and antialiased edge pixels are never discarded.
+Before encoding, the scrape SHALL **trim the source to the subject's bounding box**. The bounding box SHALL be the smallest rectangle containing every pixel whose alpha is **greater than or equal to 8**, of 255. Pixels below that value are margin.
+
+The threshold SHALL be this fixed value rather than the image library's default, so that two conforming implementations produce identical dimensions. It SHALL NOT be zero.
+
+> **Amended 2026-08-10 (trim threshold) — the threshold was zero, and zero was wrong.** The original rule took "not fully transparent" to mean "subject". That holds for most of the roster and fails badly for the rest. Measured across all 242 committed assets: **21 sources carry a near-invisible alpha wash across nearly the whole 384×256 canvas**, at alpha 1–3 (one reaches 7). Every such pixel is greater than zero, so the bounding box expanded to almost the full canvas and the trim became a no-op. Those assets committed at **322–333px wide against a ~207px median — 30–46% dead space by width**. Because every surface renders portraits with `object-fit: cover` into a fixed box, dead space eats the frame and the hunter is drawn visibly smaller than his neighbours in the picker. The defect was *specified*, not mis-coded: the pipeline conformed to this clause exactly.
+>
+> The zero-threshold reasoning is retained in halves. Its second half stands — the box is still computed from raw pixels rather than delegated to a library trim whose threshold is a heuristic and whose background is inferred from the top-left pixel. Its first half does not: an antialiased edge pixel is only subject if it is *visible*, and 8/255 is 3.1% opacity, below which nothing renders that a reader could see. An explicit number is still a definition; only the constant changed.
+>
+> The affected 21 skew to progression variants (10 of the 21 are `-rookie` or `-survivor`), which points at a wiki-side export batch rather than anything the scrape controls.
+
+Conformance to this clause SHALL be asserted against **fixtures whose alpha values are exact**, not against re-decoded committed assets. Lossy AVIF alpha at quality 70 introduces block-boundary ringing of a few pixels at values near the threshold — measured on the committed set as isolated 5-pixel runs at exactly alpha 8, far from any subject — so a re-decoded asset can fail a threshold check its source would pass. This is the same reasoning as the clause below on transparent borders: assert the property the pipeline controls.
 
 The trimmed subject SHALL then be encoded at its **native trimmed resolution**: neither downscaled nor upscaled.
 
@@ -114,7 +126,7 @@ Portraits SHALL be encoded as **AVIF at quality 70**, and the encoding SHALL pre
 Two source shapes fall outside the trim and SHALL be handled explicitly rather than left to the image library:
 
 - A source with **no alpha channel** SHALL be encoded untrimmed at its native resolution rather than failing. There is no transparent margin to remove, and the hunter still needs a portrait.
-- A source whose alpha is **zero at every pixel** has no subject and therefore no bounding box. It SHALL fail that hunter with a distinct sentinel error and SHALL NOT be written.
+- A source with **no pixel at or above the trim threshold** has no visible subject and therefore no bounding box. It SHALL fail that hunter with a distinct sentinel error and SHALL NOT be written. *(Widened 2026-08-10 with the trim threshold; this previously read "alpha is zero at every pixel".)* A source consisting only of the sub-threshold wash renders as nothing, exactly as a blank one does, so it is unusable for the same reason. Under the zero threshold such a source would have **succeeded**, emitting a full-canvas asset of empty space — a portrait of nothing, sized like a portrait of something. The error's reason SHALL name the threshold, so a maintainer can tell an all-transparent source from a wash-only one without re-fetching it.
 
 Because each hunter's subject occupies a different region of the source, the emitted assets SHALL vary in both dimensions and aspect ratio between hunters. Consuming code MUST NOT assume a uniform portrait aspect.
 
@@ -122,13 +134,15 @@ Trimming rather than downscaling is what makes one asset sufficient. Every store
 
 | Surface | Needs at 2× | Trimmed subject provides |
 |---|---|---|
-| Picker tile (96px square) | 192×192 | 205–256 tall for all 242; **176–333 wide, so 51 fall short on width** and upscale by at most 1.09× |
+| Picker tile (96px square) | 192×192 | 204–256 tall for all 242; **176–270 wide, so 61 fall short on width** and upscale by at most 1.09× |
 | Expanded list header (52×68) | 104×136 | clears both dimensions for every hunter |
 | List card (154×220) | 308×440 | **no hunter reaches it — see the next requirement** |
 
 The scrape MUST NOT upscale a subject to meet any of these figures. Where the source cannot supply what a surface wants, the shortfall SHALL be accepted as a source-resolution limit rather than manufactured. The 1.09× worst case on a narrow tile is recorded rather than hidden: it is an improvement on the 1.5× every hunter is upscaled by today, but it is not zero, and a requirement claiming otherwise would be false.
 
 *(figures corrected 2026-08-10 after the first real run: this table originally read 178–334 wide and 1.08×, derived by scaling the committed 320px assets rather than measuring the 384px originals. The true floor is 176px — `the-rednecks-daughter` and `wight-raven` — giving 192/176 = 1.09×. The bound was wrong by two pixels of source width, and the run that produced conforming assets was failed by it.)*
+
+*(width figures revised again 2026-08-10 with the trim threshold, and **these are projections until the re-scrape lands**. They are computed from the visible-subject box of each committed asset — the box the corrected threshold selects — rather than from a completed run, because the run requires wiki access. Two of the three numbers move and the third deliberately does not: the **upper** bound falls 333 → 270, because that tail was the untrimmed wash rather than genuinely wide hunters. The count falling short on width rises **51 → 61**, since ten of the repaired assets are narrower than 192 once their padding is gone. The worst case stays **1.09×** — the 176px floor is set by hunters whose trim was always correct, so the ceiling on the damage does not move. The rise from 51 to 61 is not a regression: those ten were only clearing 192px on the strength of invisible padding, so the old pass was false. Height is unaffected at 204–256, and all 242 still clear 192px in height. The run SHALL replace these projections with measured figures.)*
 
 **Stale size variants SHALL be removed.** The scrape SHALL delete any previously emitted asset for a hunter that does not match the current single-asset path, so that a run leaves no orphaned size variant behind, and SHALL report the count of stale assets removed. Without this the 242 `-thumb` assets already committed would survive every future run, and the disk-state and payload scenarios below could never pass.
 
@@ -142,6 +156,18 @@ The scrape MUST NOT upscale a subject to meet any of these figures. Where the so
 - **WHEN** a source portrait carries fully transparent margin around the subject
 - **THEN** the emitted asset SHALL be no larger than the source in either dimension, SHALL be strictly smaller in every dimension that carried margin, and the rectangle selected for encoding SHALL contain no fully transparent border row or column
 
+#### Scenario: An invisible alpha wash does not defeat the trim
+
+*(added 2026-08-10 with the trim threshold — this is the regression the threshold exists to prevent, and it reached the committed set)*
+
+- **WHEN** a source portrait carries a margin whose alpha is above zero but below the trim threshold, covering any part of the canvas up to and including all of it
+- **THEN** that margin SHALL be treated as margin and removed, and the rectangle selected for encoding SHALL be the subject's bounding box rather than the source canvas
+
+#### Scenario: A visible edge pixel is not shaved
+
+- **WHEN** a source portrait carries a pixel at or above the trim threshold outside the subject's solid body
+- **THEN** that pixel SHALL be treated as subject and the rectangle selected for encoding SHALL contain it, so a faint but visible silhouette edge is never discarded
+
 #### Scenario: Alpha survives encoding
 
 - **WHEN** a source portrait has an alpha channel
@@ -152,10 +178,12 @@ The scrape MUST NOT upscale a subject to meet any of these figures. Where the so
 - **WHEN** a source portrait has no alpha channel
 - **THEN** it SHALL be encoded untrimmed at its native resolution, and the hunter SHALL NOT be failed on that basis
 
-#### Scenario: A fully transparent source fails its hunter
+#### Scenario: A source with no visible subject fails its hunter
 
-- **WHEN** a source portrait's alpha is zero at every pixel
-- **THEN** that hunter SHALL be failed with a distinct sentinel error naming the condition, and no asset SHALL be written
+*(widened 2026-08-10 with the trim threshold — this previously read "alpha is zero at every pixel")*
+
+- **WHEN** no pixel of a source portrait reaches the trim threshold, whether because its alpha is zero everywhere or because it carries only the sub-threshold wash
+- **THEN** that hunter SHALL be failed with a distinct sentinel error whose reason names the threshold, and no asset SHALL be written
 
 #### Scenario: Stale size variants are removed
 
@@ -272,7 +300,7 @@ The scrape SHALL support producing the dataset without portrait assets, so the r
 All error-producing operations MUST follow structured error handling:
 
 - Errors MUST be wrapped with contextual information at each layer boundary, naming the hunter, the URL, and the reason
-- Sentinel errors MUST distinguish the failure modes callers need to tell apart — at minimum: hunter page not found, portrait asset not found on an existing page, **portrait source unusable** (its alpha is zero at every pixel, so no subject bounding box exists), network or rate-limit failure, robots disallowed, and budget exceeded
+- Sentinel errors MUST distinguish the failure modes callers need to tell apart — at minimum: hunter page not found, portrait asset not found on an existing page, **portrait source unusable** (no pixel reaches the trim threshold, so no subject bounding box exists), network or rate-limit failure, robots disallowed, and budget exceeded
 
 *(the unusable-source sentinel was added 2026-08-10 alongside the trimming requirement, which requires that condition to fail with a distinct sentinel; it is listed here so the two requirements agree)*
 
