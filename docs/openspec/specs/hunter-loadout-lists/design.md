@@ -77,13 +77,11 @@ Atomicity matters more than it first appears. `lowdb` reads the whole file, muta
 
 ### Portrait reuse is made comfortable, not merely legal
 
-**Choice**: Each list carries an `accent` colour assigned on creation and user-editable. The hunter picker marks already-used hunters without disabling them.
+**Choice**: Each list carries an `accent` colour assigned on creation and user-editable, giving it an identity channel independent of both its name and its portrait.
 
-**Rationale**: Allowing two lists to share a hunter creates an interface problem the data model doesn't see: at a glance, two "Rat" lists are indistinguishable except by reading their names. An accent colour gives each list an identity channel independent of both its name and its portrait, which is what makes reuse feel intentional rather than like a mistake the app tolerated.
+**Rationale**: Allowing two lists to share a hunter creates an interface problem the data model doesn't see: at a glance, two "Rat" lists are indistinguishable except by reading their names. The accent is what makes reuse feel intentional rather than like a mistake the app tolerated — and it works everywhere a list appears, not only at the moment of creation.
 
-The picker's in-use marker is deliberately informational. Disabling used hunters would silently reimpose the one-to-one binding this whole design rejected; showing the state and allowing the choice gives the user the information without taking the decision.
-
-Accessibility constrains the mechanism: an accent colour cannot be the *only* differentiator, and the in-use marker cannot be colour-only. Both need a non-colour channel — the list name remains the primary accessible identity, and the marker is exposed in the option's accessible name.
+Accessibility constrains the mechanism: the accent cannot be the *only* differentiator. The list name remains the primary accessible identity. See the palette decision below for why that constraint is load-bearing rather than precautionary.
 
 ### Accent palette: six fixed values, assigned least-used-first
 
@@ -126,6 +124,19 @@ Saving stays in `ActionsPanel`; a save files into whichever list is currently op
 **Alternatives considered**:
 - *Sidebar list + detail pane*: rejected — costs horizontal space the picker and loadout rows need, and the app is already narrow on phones.
 - *Modal per list*: rejected — hides the roster, and makes comparing lists impossible.
+
+### Moving a loadout between lists is a native select, not a menu
+
+**Choice**: Each loadout row carries a native `<select>` whose value is the loadout's current list, with Unassigned pinned first. Changing it moves the loadout. Visual detail is in #87.
+
+**Rationale**: Modelling the control as *state* — "which list is this in?" — rather than as a "Move to…" *action* is what makes it cheap to get right. A native select brings keyboard operation, type-ahead, Escape-to-cancel, and a correct assistive-technology announcement for free, where a custom menu would need a focus trap, arrow-key handling, and `aria-expanded` bookkeeping all hand-built and separately tested. It also matches the sort control already in the panel header, so it reads as part of the same system.
+
+The non-obvious cost is what happens *after* a successful move: the row leaves the open list, taking focus with it. Left alone, focus falls to `document.body` and a keyboard user is stranded — the same failure the retire flow already guards against. Focus must move deliberately to the next row or to the list heading.
+
+**Alternatives considered**:
+- *Drag-and-drop as the primary affordance*: rejected — the spec forbids it as the only path, and it is unusable by keyboard.
+- *Custom menu button*: rejected — every affordance the native select provides would have to be rebuilt and retested, for styling control this design does not need.
+- *Modal picker*: rejected — far too heavy for a per-row operation, and it hides the roster the user is choosing among.
 
 ### List ordering is client-side, with alphabetical as the default
 
@@ -253,9 +264,9 @@ Rollback: steps 2 and 3 are additive. Reverting the server change leaves `listId
 
 Settled during review of the initial draft, recorded so the reasoning is not re-litigated:
 
-- **Move affordance** — an explicit control on the loadout row, not drag-and-drop. DnD is a future enhancement to that page; if added, the explicit control stays rather than being replaced.
+- **Move affordance** — a native `<select>` on the loadout row whose value is the loadout's current list, not drag-and-drop. DnD may be added later; if it is, the explicit control stays rather than being replaced. Full detail in the decision below and in #87.
 - **List ordering** — alphabetical by list name by default, with hunter name, creation date, most-recently-used, and loadout count as alternatives. Hunter-name ordering places hunterless and unresolvable lists after everything that resolves.
-- **Picker behaviour for already-used hunters** — show them as in use, never restrict them, and pair the reuse allowance with a per-list accent colour so lists remain distinguishable.
+- **Picker behaviour for already-used hunters** — never restrict them, and never mark them either. Reuse is unremarkable; the per-list accent colour is what keeps lists distinguishable. (An earlier draft required an in-use marker; see the decision above for why it was dropped.)
 - **Collection name** — `loadoutLists`, not `hunterLists`, because lists need not correspond to hunters and a `hunters` dataset is coming.
 - **Portrait scope** — the full wiki roster, and the dataset's sourcing is factored out into its own decision rather than being specified here.
 - **Accent palette** — six fixed values, assigned least-used-first, all verified at 3:1 or better. `--gold` was dropped from the designed palette to avoid colliding with the theme's interactive colour.
@@ -265,6 +276,6 @@ Settled during review of the initial draft, recorded so the reasoning is not re-
 
 ## Open Questions
 
-- What accent palette? It must survive the app's dark frontier theme, provide enough distinguishable values to be useful, and meet contrast requirements against both the panel background and any portrait it overlays.
-- Should accent assignment on creation cycle deterministically through the palette, or pick the least-used value? Only matters once a user has more lists than palette entries.
-- Does "most recently used" mean last viewed, last saved into, or last modified in any way? Each is defensible and they diverge in practice.
+- Should the undo affordance for a move ship in the first pass, or follow? A move removes the row from view, which argues for undo, but it is additive and the spec does not require it.
+- Should the expanded card animate open, or swap instantly? The prototype swaps instantly. Animation would help orient the user when a card grows to full width, but risks feeling sluggish in a panel that is otherwise immediate.
+- What is the right empty state for a brand-new user with no lists at all — an empty roster, or a prompt to create the first list?
