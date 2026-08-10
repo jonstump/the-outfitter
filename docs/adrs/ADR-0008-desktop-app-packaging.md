@@ -65,10 +65,14 @@ Two facts about the current implementation dominate the answer:
   strength of plain static output servable by any file server; the desktop host
   must be one more such server, not a reason to add a framework-specific
   adapter.
-* **Honest accounting of signing cost.** Unsigned desktop binaries are actively
-  hostile on two of the three platforms. Whatever we choose, the recurring cost
-  of Apple notarization and Windows Authenticode is part of the decision, not a
-  surprise afterward.
+* **Honest accounting of signing cost.** Unsigned binaries carry real friction on
+  two of the three platforms, and the recurring cost of removing it belongs in
+  the decision rather than arriving as a surprise afterward. *(Amended
+  2026-08-10: this driver originally called unsigned binaries "actively hostile,"
+  which read as unshippable. The friction is real but badly asymmetric — none on
+  Linux, two clicks on Windows, a System Settings trip on macOS — and SPEC-0005
+  now permits unsigned publication where the bypass is documented, gating signing
+  on broad promotion rather than on any release.)*
 
 ## Considered Options
 
@@ -373,14 +377,23 @@ graph TD
     TAG["git tag v*"] --> TEST["CI: test job<br/>ubuntu-latest, unchanged"]
     TEST --> BUILD["npm run build -w client<br/>→ client/dist"]
     BUILD --> M["Package matrix"]
-    M --> W["windows-latest<br/>NSIS installer<br/>Authenticode signed"]
-    M --> A["macos-latest<br/>universal DMG<br/>Developer ID + notarized"]
-    M --> L["ubuntu-latest<br/>AppImage + deb"]
-    W --> REL["GitHub Release artifacts<br/>+ electron-updater feed"]
-    A --> REL
+    M --> W["windows-latest<br/>NSIS installer"]
+    M --> A["macos-latest<br/>universal DMG"]
+    M --> L["ubuntu-latest<br/>AppImage + deb<br/>signing never applies"]
+    W --> D{"release designation<br/>SPEC-0005"}
+    A --> D
+    D -->|unsigned| U["publish with documented<br/>per-platform bypass<br/>(gate: no instructions, no release)"]
+    D -->|signed| S["Authenticode / Developer ID<br/>+ notarization<br/>(fails closed if creds absent)"]
+    U --> REL["GitHub Release artifacts<br/>+ electron-updater feed"]
+    S --> REL
     L --> REL
     TEST --> DOCK["container smoke job<br/>self-hosting stays green"]
 ```
+
+*(Diagram amended 2026-08-10. It previously showed signing as unconditional on
+the Windows and macOS legs. Per SPEC-0005 every release is explicitly designated
+`signed` or `unsigned`; the first Windows and macOS releases take the `unsigned`
+branch, and `signed` is required before broad promotion.)*
 
 ## More Information
 

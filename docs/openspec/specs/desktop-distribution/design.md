@@ -20,7 +20,7 @@ The one thing the packaging choice costs is a trust boundary. That is what most 
 - Self-hosting stays first-class, with its existing CI guard green
 - lowdb's single-writer constraint becomes true by construction rather than documented as a hazard
 - The Node major the desktop ships stays tied to `.nvmrc` (SPEC-0002)
-- Signed, notarized artifacts from CI on a tag — never from a laptop
+- Artifacts built by CI on a tag, never from a laptop; explicitly designated signed or unsigned, with signing and notarization in place before broad promotion *(amended 2026-08-10 — this goal previously read "Signed, notarized artifacts from CI on a tag," which contradicted the unsigned-publication decision below)*
 
 ### Non-Goals
 
