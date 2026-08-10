@@ -13,6 +13,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { hunterThumb } from "../../data/catalog.js";
+import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, AVAILABLE_SORT_KEYS, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
@@ -104,6 +106,7 @@ export default function LoadoutListsPanel() {
             key={l.id}
             id={l.id}
             name={l.name}
+            hunterId={l.hunterId}
             count={countFor(l.id)}
             open={isOpen(l.id)}
             onToggle={() => toggle(l.id)}
@@ -131,7 +134,12 @@ export default function LoadoutListsPanel() {
   );
 }
 
-function ListCard({ id, name, count, open, onToggle, unassigned = false }) {
+function ListCard({ id, name, hunterId, count, open, onToggle, unassigned = false }) {
+  // A hunter with no portrait asset yet falls back to a schematic silhouette via ItemThumb's
+  // existing photo-first chain. A list with NO hunter keeps its list-name monogram: there is
+  // no identity to depict, and drawing a figure would imply one the list never claimed.
+  const silhouette = unassigned ? null : hunterThumb(hunterId);
+
   return (
     <button
       type="button"
@@ -140,9 +148,17 @@ function ListCard({ id, name, count, open, onToggle, unassigned = false }) {
       onClick={onToggle}
       data-testid={`list-card-${id}`}
     >
-      <span className="ll-card-mono" aria-hidden="true">
-        {unassigned ? "∴" : monogram(name)}
-      </span>
+      {silhouette ? (
+        <span className="ll-card-art" data-testid={`list-art-${id}`}>
+          {/* alt="" — the list name is visibly adjacent in the plate below, so announcing
+              the portrait too would read it twice (SPEC-0003 accessibility). */}
+          <ItemThumb category="hunters" name={hunterId} svgPath={silhouette} />
+        </span>
+      ) : (
+        <span className="ll-card-mono" aria-hidden="true">
+          {unassigned ? "∴" : monogram(name)}
+        </span>
+      )}
       <span className="ll-card-plate">
         <span className="ll-card-name">{name}</span>
         <span className="ll-card-count">
