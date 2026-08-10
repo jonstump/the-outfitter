@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..700;1,400&amp;family=IM+Fell+English+SC&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#131009;font-family:"Alegreya",Georgia,serif;color:#e6d9ba}a{color:#c4a05e}a:hover{color:#e5c78b}select{background:#221b12;color:#e6d9ba;border:1px solid #3a2f1e;padding:6px 8px;font-family:"Alegreya",Georgia,serif}::-webkit-scrollbar{width:10px}::-webkit-scrollbar-track{background:#17130c}::-webkit-scrollbar-thumb{background:#3a2f1e;border:2px solid #17130c}</style>
+</helmet>
+<div style="min-height:100vh;background:#131009;padding:24px 16px">
+<div style="max-width:880px;margin:0 auto;background:#1a1510;border:1px solid #3a2f1e;padding:20px">
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+    <span style="font-family:'IM Fell English SC',serif;font-size:19px;letter-spacing:1.5px;color:#c4a05e">Saved loadouts</span>
+    <span style="font-size:13px;color:#a3936f;letter-spacing:1px;flex:1">{{ metaLabel }}</span>
+    <select value="{{ sortKey }}" onChange="{{ onSortChange }}" aria-label="Sort lists">
+      <option value="name">Sort: List name</option>
+      <option value="hunter">Sort: Hunter name</option>
+      <option value="created">Sort: Creation date</option>
+      <option value="recent">Sort: Recently used</option>
+      <option value="count">Sort: Loadouts held</option>
+    </select>
+    <button onClick="{{ openCreate }}" style="background:#221b12;border:1px solid #3a2f1e;color:#e6d9ba;padding:9px 16px;font-size:15.5px;letter-spacing:1px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="border-color:#8a6f42">+ New list</button>
+  </div>
+  <div aria-live="polite" style="font-size:15px;color:#9aa06b;font-style:italic;min-height:20px;margin-top:8px">{{ message }}</div>
+  <sc-if value="{{ creating }}" hint-placeholder-val="{{ false }}">
+    <div style="border:1px solid #8a6f42;background:#17130c;padding:16px;margin-top:8px">
+      <div style="font-family:'IM Fell English SC',serif;font-size:17px;letter-spacing:1px;color:#e5c78b">New list — choose a portrait</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px">
+        <sc-for list="{{ pickerHunters }}" as="h" hint-placeholder-count="8">
+          <button onClick="{{ h.pick }}" aria-label="{{ h.name }}" style="padding:0;background:#1a1510;border:2px solid {{ h.border }};cursor:pointer;font-family:'Alegreya',Georgia,serif;text-align:center">
+            <div style="height:96px;background:repeating-linear-gradient(45deg,#221b12 0 8px,#1a1510 8px 16px);display:flex;align-items:center;justify-content:center;border-bottom:1px solid #241d12"><span style="font-family:monospace;font-size:9px;color:#857659">portrait</span></div>
+            <div style="padding:6px 4px;font-size:13.5px;color:#e6d9ba;line-height:1.2">{{ h.name }}</div>
+          </button>
+        </sc-for>
+        <button onClick="{{ pickNone }}" aria-label="No portrait" style="padding:0;background:#1a1510;border:2px solid {{ noneBorder }};cursor:pointer;font-family:'Alegreya',Georgia,serif;text-align:center">
+          <div style="height:96px;background:#17130c;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #241d12"><span style="font-family:'IM Fell English SC',serif;font-size:30px;color:#3a2f1e">?</span></div>
+          <div style="padding:6px 4px;font-size:13.5px;color:#a3936f;font-style:italic;line-height:1.2">No portrait</div>
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <label for="new-list-name" style="font-size:13px;letter-spacing:1px;color:#a3936f">NAME</label>
+        <input id="new-list-name" value="{{ nameDraft }}" onChange="{{ onNameInput }}" placeholder="{{ nameHint }}" style="flex:1;min-width:160px;background:#221b12;border:1px solid #3a2f1e;color:#f0e6c8;padding:9px 12px;font-size:16px;font-family:'Alegreya',Georgia,serif">
+        <span style="font-size:13px;color:#a3936f;display:flex;align-items:center;gap:6px">accent <span style="display:inline-block;width:18px;height:18px;background:{{ nextAccent }};border:1px solid #241d12"></span></span>
+        <button onClick="{{ confirmCreate }}" style="background:#7f2b26;border:1px solid #a04338;color:#f0e2c4;font-family:'IM Fell English SC',serif;font-size:16px;letter-spacing:1px;padding:9px 16px;cursor:pointer" style-hover="background:#96352d">Create list</button>
+        <button onClick="{{ cancelCreate }}" style="background:none;border:1px solid #3a2f1e;color:#a3936f;padding:9px 14px;font-size:15px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#e6d9ba">Cancel</button>
+      </div>
+    </div>
+  </sc-if>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:14px">
+    <sc-if value="{{ uCollapsed }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ uToggle }}" aria-label="Unassigned loadouts" style="padding:0;height:220px;position:relative;border:3px dashed #3a2f1e;background:#17130c;cursor:pointer;font-family:'Alegreya',Georgia,serif;text-align:left">
+        <span style="position:absolute;top:38%;left:0;right:0;transform:translateY(-50%);text-align:center;font-family:'IM Fell English SC',serif;font-size:44px;color:#2a2216">∴</span>
+        <span style="position:absolute;left:0;right:0;bottom:0;padding:36px 12px 12px;background:linear-gradient(transparent,rgba(19,16,9,.95) 60%);display:block">
+          <span style="display:block;font-family:'IM Fell English SC',serif;font-size:19px;letter-spacing:1px;color:#f0e6c8;line-height:1.1">Unassigned</span>
+          <span style="display:block;font-size:13px;color:#a3936f;margin-top:3px">{{ uCountLabel }}</span>
+        </span>
+      </button>
+    </sc-if>
+    <sc-if value="{{ uExpanded }}" hint-placeholder-val="{{ false }}">
+      <div style="grid-column:1/-1;border:3px dashed #3a2f1e;background:#1a1510">
+        <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-bottom:1px solid #241d12;flex-wrap:wrap">
+          <span style="font-family:'IM Fell English SC',serif;font-size:20px;letter-spacing:1px;color:#f0e6c8">Unassigned</span>
+          <span style="font-size:13.5px;color:#a3936f;flex:1">{{ uCountLabel }} · not filed into any list</span>
+          <span style="font-size:12.5px;letter-spacing:1px;border:1px solid #8a6f42;color:#e5c78b;padding:4px 10px">DEFAULT LIST FOR SAVED LOADOUTS</span>
+          <button onClick="{{ uToggle }}" aria-label="Collapse Unassigned" style="background:none;border:1px solid #3a2f1e;color:#a3936f;padding:5px 12px;font-size:14px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#e6d9ba">Close</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:12px">
+          <sc-if value="{{ uIsEmpty }}" hint-placeholder-val="{{ false }}"><div style="color:#857659;font-style:italic;font-size:15px;padding:4px 2px">Nothing unassigned.</div></sc-if>
+          <sc-for list="{{ uRows }}" as="row" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid #3a2f1e;border-left:3px solid #2a2216;background:#17130c;padding:10px 12px;flex-wrap:wrap">
+              <sc-if value="{{ thumbStrips }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:4px;flex:none">
+                  <sc-for list="{{ row.thumbs }}" as="t" hint-placeholder-count="2">
+                    <div style="width:64px;height:36px;background:#221b12;border:1px solid #241d12;display:flex;align-items:center;justify-content:center"><span style="font-family:monospace;font-size:8px;color:#857659">weapon</span></div>
+                  </sc-for>
+                  <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;max-width:200px">
+                    <sc-for list="{{ row.toolThumbs }}" as="t" hint-placeholder-count="4">
+                      <div style="width:28px;height:28px;background:#221b12;border:1px solid #241d12;display:flex;align-items:center;justify-content:center"><span style="font-family:monospace;font-size:6.5px;color:#857659">{{ t }}</span></div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="flex:1;min-width:180px">
+                <button onClick="{{ row.load }}" style="display:block;background:none;border:none;padding:0;font-size:16.5px;color:#f0e6c8;font-family:'Alegreya',Georgia,serif;cursor:pointer;text-align:left" style-hover="color:#e5c78b">{{ row.name }}</button>
+                <div style="font-size:13px;color:#a3936f;margin-top:1px">{{ row.meta }}</div>
+              </div>
+              <span style="font-size:14.5px;color:#c4a05e">{{ row.cost }}</span>
+              <button onClick="{{ row.share }}" style="background:#221b12;border:1px solid #3a2f1e;color:#a3936f;padding:6px 10px;font-size:13.5px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="border-color:#8a6f42;color:#e6d9ba">Share</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+    <sc-for list="{{ lists }}" as="item" hint-placeholder-count="6">
+      <sc-if value="{{ item.isCollapsed }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ item.toggle }}" aria-label="{{ item.ariaOpen }}" style="padding:0;height:220px;position:relative;border:3px solid {{ item.accent }};background:#17130c;cursor:pointer;font-family:'Alegreya',Georgia,serif;text-align:left">
+          <sc-if value="{{ item.showPortrait }}" hint-placeholder-val="{{ true }}">
+            <span style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,#221b12 0 8px,#1a1510 8px 16px)"></span>
+            <span style="position:absolute;top:12px;left:0;right:0;text-align:center;font-family:monospace;font-size:11px;color:#857659">hunter portrait</span>
+          </sc-if>
+          <sc-if value="{{ item.showMonogram }}" hint-placeholder-val="{{ false }}">
+            <span style="position:absolute;top:38%;left:0;right:0;transform:translateY(-50%);text-align:center;font-family:'IM Fell English SC',serif;font-size:52px;color:#3a2f1e">{{ item.monogram }}</span>
+          </sc-if>
+          <span style="position:absolute;left:0;right:0;bottom:0;padding:36px 12px 12px;background:linear-gradient(transparent,rgba(19,16,9,.95) 60%);display:block">
+            <span style="display:block;font-family:'IM Fell English SC',serif;font-size:19px;letter-spacing:1px;color:#f0e6c8;line-height:1.1">{{ item.name }}</span>
+            <span style="display:block;font-size:13px;color:#a3936f;margin-top:3px">{{ item.countLabel }}</span>
+          </span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ item.isExpanded }}" hint-placeholder-val="{{ false }}">
+        <div style="grid-column:1/-1;border:3px solid {{ item.accent }};background:#1a1510">
+          <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-bottom:1px solid #241d12;flex-wrap:wrap">
+            <div style="width:52px;height:64px;flex:none;background:repeating-linear-gradient(45deg,#221b12 0 8px,#1a1510 8px 16px);border:1px solid #241d12;display:flex;align-items:center;justify-content:center"><span style="font-family:monospace;font-size:8px;color:#857659">{{ item.thumbLabel }}</span></div>
+            <div style="flex:1;min-width:180px">
+              <sc-if value="{{ item.isRenaming }}" hint-placeholder-val="{{ false }}">
+                <input value="{{ renameDraft }}" onChange="{{ onRenameInput }}" onKeyDown="{{ onRenameKey }}" onBlur="{{ commitRename }}" aria-label="List name" style="background:#221b12;border:1px solid #8a6f42;color:#f0e6c8;padding:6px 10px;font-size:18px;font-family:'IM Fell English SC',serif;letter-spacing:1px;width:100%;max-width:320px">
+              </sc-if>
+              <sc-if value="{{ item.notRenaming }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <span style="font-family:'IM Fell English SC',serif;font-size:20px;letter-spacing:1px;color:#f0e6c8">{{ item.name }}</span>
+                  <button onClick="{{ item.startRename }}" aria-label="{{ item.ariaRename }}" style="background:none;border:none;color:#857659;font-size:13.5px;font-style:italic;padding:0;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#e5c78b">rename</button>
+                </div>
+              </sc-if>
+              <div style="font-size:13.5px;color:#a3936f;margin-top:2px">{{ item.sub }}</div>
+            </div>
+            <span style="font-size:12.5px;letter-spacing:1px;border:1px solid #8a6f42;color:#e5c78b;padding:4px 10px">DEFAULT LIST FOR SAVED LOADOUTS</span>
+            <button onClick="{{ item.retire }}" aria-label="{{ item.ariaRetire }}" style="background:none;border:1px solid #3a2f1e;color:#a3936f;padding:5px 12px;font-size:14px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#c96b5b;border-color:#a04338">Retire</button>
+            <button onClick="{{ item.toggle }}" aria-label="{{ item.ariaClose }}" style="background:none;border:1px solid #3a2f1e;color:#a3936f;padding:5px 12px;font-size:14px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#e6d9ba">Close</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px">
+            <sc-if value="{{ item.isEmpty }}" hint-placeholder-val="{{ false }}"><div style="color:#857659;font-style:italic;font-size:15px;padding:4px 2px">No loadouts filed yet. Save one while this list is open.</div></sc-if>
+            <sc-for list="{{ item.rows }}" as="row" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;border:1px solid #3a2f1e;border-left:3px solid {{ item.accent }};background:#17130c;padding:10px 12px;flex-wrap:wrap">
+                <sc-if value="{{ thumbStrips }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;gap:4px;flex:none">
+                    <sc-for list="{{ row.thumbs }}" as="t" hint-placeholder-count="2">
+                      <div style="width:64px;height:36px;background:#221b12;border:1px solid #241d12;display:flex;align-items:center;justify-content:center"><span style="font-family:monospace;font-size:8px;color:#857659">weapon</span></div>
+                    </sc-for>
+                    <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;max-width:200px">
+                      <sc-for list="{{ row.toolThumbs }}" as="t" hint-placeholder-count="4">
+                        <div style="width:28px;height:28px;background:#221b12;border:1px solid #241d12;display:flex;align-items:center;justify-content:center"><span style="font-family:monospace;font-size:6.5px;color:#857659">{{ t }}</span></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+                <div style="flex:1;min-width:180px">
+                  <button onClick="{{ row.load }}" style="display:block;background:none;border:none;padding:0;font-size:16.5px;color:#f0e6c8;font-family:'Alegreya',Georgia,serif;cursor:pointer;text-align:left" style-hover="color:#e5c78b">{{ row.name }}</button>
+                  <div style="font-size:13px;color:#a3936f;margin-top:1px">{{ row.meta }}</div>
+                </div>
+                <span style="font-size:14.5px;color:#c4a05e">{{ row.cost }}</span>
+                <button onClick="{{ row.share }}" style="background:#221b12;border:1px solid #3a2f1e;color:#a3936f;padding:6px 10px;font-size:13.5px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="border-color:#8a6f42;color:#e6d9ba">Share</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </sc-for>
+  </div>
+  <sc-if value="{{ hasConfirm }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ cancelRetire }}" style="position:fixed;inset:0;background:rgba(10,8,4,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px">
+      <div role="dialog" aria-modal="true" aria-label="Retire list" onClick="{{ swallowClick }}" style="background:#1a1510;border:1px solid #8a6f42;padding:22px;max-width:400px;width:100%">
+        <div style="font-family:'IM Fell English SC',serif;font-size:20px;letter-spacing:1px;color:#f0e6c8">Retire this list?</div>
+        <p style="font-size:15.5px;color:#e6d9ba;line-height:1.5;margin:12px 0 0">“{{ confirmName }}” will be removed. {{ confirmCountLabel }}</p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+          <button onClick="{{ cancelRetire }}" style="background:none;border:1px solid #3a2f1e;color:#a3936f;padding:9px 16px;font-size:15px;font-family:'Alegreya',Georgia,serif;cursor:pointer" style-hover="color:#e6d9ba">Cancel</button>
+          <button onClick="{{ doRetire }}" style="background:#7f2b26;border:1px solid #a04338;color:#f0e2c4;font-family:'IM Fell English SC',serif;font-size:16px;letter-spacing:1px;padding:9px 18px;cursor:pointer" style-hover="background:#96352d">Retire list</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:940,&quot;height&quot;:820},&quot;namesOnlyPhase&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Rollout phase&quot;},&quot;showThumbStrips&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Loadout rows&quot;}}">
+const HUNTERS = [
+  { id: "rat", name: "The Rat" },
+  { id: "doctor", name: "The Doctor" },
+  { id: "drifter", name: "The Drifter" },
+  { id: "marshal", name: "The Marshal" },
+  { id: "widow", name: "The Widow" },
+  { id: "prospector", name: "The Prospector" },
+  { id: "chaplain", name: "The Chaplain" },
+  { id: "scout", name: "Scout" }
+];
+const PALETTE = ["#b04a3e", "#7a8a4e", "#5a6e96", "#5e8a8a", "#8a5e86", "#a3703e"]; // #c4a05e -> #5a6e96: see handoff.md deviations
+const T = Date.now();
+class Component extends DCLogic {
+  state = {
+    lists: [
+      { id: "l1", name: "The Rat", hunterId: "rat", accent: "#b04a3e", createdAt: T - 86e6 * 40, lastUsed: T - 86e6 * 2 },
+      { id: "l2", name: "shotgun experiments", hunterId: "rat", accent: "#7a8a4e", createdAt: T - 86e6 * 30, lastUsed: T - 86e6 * 1 },
+      { id: "l3", name: "Scout", hunterId: "scout", accent: "#5a6e96", createdAt: T - 86e6 * 25, lastUsed: T - 86e6 * 9 },
+      { id: "l4", name: "duo runs with Dave", hunterId: "widow", accent: "#5e8a8a", createdAt: T - 86e6 * 12, lastUsed: T - 86e6 * 4 },
+      { id: "l5", name: "bounty clash", hunterId: null, accent: "#8a5e86", createdAt: T - 86e6 * 6, lastUsed: T - 86e6 * 6 },
+      { id: "l6", name: "The Doctor", hunterId: "doctor", accent: "#a3703e", createdAt: T - 86e6 * 3, lastUsed: T - 86e6 * 3 }
+    ],
+    loadouts: [
+      { id: "s1", name: "Long ammo sniper", weapons: ["Mosin-Nagant M1891", "Bornheim No. 3"], tools: 6, cost: 742, listId: "l1" },
+      { id: "s2", name: "Budget rat kit", weapons: ["Romero 77", "Scottfield Model 3"], tools: 4, cost: 188, listId: "l1" },
+      { id: "s3", name: "Silent knives", weapons: ["Winfield M1873C Silencer", "Nagant M1895 Silencer"], tools: 5, cost: 431, listId: "l1" },
+      { id: "s4", name: "Levering rush", weapons: ["Winfield M1873C", "Specter 1882"], tools: 6, cost: 356, listId: "l2" },
+      { id: "s5", name: "Slug crown", weapons: ["Crown & King Auto-5"], tools: 5, cost: 690, listId: "l2" },
+      { id: "s6", name: "Rival double", weapons: ["Rival 78", "Caldwell Conversion"], tools: 4, cost: 247, listId: "l2" },
+      { id: "s7", name: "Scout lightfoot", weapons: ["Vetterli 71 Karabiner", "Nagant M1895"], tools: 6, cost: 315, listId: "l3" },
+      { id: "s8", name: "Dave carries", weapons: ["Lebel 1886", "Caldwell Pax"], tools: 6, cost: 566, listId: "l4" },
+      { id: "s9", name: "Clash blitz", weapons: ["Specter 1882 Compact", "Dolch 96"], tools: 3, cost: 812, listId: "l5" },
+      { id: "s10", name: "Doctor's rounds", weapons: ["Springfield 1866 Marksman", "LeMat Mark II"], tools: 7, cost: 402, listId: "l6" },
+      { id: "s11", name: "Old prospect build", weapons: ["Sparks LRR", "Caldwell Conversion Chain"], tools: 5, cost: 498, listId: null },
+      { id: "s12", name: "Quick draft", weapons: ["Winfield M1873"], tools: 4, cost: 156, listId: "ghost-list" }
+    ],
+    expandedId: null, sortKey: "name", creating: false, pickedHunterId: undefined,
+    nameDraft: "", renamingId: null, renameDraft: "", confirmRetire: null, message: "", saveN: 0
+  };
+  componentDidMount() {
+    this.onKey = (e) => {
+      if (e.key === "Escape") this.setState({ confirmRetire: null, creating: false });
+    };
+    document.addEventListener("keydown", this.onKey);
+  }
+  componentWillUnmount() { document.removeEventListener("keydown", this.onKey); }
+  hunterName(id) { const h = HUNTERS.find((h) => h.id === id); return h ? h.name : null; }
+  countOf(listId) { return this.state.loadouts.filter((l) => l.listId === listId).length; }
+  nextAccent() {
+    const used = this.state.lists.map((l) => l.accent);
+    let best = PALETTE[0], bestN = Infinity;
+    for (const c of PALETTE) { const n = used.filter((u) => u === c).length; if (n < bestN) { bestN = n; best = c; } }
+    return best;
+  }
+  flash(msg) { this.setState({ message: msg }); clearTimeout(this._mt); this._mt = setTimeout(() => this.setState({ message: "" }), 4000); }
+  renderVals() {
+    const s = this.state;
+    const knownIds = new Set(s.lists.map((l) => l.id));
+    const rowsFor = (pred) => s.loadouts.filter(pred).map((l) => ({
+      id: l.id, name: l.name,
+      meta: l.weapons.join(" · "),
+      cost: "$" + l.cost, thumbs: l.weapons.slice(0, 2),
+      toolThumbs: Array.from({ length: l.tools }, (_, i) => "tool"),
+      load: () => this.flash("Loaded “" + l.name + "” into the builder."),
+      share: () => this.flash("Share link copied for “" + l.name + "”.")
+    }));
+    const key = s.sortKey;
+    const sorted = [...s.lists].sort((a, b) => {
+      if (key === "created") return a.createdAt - b.createdAt;
+      if (key === "recent") return b.lastUsed - a.lastUsed;
+      if (key === "count") return this.countOf(b.id) - this.countOf(a.id) || a.name.localeCompare(b.name);
+      if (key === "hunter") {
+        const ha = this.hunterName(a.hunterId), hb = this.hunterName(b.hunterId);
+        if (ha && hb) return ha.localeCompare(hb) || a.name.localeCompare(b.name);
+        if (ha) return -1; if (hb) return 1;
+        return a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+    const namesOnly = this.props.namesOnlyPhase ?? false;
+    const lists = sorted.map((l) => {
+      const n = this.countOf(l.id);
+      const hn = this.hunterName(l.hunterId);
+      const hasPortrait = Boolean(l.hunterId) && !namesOnly;
+      return {
+        id: l.id, name: l.name, accent: l.accent, countLabel: n + (n === 1 ? " loadout" : " loadouts"),
+        sub: n + (n === 1 ? " loadout" : " loadouts") + " · " + (hn ? hn : (l.hunterId ? "hunter missing from roster" : "no portrait")),
+        showPortrait: hasPortrait, showMonogram: !hasPortrait, monogram: l.name.charAt(0).toUpperCase(),
+        thumbLabel: l.hunterId ? "portrait" : "—",
+        isExpanded: s.expandedId === l.id, isCollapsed: s.expandedId !== l.id,
+        isRenaming: s.renamingId === l.id, notRenaming: s.renamingId !== l.id,
+        isEmpty: n === 0, rows: s.expandedId === l.id ? rowsFor((x) => x.listId === l.id) : [],
+        ariaOpen: "Open list: " + l.name, ariaClose: "Close list: " + l.name,
+        ariaRetire: "Retire list: " + l.name, ariaRename: "Rename list: " + l.name,
+        toggle: () => this.setState((st) => ({
+          expandedId: st.expandedId === l.id ? null : l.id, renamingId: null,
+          lists: st.expandedId === l.id ? st.lists : st.lists.map((x) => x.id === l.id ? { ...x, lastUsed: Date.now() } : x)
+        })),
+        startRename: () => this.setState({ renamingId: l.id, renameDraft: l.name }),
+        retire: () => this.setState({ confirmRetire: { id: l.id, name: l.name, count: n } })
+      };
+    });
+    const uPred = (x) => x.listId == null || !knownIds.has(x.listId);
+    const uCount = s.loadouts.filter(uPred).length;
+    const pickerHunters = HUNTERS.map((h) => ({
+      id: h.id, name: h.name, border: s.pickedHunterId === h.id ? "#c4a05e" : "#3a2f1e",
+      pick: () => this.setState((st) => {
+        const prevDefault = st.pickedHunterId && st.pickedHunterId !== "none" ? (HUNTERS.find((x) => x.id === st.pickedHunterId) || {}).name : "";
+        const keep = st.nameDraft && st.nameDraft !== prevDefault;
+        return { pickedHunterId: h.id, nameDraft: keep ? st.nameDraft : h.name };
+      })
+    }));
+    return {
+      metaLabel: s.lists.length + " lists · " + s.loadouts.length + " loadouts",
+      message: s.message, sortKey: s.sortKey,
+      onSortChange: (e) => this.setState({ sortKey: e.target.value }),
+      saveCurrent: () => this.setState((st) => {
+        const target = st.expandedId && st.expandedId !== "unassigned" && knownIds.has(st.expandedId) ? st.expandedId : null;
+        const n = st.saveN + 1;
+        const lo = { id: "new" + n, name: "Current build " + n, weapons: ["Mosin-Nagant M1891", "Bornheim No. 3"], tools: 6, cost: 742, listId: target };
+        const tname = target ? st.lists.find((x) => x.id === target).name : "Unassigned";
+        setTimeout(() => this.flash("Saved “" + lo.name + "” to " + tname + "."), 0);
+        return { loadouts: [...st.loadouts, lo], saveN: n };
+      }),
+      creating: s.creating, pickerHunters,
+      openCreate: () => this.setState({ creating: true, pickedHunterId: undefined, nameDraft: "" }),
+      cancelCreate: () => this.setState({ creating: false }),
+      pickNone: () => this.setState({ pickedHunterId: "none" }),
+      noneBorder: s.pickedHunterId === "none" ? "#c4a05e" : "#3a2f1e",
+      nameDraft: s.nameDraft, nameHint: "defaults to the hunter's name",
+      onNameInput: (e) => this.setState({ nameDraft: e.target.value }),
+      nextAccent: this.nextAccent(),
+      confirmCreate: () => this.setState((st) => {
+        const hid = st.pickedHunterId && st.pickedHunterId !== "none" ? st.pickedHunterId : null;
+        const name = st.nameDraft.trim() || (hid ? this.hunterName(hid) : "New list");
+        const list = { id: "u" + Date.now(), name, hunterId: hid, accent: this.nextAccent(), createdAt: Date.now(), lastUsed: Date.now() };
+        setTimeout(() => this.flash("Created list “" + name + "”."), 0);
+        return { lists: [...st.lists, list], creating: false, expandedId: list.id };
+      }),
+      renameDraft: s.renameDraft,
+      onRenameInput: (e) => this.setState({ renameDraft: e.target.value }),
+      onRenameKey: (e) => {
+        if (e.key === "Enter") e.target.blur();
+        if (e.key === "Escape") this.setState({ renamingId: null });
+      },
+      commitRename: () => this.setState((st) => {
+        if (!st.renamingId) return {};
+        const name = st.renameDraft.trim();
+        return {
+          lists: name ? st.lists.map((x) => x.id === st.renamingId ? { ...x, name } : x) : st.lists,
+          renamingId: null
+        };
+      }),
+      lists,
+      uCount, uCountLabel: uCount + (uCount === 1 ? " loadout" : " loadouts"),
+      uExpanded: s.expandedId === "unassigned", uCollapsed: s.expandedId !== "unassigned",
+      uIsEmpty: uCount === 0,
+      uRows: s.expandedId === "unassigned" ? rowsFor(uPred) : [],
+      uToggle: () => this.setState((st) => ({ expandedId: st.expandedId === "unassigned" ? null : "unassigned", renamingId: null })),
+      thumbStrips: this.props.showThumbStrips ?? true,
+      hasConfirm: Boolean(s.confirmRetire),
+      confirmName: s.confirmRetire ? s.confirmRetire.name : "",
+      confirmCountLabel: s.confirmRetire
+        ? (s.confirmRetire.count === 0 ? "It holds no loadouts — nothing else changes."
+          : "Its " + s.confirmRetire.count + (s.confirmRetire.count === 1 ? " loadout moves" : " loadouts move") + " to Unassigned, not deleted.")
+        : "",
+      cancelRetire: () => this.setState({ confirmRetire: null }),
+      swallowClick: (e) => e.stopPropagation(),
+      doRetire: () => this.setState((st) => {
+        const c = st.confirmRetire; if (!c) return {};
+        setTimeout(() => this.flash("Retired “" + c.name + "”. Its loadouts are now Unassigned."), 0);
+        return {
+          lists: st.lists.filter((x) => x.id !== c.id),
+          loadouts: st.loadouts.map((x) => x.listId === c.id ? { ...x, listId: null } : x),
+          confirmRetire: null, expandedId: null
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
