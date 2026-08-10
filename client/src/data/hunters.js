@@ -16,9 +16,9 @@
 // to a consumer, and both resolve to null here.
 //
 // Each entry carries: id, name, description, portrait, source, acquisition, obtainable,
-// sourceRevision, ingestedAt. Portrait assets live at /images/hunters/{portrait}.avif and
-// /images/hunters/{portrait}-thumb.avif — derivable from the slug, with no manifest lookup
-// (SPEC-0004 REQ "Consumption Contract Compatibility").
+// sourceRevision, ingestedAt. A hunter has ONE portrait asset, at
+// /images/hunters/{portrait}.avif — derivable from the slug alone, with no size segment and
+// no manifest lookup (SPEC-0004 REQ "Consumption Contract Compatibility").
 
 // The dataset itself lives at the REPO ROOT (`data/hunters.json`), not beside this file.
 // It is a shared artifact: the server reads the same file to validate a favorited hunter
@@ -50,36 +50,45 @@ export function hunterFor(hunterId) {
   return BY_ID.get(hunterId) ?? null;
 }
 
-// Governing: SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+// Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ "Consumption Contract
+// Compatibility", SPEC-0003 REQ "Hunter Dataset Consumption Contract"
 //
 // Asset paths are DERIVED from the entry's `portrait` slug, not looked up in a manifest —
 // the same property that lets the item scrape add or replace images with no code change
-// here (see the note in catalog.js). Both sizes live under the application's own origin;
+// here (see the note in catalog.js). The asset lives under the application's own origin;
 // nothing in this file, or downstream of it, ever addresses the wiki at runtime.
 const PORTRAIT_BASE = "/images/hunters";
 
 /**
- * Ordered portrait URLs for a hunter, best-fit size first.
+ * The portrait URL for a hunter, as a one-element array — or an empty one.
  *
- * SPEC-0003 requires falling back to the OTHER size before the placeholder: "a too-large
- * image is a performance cost; an empty tile is a defect." So a thumbnail request that
- * 404s retries the full size, and vice versa, and only then does the caller's placeholder
- * take over.
+ * ONE ASSET PER HUNTER (#148). This used to take a `size` and return two URLs ordered by
+ * context, because the scrape emitted a `-thumb` companion. The 2026-08-10 amendment to
+ * ADR-0007 replaced both with a single portrait trimmed to its subject, and #147 deleted
+ * all 242 `-thumb` files — so from that merge until this change every tile in the picker
+ * requested a file that no longer existed, 404'd, and fell back. That wasted request is
+ * what this collapse removes.
+ *
+ * The `size` parameter is REMOVED rather than defaulted, which SPEC-0003 states outright:
+ * "so no call site can ask for a size that no longer exists". A defaulted parameter would
+ * have let a stale `size="full"` keep type-checking and keep 404ing; removing it makes an
+ * unmigrated call site an argument that goes nowhere, visible at the call site.
+ *
+ * The return type stays an ARRAY of one rather than a bare string. ItemThumb's contract is
+ * an ordered candidate list it walks on `onError`, and it is shared with the item scrape's
+ * extension chain; narrowing the hunter path to a scalar would fork that seam for the sake
+ * of one element. The ladder is now two rungs — this URL, then SPEC-0001's placeholder.
  *
  * Returns an EMPTY array — not a guessed URL — for a hunter absent from the dataset or
  * carrying no `portrait`. That is the difference between "no asset" and "asset missing":
  * with no slug there is no path to derive, so issuing a request would be guessing, and a
  * guaranteed 404 per unknown hunter is a cost with no upside. The caller renders its
  * neutral placeholder immediately instead.
- *
- * @param size "thumb" for picker tiles and list cards, "full" for an expanded header.
  */
-export function portraitSources(hunterId, size = "thumb") {
+export function portraitSources(hunterId) {
   const portrait = hunterFor(hunterId)?.portrait;
   if (!portrait) return [];
-  const full = `${PORTRAIT_BASE}/${portrait}.avif`;
-  const thumb = `${PORTRAIT_BASE}/${portrait}-thumb.avif`;
-  return size === "full" ? [full, thumb] : [thumb, full];
+  return [`${PORTRAIT_BASE}/${portrait}.avif`];
 }
 
 // Governing: SPEC-0003 REQ "The Hunter Picker Is Filterable and Bounded"

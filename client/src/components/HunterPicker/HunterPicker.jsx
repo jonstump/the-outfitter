@@ -598,8 +598,14 @@ export default function HunterPicker({
                           <span className="hp-tile-art">
                             {/* alt="" — the name is rendered right below, so announcing the
                                 portrait would read the hunter twice. The cell's own text is
-                                its name. */}
-                            <HunterPortrait hunterId={h.id} size="thumb" alt="" />
+                                its name.
+
+                                Governing: ADR-0007 (as amended 2026-08-10), SPEC-0004 REQ
+                                "Consumption Contract Compatibility". No size is passed:
+                                the tile asks for the hunter's one portrait. It used to ask
+                                for a `-thumb` companion that #147 deleted, which made every
+                                one of these 242 tiles issue a 404 before falling back. */}
+                            <HunterPortrait hunterId={h.id} alt="" />
                           </span>
                           <span className="hp-tile-name">{h.name}</span>
                         </div>

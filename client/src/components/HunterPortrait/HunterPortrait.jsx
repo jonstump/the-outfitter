@@ -1,18 +1,30 @@
 // Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
-// Hunter Portraits), ADR-0007 (Scrape the Full Hunter Roster into a Generated Dataset),
-// ADR-0002 (self-hosted imagery), SPEC-0003 REQ "Hunter Dataset Consumption Contract"
+// Hunter Portraits), ADR-0007 (as amended 2026-08-10), ADR-0002 (self-hosted imagery),
+// SPEC-0003 REQ "Hunter Dataset Consumption Contract", SPEC-0004 REQ "Consumption Contract
+// Compatibility"
 //
 // The single place a hunter's likeness is rendered — list cards, expanded headers, and
 // picker tiles all come through here, so the fallback ladder is defined once.
 //
 // The ladder, in order:
-//   1. the requested size            (thumb for cards and tiles, full for an expanded header)
-//   2. the other size                (a too-large image is a cost; an empty tile is a defect)
-//   3. the deterministic silhouette  (hunterThumb, issue #100 — SPEC-0001's placeholder tier)
+//   1. the hunter's portrait         (one asset, derived from the `portrait` slug alone)
+//   2. the deterministic silhouette  (hunterThumb, issue #100 — SPEC-0001's placeholder tier)
 //
-// Steps 1 and 2 are `sources` handed to ItemThumb, which already owns the `<img onError>`
-// walk. Step 3 is its existing SVG tier. Nothing new was invented for portraits; the chain
-// was widened from "try each extension" to "try each candidate URL".
+// TWO RUNGS, NOT THREE (#148). There used to be a middle rung: request the size suited to
+// the context, fall back to the OTHER size, and only then the silhouette. ADR-0007's
+// 2026-08-10 amendment collapsed the two sizes into one trimmed portrait, so there is no
+// other size to fall back to and no `size` prop to pick between them. The prop is gone
+// rather than ignored — SPEC-0003 requires that no call site be able to ask for a size.
+//
+// Step 1 is `sources` handed to ItemThumb, which already owns the `<img onError>` walk.
+// Step 2 is its existing SVG tier. Nothing new was invented for portraits; the chain was
+// widened from "try each extension" to "try each candidate URL", and a one-candidate list
+// walks it exactly as a two-candidate one did.
+//
+// Portraits are trimmed to their own subject, so they VARY in dimensions and aspect ratio
+// between hunters (SPEC-0003). Nothing here states a size: every surface sizes its own box
+// in CSS and lets `object-fit: cover` do the fitting, which is what lets this component be
+// the same component in a 154×220 card and a 96px picker tile.
 //
 // Two cases skip the network entirely, and both are specified rather than defensive:
 // a hunterId absent from the dataset, and a dataset entry with no `portrait` slug. There
@@ -26,15 +38,17 @@ import { portraitSources } from "../../data/hunters.js";
 
 /**
  * @param hunterId  the list's stored hunter reference; may be null, or absent from the dataset
- * @param size      "thumb" (default) or "full"
  * @param alt       "" where the list name is visibly adjacent, so it is announced once
  * @param lazy      defer the fetch until the image nears the viewport (default true)
+ *
+ * There is deliberately no `size`: a hunter has one portrait, and every surface scales it
+ * with `object-fit: cover` rather than asking for a variant.
  *
  * Returns null when there is no hunter at all — a list that never claimed an identity has
  * none to depict, and the caller renders its name monogram instead. That is a different
  * state from "hunter we cannot resolve", which does render the neutral silhouette.
  */
-export default function HunterPortrait({ hunterId, size = "thumb", alt = "", lazy = true, className }) {
+export default function HunterPortrait({ hunterId, alt = "", lazy = true, className }) {
   if (!hunterId) return null;
 
   return (
@@ -44,7 +58,7 @@ export default function HunterPortrait({ hunterId, size = "thumb", alt = "", laz
       // identifiable in tests and the DOM.
       name={hunterId}
       alt={alt}
-      sources={portraitSources(hunterId, size)}
+      sources={portraitSources(hunterId)}
       svgPath={hunterThumb(hunterId)}
       className={className}
       loading={lazy ? "lazy" : undefined}
