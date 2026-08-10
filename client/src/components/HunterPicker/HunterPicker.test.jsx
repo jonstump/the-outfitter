@@ -12,7 +12,11 @@ import HunterPicker from "./HunterPicker.jsx";
 // the free-text filter has something to actually narrow, and one has a null `acquisition`
 // and a null `obtainable` — the two live entries that shape do exist for, and the reason
 // the filters need an explicit Unknown bucket rather than dropping them.
-vi.mock("../../data/hunters.json", () => ({
+// The specifier must resolve to the SAME file `client/src/data/hunters.js` imports — the
+// repo-root `data/hunters.json`, not a client-workspace path. If the two ever disagree the
+// mock silently stops applying and this suite quietly runs against the real 242-hunter
+// roster instead of the five below.
+vi.mock("../../../../data/hunters.json", () => ({
   default: [
     { id: "the-rat", name: "The Rat", portrait: "the-rat", acquisition: "dlc", obtainable: true },
     { id: "the-raven", name: "The Raven", portrait: "the-raven", acquisition: "dlc", obtainable: true },
@@ -330,6 +334,39 @@ describe("HunterPicker favorites", () => {
     fireEvent.click(favButton("kingsnake"));
     expect(tileNames()).toHaveLength(6);
     expect(screen.getByRole("checkbox", { name: /favorites only/i })).toBeDisabled();
+  });
+
+  it("does not let the emptied toggle re-engage itself when a new favorite arrives", () => {
+    // Regression, PR #133 review. `favoritesOnly` used to survive the set emptying: the
+    // checkbox renders `favoritesOnly && !noFavorites`, so it went disabled+unchecked and
+    // the roster came back — every visible sign of the filter being off — while the state
+    // stayed `true` and out of the user's reach. Favoriting anything else then reactivated
+    // it and collapsed the picker to that one hunter, with the box showing checked, without
+    // the user re-checking anything.
+    render(<Harness initialFavorites={["kingsnake"]} />);
+    openPicker();
+    const toggle = () => screen.getByRole("checkbox", { name: /favorites only/i });
+
+    fireEvent.click(toggle());
+    expect(tileNames()).toEqual(["Kingsnake", "No portrait"]);
+
+    // The last favorite goes away. The control must be genuinely off, not merely masked.
+    fireEvent.click(favButton("kingsnake"));
+    expect(toggle()).toBeDisabled();
+    expect(toggle()).not.toBeChecked();
+
+    // A different hunter is favorited. Nothing touched the checkbox, so nothing may filter.
+    fireEvent.click(favButton("bad-hand"));
+    expect(toggle()).toBeEnabled();
+    expect(toggle()).not.toBeChecked();
+    expect(tileNames()).toHaveLength(6);
+    expect(tileNames()).toContain("The Rat");
+
+    // …and re-checking it deliberately still works, so the reset disarmed the control
+    // rather than breaking it.
+    fireEvent.click(toggle());
+    expect(toggle()).toBeChecked();
+    expect(tileNames()).toEqual(["Bad Hand", "No portrait"]);
   });
 
   it("indicates a favorite and nothing else — never that a hunter is in use", () => {

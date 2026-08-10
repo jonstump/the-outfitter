@@ -1259,8 +1259,14 @@ button {
   border: 2px solid var(--border);
   color: var(--text);
 }
+/* `:has(:focus-visible)`, not `:focus-within`. The tile is a row div and never takes focus
+   itself, so the original `.hp-tile:focus-visible` stopped matching once the cells became
+   the focusable things — but `:focus-within` overshot in the other direction and lit the
+   gold border on a plain mouse click, which is the state `.hp-tile-picked` means. `:has()`
+   keeps the highlight scoped to a KEYBOARD focus landing anywhere inside the tile, whether
+   that is the choose cell or the star button (PR #133 review). */
 .hp-tile:hover,
-.hp-tile:focus-within {
+.hp-tile:has(:focus-visible) {
   border-color: var(--gold-border);
 }
 .hp-tile-picked {

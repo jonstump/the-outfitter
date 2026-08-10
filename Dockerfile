@@ -23,6 +23,10 @@ COPY client/package.json client/package.json
 COPY server/package.json server/package.json
 RUN npm ci
 COPY client client
+# The generated hunter roster lives at the repo root, not inside the client workspace —
+# both this build and the server import the same file. Without it the vite build fails on a
+# missing import from client/src/data/hunters.js.
+COPY data data
 RUN npm run build -w client
 
 # --- Runtime ---------------------------------------------------------------
@@ -39,6 +43,12 @@ COPY client/package.json client/package.json
 COPY server/package.json server/package.json
 RUN npm ci --omit=dev --workspace server
 COPY server server
+# Governing: ADR-0007, SPEC-0003 REQ "Favorite Hunters". The runtime needs the roster too:
+# server/src/lib/hunterRoster.js reads data/hunters.json to validate a favorited hunter id,
+# and refuses to boot without it. This COPY is the whole reason the file was moved out of
+# client/src — a multi-stage build discards the build stage's filesystem, so anything under
+# client/src is simply absent here (PR #133 review).
+COPY data data
 COPY --from=client-build /app/client/dist client/dist
 RUN addgroup -S app && adduser -S app -G app \
   && mkdir -p server/data && chown -R app:app /app

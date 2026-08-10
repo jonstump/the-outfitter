@@ -59,7 +59,8 @@ node scripts/scrape-hunters.mjs --names-only   # roster only; no sharp required
 ```
 
 Both respect `robots.txt` (aborting if it can't be read), rate-limit every request, and report a
-structured per-run summary. `scrape-hunters.mjs` writes `client/src/data/hunters.json` plus two
+structured per-run summary. `scrape-hunters.mjs` writes `data/hunters.json` (a repo-root artifact:
+the client bundles it and the server reads it to validate favorited hunter ids) plus two
 AVIF portrait sizes per hunter under `client/public/images/hunters/`, enforcing a per-asset and a
 total byte budget — an over-budget asset fails its hunter rather than being written. Useful flags:
 `--force` (re-encode existing art), `--limit=N`, `--dry-run`, `--delay-ms=N`.
@@ -71,6 +72,7 @@ Generated files are committed and must not be hand-edited; re-running the scrape
 ```
 client/   React + Redux frontend (Vite)
 server/   Express API + lowdb storage
+data/     Generated, committed datasets shared by both workspaces (hunters.json)
 docs/     Architecture Decision Records and specs (see below)
 ```
 

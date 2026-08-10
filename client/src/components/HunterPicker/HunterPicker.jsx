@@ -58,7 +58,7 @@
 // that another list already uses therefore shows the favorite indicator and nothing else —
 // not because that case is special-cased, but because the in-use half does not exist here.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import {
@@ -102,6 +102,21 @@ export default function HunterPicker({
   const { onKeyDown, returnFocus } = useFocusTrap(dialogRef, { onEscape: close });
 
   const favored = useMemo(() => new Set(favorites), [favorites]);
+
+  // Unfavoriting the LAST favorite must clear the toggle, not just grey it out. The
+  // checkbox renders `favoritesOnly && !noFavorites`, so an unreset `true` hides behind a
+  // disabled, unchecked box while the roster comes back — the filter looks off. Favorite
+  // anything else and it reactivates, collapsing the picker to that one hunter without the
+  // user ever re-checking the box (PR #133 review). Resetting the state is what makes the
+  // control's internal value match what it visually communicates.
+  //
+  // An effect rather than a branch in `toggleFavorite`: `favorites` is a prop driven by a
+  // server round-trip, so the set can also empty from a refetch, another tab, or a failed
+  // write rolling back — none of which pass through this component's own handler.
+  const noFavorites = favored.size === 0;
+  useEffect(() => {
+    if (noFavorites) setFavoritesOnly(false);
+  }, [noFavorites]);
 
   // 242 entries filtered on every keystroke; memoised on the inputs it reads.
   const matches = useMemo(
@@ -218,8 +233,6 @@ export default function HunterPicker({
       choose(hunter);
     }
   };
-
-  const noFavorites = favored.size === 0;
 
   return (
     <div className="ll-overlay" onClick={close}>

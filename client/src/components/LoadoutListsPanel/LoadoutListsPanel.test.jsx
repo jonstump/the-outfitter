@@ -461,6 +461,55 @@ describe("creating a list from the picker", () => {
     expect(store.getState().loadoutLists.items).toHaveLength(2);
   });
 
+  it("shows ONLY the favorite marking on a hunter that is both favorited and in use", async () => {
+    // Governing: SPEC-0003 REQ "Favorite Hunters", REQ "The Hunter Picker Does Not Restrict
+    // or Mark Reuse" — acceptance criterion 9, at the INTERSECTION the two halves are each
+    // tested at separately. Favorited-and-unused and unfavorited-but-in-use both pass
+    // trivially; the state SPEC-0003 actually forbids conflating is a hunter in BOTH, where
+    // a star could be read as "already used" or an in-use variant could quietly ride along
+    // on the class that carries the star.
+    //
+    // The store below puts list "a" on this hunter AND puts the hunter in the user's
+    // favorites, then asserts the tile carries exactly the favorite class and no reuse
+    // signal of any kind.
+    const store = renderPanel({
+      ...base([list("a", "First rat", { hunterId: REAL_HUNTER.id })], []),
+      hunterFavorites: { ids: [REAL_HUNTER.id], status: "succeeded", error: null },
+    });
+    expect(store.getState().loadoutLists.items[0].hunterId).toBe(REAL_HUNTER.id);
+    await openPickerFromCreateForm();
+
+    const tile = screen.getByTestId(`hunter-tile-${REAL_HUNTER.id}`);
+    const row = tile.closest('[role="row"]');
+
+    // Exactly the favorite variant. `hp-tile-fav` and nothing beside it — no in-use class
+    // can hide in this list.
+    expect(row.className.split(" ").sort()).toEqual(["hp-tile", "hp-tile-fav"]);
+    // The favorite state is announced, and announced as a favorite.
+    expect(
+      within(row).getByRole("button", { name: new RegExp(`unfavorite ${REAL_HUNTER.name}`, "i") })
+    ).toHaveAttribute("aria-pressed", "true");
+    // Nothing marks it as used, and nothing takes it out of play.
+    expect(row).not.toHaveAttribute("aria-disabled");
+    expect(tile).not.toHaveAttribute("aria-disabled");
+    expect(tile).not.toHaveAttribute("disabled");
+    // aria-selected lives on the choose cell, and "false" here is the point: the only
+    // selection state the picker knows is THIS list's current portrait, not another list's.
+    expect(tile).toHaveAttribute("aria-selected", "false");
+    expect(within(row).queryByText(/in use|used|already/i)).not.toBeInTheDocument();
+    expect(row.getAttribute("title")).toBeNull();
+
+    // And it is still choosable, which is the behavioural half of "does not restrict".
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "new", name: REAL_HUNTER.name, hunterId: REAL_HUNTER.id, accent: "#7a8a4e" }),
+    }));
+    await act(async () => fireEvent.click(tile));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Create list" })));
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).hunterId).toBe(REAL_HUNTER.id);
+  });
+
   it("does not overwrite a name the user already typed", async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,

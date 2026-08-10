@@ -3,6 +3,7 @@ import express from "express";
 import request from "supertest";
 import { hunterFavoritesRouter } from "./hunterFavorites.js";
 import { isKnownHunterId, rosterSize } from "../lib/hunterRoster.js";
+import { ipLimiter, tokenLimiter } from "../lib/ownership.js";
 import { db } from "../db.js";
 
 // Governing: ADR-0006, ADR-0007, SPEC-0003 REQ "Favorite Hunters", REQ "Cross-Collection
@@ -49,9 +50,12 @@ describe("hunter favorites API", () => {
   // --- the roster the validator reads ----------------------------------------------
 
   it("validates against the generated roster, which the server actually loaded", () => {
-    // Guards the cross-workspace read in lib/hunterRoster.js: if hunters.json moved or
-    // failed to parse, the set would be empty and EVERY favorite would 400 — a failure
-    // that is otherwise indistinguishable from "the test picked a bad id".
+    // Guards the shared-artifact read in lib/hunterRoster.js: the roster is the repo-root
+    // data/hunters.json that the client bundles and the server validates against. Note the
+    // module now REFUSES TO BOOT on a missing or unparseable roster, so a packaging defect
+    // fails here as an import error rather than as 242 mysterious 400s — this assertion is
+    // the belt to that braces, pinning that the file the server actually found is the full
+    // roster and not some truncated stand-in.
     expect(rosterSize()).toBeGreaterThan(200);
     expect(isKnownHunterId(RAT)).toBe(true);
     expect(isKnownHunterId(REAPER)).toBe(true);
@@ -205,5 +209,45 @@ describe("hunter favorites API", () => {
   it("applies the same validation to unfavoriting", async () => {
     const app = makeApp();
     expect((await unfav(app, TOKEN_A, "no-such-hunter")).status).toBe(400);
+  });
+
+  // --- Rate limiting ----------------------------------------------------------------
+
+  it("mounts BOTH shared limiters on the two write verbs, and neither on the read", () => {
+    // Governing: SPEC-0003 Security Requirements. Nothing pinned this before, so dropping
+    // `ipLimiter` from the PUT would have left every test green while removing the floor
+    // that stops a client rotating its token to buy unlimited writes (issue #17's shape).
+    //
+    // Asserted by IDENTITY against the exports from lib/ownership.js rather than by driving
+    // 241 requests: the requirement is "these two limiters, the shared ones, are in the
+    // chain", and a header probe cannot tell one limiter from two stacked (both emit
+    // draft-7 `RateLimit-*`, and the last to run wins the header).
+    const layerFor = (method, path) =>
+      hunterFavoritesRouter.stack.find((l) => l.route?.path === path && l.route?.methods?.[method]);
+
+    for (const method of ["put", "delete"]) {
+      const layer = layerFor(method, "/:hunterId");
+      expect(layer, `${method.toUpperCase()} /:hunterId is not routed`).toBeTruthy();
+      const handlers = layer.route.stack.map((s) => s.handle);
+      expect(handlers, `${method.toUpperCase()} is missing ipLimiter`).toContain(ipLimiter);
+      expect(handlers, `${method.toUpperCase()} is missing tokenLimiter`).toContain(tokenLimiter);
+    }
+
+    // The listing is a read and deliberately unlimited — a limiter there would throttle the
+    // picker's own boot fetch.
+    const get = layerFor("get", "/");
+    expect(get.route.stack.map((s) => s.handle)).not.toContain(ipLimiter);
+    expect(get.route.stack.map((s) => s.handle)).not.toContain(tokenLimiter);
+  });
+
+  it("advertises a rate-limit budget on a write, and none on the read", async () => {
+    // The identity check above proves the mount; this proves the mounted middleware is live
+    // in a real request rather than a reference nothing calls.
+    const app = makeApp();
+    const written = await fav(app, TOKEN_A, RAT);
+    expect(written.headers).toHaveProperty("ratelimit-policy");
+
+    const read = await list(app, TOKEN_A);
+    expect(read.headers).not.toHaveProperty("ratelimit-policy");
   });
 });

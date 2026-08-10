@@ -21,7 +21,7 @@
 //   --dry-run           Resolve the roster and check robots.txt, but fetch no hunter page and
 //                       write no file
 //   --limit=N           Stop after N hunter pages (development aid, not a production mode)
-//   --out=PATH          Override the dataset path (defaults to client/src/data/hunters.json)
+//   --out=PATH          Override the dataset path (defaults to data/hunters.json at the repo root)
 //
 // ---------------------------------------------------------------------------------------------
 // WHAT THE WIKI ACTUALLY SERVES
@@ -103,7 +103,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..");
 
-export const HUNTERS_DATA_PATH = path.join(REPO_ROOT, "client", "src", "data", "hunters.json");
+// The dataset is a REPO-ROOT artifact, not a client-workspace file: the client bundles it
+// and the server reads it to validate favorited hunter ids, so it belongs to neither
+// workspace. Both Docker stages copy `data/` explicitly (issue: PR #133 review).
+export const HUNTERS_DATA_PATH = path.join(REPO_ROOT, "data", "hunters.json");
 export const HUNTERS_IMAGES_ROOT = path.join(REPO_ROOT, "client", "public", "images", "hunters");
 
 /** The roster index page. One fetch yields every hunter's page link and the wiki's own labels. */

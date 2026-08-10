@@ -20,7 +20,11 @@
 // /images/hunters/{portrait}-thumb.avif — derivable from the slug, with no manifest lookup
 // (SPEC-0004 REQ "Consumption Contract Compatibility").
 
-import hunters from "./hunters.json";
+// The dataset itself lives at the REPO ROOT (`data/hunters.json`), not beside this file.
+// It is a shared artifact: the server reads the same file to validate a favorited hunter
+// id, and a copy inside the client workspace was invisible to the server's production
+// image. Vite bundles it through this import exactly as it did when it was a sibling.
+import hunters from "../../../data/hunters.json";
 
 export const HUNTERS = hunters;
 
