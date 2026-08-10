@@ -607,10 +607,17 @@ const LOADED = v1({
   tr: ["quartermaster"],
 });
 
+// Spelled out per category, not `expect.any(String)`: the /images/{category}/ segment is the
+// only place the tool/consumable split is observable from outside, so pinning it is what
+// stops TOOLS/toolThumb being substituted for CONS/consThumb without a test noticing
+// (SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback").
 const SPARKS = `/images/weapons/${slugify("Sparks LRR")}.jpg`;
 const CONVERSION = `/images/weapons/${slugify("Caldwell Conversion Pistol")}.jpg`;
 const FIRST_AID = `/images/tools/${slugify("First Aid Kit")}.jpg`;
 const KNIFE = `/images/tools/${slugify("Knife")}.jpg`;
+const VITALITY = `/images/consumables/${slugify("Vitality Shot")}.jpg`;
+const DYNAMITE = `/images/consumables/${slugify("Dynamite Stick")}.jpg`;
+const THROWING_KNIVES = `/images/tools/${slugify("Throwing Knives")}.jpg`;
 
 describe("LoadoutRow previews", () => {
   beforeEach(() => {
@@ -624,7 +631,11 @@ describe("LoadoutRow previews", () => {
     renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
 
     // Everything drawn came out of `data`; nothing was fetched to learn what the loadout holds.
-    expect(drawn("1")).toEqual([SPARKS, CONVERSION, FIRST_AID, KNIFE, expect.any(String), expect.any(String), expect.any(String)]);
+    // Every tile is named, including both consumables — a consumable resolving under
+    // /images/tools/ is asserted against nowhere else in the suite.
+    expect(drawn("1")).toEqual([
+      SPARKS, CONVERSION, FIRST_AID, KNIFE, VITALITY, DYNAMITE, THROWING_KNIVES,
+    ]);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -659,6 +670,15 @@ describe("LoadoutRow previews", () => {
     expect(previewOf("1")).toHaveTextContent("Empty — no weapons or equipment");
     expect(previewOf("1").querySelectorAll("img")).toHaveLength(0);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("keeps traits in the text when there is nothing to draw", () => {
+    renderPanel(base([], [filed("1", "perks only", v1({ tr: ["quartermaster"] }))], { unassignedOpen: true }));
+
+    // The strip is empty, the loadout is not. The empty branch is the one path where the
+    // text equivalent could have swallowed contents that resolve, so the count rides along.
+    expect(previewOf("1").querySelectorAll("img")).toHaveLength(0);
+    expect(previewOf("1")).toHaveTextContent("Empty — no weapons or equipment · 1 trait");
   });
 
   it("sheds equipment before weapons, later slots first, and counts the remainder", async () => {
@@ -701,6 +721,10 @@ describe("LoadoutRow previews", () => {
   it("writes nothing and mutates nothing to render a preview", () => {
     const store = renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
 
+    // The fetch assertion is cheap here (the fixture preloads status "succeeded", so no
+    // thunk runs regardless) but still catches a preview implemented WITH a request. The
+    // assertion actually carrying the "no write" AC is the next one: the stored record is
+    // byte-identical to the input after rendering.
     expect(global.fetch).not.toHaveBeenCalled();
     expect(store.getState().savedLoadouts.items[0].data).toEqual(LOADED);
   });

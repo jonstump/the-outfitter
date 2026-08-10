@@ -117,9 +117,10 @@ export function previewEntries(loadout) {
  * nowhere else in the preview) as the count the spec leaves open — they are textual rather
  * than iconographic, so a strip of trait tiles would buy nothing.
  */
+const plural = (n, word) => `${n} ${n === 1 ? word : `${word}s`}`;
+
 export function previewSummary(entries, traitCount = 0) {
   const named = entries.filter((e) => e.kind === "weapon").map((e) => e.name);
-  const plural = (n, word) => `${n} ${n === 1 ? word : `${word}s`}`;
   const tools = entries.filter((e) => e.kind === "tool").length;
   const cons = entries.filter((e) => e.kind === "consumable").length;
 
@@ -129,6 +130,21 @@ export function previewSummary(entries, traitCount = 0) {
   if (traitCount) parts.push(plural(traitCount, "trait"));
 
   return parts.length ? `Holds ${parts.join(", ")}` : "Holds nothing";
+}
+
+/**
+ * What the row says when there is no imagery to draw.
+ *
+ * The spec's scenario is worded "holds no weapons and no equipment", so the leading clause
+ * is the literal conformance. But the accessibility clause asks the text equivalent to
+ * describe everything the loadout holds that resolves, and a traits-only loadout is the one
+ * path where the empty branch would otherwise swallow real contents — the tiles are the only
+ * thing that is genuinely absent, not the loadout. So the trait count rides along, in the
+ * same words `previewSummary` uses, rather than being dropped with the strip.
+ */
+export function previewEmptyLabel(traitCount = 0) {
+  const base = "Empty — no weapons or equipment";
+  return traitCount ? `${base} · ${plural(traitCount, "trait")}` : base;
 }
 
 /**
@@ -553,7 +569,15 @@ function LoadoutRow({ item, lists, previewCap }) {
       </button>
 
       {/* Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
-          Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
+          Hunter Portraits), ADR-0002 (Source Weapon/Equipment Images from
+          huntshowdown.wiki.gg via a One-Time, Self-Hosted Scrape)
+          Implements: SPEC-0003 REQ "Filed Loadouts Preview Their Contents", SPEC-0001 REQ
+          "Image Coverage Across All Catalog Categories, with Fallback"
+
+          The imagery lineage is cited because the REQ delegates to it: preview tiles go
+          through ItemThumb precisely so the /images/{category}/{slug} convention and the
+          extension-then-SVG fallback chain stay in one place (same contract as PickerRow,
+          TraitsPanel and EquipmentSlot) rather than being restated here.
 
           Last in the row, and last in the tab/reading order: the name is the row's identity
           and the preview only annotates it (SPEC-0003 "Loadout Previews Are Supplementary").
@@ -564,7 +588,7 @@ function LoadoutRow({ item, lists, previewCap }) {
           it must not change when the viewport does. */}
       {entries.length === 0 ? (
         <span className="ll-row-preview ll-row-preview-empty" data-testid={`row-preview-${item.id}`}>
-          Empty — no weapons or equipment
+          {previewEmptyLabel(loadout.traits.length)}
         </span>
       ) : (
         <span
