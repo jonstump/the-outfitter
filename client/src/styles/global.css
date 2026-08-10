@@ -1024,7 +1024,7 @@ button {
   color: var(--text-bright);
 }
 .ll-rename,
-.ll-row-name {
+.ll-lcard-name {
   background: none;
   border: 0;
   cursor: pointer;
@@ -1059,84 +1059,184 @@ button {
   border-color: var(--red-border);
 }
 
-.ll-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Saved loadouts, as a grid of cards.
+
+   Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with Hunter
+   Portraits), SPEC-0003 REQ "Saved Loadouts Render as a Card Grid".
+
+   Replaces the `.ll-row` flex row and its `.ll-row-preview` strip, both withdrawn: a
+   categorised preview does not fit a row, and the strip's shed-by-width rule went with it.
+
+   `auto-fill` + `1fr` against a minimum track is the whole responsive rule. Cards reflow by
+   COUNT — fewer per row as the viewport narrows — and never by dropping anything out of the
+   preview inside them. The minimum track is set inline from CARD_MIN_PX so the layout and the
+   size floors it exists to protect cannot drift apart. */
+.ll-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ll-card-min, 288px), 1fr));
+  gap: 12px;
   padding: 12px;
+  /* The track floor is a MINIMUM, and one column of it must still fit: below that width the
+     single column is allowed to be narrower than the floor, which is what stops the grid
+     itself from overflowing the panel on a phone. The preview inside then scales its cells
+     toward the 48px floor and the card grows taller — it never clips and never sheds. */
+  min-width: 0;
 }
-.ll-empty {
+.ll-empty,
+.ll-empty-list {
   margin: 0;
   font-style: italic;
   color: var(--text-dim);
 }
-.ll-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  background: var(--scroll-track);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border-soft);
+.ll-empty-list {
+  padding: 12px;
 }
-.ll-row-name {
+
+.ll-lcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--scroll-track);
+  /* NOT the list card's identity. `.ll-card` above is a 220px portrait tile inside a 3px
+     accent frame with a name plate and a loadout count; SPEC-0003 forbids a loadout card
+     reusing that combination, and forbids resting the distinction on size, since both grids
+     reflow. So this refuses all three: no portrait, no accent, no count — a plain neutral
+     frame with a ruled title, and three preview grids no list card ever draws. */
+  border: 1px solid var(--border);
+}
+.ll-lcard-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
+}
+.ll-lcard-name {
   flex: 1;
-  min-width: 180px;
+  min-width: 0;
   text-align: left;
   font-size: 16.5px;
   color: var(--text-bright);
+  /* A user-typed name can be one long unbroken token; wrapping it is what keeps "no card
+     overflows horizontally at any supported width" true of content as well as of layout. */
+  overflow-wrap: anywhere;
 }
-.ll-row-name:hover {
+.ll-lcard-name:hover {
   color: var(--gold-bright);
 }
-.ll-row-cost {
+.ll-lcard-cost {
+  flex: none;
   font-size: 14.5px;
   color: var(--gold);
 }
-.ll-row-move select {
+/* Pushed to the bottom edge, so the controls line up across a row of cards whose previews
+   may have grown to different heights. */
+.ll-lcard-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+.ll-lcard-move {
+  flex: 1;
+  min-width: 0;
+}
+.ll-lcard-move select {
+  width: 100%;
   font-size: 13.5px;
   padding: 4px 8px;
-  max-width: 160px;
   text-overflow: ellipsis;
 }
-.ll-row-move select:hover,
-.ll-row-move select:focus-visible {
+.ll-lcard-move select:hover,
+.ll-lcard-move select:focus-visible {
   border-color: var(--gold-border);
 }
 
-/* Governing: SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
-   The preview is the part of the row that yields, so it takes a line of its own
-   (`flex-basis: 100%`) and can never compete for width with the name, the cost or the move
-   control. `min-width: 0` + `overflow: hidden` make "the row never overflows" a property of
-   the box rather than a hope about content; WHAT survives is decided in JS by the specified
-   shedding order, not by wrapping, so the outcome is assertable. */
-.ll-row-preview {
-  flex: 1 0 100%;
-  min-width: 0;
+/* The categorised preview.
+
+   Governing: SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
+
+   Every size floor below reads a custom property set inline from a JS constant
+   (WEAPON_MIN_DRAWN_PX, CELL_MIN_PX, PREVIEW_GAP_PX, the two column counts) rather than a
+   literal. The strip this replaces drew 512x128 weapon art at 34x24 while conforming to the
+   requirement as written; a floor that lives only in a stylesheet is a floor nothing can
+   check, and that is precisely what let it ship. The fallbacks here are the same numbers,
+   present only so the rules stay readable in isolation. */
+.ll-lp {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 10px;
+  /* 50% of the weapon asset's 512px intrinsic width — and, by construction, also the trait
+     grid's own floor (5 columns x 48px + 4 x 4px gap = 256px). One number governs both, so
+     no card can be wide enough to draw one at full size and not the other. */
+  min-width: var(--ll-weapon-min, 256px);
 }
-.ll-row-preview-thumb {
-  width: 34px;
-  height: 24px;
+.ll-lp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ll-preview-gap, 4px);
+  min-width: 0;
 }
-/* --text-muted, not --text-dim: both of these strings are the ONLY channel carrying a
-   requirement. "+N more" is aria-hidden by design (the label must not change with viewport),
-   so its pixels are the whole realization of "SHALL summarise whatever it dropped as a
-   count"; the empty statement is likewise the only realization of "an empty loadout says
-   so". --text-dim (#857659) on --scroll-track (#17130c) is 4.17:1, under SC 1.4.3's 4.5:1
-   at this size; --text-muted (#a3936f) is 6.13:1. SPEC-0003 Accessibility Requirements make
-   WCAG 2.1 AA the mandatory minimum. */
-.ll-row-preview-more {
-  flex: none;
+/* Labels the group for the eye only — aria-hidden in the markup, because the preview's one
+   aria-label is its whole announcement. --text-muted, not --text-dim: 6.13:1 on
+   --scroll-track against --text-dim's 4.17:1, and SPEC-0003 makes WCAG 2.1 AA mandatory. */
+.ll-lp-cap {
+  font-size: 11.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* Weapons largest, per the requirement: each spans the preview's full width, so its drawn
+   width is never below the min-width above. 4/1 is the asset's own aspect (512x128), so the
+   cell scales with the card without ever letterboxing the art. */
+.ll-lp-weapon {
+  width: 100%;
+  aspect-ratio: 4 / 1;
+}
+.ll-lp-equip,
+.ll-lp-traits {
+  display: grid;
+  gap: var(--ll-preview-gap, 4px);
+}
+/* Eight cells as two rows of four, mirroring the builder's own .equip-grid so a loadout
+   reads the same way here as in the panel that produced it. The column count is FIXED
+   rather than auto-filled: a grid that reflowed its own shape would defeat the point, which
+   is that two loadouts are compared as two identically-shaped grids. */
+.ll-lp-equip {
+  grid-template-columns: repeat(var(--ll-equip-cols, 4), minmax(var(--ll-cell-min, 48px), 1fr));
+}
+/* Fifteen cells, five across. Fifteen is Hunt: Showdown's per-hunter trait maximum, NOT the
+   trait-point cap — the cap is user-settable, and deriving from it would reflow the grid
+   when a setting changed. */
+.ll-lp-traits {
+  grid-template-columns: repeat(var(--ll-trait-cols, 5), minmax(var(--ll-cell-min, 48px), 1fr));
+}
+/* The 48px floor on the shorter edge. minmax() above lets a cell scale DOWN to it as the
+   card narrows and no further; past that the card grows taller rather than clipping, and no
+   cell is ever shed. */
+.ll-lp-slot {
+  min-width: var(--ll-cell-min, 48px);
+  min-height: var(--ll-cell-min, 48px);
+}
+/* An empty cell is information and is drawn as one — dashed, like the builder's empty
+   equipment slot. It is never announced; see the note on PreviewCell. */
+.ll-lp-cell-empty {
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+/* The only realization of "SHALL state the remainder as a count", so it is aria-hidden by
+   design and its pixels are the whole of it — the label already states the true total, and
+   must not vary with what is drawn. --text-muted for the same contrast reason as above. */
+.ll-lp-more {
   font-size: 12.5px;
   color: var(--text-muted);
-  white-space: nowrap;
 }
-.ll-row-preview-empty {
+/* Likewise the only realization of "a loadout holding nothing SHALL be stated as empty
+   rather than rendered as three empty grids". */
+.ll-lp-empty {
+  margin: 0;
   font-size: 12.5px;
   font-style: italic;
   color: var(--text-muted);

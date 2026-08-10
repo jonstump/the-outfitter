@@ -22,7 +22,16 @@ import { useDispatch, useSelector } from "react-redux";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import HunterPicker from "../HunterPicker/HunterPicker.jsx";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
-import { CONS, TOOLS, WEAPONS, consThumb, toolThumb, weaponThumb } from "../../data/catalog.js";
+import {
+  CONS,
+  TOOLS,
+  TRAITS,
+  WEAPONS,
+  consThumb,
+  toolThumb,
+  traitThumb,
+  weaponThumb,
+} from "../../data/catalog.js";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
@@ -56,146 +65,166 @@ function hunterLine(hunterId) {
 }
 
 // ---------------------------------------------------------------------------------------
-// Loadout row previews
+// The categorised loadout preview
 //
 // Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
-// Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents"
+// Hunter Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents", SPEC-0003 REQ
+// "Saved Loadouts Render as a Card Grid"
 //
-// Everything below derives from the loadout the row ALREADY decoded to show its cost. There
+// Everything below derives from the loadout the card ALREADY decoded to show its cost. There
 // is no summary field, no second fetch and no write: design.md ("Loadout previews are
 // derived from the record, never stored") rejected caching precisely because a stored
 // summary is a second source of truth that goes stale the moment the catalog changes.
 //
-// Unresolvable items are not handled here on purpose. `fromData` drops ids the catalog no
-// longer carries — a weapon slot decodes to null, an equip entry is filtered out — so a
-// preview of a loadout referencing a removed item is simply a preview of what survives. Any
-// per-item placeholder written here would be a second, divergent copy of that rule.
+// This REPLACES the compact strip that shipped in #139/#150, and the shed-by-width rule that
+// strip implemented is withdrawn rather than merely unused — `previewEntries`,
+// `shedPreview`, `previewCapacity` and the resize listener are gone, not dormant. A
+// fixed-cell grid has no ordered list to degrade along, and dropping cells would destroy the
+// constant shape the grid exists to hold. Responsiveness is the CARD's concern now
+// (design.md, "Loadouts become cards, and must not read as lists").
+//
+// Unresolvable items are not special-cased for a placeholder: `fromData` drops ids the
+// catalog no longer carries, and a cell with nothing in it renders as an empty cell rather
+// than shifting its neighbours forward. Any per-item placeholder written here would be a
+// second, divergent copy of that rule.
 // ---------------------------------------------------------------------------------------
 
 /**
- * The loadout's weapons and equipment, in DRAW order — which is also PRIORITY order.
+ * Cell counts, fixed — the load-bearing choice, per design.md.
  *
- * Weapons first (slot 0 then slot 1), then equipment in slot order. Because the shedding
- * order the spec mandates is "equipment before weapons, and within each, later slots before
- * earlier ones", that ranking is exactly this list reversed, and shedding is therefore a
- * truncation from the tail rather than a second ordering that could drift from this one.
+ * Eight equipment cells and fifteen trait cells are constants, NOT functions of what the
+ * loadout holds. A grid whose shape depends on its contents cannot be scanned across a list:
+ * the eye has to re-find each category in every card. Fixing the shape means a filled cell
+ * is information and an empty cell is information too.
+ *
+ * Eight-as-two-rows-of-four mirrors the builder's own `.equip-grid` (EquipmentPanel), so a
+ * loadout reads the same way in a list as in the panel that produced it.
+ *
+ * Fifteen is *Hunt: Showdown*'s per-hunter trait maximum. It is deliberately NOT derived
+ * from the trait-point cap, which is user-settable — deriving it would make the grid reflow
+ * when a setting changed, which is exactly what fixing the shape is meant to prevent. It is
+ * a fact about the game, not an invariant this application enforces: `upBudgetOn` is off by
+ * default, the catalog holds 32 traits and the server accepts 40, so a loadout holding more
+ * than fifteen is an ordinary savable record. See `traitOverflow` below.
  */
-export function previewEntries(loadout) {
-  const weapons = loadout.weapons
-    .map((w, slot) => {
-      if (!w) return null; // dropped by fromData: the id left the catalog
-      const def = WEAPONS[w.i];
-      return { key: `w${slot}`, kind: "weapon", category: "weapons", name: def[1], svgPath: weaponThumb(def) };
-    })
-    .filter(Boolean);
+export const WEAPON_CELLS = 2;
+export const EQUIP_CELLS = 8;
+export const EQUIP_COLUMNS = 4;
+export const TRAIT_CELLS = 15;
+export const TRAIT_COLUMNS = 5;
 
-  const equip = loadout.equip.map((e, slot) => {
-    const tool = e.t === "T";
-    const def = tool ? TOOLS[e.i] : CONS[e.i];
-    return {
-      key: `e${slot}`,
-      kind: tool ? "tool" : "consumable",
-      category: tool ? "tools" : "consumables",
-      name: def[1],
-      svgPath: tool ? toolThumb(def) : consThumb(def),
-    };
-  });
+/**
+ * The size floors the spec pins, as numbers rather than as stylesheet literals.
+ *
+ * These exist because the strip this replaces drew 512×128 weapon art at 34×24 — about 7% of
+ * the width the asset carries — while conforming to a requirement that said only "preview".
+ * An unassertable size rule is what let that ship, so every floor below is exported, is set
+ * on the preview as a custom property, and is read from there by global.css. One number, one
+ * place, and a test can reach it.
+ *
+ * The two floors meet by construction rather than by coincidence: five trait columns at the
+ * 48px cell floor plus four 4px gaps is 256px, which is exactly half the weapon asset's
+ * intrinsic width. So a single minimum width satisfies both, and no card can ever be wide
+ * enough to draw one at full size and not the other.
+ */
+export const WEAPON_ASSET_WIDTH = 512; // client/public/images/weapons/*.png are 512×128
+export const WEAPON_MIN_DRAWN_PX = WEAPON_ASSET_WIDTH / 2;
+export const CELL_MIN_PX = 48;
+export const PREVIEW_GAP_PX = 4;
+/** Card padding (12) + border (1) on each side, around a preview at its floor. */
+export const CARD_MIN_PX = WEAPON_MIN_DRAWN_PX + 2 * 12 + 2 * 1;
 
-  return [...weapons, ...equip];
+const TRAIT_BY_ID = new Map(TRAITS.map((t) => [t[0], t]));
+
+function weaponCell(w, slot) {
+  const def = w ? WEAPONS[w.i] : null;
+  if (!def) return null;
+  return { key: `w${slot}`, kind: "weapon", category: "weapons", name: def[1], svgPath: weaponThumb(def) };
+}
+
+function equipCell(e, slot) {
+  if (!e) return null;
+  const tool = e.t === "T";
+  const def = tool ? TOOLS[e.i] : CONS[e.i];
+  if (!def) return null;
+  return {
+    key: `e${slot}`,
+    kind: tool ? "tool" : "consumable",
+    category: tool ? "tools" : "consumables",
+    name: def[1],
+    svgPath: tool ? toolThumb(def) : consThumb(def),
+  };
+}
+
+function traitCell(id, slot) {
+  const def = TRAIT_BY_ID.get(id);
+  if (!def) return null;
+  return { key: `t${slot}`, kind: "trait", category: "traits", name: def[1], svgPath: traitThumb(def) };
 }
 
 /**
- * The row's ONE text equivalent.
+ * The loadout, arranged into the three category groups the preview draws.
+ *
+ * Every group is a FIXED-LENGTH array whose holes are `null`. That is the whole contract:
+ * a cell index is a position in the grid, and an item that does not resolve leaves its cell
+ * empty rather than shifting later items forward.
+ *
+ * Stated as cells occupied rather than as an array shape, deliberately. SPEC-0006 changes
+ * `state.equip` from a packed array to a fixed sparse one; a packed array fills cells in
+ * order and a sparse one places them where the user put them, and indexing by cell is
+ * correct under both. Nothing here needs rewriting when that lands.
+ */
+export function previewGroups(loadout) {
+  const weapons = Array.from({ length: WEAPON_CELLS }, (_, slot) => weaponCell(loadout.weapons[slot], slot));
+  const equipment = Array.from({ length: EQUIP_CELLS }, (_, slot) => equipCell(loadout.equip[slot], slot));
+  const traits = Array.from({ length: TRAIT_CELLS }, (_, slot) => traitCell(loadout.traits[slot], slot));
+
+  // What the loadout HOLDS, which is not the same as what the grid can draw. More than
+  // fifteen traits is reachable today, so the sixteenth is counted and announced even though
+  // there is no cell for it — the grid must not grow, scroll or clip to accommodate it.
+  const traitsHeld = loadout.traits.filter((id) => TRAIT_BY_ID.has(id)).length;
+  const traitOverflow = Math.max(0, traitsHeld - traits.filter(Boolean).length);
+
+  return {
+    weapons,
+    equipment,
+    traits,
+    traitsHeld,
+    traitOverflow,
+    // "Holding nothing" is all three categories, not just the two that used to be drawn.
+    // A traits-only loadout has contents and gets grids; only a genuinely empty one is
+    // stated in words rather than rendered as three empty grids.
+    empty: !weapons.some(Boolean) && !equipment.some(Boolean) && traitsHeld === 0,
+  };
+}
+
+/**
+ * The preview's ONE text equivalent.
  *
  * Governing: SPEC-0003 Accessibility Requirements, "Loadout Previews Are Supplementary, Not
- * the Row's Identity". A dozen tiles must not become a dozen announcements, and the text
- * describes everything that RESOLVES rather than the subset currently drawn — so what a
- * screen-reader user hears does not change when the viewport narrows.
+ * the Card's Identity". Twenty-five cells must not become twenty-five announcements, and the
+ * empty ones must not be announced at all — a fifteen-cell trait grid holding four traits
+ * must not read as eleven blanks.
  *
- * Weapons are named because a build is identified by them; equipment and traits summarise as
- * counts because eight tool names in one label is not a summary. Traits appear here (and
- * nowhere else in the preview) as the count the spec leaves open — they are textual rather
- * than iconographic, so a strip of trait tiles would buy nothing.
+ * Weapons are named because a build is identified by them; everything else summarises as a
+ * count, because eight tool names in one label is not a summary. The counts describe what the
+ * loadout HOLDS and resolves in the catalog, not what is currently drawn: eighteen traits
+ * announce as eighteen while fifteen cells are filled.
  */
 const plural = (n, word) => `${n} ${n === 1 ? word : `${word}s`}`;
 
-export function previewSummary(entries, traitCount = 0) {
-  const named = entries.filter((e) => e.kind === "weapon").map((e) => e.name);
-  const tools = entries.filter((e) => e.kind === "tool").length;
-  const cons = entries.filter((e) => e.kind === "consumable").length;
+export const PREVIEW_EMPTY_LABEL = "Empty — no weapons, equipment or traits";
 
-  const parts = [...named];
+export function previewSummary(groups) {
+  const parts = groups.weapons.filter(Boolean).map((c) => c.name);
+  const tools = groups.equipment.filter((c) => c?.kind === "tool").length;
+  const cons = groups.equipment.filter((c) => c?.kind === "consumable").length;
+
   if (tools) parts.push(plural(tools, "tool"));
   if (cons) parts.push(plural(cons, "consumable"));
-  if (traitCount) parts.push(plural(traitCount, "trait"));
+  if (groups.traitsHeld) parts.push(plural(groups.traitsHeld, "trait"));
 
-  return parts.length ? `Holds ${parts.join(", ")}` : "Holds nothing";
-}
-
-/**
- * What the row says when there is no imagery to draw.
- *
- * The spec's scenario is worded "holds no weapons and no equipment", so the leading clause
- * is the literal conformance. But the accessibility clause asks the text equivalent to
- * describe everything the loadout holds that resolves, and a traits-only loadout is the one
- * path where the empty branch would otherwise swallow real contents — the tiles are the only
- * thing that is genuinely absent, not the loadout. So the trait count rides along, in the
- * same words `previewSummary` uses, rather than being dropped with the strip.
- */
-export function previewEmptyLabel(traitCount = 0) {
-  const base = "Empty — no weapons or equipment";
-  return traitCount ? `${base} · ${plural(traitCount, "trait")}` : base;
-}
-
-/**
- * How many preview tiles a row may draw at a given viewport width.
- *
- * The spec deliberately specifies a shedding ORDER rather than a breakpoint table, so this
- * table is an implementation detail and can move freely; what it may never do is return a
- * number large enough to push the name, the cost or the move control out of the row. The
- * floor is 2 — at most the two weapon slots — because weapons are the last thing to shed.
- */
-const PREVIEW_CAPACITY = [
-  [1180, 10],
-  [980, 8],
-  [820, 6],
-  [660, 4],
-  [520, 3],
-  [0, 2],
-];
-
-export function previewCapacity(width) {
-  const w = Number.isFinite(width) ? width : 0;
-  return (PREVIEW_CAPACITY.find(([min]) => w >= min) ?? [0, 2])[1];
-}
-
-/**
- * Truncate to `capacity`, reporting what was dropped so the row can summarise it as a count.
- *
- * Truncating the tail of `previewEntries` IS the specified order: equipment sits after
- * weapons and later slots after earlier ones, so the last thing in the list is always the
- * least identifying thing in the loadout.
- */
-export function shedPreview(entries, capacity) {
-  const keep = Math.max(0, Math.min(entries.length, Number.isFinite(capacity) ? capacity : entries.length));
-  return { shown: entries.slice(0, keep), dropped: entries.length - keep };
-}
-
-/**
- * Viewport width, as a re-rendering value.
- *
- * Read once per expanded list rather than once per row: a list of twenty loadouts would
- * otherwise attach twenty identical resize listeners to compute twenty identical numbers.
- */
-function useViewportWidth() {
-  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
-  useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth);
-    onResize(); // the window may have been resized between the initial state and this effect
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return width;
+  return parts.length ? `Holds ${parts.join(", ")}` : PREVIEW_EMPTY_LABEL;
 }
 
 export default function LoadoutListsPanel() {
@@ -363,8 +392,6 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   const [draftName, setDraftName] = useState(list?.name ?? "");
   const inputRef = useRef(null);
   const rootRef = useRef(null);
-  // One subscription for the whole group; every row sheds against the same number.
-  const previewCap = previewCapacity(useViewportWidth());
 
   // The expanded panel renders below the whole grid; on a phone with several lists a tap
   // otherwise looks like it did nothing.
@@ -461,15 +488,25 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
         </button>
       </div>
 
-      <div className="ll-rows">
-        {loadouts.length === 0 ? (
-          <p className="ll-empty">No loadouts filed yet. Save one while this list is open.</p>
-        ) : (
-          loadouts.map((item) => (
-            <LoadoutRow key={item.id} item={item} lists={lists} previewCap={previewCap} />
-          ))
-        )}
-      </div>
+      {/* Governing: SPEC-0003 REQ "Saved Loadouts Render as a Card Grid".
+
+          `auto-fill` + `1fr` against a minimum track IS the whole responsive rule: cards
+          reflow BY COUNT, never by shedding anything out of the preview inside them. The
+          minimum track comes from CARD_MIN_PX so the layout and the size floors it exists
+          to protect cannot drift — see the note on those constants. */}
+      {loadouts.length === 0 ? (
+        <p className="ll-empty ll-empty-list">No loadouts filed yet. Save one while this list is open.</p>
+      ) : (
+        <div
+          className="ll-cards"
+          style={{ "--ll-card-min": `${CARD_MIN_PX}px` }}
+          data-testid="loadout-card-grid"
+        >
+          {loadouts.map((item) => (
+            <LoadoutCard key={item.id} item={item} lists={lists} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -511,114 +548,208 @@ function AccentPicker({ list }) {
   );
 }
 
-function LoadoutRow({ item, lists, previewCap }) {
+/**
+ * One cell of the preview.
+ *
+ * Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with Hunter
+ * Portraits), ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a
+ * One-Time, Self-Hosted Scrape)
+ * Implements: SPEC-0003 REQ "Filed Loadouts Preview Their Contents", SPEC-0001 REQ "Image
+ * Coverage Across All Catalog Categories, with Fallback"
+ *
+ * Imagery goes through ItemThumb precisely so the `/images/{category}/{slug}` convention and
+ * the extension-then-SVG fallback chain stay in one place (the same contract as PickerRow,
+ * TraitsPanel and EquipmentSlot) rather than being restated here. Lazy, because an expanded
+ * list of twenty loadouts is five hundred cells and SPEC-0003 requires the bytes fetched to
+ * follow what was scrolled to.
+ *
+ * An empty cell is drawn and is never announced. It is real information — a loadout with two
+ * tools is legible as a loadout with two tools only because the other six cells are visibly
+ * empty — but a fifteen-cell trait grid holding four traits must not read as eleven blanks
+ * (SPEC-0003, "Loadout Previews Are Supplementary, Not the Card's Identity"). The preview's
+ * single `role="img"` already makes its whole subtree presentational; `aria-hidden` here says
+ * so a second time, for anything that flattens it.
+ */
+function PreviewCell({ cell, className }) {
+  if (!cell) return <span className={`ll-lp-cell ll-lp-cell-empty ${className}`} aria-hidden="true" />;
+  return (
+    <ItemThumb
+      category={cell.category}
+      name={cell.name}
+      alt=""
+      svgPath={cell.svgPath}
+      className={`ll-lp-cell ${className}`}
+      loading="lazy"
+    />
+  );
+}
+
+/**
+ * The categorised panel.
+ *
+ * Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with Hunter
+ * Portraits), SPEC-0003 REQ "Filed Loadouts Preview Their Contents"
+ *
+ * Three groups, in the order a build is read: what it shoots with, what it carries, what the
+ * hunter can do. Weapons are drawn largest because a loadout is identified first by them —
+ * each spans the preview's full width, which is floored at half the asset's intrinsic width.
+ *
+ * The category captions are visible and are `aria-hidden`: they label the groups for the eye,
+ * while the single `aria-label` below is the whole preview's one announcement. Same for the
+ * overflow count — it must not change what a screen-reader user hears, because the label
+ * already states the true total.
+ */
+function LoadoutPreview({ item, loadout }) {
+  const groups = useMemo(() => previewGroups(loadout), [loadout]);
+
+  if (groups.empty) {
+    return (
+      <p className="ll-lp-empty" data-testid={`loadout-preview-${item.id}`}>
+        {PREVIEW_EMPTY_LABEL}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="ll-lp"
+      role="img"
+      aria-label={previewSummary(groups)}
+      data-testid={`loadout-preview-${item.id}`}
+      // The size floors, handed to the stylesheet rather than duplicated in it. global.css
+      // reads every one of these; nothing about a cell's minimum size is written twice.
+      style={{
+        "--ll-weapon-min": `${WEAPON_MIN_DRAWN_PX}px`,
+        "--ll-cell-min": `${CELL_MIN_PX}px`,
+        "--ll-preview-gap": `${PREVIEW_GAP_PX}px`,
+        "--ll-equip-cols": EQUIP_COLUMNS,
+        "--ll-trait-cols": TRAIT_COLUMNS,
+      }}
+    >
+      <div className="ll-lp-group" data-testid={`preview-weapons-${item.id}`}>
+        <span className="ll-lp-cap" aria-hidden="true">
+          Weapons
+        </span>
+        {groups.weapons.map((cell, slot) => (
+          <PreviewCell key={`w${slot}`} cell={cell} className="ll-lp-weapon" />
+        ))}
+      </div>
+
+      <div className="ll-lp-group" data-testid={`preview-equipment-${item.id}`}>
+        <span className="ll-lp-cap" aria-hidden="true">
+          Tools &amp; consumables
+        </span>
+        <div className="ll-lp-equip">
+          {groups.equipment.map((cell, slot) => (
+            <PreviewCell key={`e${slot}`} cell={cell} className="ll-lp-slot" />
+          ))}
+        </div>
+      </div>
+
+      <div className="ll-lp-group" data-testid={`preview-traits-${item.id}`}>
+        <span className="ll-lp-cap" aria-hidden="true">
+          Traits
+        </span>
+        <div className="ll-lp-traits">
+          {groups.traits.map((cell, slot) => (
+            <PreviewCell key={`t${slot}`} cell={cell} className="ll-lp-slot" />
+          ))}
+        </div>
+        {groups.traitOverflow > 0 && (
+          <span className="ll-lp-more" aria-hidden="true">
+            +{groups.traitOverflow} more
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A saved loadout, as a card.
+ *
+ * Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with Hunter
+ * Portraits), SPEC-0003 REQ "Saved Loadouts Render as a Card Grid", SPEC-0003 REQ "Filed
+ * Loadouts Preview Their Contents"
+ *
+ * Replaces the flex row: a categorised preview does not fit a row, and stacking full-height
+ * rows down a page makes a list of ten unreadable.
+ *
+ * **It must not read as a list card.** The list selector directly above is already a grid of
+ * cards, and two nested card grids invite the reader to mistake a loadout for a list. The
+ * distinction cannot rest on size, since both grids reflow — so a loadout card refuses the
+ * list card's whole identity rather than shrinking it: no portrait, no accent frame, no
+ * loadout count. What it has instead is a titled head with a cost, and three preview grids no
+ * list card ever draws.
+ *
+ * Every control that was reachable on the row is reachable here, and the move affordance is
+ * still an explicit `<select>` in the tab order rather than a drag target (SPEC-0003
+ * "Keyboard Navigation": filing MUST be achievable without a pointer).
+ */
+function LoadoutCard({ item, lists }) {
   const dispatch = useDispatch();
   // One decode serves both the cost and the preview — the contents were already in hand,
   // which is the whole reason the preview costs nothing (design.md).
   const loadout = useMemo(() => fromData(item.data), [item.data]);
   const cost = totalCost(loadout);
-  const entries = useMemo(() => previewEntries(loadout), [loadout]);
-  const summary = previewSummary(entries, loadout.traits.length);
-  const { shown, dropped } = shedPreview(entries, previewCap);
 
   return (
-    <div className="ll-row">
-      <button className="ll-row-name" onClick={() => dispatch(loadSavedThunk(item))}>
-        {item.name}
-      </button>
-      <span className="ll-row-cost">${cost}</span>
+    <article className="ll-lcard" data-testid={`loadout-card-${item.id}`}>
+      <div className="ll-lcard-head">
+        <button className="ll-lcard-name" onClick={() => dispatch(loadSavedThunk(item))}>
+          {item.name}
+        </button>
+        <span className="ll-lcard-cost">${cost}</span>
+      </div>
 
-      {/* SPEC-0003: an explicit, keyboard-operable control — not drag-and-drop. Modelling
-          it as state ("which list is this in?") rather than an action means keyboard
-          operation, type-ahead and Escape-to-cancel come from the platform. */}
-      <label className="ll-row-move">
-        <span className="sr-only">List for {item.name}</span>
-        <select
-          // Degrade exactly as groupByList does: a dangling listId matches no <option>, so
-          // the row would sit under Unassigned with a blank control.
-          value={item.listId && lists.some((l) => l.id === item.listId) ? item.listId : ""}
-          onChange={(e) => {
-            const next = e.target.value || null;
-            dispatch(
-              moveSaved({
-                id: item.id,
-                listId: next,
-                loadoutName: item.name,
-                listName: lists.find((l) => l.id === next)?.name ?? null,
-              })
-            );
-          }}
+      {/* A description belongs here, between the head and the preview, when #140 lands
+          (SPEC-0003 REQ "Loadouts Carry an Editable Description"). Nothing is rendered for
+          it today — the position is reserved in the layout, not occupied by an empty node. */}
+
+      <LoadoutPreview item={item} loadout={loadout} />
+
+      <div className="ll-lcard-actions">
+        {/* SPEC-0003: an explicit, keyboard-operable control — not drag-and-drop. Modelling
+            it as state ("which list is this in?") rather than an action means keyboard
+            operation, type-ahead and Escape-to-cancel come from the platform. */}
+        <label className="ll-lcard-move">
+          <span className="sr-only">List for {item.name}</span>
+          <select
+            // Degrade exactly as groupByList does: a dangling listId matches no <option>, so
+            // the card would sit under Unassigned with a blank control.
+            value={item.listId && lists.some((l) => l.id === item.listId) ? item.listId : ""}
+            onChange={(e) => {
+              const next = e.target.value || null;
+              dispatch(
+                moveSaved({
+                  id: item.id,
+                  listId: next,
+                  loadoutName: item.name,
+                  listName: lists.find((l) => l.id === next)?.name ?? null,
+                })
+              );
+            }}
+          >
+            <option value="">Unassigned</option>
+            {[...lists]
+              .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+              .map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        <button
+          className="icon-btn"
+          aria-label={`Delete loadout: ${item.name}`}
+          onClick={() => dispatch(deleteSaved(item.id))}
         >
-          <option value="">Unassigned</option>
-          {[...lists]
-            .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-            .map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-        </select>
-      </label>
-
-      <button
-        className="icon-btn"
-        aria-label={`Delete loadout: ${item.name}`}
-        onClick={() => dispatch(deleteSaved(item.id))}
-      >
-        ✕
-      </button>
-
-      {/* Governing: ADR-0006 (Organize Saved Loadouts into User-Named Lists Illustrated with
-          Hunter Portraits), ADR-0002 (Source Weapon/Equipment Images from
-          huntshowdown.wiki.gg via a One-Time, Self-Hosted Scrape)
-          Implements: SPEC-0003 REQ "Filed Loadouts Preview Their Contents", SPEC-0001 REQ
-          "Image Coverage Across All Catalog Categories, with Fallback"
-
-          The imagery lineage is cited because the REQ delegates to it: preview tiles go
-          through ItemThumb precisely so the /images/{category}/{slug} convention and the
-          extension-then-SVG fallback chain stay in one place (same contract as PickerRow,
-          TraitsPanel and EquipmentSlot) rather than being restated here.
-
-          Last in the row, and last in the tab/reading order: the name is the row's identity
-          and the preview only annotates it (SPEC-0003 "Loadout Previews Are Supplementary").
-
-          `role="img"` + `aria-label` is what makes the whole strip ONE announcement instead
-          of a dozen. It also makes the "+N more" count decorative by construction, which is
-          required rather than incidental — the label describes everything that resolves, so
-          it must not change when the viewport does. */}
-      {entries.length === 0 ? (
-        <span className="ll-row-preview ll-row-preview-empty" data-testid={`row-preview-${item.id}`}>
-          {previewEmptyLabel(loadout.traits.length)}
-        </span>
-      ) : (
-        <span
-          className="ll-row-preview"
-          role="img"
-          aria-label={summary}
-          data-testid={`row-preview-${item.id}`}
-        >
-          {shown.map((e) => (
-            // Decorative: the summary above already names everything. Lazy, because an
-            // expanded list of twenty loadouts is well over a hundred icons and SPEC-0003
-            // requires the bytes to follow what was scrolled to.
-            <ItemThumb
-              key={e.key}
-              category={e.category}
-              name={e.name}
-              alt=""
-              svgPath={e.svgPath}
-              className="ll-row-preview-thumb"
-              loading="lazy"
-            />
-          ))}
-          {dropped > 0 && (
-            <span className="ll-row-preview-more" aria-hidden="true">
-              +{dropped} more
-            </span>
-          )}
-        </span>
-      )}
-    </div>
+          ✕
+        </button>
+      </div>
+    </article>
   );
 }
 
