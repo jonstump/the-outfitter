@@ -387,6 +387,22 @@ flowchart LR
 
 Both mutations are staged in memory and committed by one `write()`. There is no intermediate persisted state in which a loadout references a deleted list.
 
+### Which text tokens clear WCAG AA on a row background
+
+*Added 2026-08-10, after #139's review.*
+
+SPEC-0003 makes WCAG 2.1 AA mandatory but names no admissible colour tokens, so every new rule re-derives whether a given token passes. That is how #139 shipped two 4.17:1 strings for review to catch. Measured against `--scroll-track` `#17130c`, the background of a loadout row and a list card:
+
+| Token | Value | Ratio | Normal text (needs 4.5:1) |
+|---|---|---|---|
+| `--text` | `#c9bda0` | 9.93:1 | pass |
+| `--text-muted` | `#a3936f` | 6.13:1 | pass |
+| `--text-dim` | `#857659` | **4.17:1** | **fail** |
+
+`--text-dim` is usable for large text (≥18.66px, or 14px bold — SC 1.4.3's 3:1 threshold) and for non-text indicators, but not for body-sized strings on these surfaces. Recording it here makes the question a lookup rather than a computation.
+
+Note `.ll-empty` on `main` carries the same violation and is deliberately untouched — it belongs to #93 (a11y Tier 3, text contrast and focus visibility), which owns contrast repo-wide.
+
 ## Risks / Trade-offs
 
 - **Cross-collection ownership check is new and easy to omit** → It is called out as the first bold item in the spec's Confirmation list, and gets a dedicated scenario. The test asserting token A cannot file into token B's list should be written before the endpoint.
@@ -442,7 +458,7 @@ Settled on 2026-08-10, when three changes were accepted after using the shipped 
 
 Raised by the 2026-08-10 amendments:
 
-- Does the preview show traits? The spec requires weapons and equipment and leaves traits open. Traits are numerous and textual rather than iconographic, so they may summarise better as a count than as tiles.
+- ~~Does the preview show traits?~~ **Resolved by #139: a count, no tiles.** Traits appear in the preview's single text equivalent ("…3 tools, 2 consumables, 1 trait") and draw no imagery. A traits-only loadout reads "Empty — no weapons or equipment · 1 trait", because what is empty is the *strip*, not the record — asserting "Empty" about a loadout that holds something would be a wrong claim about the record.
 - Should an inherited description be distinguished *visually* from a written one — greyed, italic, marked "from The Turncoat"? The spec already settles the non-visual half: it MUST NOT be announced as though the user wrote it. What remains open is whether to also mark it on screen, which is more honest and more cluttered.
 - Is 10 the right threshold? It is a judgement recorded as one. Worth revisiting once there is any usage data, and cheap to change by design.
 - **Where** in the loadout row does the description sit, and how tall is it before it clamps? The spec requires it to be bounded with a reveal affordance and to never overflow the row, but not where the clamp falls — one line beside the preview and a full paragraph on expand are both conforming, and they read very differently.

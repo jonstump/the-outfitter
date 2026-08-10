@@ -163,33 +163,29 @@ flowchart TD
 
     subgraph PROC["Per hunter"]
         META["id · name · description<br/>revision · ingestedAt"]
-        IMG["source image<br/>downscale + re-encode"]
+        IMG["source image<br/>trim to alpha bbox + re-encode"]
     end
 
     subgraph committed["Generated, committed"]
         JSON["client/src/data/hunters.json"]
-        THUMB["images/hunters/{slug}-thumb"]
-        FULL["images/hunters/{slug}"]
+        ART["images/hunters/{slug}<br/>one trimmed asset"]
     end
 
     META --> JSON
-    IMG --> THUMB
-    IMG --> FULL
+    IMG --> ART
 
     subgraph consumers["Consumers — zero wiki requests at runtime"]
-        PICKER["Portrait picker grid<br/>uses THUMB"]
-        HEADER["List header / detail<br/>uses FULL"]
+        PICKER["Portrait picker grid"]
+        HEADER["List header / detail"]
         PH["SPEC-0003 placeholder"]
     end
 
     JSON --> PICKER
     JSON --> HEADER
-    THUMB --> PICKER
-    FULL --> HEADER
-    THUMB -.->|"full missing"| HEADER
-    FULL -.->|"thumb missing"| PICKER
-    PICKER -.->|"both missing"| PH
-    HEADER -.->|"both missing"| PH
+    ART --> PICKER
+    ART --> HEADER
+    PICKER -.->|"portrait missing"| PH
+    HEADER -.->|"portrait missing"| PH
 ```
 
 ## More Information
@@ -197,7 +193,7 @@ flowchart TD
 * Extends **ADR-0005** (Scrape Item Stats and Descriptions into a Generated, Committed Data File) — this is a fourth consumer of `scripts/lib/wiki.mjs` and follows the same generated-committed-data, revision-provenance, and offline-invocation rules. It also inherits ADR-0005's open question about how a backend-scheduled scrape reaches committed data.
 * Enables **ADR-0006** (Organize Saved Loadouts into User-Named Lists Illustrated with Hunter Portraits), which explicitly defers dataset sourcing to this decision, and **SPEC-0003**, whose sequencing step 1 is "scrape hunter names only."
 * Related to **ADR-0002** (Source Weapon/Equipment Images via a One-Time, Self-Hosted Scrape) — portraits and descriptions are subject to its self-hosting and attribution rules, reached through ADR-0005.
-* **SPEC-0003's dataset contract has been amended to match this decision.** It previously said the dataset provides "a portrait asset" — singular, which could express neither two sizes nor the cross-size fallback rule. Its "Hunter Dataset Consumption Contract" requirement now names both sizes, the rule that a consumer requests the size appropriate to its context, and the fallback ordering (other size before placeholder).
+* **SPEC-0003's dataset contract has been amended to match this decision.** It previously said the dataset provides "a portrait asset" — singular, which could express neither two sizes nor the cross-size fallback rule, so its "Hunter Dataset Consumption Contract" was rewritten to name both sizes, the size-selection rule, and the fallback ordering. *(Superseded by the 2026-08-10 amendment below, which returns that contract to a single asset and a two-rung ladder. The diagram above was updated to match; this bullet is kept as the record of why it once said otherwise.)*
 * **Deliberately left to the spec, not fixed here:** exact thumbnail and full-size dimensions, the image encoder and any format fallback chain, and the byte budget the confirmation criterion asserts against. Those are tuning decisions that want measurement, and pinning them in an ADR would force an ADR revision every time a number moves.
 * **Open question worth settling early:** which image-processing library. It is the first such dependency in the repo, it only ever runs in a human-invoked script rather than in the app or the build, and it should be a devDependency for that reason. Worth choosing deliberately rather than by whichever example gets copied first.
 
