@@ -178,6 +178,8 @@ This capability consumes a hunters dataset; it does not specify how that dataset
 
 The dataset SHALL provide, for each hunter, a stable identifier, a display name, and portrait assets self-hosted under the application's own origin. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
+Portraits are encoded as AVIF (SPEC-0004). The render site's extension-resolution chain SHALL include `avif`, so that adding portraits requires no change at the call site — the same property that lets the item scrape replace or re-extension its images freely.
+
 When the size appropriate to a context is unavailable, consuming code SHALL fall back to the other size before falling back to the placeholder. A too-large image is a performance cost; an empty tile is a defect.
 
 Consuming code MUST tolerate a dataset entry that lacks either or both portrait sizes, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
@@ -196,6 +198,11 @@ Consuming code MUST tolerate a dataset entry that lacks either or both portrait 
 
 - **WHEN** a list references a hunter for which neither portrait size is present
 - **THEN** the UI SHALL fall back to a neutral placeholder using the same fallback mechanism SPEC-0001 defines for items, and SHALL NOT render a broken image
+
+#### Scenario: The extension chain resolves AVIF portraits
+
+- **WHEN** a portrait exists only as AVIF
+- **THEN** the render site SHALL resolve and display it without any per-hunter configuration
 
 #### Scenario: A list survives its hunter leaving the dataset
 

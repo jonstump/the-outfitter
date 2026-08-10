@@ -97,16 +97,18 @@ The dataset SHALL cover the full roster the wiki lists, not a subset.
 
 ### Requirement: Two Portrait Sizes Per Hunter
 
-The scrape SHALL emit two self-hosted portrait assets per hunter under `client/public/images/hunters/`: a thumbnail at **192px** wide and a full size at **440px** wide, each preserving the source aspect ratio.
+The scrape SHALL emit two self-hosted portrait assets per hunter under `client/public/images/hunters/`: a thumbnail at **192px** wide and a full size at **320px** wide, each preserving the source aspect ratio.
 
-Both sizes SHALL be downscaled and re-encoded from the wiki original rather than stored as served. Portraits SHALL be encoded as **WebP**.
+Both sizes SHALL be downscaled and re-encoded from the wiki original rather than stored as served. Portraits SHALL be encoded as **AVIF**.
+
+Both dimensions are derived from what actually renders, at 2× for high-DPI displays. The largest place a portrait appears is a 154×220 list card, which needs 308px wide; 320px gives modest headroom. Picker tiles are 96px, needing 192px. Storing detail beyond what any surface displays costs bytes across the whole roster and buys nothing — a full size at 440px wide would carry roughly twice the pixels of anything on screen.
 
 A source image narrower than a target width SHALL NOT be upscaled; it SHALL be re-encoded at its native width.
 
 #### Scenario: Both sizes are produced
 
 - **WHEN** a hunter with an available portrait is scraped
-- **THEN** both a 192px-wide and a 440px-wide WebP SHALL be written for that hunter
+- **THEN** both a 192px-wide and a 320px-wide AVIF SHALL be written for that hunter
 
 #### Scenario: The thumbnail is materially smaller
 
@@ -115,16 +117,23 @@ A source image narrower than a target width SHALL NOT be upscaled; it SHALL be r
 
 #### Scenario: Small sources are not upscaled
 
-- **WHEN** a source portrait is narrower than 440px
+- **WHEN** a source portrait is narrower than 320px
 - **THEN** the full-size asset SHALL be written at the source's native width rather than upscaled
+
+#### Scenario: The full size stays crisp at the largest render
+
+- **WHEN** the full size is displayed on the 154×220 list card on a 2× display
+- **THEN** the asset SHALL be at least as wide as the rendered CSS width doubled, so it is not upscaled by the browser
 
 ### Requirement: Portrait Payload Budget
 
 Portraits are the heaviest assets this application ships. The roster is roughly **285 hunters**, so a per-asset budget alone is not a budget — it is a per-asset budget multiplied by 285.
 
-**Per asset:** the thumbnail SHALL be at most **20 KB** and the full size at most **60 KB**.
+**Per asset:** the thumbnail SHALL be at most **15 KB** and the full size at most **25 KB**.
 
-**In total:** the committed portrait payload SHALL NOT exceed **25 MB** across all hunters and both sizes.
+**In total:** the committed portrait payload SHALL NOT exceed **12 MB** across all hunters and both sizes.
+
+These follow from the dimensions and encoder above rather than being chosen independently: a 192px AVIF photograph and a 320px one are comfortably inside those figures at good quality. They remain estimates until measured against real art — see the open questions in design.md.
 
 A generated asset exceeding its per-asset budget SHALL fail that hunter with a recorded reason rather than being written. A run whose output would exceed the total ceiling SHALL fail with the projected total and the ceiling, rather than writing a partial set that silently breaches it.
 
@@ -132,18 +141,18 @@ Both are enforced by failing, not warning. An oversized asset is invisible in re
 
 #### Scenario: An oversized asset is rejected, not written
 
-- **WHEN** encoding produces a thumbnail above 20 KB or a full size above 60 KB
+- **WHEN** encoding produces a thumbnail above 15 KB or a full size above 25 KB
 - **THEN** that hunter SHALL be recorded as failed with the measured size and the budget, and the oversized file SHALL NOT be written
 
 #### Scenario: A run exceeding the total ceiling fails
 
-- **WHEN** the projected total across all hunters and both sizes would exceed 25 MB
+- **WHEN** the projected total across all hunters and both sizes would exceed 12 MB
 - **THEN** the run SHALL fail, reporting the projected total and the ceiling, rather than committing a partial set
 
 #### Scenario: The committed set is within budget
 
 - **WHEN** the committed portrait assets are measured
-- **THEN** every thumbnail SHALL be at most 20 KB, every full size at most 60 KB, and the total at most 25 MB
+- **THEN** every thumbnail SHALL be at most 15 KB, every full size at most 25 KB, and the total at most 12 MB
 
 ### Requirement: Consumption Contract Compatibility
 
