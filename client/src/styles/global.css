@@ -153,6 +153,14 @@ button {
   flex-direction: column;
 }
 
+/* Saved loadouts span the full page beneath both columns. The roster is a card grid
+   (auto-fill, minmax(150px, 1fr)) — in a 400px column it could only ever fit two across,
+   which wasted the space and buried the expanded list far down the page. */
+.loadouts-row {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
 .app-footer {
   padding: 0 24px 28px;
   max-width: 1440px;
