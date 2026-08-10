@@ -527,6 +527,16 @@ describe("acquisition normalisation", () => {
 });
 
 describe("portrait encoding and budgets", () => {
+  it("pins the trim threshold to the value the spec fixes", () => {
+    // Deliberately a LITERAL, and deliberately outside the sharp-dependent block so it runs on any
+    // machine. Every other threshold assertion in this file derives its fixture from the constant
+    // and therefore follows it anywhere: editing 8 to 32 left the whole suite green, which is how
+    // this gap was found. SPEC-0004 makes the value normative — "two conforming implementations
+    // produce identical dimensions" is a claim about the number, not about the comparison — so
+    // changing it is a spec edit, and this is the assertion that says so out loud.
+    assert.equal(ALPHA_TRIM_THRESHOLD, 8);
+  });
+
   it("emits exactly one asset, at the trimmed bounding box, with no resize step", async () => {
     const sharp = fakeSharp({ box: { left: 90, top: 13, width: 207, height: 230 } });
     const out = await encodePortrait(PNG_BYTES, sharp, { hunter: "X" });
@@ -692,24 +702,56 @@ describe("trimming against real images", { skip: realSharp ? false : "sharp is n
     });
   });
 
-  it("puts the boundary exactly at the threshold, from both sides", async () => {
-    // Pinned from both directions so the constant cannot drift silently: one below is margin, the
-    // threshold itself is subject. Asserting only one side would let any larger value pass.
-    const build = async (alpha) => {
-      const width = 20;
-      const height = 20;
-      const channels = 4;
-      const data = Buffer.alloc(width * height * channels);
-      for (let y = 8; y < 12; y += 1) for (let x = 8; x < 12; x += 1) data[(y * width + x) * channels + 3] = 255;
-      data[(3 * width + 2) * channels + 3] = alpha;
-      return realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
-    };
+  /** A solid block, plus one stray pixel at a caller-chosen alpha well outside it. */
+  async function blockWithStrayPixel(alpha) {
+    const width = 20;
+    const height = 20;
+    const channels = 4;
+    const data = Buffer.alloc(width * height * channels);
+    for (let y = 8; y < 12; y += 1) for (let x = 8; x < 12; x += 1) data[(y * width + x) * channels + 3] = 255;
+    data[(3 * width + 2) * channels + 3] = alpha;
+    return realSharp(data, { raw: { width, height, channels } }).png().toBuffer();
+  }
 
-    const below = await findAlphaBoundingBox(await build(ALPHA_TRIM_THRESHOLD - 1), realSharp);
-    assert.deepEqual(below, { left: 8, top: 8, width: 4, height: 4 }, "below the threshold is margin");
+  const BLOCK_ONLY = { left: 8, top: 8, width: 4, height: 4 };
+  const BLOCK_PLUS_STRAY = { left: 2, top: 3, width: 10, height: 9 };
 
-    const at = await findAlphaBoundingBox(await build(ALPHA_TRIM_THRESHOLD), realSharp);
-    assert.deepEqual(at, { left: 2, top: 3, width: 10, height: 9 }, "at the threshold is subject");
+  it("treats the comparison as inclusive of the threshold and exclusive below it", async () => {
+    // The RELATION, not the value: whatever the constant is, one below it is margin and the value
+    // itself is subject. Asserting only one side would let any larger threshold pass.
+    //
+    // Note what this deliberately does NOT cover. Both fixtures are derived from the constant, so
+    // this test follows it anywhere — it stays green if someone edits 8 to 32. The value is pinned
+    // separately, against a literal, in "the trim threshold is the value the spec fixes".
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(ALPHA_TRIM_THRESHOLD - 1), realSharp),
+      BLOCK_ONLY,
+      "below the threshold is margin"
+    );
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(ALPHA_TRIM_THRESHOLD), realSharp),
+      BLOCK_PLUS_STRAY,
+      "at the threshold is subject"
+    );
+  });
+
+  it("applies an injected threshold rather than the shipped constant", async () => {
+    // Exercises the `threshold` option itself, at a value the pipeline never ships, so the scan is
+    // shown to be genuinely parameterised rather than comparing against a hardcoded 8 that happens
+    // to agree with the constant. Without this the option is API surface no caller uses.
+    const injected = 64;
+    assert.notEqual(injected, ALPHA_TRIM_THRESHOLD, "the point is to differ from the default");
+
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(injected - 1), realSharp, { threshold: injected }),
+      BLOCK_ONLY,
+      "below the INJECTED threshold is margin, even though it is above the default"
+    );
+    assert.deepEqual(
+      await findAlphaBoundingBox(await blockWithStrayPixel(injected), realSharp, { threshold: injected }),
+      BLOCK_PLUS_STRAY,
+      "at the injected threshold is subject"
+    );
   });
 
   it("encodes the wash-carrying source at the subject's size, not the canvas's", async () => {

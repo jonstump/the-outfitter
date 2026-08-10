@@ -632,9 +632,15 @@ export const ALPHA_TRIM_THRESHOLD = 8;
  * Returns { left, top, width, height }, or null when no pixel reaches the threshold and the
  * source therefore has no visible subject to trim to.
  *
- * `threshold` is injectable so a test can pin the boundary from both sides without depending on
- * the shipped constant, but production callers take the default: the value is normative, and a
- * caller choosing its own would be the "moving target" the explicit scan exists to avoid.
+ * `threshold` is injectable so a test can drive the comparison at a value the pipeline never
+ * ships, showing the scan is genuinely parameterised rather than agreeing with the constant by
+ * coincidence. Production callers take the default: the value is normative, and a caller choosing
+ * its own would be the "moving target" the explicit scan exists to avoid.
+ *
+ * The shipped value is pinned against a literal in the test suite rather than here. Every
+ * assertion that derives its fixture from ALPHA_TRIM_THRESHOLD follows the constant wherever it
+ * goes, so none of them can catch it being edited — which is a property worth stating, because it
+ * was true of every threshold test in this suite until it was measured.
  */
 export async function findAlphaBoundingBox(sourceBuffer, sharp, { threshold = ALPHA_TRIM_THRESHOLD } = {}) {
   const { data, info } = await sharp(sourceBuffer).raw().toBuffer({ resolveWithObject: true });
