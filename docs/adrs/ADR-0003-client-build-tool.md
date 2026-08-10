@@ -112,4 +112,6 @@ A bundler marketed as zero-config, with automatic dependency installation and mu
 
 ## More Information
 
-This ADR intentionally stops short of a final decision. Vite is already running in production and nothing in this document should be read as a signal to migrate away from it preemptively — it's flagged here so the tradeoffs are visible and the choice can be consciously re-affirmed (or changed) via `/sdd:status` once reviewed, rather than left as an unexamined default.
+An earlier draft of this ADR was written as an open question — "Vite is the incumbent, here are the alternatives" — and closed by inviting the choice to be re-affirmed or changed via `/sdd:status` once reviewed. That review has happened, and the decision is the one recorded above: Vite stays, on the disqualifications in the Decision Outcome rather than on incumbency. The original closing paragraph is replaced rather than left in place, because it told a reader the opposite of both this ADR's `accepted` status and its own Decision Outcome.
+
+Nothing here should be read as a signal to migrate away from Vite preemptively. If the app's requirements change in a way that reopens the question — SSR, file-based routing, or a second deployment target — that belongs in a new ADR superseding this one rather than an amendment here.

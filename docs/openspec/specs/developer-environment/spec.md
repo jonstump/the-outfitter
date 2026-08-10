@@ -12,7 +12,11 @@ This capability formalizes how The Outfitter's developer environment is pinned, 
 
 The gap this capability closes is concrete. Node 20 was pinned in four places (`.nvmrc`, `.github/workflows/ci.yml`, and twice in `Dockerfile`) with no mechanism keeping them in sync, and nothing read any of them automatically — the machine ADR-0004 was authored on resolves `node` to v24.13.1. The README instructs `npm install` while CI and the production image run `npm ci`, permitting lockfile drift that surfaces only as a CI failure on an unrelated pull request. No `.env.example` existed, so the four environment variables the app reads were discoverable only by grepping source.
 
-**Implementation status.** The requirements below are partially satisfied. `mise.toml`, `.npmrc`, and `.env.example` now exist at the repo root, and the root `package.json` declares `engines.node` — this covers "Automatic Toolchain Activation", "Toolchain Enforcement at Install Time", and "Documented Environment Variables". The remaining four requirements are not yet implemented: `.github/workflows/ci.yml` still hardcodes `node-version: "20"` and has no lockfile-integrity step, `Dockerfile` still hardcodes its Node tag in both stages, and the README still instructs `npm install`.
+**Implementation status.** Most of this capability is in place. `mise.toml`, `.npmrc`, and `.env.example` exist at the repo root and the root `package.json` declares `engines.node`; `.github/workflows/ci.yml` resolves Node via `node-version-file: .nvmrc` and verifies lockfile integrity on every pull request; the `Dockerfile` declares a single `ARG NODE_VERSION` consumed by both of its stages. Three gaps remain:
+
+- **Single Reproducible Install Command** — the README still instructs `npm install` (#57).
+- **Documented Environment Variables** — `.env.example` omits `OUTFITTER_DB_FILE`, which `server/src/db.js` reads, and `mise.toml` carries no `[env]` section to load the documented variables on activation (#57).
+- **Task Interface Stability** — there is no root `test` script and the README documents no test command, so CI runs the client and scrape suites but not the server's.
 
 ## Requirements
 
@@ -62,7 +66,7 @@ The toolchain declaration MUST remain consistent with `.nvmrc`. Contributors SHA
 
 The root `package.json` SHALL declare an `engines.node` range matching the canonical pin, and the repository SHALL configure npm so that a Node version outside that range causes installation to fail rather than emit a warning. A repo-root `.npmrc` containing `engine-strict=true` is the RECOMMENDED mechanism.
 
-The enforcement mechanism MUST cause a non-zero exit code, and its output MUST name the required version range. If `engine-strict=true` produces spurious failures originating from a dependency's own `engines` field rather than the root package's, the repository SHOULD replace it with a `preinstall` script that checks `process.versions.node` against the root range and exits non-zero. Whichever mechanism is in place MUST carry a governing comment identifying it as the enforcement point.
+The enforcement mechanism MUST cause a non-zero exit code, and its output MUST name the required version range. If `engine-strict=true` produces spurious failures originating from a dependency's own `engines` field rather than the root package's, the repository SHALL replace it with a `preinstall` script that checks `process.versions.node` against the root range and exits non-zero. Whichever mechanism is in place MUST carry a governing comment identifying it as the enforcement point.
 
 #### Scenario: Installing on an unsupported Node major fails loudly
 

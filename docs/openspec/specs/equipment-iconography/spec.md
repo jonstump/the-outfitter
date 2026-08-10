@@ -108,7 +108,7 @@ Because this revision introduces real photographic imagery (not purely decorativ
 
 ### Dynamic Content Regions
 
-Dynamically updated content (HTMX swaps, auto-refresh panels, real-time status updates) MUST use `aria-live` regions:
+Content that changes without a page load MUST use `aria-live` regions. In this application that means the regions React re-renders in place — the picker's result rows as a filter or category changes, the equipment and trait panels as slots fill, and the share/save message banner:
 - `aria-live="polite"` for non-urgent updates
 - `aria-live="assertive"` for critical status changes
 
