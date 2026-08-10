@@ -1074,6 +1074,13 @@ button {
   align-items: center;
   justify-content: center;
 }
+.ll-card-art .item-thumb {
+  /* The base .item-thumb carries a border and background for item rows, where the thumb is
+     a small framed tile. Here it is stretched over the whole card, so that framing renders
+     as an inset rectangle around the ~70%-wide SVG fallback. Reset both. */
+  background: none;
+  border: none;
+}
 .ll-card-art .item-thumb,
 .ll-card-art img {
   width: 100%;
