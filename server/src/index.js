@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { loadoutsRouter } from "./routes/loadouts.js";
+import { loadoutListsRouter } from "./routes/loadoutLists.js";
 import { db } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,9 +37,14 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Explicit body-size cap (SPEC-0003 Security Requirements). express.json() defaults to
+// 100kb implicitly; stating it means the limit is a decision on the record rather than a
+// framework default that could shift under an upgrade. Loadout and list payloads are
+// small — this is generous.
+app.use(express.json({ limit: "64kb" }));
 
 app.use("/api/loadouts", loadoutsRouter);
+app.use("/api/loadout-lists", loadoutListsRouter);
 
 // Lightweight liveness endpoint for orchestrators/load balancers (issue #31).
 app.get("/healthz", (_req, res) => {

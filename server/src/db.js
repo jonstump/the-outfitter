@@ -15,7 +15,9 @@ const dbFile = process.env.OUTFITTER_DB_FILE
   ? path.resolve(process.env.OUTFITTER_DB_FILE)
   : path.join(__dirname, "..", "data", "db.json");
 
-const defaultData = { loadouts: [] };
+// Governing: ADR-0006, SPEC-0003 REQ "List Identity Is User-Owned and Independent of
+// Portrait". `loadoutLists` is a second token-scoped collection alongside `loadouts`.
+const defaultData = { loadouts: [], loadoutLists: [] };
 
 export const db = new Low(new JSONFile(dbFile), defaultData);
 
@@ -26,6 +28,10 @@ try {
   await db.read();
   db.data ||= defaultData;
   db.data.loadouts ||= [];
+  // Absent on any data file written before SPEC-0003. An empty collection is the correct
+  // starting state — there is nothing to migrate, since a loadout with no `listId` is
+  // already Unassigned by definition.
+  db.data.loadoutLists ||= [];
 
   // Records written before per-user ownership (issue #17) have no `owner` field.
   // They are marked with a `legacy` flag rather than folded into any named
@@ -42,7 +48,9 @@ try {
   // count as token-shaped — enumerating known-bad values one at a time is how
   // this check drifted in the first place.
   const TOKEN_SHAPED_OWNER = /^(?=[a-f0-9-]{36}$|[tT]-[A-Za-z0-9]{10,}|request-scoped:[a-f0-9-]{36}$)/;
-  for (const record of db.data.loadouts) {
+  // The same quarantine applies to every owned collection. A list whose owner is not
+  // token-shaped can never be reached by any header value, exactly as for loadouts.
+  for (const record of [...db.data.loadouts, ...db.data.loadoutLists]) {
     if (!record.owner || !TOKEN_SHAPED_OWNER.test(record.owner)) {
       delete record.owner;
       record.legacy = true;

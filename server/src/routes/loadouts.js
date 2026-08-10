@@ -1,68 +1,20 @@
 import { Router } from "express";
-import { createHash, randomUUID } from "node:crypto";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import {
+  callerToken,
+  ipLimiter,
+  liveRecords,
+  publicRecord,
+  tokenLimiter,
+} from "../lib/ownership.js";
+
+// Ownership primitives (callerToken, liveRecords, the stacked rate limiters) moved to
+// ../lib/ownership.js when SPEC-0003 added a second owned collection. Both routers MUST
+// agree exactly on what a caller token is and which records are reachable — a divergence
+// is a cross-user leak, which is what issue #17 closed. One definition, two importers.
 
 export const loadoutsRouter = Router();
-
-// Per-user ownership boundary (issue #17): every loadout record is scoped to the
-// client-issued token that created it. Requests that carry no token (e.g. curl)
-// never touch another client's data — they get a fresh per-request identity, so
-// anything they save is scoped to that single request and invisible to everyone
-// else (including their own later no-token requests). There is deliberately no
-// shared anonymous bucket: one would expose every legacy no-owner record to any
-// request that simply omits the header, recreating the leak #17 closes.
-const ANON = "request-scoped";
-
-function callerToken(req) {
-  const token = req.get("x-loadout-token") || "";
-  if (typeof token === "string" && token.trim()) return token.trim().slice(0, 200);
-  // Anonymous requests get a random identity so they can't observe/overwrite
-  // any persisted scope, including each other's.
-  return `${ANON}:${randomUUID()}`;
-}
-
-// Basic throttling on the write/delete endpoints — defense-in-depth
-// independent of the ownership model (issue #21). Two stacked limiters:
-//  - ipLimiter: a hard per-IP floor so rotating the client-controlled token
-//    can't bypass rate limiting entirely (abuse/DoS protection).
-//  - tokenLimiter: per-client-token fairness so users sharing a NAT don't
-//    collectively trip the IP floor; anonymous (no-token) requests key by IP.
-const WRITE_PER_IP = 240; // generous hard floor (4x the per-token budget)
-const WRITE_PER_TOKEN = 60;
-
-// Normalize the client IP (IPv6 subnetting handled by the library's helper) and
-// prefix it so keys stay within the rate-limiter store's size limits.
-function ipKey(req) {
-  const ip = ipKeyGenerator(req.ip || "unknown", 56);
-  return `ip:${createHash("sha256").update(ip).digest("hex").slice(0, 32)}`;
-}
-
-const ipLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: WRITE_PER_IP,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  keyGenerator: ipKey,
-});
-
-function tokenLimiterKey(req) {
-  const token = req.get("x-loadout-token");
-  return token && typeof token === "string" && token.trim() ? `tok:${token.trim().slice(0, 200)}` : ipKey(req);
-}
-
-const tokenLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: WRITE_PER_TOKEN,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  keyGenerator: (req) => tokenLimiterKey(req),
-});
-
-// Live records are those owned by a client token; legacy pre-token records
-// (issue #17, marked `legacy: true` at boot in db.js) have no owner and are
-// excluded from every handler so no header value can ever reach them.
-const liveRecords = (list) => list.filter((l) => !l.legacy);
 
 // Wire shape the client's toData()/fromData() (client/src/utils/loadoutCodec.js)
 // produces: { w, e, tr, n, b } — item references as numeric catalog indices on
@@ -101,7 +53,7 @@ loadoutsRouter.get("/", async (_req, res) => {
     const token = callerToken(_req);
     const mine = liveRecords(db.data.loadouts)
       .filter((l) => l.owner === token)
-      .map(({ owner, ...record }) => record);
+      .map(publicRecord);
     res.json(mine);
   } catch (err) {
     console.error("GET /api/loadouts failed:", err);
@@ -139,8 +91,7 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     }
 
     await db.write();
-    const { owner, ...publicRecord } = record;
-    res.status(existing ? 200 : 201).json(publicRecord);
+    res.status(existing ? 200 : 201).json(publicRecord(record));
   } catch (err) {
     console.error("POST /api/loadouts failed:", err);
     res.status(500).json({ error: "failed to save loadout" });
