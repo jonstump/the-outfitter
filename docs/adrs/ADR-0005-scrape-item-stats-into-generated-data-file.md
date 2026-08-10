@@ -230,6 +230,7 @@ flowchart TD
 * **ADR-0001** (superseded by ADR-0002) is the earlier decision to avoid wiki-sourced assets entirely; it is listed for history only.
 * **SPEC-0001** "Ethical, Self-Hosted Image Sourcing" and "Error Handling Standards" constrain the existing scrape script; the stat-scraping extension must satisfy both — see `docs/openspec/specs/equipment-iconography/`.
 * [**Weapon catalog vs. huntshowdown.wiki.gg — reconciliation audit**](../audits/weapon-catalog-wiki-audit.md) is the evidence base for the amendment below, and the closest thing this decision has to an implementation spec for `scrape-stats.mjs`. It carries the per-weapon mapping of catalog rows to wiki paths, the seed URL list for the crawler queue, the twelve structural properties of the wiki's page organization the parser has to survive, and the coverage delta (146 wiki pages against 39 catalog rows). Its numeric values are deliberately marked `[VERIFY]` — direct HTTP access to the wiki was blocked when it was written, so it is authoritative on *page structure and identity* and explicitly not on stat values, which are the scraper's job to fetch rather than a human's to transcribe.
+* [**Equipment catalog vs. huntshowdown.wiki.gg — reconciliation audit**](../audits/equipment-catalog-wiki-audit.md) is the companion covering everything the weapon audit skipped: `TOOLS`, `CONS`, `TRAITS`, the `AMMO` pools, the four group taxonomies, and the loadout rules encoded in `calc.js`/`loadoutSlice.js`. It is the evidence base for the second amendment below, carries a scrape-target list designed to concatenate with the weapon audit's into one crawler queue, and adds fourteen structural properties of the wiki that are specific to these categories. Same evidence discipline: authoritative on page identity and structure, explicitly `[VERIFY]` on stat values, since wiki egress was still blocked when it was written.
 * Existing implementation touchpoints: `scripts/scrape-images.mjs` (fetch, robots, rate limit, slugify, sentinel errors — the pieces to extract into `scripts/lib/wiki.mjs`), `scripts/scrape-images.test.mjs` (must keep passing across the extraction), `client/src/data/catalog.js` (item tuples, `AMMO`/`AMMO_LABEL` pools, id stability contract), `client/src/components/ItemThumb/ItemThumb.jsx` (fallback chain to imitate for missing stats).
 * Implementation order this implies: extract `scripts/lib/wiki.mjs` and re-point `scrape-images.mjs` at it (behavior-preserving, existing tests green) *before* writing `scrape-stats.mjs`. Writing the second script first guarantees a duplicated `slugify()`.
 * Out of scope, and left for at least one future ADR: the revision-history-driven incremental refresh sketched in the context above. Open questions it will have to settle include how change detection reads the wiki's histories (MediaWiki exposes revision and recent-changes data through an API, which is a different and much lighter client than the HTML page fetch used here — `scripts/lib/wiki.mjs` should not assume HTML scraping is the only access mode); where the ingested-revision watermark is persisted once the backend owns it rather than the repo; how a scrape run triggered by a server reaches the committed data this ADR chose as the data home, which may reopen the "server-side stat store" option rejected below; and what cadence and failure/retry behavior the scheduler needs. This decision deliberately does not prejudge any of those — it only ensures the fetchers have the per-item, per-payload granularity that design will need, and leaves behind the revision baseline it will start from.
@@ -411,3 +412,162 @@ keys with identical scraped content, and the existing confirmation check will pa
 * World weapons are classified and skipped, not reported as parse failures
 * The run summary states coverage against `Category:Weapons` (pages seen vs. catalog rows), so a
   green run over 39 of 146 pages cannot read as complete
+
+---
+
+## Amendment (2026-08-10): findings from the equipment-catalog wiki audit
+
+A companion reconciliation audit of `TOOLS`, `CONS`, `TRAITS`, the `AMMO` pools, the four group
+taxonomies, and the loadout rules encoded in `calc.js`/`loadoutSlice.js`
+([`docs/audits/equipment-catalog-wiki-audit.md`](../audits/equipment-catalog-wiki-audit.md))
+covers everything the weapon audit skipped. As with that one, **none of it changes the decision.**
+It adds constraints on `scrape-stats.mjs`, and it corrects one claim the previous amendment
+inherited from the weapon audit.
+
+### The retirement blocker is gone — the previous amendment's "Retiring a duplicate row is blocked by the wire format" is superseded
+
+That section says a plain deletion is unsafe because "`loadoutCodec.js`'s legacy pre-versioning
+decoder resolves weapons by raw array position". **That is no longer true.** `loadoutCodec.js` now
+pins the pre-versioning catalog order in four frozen tables (`LEGACY_WEAPON_IDS` and siblings,
+issue #68, commit `9fbcba2`); `fromLegacy()` resolves an index to a **stable id** through them and
+only then locates that id's current position. A mid-array deletion cannot shift what a legacy record
+resolves to, and `loadoutCodec.test.js` asserts every non-null legacy entry still resolves, so
+retiring a row fails a test until someone records what the legacy slot should do. Issue #67 retired
+the duplicate `Choke Bomb` consumable on exactly that basis — a merged mid-array deletion.
+
+Retiring `winfield-m1873c` is therefore **unblocked**, needing one deliberate decision
+(`LEGACY_WEAPON_IDS[16]` → `frontier-73c` or `null`) rather than new machinery. The consequence for
+this ADR stands unchanged in the meantime: while both rows exist the id → wiki-path map is not
+injective, and `KNOWN_CATALOG_DUPLICATES` is what keeps the scraper from writing two keys with
+identical content.
+
+### Coverage is worse outside weapons than the weapon audit implied — except for tools
+
+| Category | Wiki pages | Catalog rows | Assessment |
+|---|---|---|---|
+| Tools | 23 (`Category:Tools`) | 22 | **Complete.** 2 of the 23 are tombstones (Electric Lamp, removed in 2.0; Multitool, never shipped); the Katana is filed under `Weapons`. Reconciles exactly. |
+| Consumables | 54 (`Category:Consumables`) | 30 | ~13 are Tarot Cards (Scarce, deliberately out of scope); **~11 pages remain unaccounted for** and must be enumerated by a crawl. |
+| Traits | 58 (`Category:Purchasable_Traits`) | 32 | **26 purchasable traits missing — 45% of the roster.** The wider `Category:Traits` reports 85, the balance being Scarce (14) and Event (18) traits that are correctly out of scope. |
+
+The confirmation criterion "every key in `itemStats.json` resolves to a real item" remains a one-way
+check, and the trait gap is the sharpest illustration yet: it will pass at full green over 32 of 58
+purchasable traits. The run summary must state coverage against `Category:Purchasable_Traits` and
+`Category:Consumables`, not only `Category:Weapons`.
+
+**Unlike the weapon gap, this one is not schema-blocked.** All 26 missing traits fit the existing
+`[id, name, up, group]` tuple; only `group` must be hand-assigned. Trait import can proceed ahead of
+the variant schema work.
+
+### Category listings contain removed items — a generalization of the world-weapon rule
+
+The previous amendment recorded that "not every weapon page is a buyable item" (the Maxim). The
+equipment audit shows the problem is broader and lives in *discovery*, not just parsing: **9% of
+`Category:Tools` is tombstones.** `Tools/Electric_Lamp` documents an item removed in Update 2.0 —
+one this repo deliberately deleted, holding a `null` legacy slot for it — and `Tools/Multitool`
+documents a prototype that never shipped. Both are ordinary category members with ordinary pages.
+
+Therefore: **a discovery diff must classify each unmatched page before proposing it as missing.**
+A crawler that diffs a category index against the catalog and treats the remainder as "items to
+add" will propose re-adding items this repo removed on purpose. Expect tombstones in every category,
+including a meaningful share of the ~11 unresolved consumable pages.
+
+### `AMMO` has no source page and must not be scraped
+
+The weapon audit marked the `AMMO` table "verify all". The equipment audit establishes **why it
+could not be verified, and the answer is structural.** The wiki does not publish a per-class ammo
+price table: `/wiki/Ammo` is prose about ammo *behaviour*, and `Category:Dumdum_Ammo` and its
+siblings are titled "All Dumdum Ammo **Weapons**" — indexes of weapons, not of ammo variants. The
+wiki models a custom-ammo variant as a **per-weapon unlock with a per-weapon price**, in the
+weapon-tree table the previous amendment already identified as page sections rather than pages.
+
+So the app's shared per-class pool is an app-side abstraction with no wiki equivalent, in the same
+sense `group` is. **`scrape-stats.mjs` MUST NOT attempt to populate `AMMO`.** It should collect
+per-weapon ammo prices into `itemStats.json` as the deferred `availableAmmo` list, which
+additionally provides the first real test of the pool model's unstated assumption — that every
+weapon in a class charges the same price for the same variant.
+
+**A gap in the previous amendment's ammo hazard:** it gates `ammoClass` changes behind a
+`FORMAT_VERSION` bump because ammo selection persists as a bare index into `AMMO[ammoClass]`. But
+**inserting, removing, or reordering a variant within a pool has exactly the same effect** on every
+saved selection, and nothing currently says so. Same gate, same reason.
+
+### `group` is unscrapable in all four categories, and the wiki's taxonomies cannot supply it
+
+The wiki uses one unified, **multi-valued** subcategory scheme across Tools and Consumables
+(Throwable, Placeable, Rending, Healing, Noise, Explosive, Fire, Poison, Vision, Light) and two
+orthogonal schemes for traits (Regular/Burn/Scarce/Event by acquisition; Offensive/Defensive/
+Movement/Supportive/Solo/Catalyst by function). None is a single-valued UI category. The audit's
+verdict is that all four app taxonomies are defensible simplifications and should be kept, so the
+existing rule generalizes: **the scraper must not derive `group` for any category**, and a new row's
+`group` is hand-assigned.
+
+### A new class of silent rules bug: a data field that is a rules input
+
+`CONS[i][3]` (`type`) is not cosmetic — `calc.js`'s `catCount()` counts by it and
+`loadoutSlice.js` enforces the game's 4-per-category cap on the result. The audit found the app
+models 2 of the game's 4 cap categories (`Shot`, `Throwable`; the game also has `Placeable` and
+`Tarot Card`) and misfiles three rows: `ammo-box` and `tool-box` are Placeables typed as Throwable,
+and `medical-pack` is a Placeable typed as `Shot` because the wiki files it under **both**
+`Category:Healing_Consumables` (an *effect* category) and `Category:Placeable_Consumables` (the
+*cap* category).
+
+This is the failure mode that matters for a scraper: **assigning `type` from "the item's wiki
+subcategory" produces a well-formed value that is right about half the time, and the error surfaces
+as permitted-loadout drift rather than as a parse failure.** It will never appear in a run summary.
+Therefore: `type` may only be derived from the mechanical subcategories (Throwable / Placeable /
+Shot / Tarot Card); the thematic ones (Healing, Rending, Fire, Poison, Noise, Vision, Light) are
+`group` signals at most and must never populate `type`.
+
+**One genuinely good piece of news, recorded because the previous amendment asked for exactly this
+check.** It closed by warning that two write-through fields had turned out to carry hidden coupling
+and that any further field should be checked for what reads it positionally. `type` was checked:
+it is **never persisted** (`toData()` stores `["C", id]`) and never feeds a slug, so it can be
+corrected freely with no `FORMAT_VERSION` bump and no migration. A documented negative result, so
+the check is not repeated from scratch.
+
+### Acquisition class decides catalog membership, and nothing records it
+
+Tarot Cards (~13 consumable pages), 14 Scarce traits, and 18 Event traits are excluded from the
+catalog because they cannot be bought — with Hunt Dollars or with Upgrade Points. This is the same
+judgment already encoded by hand in `AMMO.special: []`. It is correct and it is nowhere
+machine-readable, so every roster diff re-litigates it (issue #37 has now done so twice, the second
+time on a premise — "limited-time event item" — that Update 2.8.1 has falsified; Tarot Cards are
+permanent, and Scarce is the durable reason).
+
+Therefore: **scrape the acquisition classification** (Regular / Burn / Scarce / Event for traits;
+purchasable-vs-Scarce for consumables) into `itemStats.json`, even though it is not a catalog field.
+It is what makes "should this item have a row?" checkable instead of arguable.
+
+### Game rules that live in code, not data
+
+Verified against the wiki, and recorded here because a change to any of them is a rules-engine
+change with tests, not a catalog edit — a distinction this ADR's write-through machinery cannot make
+and must not be extended to cover:
+
+* **Confirmed correct:** the 8-slot equipment ceiling (`calc.js` `slotMax`), the one-per-Tool rule
+  (`loadoutSlice.js:45` — the wiki's Tools page states "each Tool has to be a different one"
+  alongside 2.8's free-placement rule, resolving issue #41), and the 10-UP default trait budget.
+* **Correct logic, wrong inputs:** the 4-per-consumable-category cap, per the `type` finding above.
+* **Missing:** the game's **15-trait maximum** is not enforced anywhere. `addTrait` checks only for
+  duplicates, and the UP budget is opt-in and defaults off, so the app currently permits all 32
+  traits — and would permit all 58 after the roster import above.
+
+### Additional confirmation criteria
+
+* `scrape-stats.mjs` never writes `AMMO`; per-weapon ammo prices land in `itemStats.json` only
+* A `--write-catalog` run that reorders, inserts into, or removes from an `AMMO` pool is gated
+  behind a `FORMAT_VERSION` bump and a saved-selection migration, on the same terms as `ammoClass`
+* `CONS.type` is only ever assigned from a mechanical cap category, never from a thematic effect
+  category, asserted by a fixture where the item belongs to both (the Medical Pack)
+* No scrape derives `group` for any of the four categories
+* Discovery output classifies every unmatched category member as live / removed / never-shipped
+  before proposing it as a missing item; the Electric Lamp and Multitool are skipped with a recorded
+  reason, the way world weapons are
+* Every scraped trait record carries its acquisition class (Regular / Burn / Scarce / Event), and
+  every scraped consumable records whether it is purchasable with Hunt Dollars
+* The run summary states coverage against `Category:Purchasable_Traits` and `Category:Consumables`
+  as well as `Category:Weapons`
+* A page fetch returning HTTP 200 is not treated as confirming the display name — the canonical
+  title is read from the page, since MediaWiki serves renamed pages through redirects and this
+  wiki's redirect coverage is inconsistent (`Tools/Alert_Trip_Mine` does *not* redirect to
+  `Tools/Alert_Trip_Mines`, which is why that override exists)

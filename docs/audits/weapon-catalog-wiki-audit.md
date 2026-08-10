@@ -43,7 +43,7 @@ further by hand — which is exactly the toil ADR-0005 exists to absorb.
 
 | File | Contents |
 |------|----------|
-| `client/src/data/catalog.js` | **The entire game dataset.** Hand-authored ES module, 334 lines. Exports `AMMO` (ammo-class → purchasable variant price pairs), `AMMO_LABEL`, `WEAPONS` (39 tuples), `WEAPON_GROUPS`, `TOOLS` (22), `TOOL_GROUPS`, `CONS` (31), `CONS_GROUPS`, `TRAITS` (32), `TRAIT_GROUPS`, plus SVG fallback-icon maps (`THUMBS`, `TOOL_THUMBS`, `TRAIT_THUMBS`, `CONS_THUMBS`, `HUNTER_THUMBS`) and their dispatch functions, and the symbolic ids `QM` / `FIRST_AID_KIT`. |
+| `client/src/data/catalog.js` | **The entire game dataset.** Hand-authored ES module, 334 lines. Exports `AMMO` (ammo-class → purchasable variant price pairs), `AMMO_LABEL`, `WEAPONS` (39 tuples), `WEAPON_GROUPS`, `TOOLS` (22), `TOOL_GROUPS`, `CONS` (31), `CONS_GROUPS`, `TRAITS` (32), `TRAIT_GROUPS`, plus SVG fallback-icon maps (`THUMBS`, `TOOL_THUMBS`, `TRAIT_THUMBS`, `CONS_THUMBS`, `HUNTER_THUMBS`) and their dispatch functions, and the symbolic ids `QM` / `FIRST_AID_KIT`. *(Corrected 2026-08-10: `CONS` is 30, not 31 — the duplicate `Choke Bomb` row was retired in `4b1ab50` / issue #67.)* |
 | `client/src/data/catalog.test.js` | Vitest suite asserting catalog invariants — id uniqueness/stability, tuple shape, group membership, thumb dispatch coverage. |
 | `client/src/data/hunterThumb.test.js` | Vitest suite for `hunterThumb()` determinism. |
 
@@ -606,24 +606,53 @@ Sequence the work: schema → parent map → bulk import. Not import-first.
 
 ---
 
-## Correction (2026-08-10): deleting a duplicate row is not safe
+## Correction (2026-08-10): retiring a duplicate row — superseded, then resolved
 
-An earlier revision of this document recommended deleting the `winfield-m1873c` row. **That
-was wrong.** `client/src/utils/loadoutCodec.js`'s legacy (pre-versioning) decoder resolves
-weapons by **raw array position** — `fromLegacy()` returns the stored index and uses it
-directly against the current `WEAPONS` array. Removing a row at index 16 shifts every later
-weapon down one, so a legacy saved loadout referencing `romero-77` would silently resolve to
-`crossbow`. This is exactly the failure the `catalog.js` "appended, never inserted" rule
-exists to prevent.
+This section has been wrong in both directions. Recording the full history, because ADR-0005
+cites this document as an implementation spec and the current state is what matters.
 
-The current-format decoder (`fromV1`) is safe — it resolves by stable id and drops unknown
-ids. Only legacy records are at risk, and they are the ones with no version field to
-distinguish them.
+**Revision 1** recommended deleting the `winfield-m1873c` row outright.
 
-Retiring a weapon row therefore needs the same treatment the Choke/Stalker Beetle tool slots
-got: an explicit legacy-index carve-out (`LEGACY_DROPPED_TOOL_INDICES` is the precedent),
-which is a deliberate change with its own tests, not a splice. Until that lands the duplicate
-row stays and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
+**Revision 2** retracted that, on the grounds that `loadoutCodec.js`'s legacy (pre-versioning)
+decoder resolved weapons by **raw array position**, so removing a row would shift every later
+weapon and silently remap old saved loadouts.
+
+**Revision 3 (this one): revision 2 described a constraint that no longer exists, and revision 1's
+recommendation is unblocked.** Verified against `client/src/utils/loadoutCodec.js` on 2026-08-10:
+
+- Lines 93-142 define four **frozen** tables — `LEGACY_WEAPON_IDS`, `LEGACY_TOOL_IDS`,
+  `LEGACY_CONS_IDS`, `LEGACY_TRAIT_IDS` — reconstructed from `catalog.js` at `2a6bd05^`, the last
+  commit before the versioned format landed.
+- `fromLegacy()` (line 167) resolves **through** them: `legacyId(LEGACY_WEAPON_IDS, w[0])` yields a
+  stable id, and only then does `indexOfItem(WEAPONS, id)` locate its current position. The live
+  arrays are never read positionally.
+- Their own docstring states it: *"deleting or reordering a live catalog row is now free, because
+  these resolve through stable ids rather than through whatever the live arrays hold."*
+- `loadoutCodec.test.js:181-184` asserts every non-null legacy entry still resolves against the live
+  catalog — so retiring a row **fails a test** until whoever retired it records what the legacy slot
+  should do.
+
+This landed in `9fbcba2` ("Pin the legacy catalog order instead of decoding against the live
+arrays", issue #68), which was itself prompted by a real instance of the bug revision 2 feared:
+commit `e0076d3` dropped the Electric Lamp from `TOOLS` position 9 and slid legacy positions 9-17
+down one, so a legacy record meaning Spyglass came back as Decoys.
+
+**The existence proof that this is settled:** `4b1ab50` (issue #67) retired the duplicate `Choke
+Bomb` row from the *middle* of `CONS`, with `LEGACY_CONS_IDS[13]` redirecting that legacy slot to
+the surviving `choke-bombs` tool id. That is a completed, merged, mid-array deletion.
+
+**Current guidance.** Retiring `winfield-m1873c` is safe and unblocked. It requires one deliberate
+decision, not a bare splice: give its `LEGACY_WEAPON_IDS[16]` slot either a replacement id
+(`frontier-73c`, since they are the same weapon — the `choke-bombs` precedent) or `null`. The test
+above enforces that the decision is made. The `catalog.js` "appended, never inserted" convention
+remains good practice but is now belt-and-braces rather than the sole protection.
+
+`scripts/lib/wiki.mjs`'s `KNOWN_CATALOG_DUPLICATES` docstring already describes this correctly and
+needs no change.
+
+**Confidence: HIGH.** Read directly from source, corroborated by a merged precedent, and confirmed
+by running `catalog.test.js` (24 tests) and `loadoutCodec.test.js` (32 tests) — 56 passing, 0
+failures. No wiki access was involved in reaching it.
 
 ---
 
@@ -649,8 +678,11 @@ row stays and the scraper skips it via `KNOWN_CATALOG_DUPLICATES`.
    write-through renames the image path the UI requests, so name changes must not be applied
    without renaming the assets alongside them.
 6. **Then** design the variant schema and import List 2.
-7. **Separately**, decide how to retire duplicate catalog rows given the legacy-index
-   constraint above.
+7. **Separately**, retire `winfield-m1873c`. **No longer blocked** — see the correction above:
+   `loadoutCodec.js` pins the pre-versioning order in its own frozen tables (issue #68), so a
+   mid-array delete is safe. It needs one deliberate call: point `LEGACY_WEAPON_IDS[16]` at
+   `frontier-73c` (same weapon, following the `choke-bombs` precedent from issue #67) or at `null`.
+   A test fails until that call is made.
 8. **Separately**, decide whether saved loadouts should persist the ammo *id* rather than its
    index into `AMMO[ammoClass]`. Today `loadoutCodec.js` stores `w.a` as a bare number, so
    changing a weapon's `ammoClass` silently re-resolves every saved selection for it against a
