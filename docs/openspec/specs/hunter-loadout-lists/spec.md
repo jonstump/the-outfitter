@@ -19,6 +19,13 @@ Portrait assets are self-hosted scraped images and therefore inherit the sourcin
 
 See ADR-0006 for the decision record and the rejected alternatives.
 
+**Implementation status.** Partially implemented, following the sequencing ADR-0006 sets out. In place: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, and the grouped roster UI. Outstanding:
+
+- **The hunter portrait picker**, its filtering, and **favorite hunters** — no picker surface exists yet; lists are created with a name only (#88, #114).
+- **Accent colour rendering** — the server assigns and persists an accent from the six-value palette, but no client surface reads it and `--list-accent-{1..6}` are not yet defined in `global.css` (#88).
+- **Portrait rendering against the real dataset** — the render site currently resolves `/images/hunters/{hunterId}` through the item extension chain, which carries no size segment and no `avif`. Both land with SPEC-0004's pipeline (#110).
+- **Hunter-name and recently-used sort orders** — the comparators are implemented and unit-tested but not offered. Hunter-name is blocked on SPEC-0004's dataset; recently-used is blocked on a `lastUsedAt` the server does not record.
+
 ## Requirements
 
 ### Requirement: List Identity Is User-Owned and Independent of Portrait
