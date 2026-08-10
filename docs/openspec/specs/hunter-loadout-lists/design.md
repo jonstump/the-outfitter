@@ -24,6 +24,7 @@ Two pieces of existing history constrain this design:
 - Leave the loadout wire format and share URLs untouched
 - Make retirement cheap and non-destructive
 - Extend the existing ownership model without weakening it
+- *(2026-08-10)* Make a filed loadout identifiable without opening it, and let a user say what it is for in their own words
 
 ### Non-Goals
 
@@ -158,9 +159,11 @@ This does not demote the classification filters — they remain required, and `a
 
 The requirement is written to not collide with "The Hunter Picker Does Not Restrict or Mark Reuse". Filtering narrows *which hunters are candidates*; it never distinguishes among the candidates it shows. A filtered-out hunter is out of scope for this selection, which is a different thing from a shown hunter being marked as already used.
 
-### Favorites filter and sort; they do not gate
+### Favorites filter and group; they do not gate
 
-**Choice**: Favorites are a token-scoped server-side collection, surfaced as a sort priority plus an optional "favorites only" toggle over the full roster. Never pre-populated.
+*Amended 2026-08-10: favorites move from an inline sort priority to their own section, and the "favorites only" toggle gains a threshold default. The gate/filter distinction below is unchanged and is what constrains both amendments.*
+
+**Choice**: Favorites are a token-scoped server-side collection, surfaced as a distinct section ahead of the rest of the roster plus an optional "favorites only" toggle over the full roster. Never pre-populated.
 
 **Rationale**: Favorites were proposed as a way to cut the picker's loading cost. They do not do that, and it is worth being precise about why: the picker requirement already mandates lazy loading, so bytes fetched are proportional to what the user scrolls to, not to the roster. A favorites-only picker and a lazily-loaded 242-hunter picker fetch roughly the same initial payload — whatever fills the viewport.
 
@@ -174,8 +177,92 @@ Storage mirrors `loadoutLists` exactly — a token-scoped collection under the o
 
 **Alternatives considered**:
 - *Gate: show only favorites, with a "browse all" escape*: rejected — strongest at reducing 242 to a handful, but it hides hunters the user has not discovered, and discovery is the whole reason a picker exists.
-- *Pin only, no toggle*: viable and smaller, but with 242 hunters the "favorites only" view is the one a returning user wants most, and it costs one boolean.
+- *Section only, no toggle*: viable and smaller, but with 242 hunters the "favorites only" view is the one a returning user wants most, and it costs one boolean.
 - *Client-only, in localStorage*: rejected for the reason SPEC-0003 already gives about grouping — it would split the durability model, with lists surviving server-side while the preferences that organise them do not.
+
+### Favorites are sectioned, not sorted inline
+
+*Added 2026-08-10. Reverses the inline-sort half of the decision above.*
+
+**Choice**: Favorited hunters are lifted into their own labelled, counted section ahead of the rest of the roster. A hunter appears in exactly one section — never in both.
+
+**Rationale**: The inline sort was correct about priority and wrong about legibility. Sorting favorites to the front of a single 242-tile grid produces no visible boundary: the user sees tiles in an order they did not choose and cannot tell where their own curation stops and the alphabet resumes. The information "these six are yours" was present in the ordering but not *readable*.
+
+A section makes the boundary explicit and gives each group a count, which is the number the user actually wants ("I have six favorites") rather than the number the old design surfaced ("241 of 242 hunters").
+
+Appearing once rather than in both sections is the load-bearing sub-decision. Duplication would keep the alphabetical roster complete, but it breaks three things at once: the section counts stop summing to the match count, the picker's roving tabindex has to treat one hunter as two cells with two focus positions, and a user who favorites from the lower copy watches a tile appear above while the one they clicked stays put. One hunter, one tile.
+
+**Alternatives considered**:
+- *Keep the inline sort*: rejected as above — priority without a legible boundary.
+- *Show favorites in both sections*: rejected for the three costs above. The alphabetical completeness it preserves is worth less than a coherent count and a single focus position per hunter.
+- *A separate favorites tab*: rejected — it hides the rest of the roster behind a mode switch, which is the gate this capability has twice declined to build.
+
+### "Favorites only" defaults on past ten
+
+*Added 2026-08-10.*
+
+**Choice**: When an owner has more than 10 favorites, the picker opens with "favorites only" already enabled. The toggle stays visible and one click restores the full roster; the auto-enabled state is never persisted.
+
+**Rationale**: Past a certain amount of curation, the favorites *are* the roster the user means. Someone who has marked eleven hunters has expressed a preference strong enough that opening to 242 tiles makes them re-narrow on every visit.
+
+This stays a filter rather than a gate under the definition the decision above establishes, and the distinction is worth stating precisely because it looks like a gate: a gate is a state the user cannot leave, while this is a **default position of a control they can operate**. Every hunter remains exactly one click away, the control is visible rather than buried, and turning it off works immediately. What changes is where the control starts, not what it can reach.
+
+**Ten is a judgement, not a measurement, and the spec says so.** There is no study behind it. It sits at roughly the point where a favorites section stops fitting on one screen and starts needing its own scroll — which is when the full roster below it has stopped being useful context and started being noise. It is specified as a named constant precisely because it is the kind of number that should be cheap to revise once real usage exists.
+
+Not persisting the override follows the rule already governing the selected list and the sort order: what the user favorited is durable, which subset they are looking at right now is not. Persisting it would also make the threshold sticky in a confusing way — a user who turned it off once would never see the default again, and the feature would silently stop working for exactly the people it was built for.
+
+**Alternatives considered**:
+- *Never auto-enable*: the status quo. Rejected because it makes heavy curators pay the same 242-tile *scrolling* cost as a brand-new user, which is backwards. (The byte cost is already equal either way — lazy loading settled that, per the decision above. This is about the user's time, not the payload.)
+- *Auto-enable and persist the override*: rejected — one dismissal would disable the behaviour permanently, and it would put a view preference in the data file.
+- *Auto-enable with no way off*: rejected outright. That is the gate this capability has consistently refused.
+- *Scale the threshold to roster size*: rejected as false precision; a fixed constant is easier to reason about and to change.
+
+### Loadout previews are derived from the record, never stored
+
+*Added 2026-08-10.*
+
+**Choice**: Each loadout row previews its contents by decoding the `data` payload the record already carries. No summary field is added, no extra request is made, and nothing is written.
+
+**Rationale**: The row already decodes `data` to compute and display cost, so the contents are in hand at render time. Everything the preview needs is therefore free; the only real question was whether to *cache* it, and caching would be the expensive choice — a stored summary is a second source of truth for something the payload already states exactly, and it goes stale the moment the catalog changes.
+
+Deriving also inherits a property the decoder already guarantees: unknown catalog ids are dropped rather than rendered. A loadout saved against a since-removed item previews as the items that survive, with no per-item placeholder and no error, because that behaviour lives in `fromData` rather than in the preview.
+
+**Responsiveness is a shedding order, not a breakpoint table.** The row's non-negotiable elements are its name, its cost and its move control — those are how the user identifies and files the loadout, and they survive every width. The preview is the part that yields.
+
+The order is **equipment before weapons, later slots before earlier ones**, with whatever was dropped summarised as a count. That ranking is not arbitrary: weapons are what people name a loadout after ("Sparks + Conversion"), and the first weapon slot is the one that identifies a build. Equipment is more interchangeable and more numerous, so it is where shedding costs the least recognition. Saying only "show fewer items" would have left two implementations dropping opposite ends of the same list, both conforming and one useless.
+
+Specifying an order rather than pixel breakpoints keeps this implementable in whatever layout the panel ends up with, and keeps "the row must never overflow" as the property a test can actually assert.
+
+**Alternatives considered**:
+- *Store a denormalised summary on the record*: rejected — a second source of truth for data already present, stale on catalog change, and a schema addition for a rendering convenience.
+- *Fetch preview data on expand*: rejected — the payload is already in the record the client holds; a request would add latency to buy nothing.
+- *Render the full loadout inline*: rejected — that is the builder, and it would make a list of ten loadouts unreadable.
+
+### Descriptions are resolved from the dataset, not copied into the record
+
+*Added 2026-08-10.*
+
+**Choice**: `description` is a nullable field on the loadout envelope with three meaningful states — null (never edited), empty string (deliberately blank), and non-empty (the user's text). When null, the UI resolves the description of the hunter on the list the loadout is filed into, live from the hunters dataset. That text is never written into the record in order to display it.
+
+**Rationale**: The alternative — stamping the hunter's lore into the record at save time — is simpler to implement and worse in three specific ways. A re-scrape that fixes a typo would never reach existing records. Every loadout in a list would carry an identical several-hundred-byte copy of the same prose. And a loadout moved to a different list would keep the previous hunter's biography, which reads as a bug rather than as a feature.
+
+Resolving live avoids all three, at the cost of one genuine complication: **null and empty string have to mean different things.** A user who clears a description is expressing "this has no description", and re-inheriting the hunter's lore at that point would make the field impossible to empty. That is why the spec states the three states as a table rather than in prose — collapsing them to a truthy check is the obvious implementation and the wrong one.
+
+The inheritance path is deliberately indirect: loadout → list → hunter → description. A loadout has no hunter of its own, and giving it one would duplicate the list's portrait reference and immediately raise the question of which wins. Inheriting through the list means the answer is always "the list", and a loadout in Unassigned simply has nothing to inherit from — an ordinary state, not an error.
+
+**This is a read-time join, and it is a cheap one.** The hunters dataset is module-level and already indexed by id for `hunterNameFor`; the same lookup returns the description. The cost is one map access per rendered row.
+
+**Three states need three wire values, not two.** Because null carries meaning here, a PATCH cannot use "key absent" and "value null" interchangeably the way the loadout endpoints do today: absent means *leave it alone*, explicit null means *reset to inherited*, and empty string means *deliberately blank*. The same rule extends to `listId` on that endpoint, where explicit null is the only way to express "move to Unassigned" — previously unambiguous only because `listId` had no third state to confuse it with.
+
+**Editing must be reversible.** Without a restore path, the first edit permanently detaches a loadout from a dataset the whole design is built to keep it in sync with — the re-scrape benefit above would apply only to loadouts nobody had ever touched. Clearing to empty cannot be that path, because empty is already spoken for. So restoring inheritance is its own action, which is a small piece of UI in exchange for the field remaining a two-way door.
+
+**The cap governs stored text only.** A resolved default is never written to the record, so it is not subject to the server's length cap — which removes what would otherwise be a genuine coupling between this spec and SPEC-0004's scrape output. A future scrape producing longer prose cannot invalidate stored records or fail a read; the cap constrains only what a user types. It is set above the dataset's current maximum (404 characters) because the default is the text a user starts editing from, and a cap that rejected the app's own suggestion would be indefensible.
+
+**Alternatives considered**:
+- *Copy the lore in at creation*: rejected for the three reasons above. It was the other option genuinely on the table.
+- *Put the description on the list instead of the loadout*: simpler — the list is what has a hunter — but it gives every loadout in a list the same text and leaves no place for a note about a specific build.
+- *Both a list description and a loadout note*: deferred rather than rejected. It is the natural extension if per-loadout notes prove to want a separate home from inherited lore, and nothing here forecloses it.
+- *Store it in `data`*: rejected for the same reason `listId` is not in `data` — it would bump the format version, lengthen share URLs, and send one user's notes to another.
 
 ### List ordering is client-side, with alphabetical as the default
 
@@ -215,6 +302,7 @@ erDiagram
     HUNTER_PORTRAIT {
         string id PK "from hunters.json"
         string name "hunter display name"
+        string description "lore — inherited default"
         string slug "asset path stem"
         string sourceRevision "ADR-0005 provenance"
         string ingestedAt
@@ -235,11 +323,30 @@ erDiagram
         string name
         object data "wire format, UNCHANGED"
         uuid listId FK "nullable = Unassigned"
+        string description "null=inherit, ''=blank"
         string updatedAt
     }
 ```
 
 `HUNTER_PORTRAIT` is generated, committed, and identical for every user. `LOADOUT_LIST` and `LOADOUT` are per-user rows in `db.json`. The portrait relationship is deliberately many-to-one and carries no uniqueness constraint.
+
+`LOADOUT.description` is envelope state like `listId`, never part of `data`. Its null state is not "no description" but "inherit", and the inheritance is a read-time join along the existing edges — `LOADOUT → LOADOUT_LIST → HUNTER_PORTRAIT` — which is why the diagram needs no new relationship to express it:
+
+```mermaid
+flowchart LR
+    A["render a loadout row"] --> B{"description<br/>absent or null?"}
+    B -->|"no"| C["render stored text<br/>(empty string renders nothing)"]
+    B -->|"yes"| D{"filed into a list<br/>with a hunterId?"}
+    D -->|"no"| E["render nothing<br/>(Unassigned, or no portrait)"]
+    D -->|"yes"| F{"hunter in<br/>dataset?"}
+    F -->|"no"| E
+    F -->|"yes"| G["render hunter.description<br/>— nothing is written"]
+    style E fill:none,stroke:#888
+```
+
+The path terminating at "render nothing" three different ways is deliberate: no-hunter, no-list and hunter-left-the-dataset are all ordinary states, and none of them is an error or a reason to hide the row.
+
+**The first branch tests absent-or-null, not strictly null.** Every loadout record written before this field existed has no `description` key at all, so a strict `=== null` check would send all of them down the "render stored text" path and show nothing — silently denying inheritance to exactly the records that most need it. This is the same three-states-collapsed-to-two failure the risk register names, arriving through a comparison operator rather than through a truthy check.
 
 ### Filing a loadout — the ownership check in context
 
@@ -288,7 +395,11 @@ Both mutations are staged in memory and committed by one `write()`. There is no 
 - **Free-text list names can still drift** → Blunted rather than solved by defaulting the name from the chosen portrait, so lists only diverge from the roster's vocabulary when the user deliberately types something else.
 - **First heavy image assets in the app** → Portraits are photographic, the picker shows many at once, and the dataset covers the full roster rather than a subset. Mitigated by lazy-loading and the SPEC-0001 fallback chain; the sequencing below defers assets entirely until the feature works, so the weight lands last and can be tuned independently.
 - **Hunters dataset refreshes independently of stored lists** → A list may outlive its hunter's dataset entry. The spec requires such a list stay fully usable behind a neutral placeholder rather than breaking or disappearing; this is the concrete reason `hunterId` resolution must never be treated as a hard reference.
-- **Cross-artifact edges must stay in step with reversals** → SPEC-0003 `implements` ADR-0006, so a decision reversed here has to be reflected there or the graph reports two sources of truth. The in-use-marker reversal required an amendment to ADR-0006 for exactly this reason.
+- **Cross-artifact edges must stay in step with reversals** → SPEC-0003 `implements` ADR-0006, so a decision reversed here has to be reflected there or the graph reports two sources of truth. The in-use-marker reversal required an amendment to ADR-0006 for exactly this reason. The 2026-08-10 amendments do not reach ADR-0006: it records the filing model and the identity/imagery split, and says nothing about favorites ordering, row previews, or descriptions.
+- **`description`'s three states will get collapsed to two** → The obvious implementation is a truthy check, which silently merges "never edited" with "deliberately blank" and makes the field impossible to empty. Addressed by specifying the states as a table with a dedicated scenario for the cleared case; the test for "clearing does not re-inherit" is the one that catches the regression.
+- **Auto-enabling "favorites only" reads as a gate to a future reviewer** → It is a default, not a state the user cannot leave, but the two look alike in a screenshot. Addressed by stating the distinction in both the requirement and the decision, and by the scenario asserting every hunter stays one control away.
+- **Previews multiply image requests per expanded list** → A list of twenty loadouts could reference well over a hundred item icons. Mitigated by lazy loading and by shedding items at narrow widths; the icons are also the same small assets already cached from the equipment panel, so a returning user mostly re-renders from cache rather than refetching.
+- **Live-resolved descriptions change under the user on a re-scrape** → Intended, and the reason the field is resolved rather than copied, but it does mean text a user read yesterday may differ today. Bounded by the fact that it only ever affects loadouts the user has never edited; anything they typed is theirs and is never overwritten.
 
 ## Migration Plan
 
@@ -316,8 +427,23 @@ Settled during review of the initial draft, recorded so the reasoning is not re-
 - **In-use marker in the picker** — dropped. Reuse is unrestricted and unmarked.
 - **Catch-all group name** — "Unassigned", kept because it is technically accurate: those loadouts have no list assignment, as distinct from belonging to a category that happens to be uncategorized.
 
+Settled on 2026-08-10, when three changes were accepted after using the shipped feature:
+
+- **Favorites presentation** — a labelled section rather than an inline sort priority, with each hunter appearing exactly once. Showing favorites in both places was considered and rejected: it breaks the section counts, gives one hunter two focus positions, and makes favoriting from the lower copy look like nothing happened.
+- **Favorites-only default** — auto-enabled past 10 favorites, never persisted, always one click from the full roster. Ten is an explicit judgement call rather than a measured figure, recorded as such so it is not mistaken for a derived number.
+- **Description ownership** — on the loadout, inherited through its list's hunter, rather than on the list itself. A loadout has no hunter of its own; giving it one would duplicate the list's portrait reference and create a precedence question with no good answer.
+- **Description defaulting** — resolved live from the dataset while the field is null, not copied into the record at creation. Copying was the other real option; it loses re-scrape improvements, duplicates the prose per row, and makes a moved loadout keep the wrong hunter's biography.
+
 ## Open Questions
 
 - Should the undo affordance for a move ship in the first pass, or follow? A move removes the row from view, which argues for undo, but it is additive and the spec does not require it.
 - Should the expanded card animate open, or swap instantly? The prototype swaps instantly. Animation would help orient the user when a card grows to full width, but risks feeling sluggish in a panel that is otherwise immediate.
 - What is the right empty state for a brand-new user with no lists at all — an empty roster, or a prompt to create the first list?
+
+Raised by the 2026-08-10 amendments:
+
+- Does the preview show traits? The spec requires weapons and equipment and leaves traits open. Traits are numerous and textual rather than iconographic, so they may summarise better as a count than as tiles.
+- Should an inherited description be distinguished *visually* from a written one — greyed, italic, marked "from The Turncoat"? The spec already settles the non-visual half: it MUST NOT be announced as though the user wrote it. What remains open is whether to also mark it on screen, which is more honest and more cluttered.
+- Is 10 the right threshold? It is a judgement recorded as one. Worth revisiting once there is any usage data, and cheap to change by design.
+- **Where** in the loadout row does the description sit, and how tall is it before it clamps? The spec requires it to be bounded with a reveal affordance and to never overflow the row, but not where the clamp falls — one line beside the preview and a full paragraph on expand are both conforming, and they read very differently.
+- Should restoring inheritance be an explicit control ("use The Turncoat's description") or should clearing the field twice mean reset? The spec requires a distinct action and deliberately does not name it, since a double-clear gesture is undiscoverable.

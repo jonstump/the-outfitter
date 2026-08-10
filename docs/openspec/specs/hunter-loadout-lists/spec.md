@@ -1,6 +1,6 @@
 ---
 status: approved
-date: 2026-08-09
+date: 2026-08-10
 implements: [ADR-0006]
 requires: [SPEC-0001, SPEC-0004]
 ---
@@ -19,12 +19,13 @@ Portrait assets are self-hosted scraped images and therefore inherit the sourcin
 
 See ADR-0006 for the decision record and the rejected alternatives.
 
-**Implementation status.** Partially implemented, following the sequencing ADR-0006 sets out. In place: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, and the grouped roster UI. Outstanding:
+**Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
 
-- **The hunter portrait picker**, its filtering, and **favorite hunters** — no picker surface exists yet; lists are created with a name only (#88, #114).
-- **Accent colour rendering** — the server assigns and persists an accent from the six-value palette, but no client surface reads it and `--list-accent-{1..6}` are not yet defined in `global.css` (#88).
-- **Portrait rendering against the real dataset** — the render site currently resolves `/images/hunters/{hunterId}` through the item extension chain, which carries no size segment and no `avif`. Both land with SPEC-0004's pipeline (#110).
-- **Hunter-name sort order** — implemented, unit-tested, and wired, but withheld from the menu while the hunters dataset is empty, since it would resolve nothing. It appears automatically once `client/src/data/hunters.js` carries a roster (#109).
+Three **additive** changes were accepted on **2026-08-10** and are **not yet implemented**. Each is marked where it appears. (A fourth change of that date — dropping most-recently-used ordering — was a removal and is recorded in "List Ordering and Sorting".)
+
+- **Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold — amends "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
+- **Loadout rows preview what they hold** — new requirement, "Filed Loadouts Preview Their Contents"
+- **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged"
 
 ## Requirements
 
@@ -183,13 +184,15 @@ The set of a user's lists MUST NOT be derived from the distinct `listId` values 
 
 This capability consumes a hunters dataset; it does not specify how that dataset is produced. Production is specified by SPEC-0004 (Hunter Roster Dataset), which realizes ADR-0007.
 
-The dataset SHALL provide, for each hunter, a stable identifier, a display name, and portrait assets self-hosted under the application's own origin. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
+The dataset SHALL provide, for each hunter, a stable identifier, a display name, a description, and portrait assets self-hosted under the application's own origin *(description added 2026-08-10, consumed by "Loadouts Carry an Editable Description")*. Per ADR-0007 the portraits are supplied in two sizes — a thumbnail and a full size. Consuming code SHALL request the size appropriate to its context: the thumbnail for picker tiles and list-selector cards, the full size for an expanded list header. The application at runtime MUST NOT issue any request to the wiki in order to render a list.
 
 Portraits are encoded as AVIF (SPEC-0004). The render site's extension-resolution chain SHALL include `avif`, so that adding portraits requires no change at the call site — the same property that lets the item scrape replace or re-extension its images freely.
 
 When the size appropriate to a context is unavailable, consuming code SHALL fall back to the other size before falling back to the placeholder. A too-large image is a performance cost; an empty tile is a defect.
 
 Consuming code MUST tolerate a dataset entry that lacks either or both portrait sizes, and MUST tolerate a `hunterId` that is absent from the dataset entirely, since the dataset and a user's stored lists refresh independently.
+
+Consuming code MUST likewise tolerate a dataset entry whose description is absent or empty, rendering no description rather than an empty element or a placeholder *(added 2026-08-10)*. Every entry carries one today; the tolerance exists because the dataset refreshes independently of this spec.
 
 #### Scenario: Portraits are served from the application's own origin
 
@@ -215,6 +218,11 @@ Consuming code MUST tolerate a dataset entry that lacks either or both portrait 
 
 - **WHEN** a list references a `hunterId` that no longer appears in the dataset
 - **THEN** the list SHALL remain fully usable — selectable, renameable, and able to hold loadouts — rendering a neutral placeholder and its own name in place of the missing hunter
+
+#### Scenario: A hunter carrying no description yields no default
+
+- **WHEN** a loadout inherits its description from a hunter whose dataset entry has an absent or empty description
+- **THEN** no description SHALL be rendered, and neither the loadout nor the list SHALL fail
 
 ### Requirement: Lists Are Visually Distinguishable Independent of Portrait and Name
 
@@ -259,7 +267,7 @@ The picker SHALL offer an explicit "no portrait" choice, so a list can be create
 #### Scenario: The picker draws no distinction between used and unused hunters
 
 - **WHEN** the picker is displayed and at least one hunter is already used by another list
-- **THEN** those hunters SHALL be presented identically to unused hunters, with no badge, dimming, reordering, or count
+- **THEN** those hunters SHALL be presented identically to unused hunters within whichever section they belong to, with no badge, dimming, count, or ordering that derives from their being in use — the favorites sectioning being the only permitted grouping *(amended 2026-08-10)*
 
 #### Scenario: A list can be created with no portrait
 
@@ -274,7 +282,7 @@ The picker SHALL provide a free-text filter matching on hunter name. It SHALL pr
 
 The picker MUST NOT load every hunter's portrait eagerly. Images SHALL be loaded lazily, so the bytes fetched are proportional to what the user has actually scrolled to rather than to the size of the roster.
 
-Filtering SHALL narrow which hunters are shown; it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter.
+Filtering SHALL narrow which hunters are shown. Apart from the favorites sectioning that "Favorite Hunters" requires *(carve-out added 2026-08-10; not yet implemented)*, it MUST NOT reorder or hide hunters for any other reason. In particular, this requirement does not reintroduce the in-use marking that "The Hunter Picker Does Not Restrict or Mark Reuse" forbids — a hunter already used by another list is shown exactly like any other hunter that matches the filter, in whichever section it belongs to.
 
 An empty result SHALL say so, rather than rendering an empty grid.
 
@@ -296,7 +304,7 @@ An empty result SHALL say so, rather than rendering an empty grid.
 #### Scenario: Filtering does not mark reuse
 
 - **WHEN** a filter is applied and some matching hunters are already used by the user's other lists
-- **THEN** those hunters SHALL be presented identically to unused ones, with no badge, dimming, reordering, or count
+- **THEN** those hunters SHALL be presented identically to unused ones within whichever section they belong to, with no badge, dimming, count, or ordering that derives from their being in use — the favorites sectioning being the only permitted grouping *(amended 2026-08-10)*
 
 #### Scenario: An empty result is stated
 
@@ -309,13 +317,26 @@ With a roster of 242, finding the handful of hunters a user actually returns to 
 
 Favorites SHALL be token-scoped and persisted server-side, under the same ownership rules as lists: a favorite belongs to the token that created it, and MUST NOT be visible to any other token.
 
-Favorites SHALL act as a **filter and sort over the full roster**, never as a gate. Every hunter SHALL remain reachable regardless of what is favorited:
+Favorites SHALL act as a **filter and a grouping over the full roster**, never as a gate. Every hunter SHALL remain reachable regardless of what is favorited.
 
-- Favorited hunters SHALL sort ahead of unfavorited ones within whatever filter is active
+The five sectioning rules below were **amended 2026-08-10 and are not yet implemented** — they replace an inline sort in which favorites simply sorted ahead of unfavorited hunters within one undivided grid:
+
+- Favorited hunters SHALL be presented in their own labelled section, ahead of the rest of the roster
+- A hunter SHALL appear in exactly one section per render: in Favorites when favorited, in the main section otherwise. The picker MUST NOT render the same hunter twice
+- Both sections SHALL be narrowed by whatever filter is active, so a favorite that fails the active filter appears in neither
+- Each section SHALL be labelled and SHALL state its own count, so "6 favorites, 65 others" is legible without counting tiles
+- A section with no members SHALL be omitted entirely rather than rendered as an empty heading
+
+These two rules are unchanged and already implemented:
+
 - The picker SHALL offer a "favorites only" toggle
 - With that toggle off, the roster SHALL be shown in full
 
 An empty favorites set SHALL therefore behave as no filter at all, not as an empty picker. The system MUST NOT pre-populate favorites — a favorite records a choice the user made, and seeding it with arbitrary hunters would require the user to remove preferences they never expressed.
+
+**When the owner's favorite set is empty**, the "favorites only" toggle SHALL be off and SHALL be rendered disabled, carrying an accessible explanation of why. Enabling it would narrow 242 hunters to zero, which is exactly the empty picker this requirement forbids. If the set becomes empty while the picker is open — the user unfavorites their last hunter — the toggle SHALL reset to off and disabled in place, and the full roster SHALL return, rather than leaving an enabled filter matching nothing.
+
+**Sectioning replaces the previous inline sort.** The two are alternatives, not layers: a favorite is either lifted into its own section or sorted ahead within one list, and doing both would place a hunter above the section it is also inside. The previous behaviour is recorded here so this is read as a decision rather than as drift.
 
 Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: a favorite is the user's own preference, whereas reuse is a fact about their other lists, which "The Hunter Picker Does Not Restrict or Mark Reuse" requires stay unmarked.
 
@@ -329,10 +350,20 @@ Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: 
 - **WHEN** a request bearing token A fetches favorites
 - **THEN** the response SHALL contain only token A's favorites, and SHALL NOT reveal any favorite belonging to another token
 
-#### Scenario: Favorites sort ahead within the active filter
+#### Scenario: Favorites occupy their own section within the active filter
 
 - **WHEN** a user filters by an acquisition value and some matching hunters are favorited
-- **THEN** the favorited matches SHALL be shown before the unfavorited matches, and no non-matching hunter SHALL be shown
+- **THEN** the favorited matches SHALL appear in a labelled Favorites section ahead of a section holding the unfavorited matches, and no non-matching hunter SHALL be shown in either
+
+#### Scenario: A favorited hunter is not also listed among the others
+
+- **WHEN** the picker renders with at least one favorite
+- **THEN** each favorited hunter SHALL appear once, in the Favorites section only, and SHALL NOT also appear in the main section
+
+#### Scenario: A section with no members is omitted
+
+- **WHEN** a filter matches favorited hunters but no unfavorited ones
+- **THEN** the Favorites section SHALL be shown with its count and the main section SHALL be omitted rather than rendered empty
 
 #### Scenario: The full roster stays reachable
 
@@ -342,7 +373,12 @@ Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: 
 #### Scenario: An empty favorites set is not an empty picker
 
 - **WHEN** a user who has favorited nothing opens the picker
-- **THEN** the full roster SHALL be shown, and no favorites filter SHALL be applied
+- **THEN** the full roster SHALL be shown, no favorites filter SHALL be applied, and the "favorites only" toggle SHALL be off and disabled with an accessible explanation
+
+#### Scenario: Unfavoriting the last hunter restores the roster in place
+
+- **WHEN** a user with "favorites only" enabled unfavorites their last remaining favorite
+- **THEN** the toggle SHALL reset to off and disabled, and the full roster SHALL be shown without the user having to re-open the picker
 
 #### Scenario: Favorites are never pre-populated
 
@@ -353,6 +389,49 @@ Favoriting SHALL NOT restrict or mark reuse, and MUST NOT be conflated with it: 
 
 - **WHEN** a favorited hunter is also already used by one of the user's lists
 - **THEN** the picker SHALL indicate only that it is favorited, and SHALL NOT indicate that it is in use
+
+### Requirement: Favorites-Only Becomes the Default Past a Threshold
+
+*(added 2026-08-10; not yet implemented)*
+
+Curating past a certain number of favorites is itself evidence that the user has settled on who they care about. Once an owner's favorite count **exceeds 10**, the picker SHALL open with "favorites only" already enabled.
+
+This MUST remain a change to the **default position of a user-operable control**, and MUST NOT become a gate:
+
+- The toggle SHALL remain visible, SHALL remain operable whenever at least one favorite exists, and turning it off SHALL show the full roster immediately
+- Turning it off SHALL hold for the remainder of that picker session; reopening the picker SHALL re-apply the default
+- The auto-enabled state MUST NOT be persisted server-side, consistent with the toggle being client state under the same rule as the selected list and the sort order
+- At or below the threshold the picker SHALL open with the toggle off
+- The threshold SHALL be a single named constant, so changing it is one edit rather than a search
+
+The threshold is a product judgement rather than a measured figure; design.md records it as such so a later reader does not go looking for the study that produced it.
+
+Crossing the threshold MUST NOT retroactively change any stored favorite, and dropping back to the threshold or below SHALL restore the default-off behaviour on the next open. The empty-set rule stated in "Favorite Hunters" takes precedence over this one: a user whose favorites fall to zero SHALL see the full roster with the toggle off and disabled.
+
+#### Scenario: Past the threshold the picker opens filtered
+
+- **WHEN** a user with 11 favorites opens the picker
+- **THEN** "favorites only" SHALL be enabled, and only the 11 favorited hunters SHALL be shown
+
+#### Scenario: The full roster is always one control away
+
+- **WHEN** a user whose picker auto-enabled "favorites only" turns the toggle off
+- **THEN** every hunter SHALL be shown immediately, and no hunter SHALL be unreachable at any point
+
+#### Scenario: Turning it off does not persist
+
+- **WHEN** a user past the threshold turns "favorites only" off, closes the picker, and reopens it
+- **THEN** the picker SHALL again open with "favorites only" enabled, and the server's data file SHALL contain no field recording the toggle
+
+#### Scenario: At the threshold the default is off
+
+- **WHEN** a user with exactly 10 favorites opens the picker
+- **THEN** "favorites only" SHALL be off and the full roster SHALL be shown
+
+#### Scenario: Falling back below the threshold restores the default
+
+- **WHEN** a user with 11 favorites unfavorites one and reopens the picker
+- **THEN** "favorites only" SHALL be off and the full roster SHALL be shown
 
 ### Requirement: List Ordering and Sorting
 
@@ -397,9 +476,146 @@ A user's chosen sort order SHALL be treated as client state under the same rules
 - **WHEN** the server's data file is inspected after a user changes sort order
 - **THEN** no field recording the sort preference SHALL be present, and no write SHALL have occurred as a result
 
+### Requirement: Filed Loadouts Preview Their Contents
+
+*(added 2026-08-10; not yet implemented)*
+
+A loadout row currently shows a name and a cost. Neither tells the user what the loadout actually holds, so choosing among a list's loadouts means loading each one in turn and undoing the ones that were wrong.
+
+Each loadout row SHALL present a preview of what that loadout holds. The preview SHALL be derived from the record's existing `data` payload, and SHALL require **no additional request for loadout data** and no change to the stored record. Fetching the imagery that depicts it is not such a request.
+
+The preview SHALL cover the loadout's weapons and its equipment. Whether it also depicts traits is left open, since traits are textual rather than iconographic and may summarise better as a count. Preview imagery SHALL use SPEC-0001's asset-path convention and its fallback chain, and SHALL be lazy-loaded, so a list holding many loadouts fetches imagery proportional to what has been scrolled to rather than to the number of rows.
+
+**The preview SHALL be responsive, and narrowing the viewport MUST NOT cause the row to overflow horizontally or clip any control.** As available width decreases the preview SHALL shed content in this order — **equipment before weapons, and within each, later slots before earlier ones** — and SHALL summarise whatever it dropped as a count. Weapons SHALL be the last preview content to shed. The loadout's name, its cost, and its move control SHALL survive every width; the preview is the part that yields.
+
+An item that no longer resolves in the catalog SHALL be omitted from the preview, consistent with the decoder already dropping unknown ids. The preview SHALL render whatever resolves rather than a broken tile, a placeholder per missing item, or an error.
+
+A loadout holding nothing SHALL be stated as empty rather than rendered as an empty strip.
+
+Rendering a preview MUST NOT write to the record, MUST NOT alter `data`, and MUST NOT issue any request that mutates state.
+
+#### Scenario: The preview comes from the stored record
+
+- **WHEN** a list containing saved loadouts is expanded
+- **THEN** each row SHALL show a preview derived from that record's existing `data`, and no additional request SHALL be issued to fetch loadout contents
+
+#### Scenario: An unresolvable item is omitted, not broken
+
+- **WHEN** a saved loadout references a catalog item that no longer exists
+- **THEN** the preview SHALL render the items that do resolve and SHALL omit the one that does not, without rendering a broken image or failing the row
+
+#### Scenario: A narrow viewport sheds preview content
+
+- **WHEN** the panel is rendered at a phone width
+- **THEN** the row SHALL NOT overflow horizontally, the name, cost and move control SHALL remain present and operable, and the preview SHALL shed equipment before weapons with the remainder summarised as a count
+
+#### Scenario: An empty loadout says so
+
+- **WHEN** a saved loadout holds no weapons and no equipment
+- **THEN** the row SHALL state that it is empty rather than rendering an empty preview area
+
+#### Scenario: Previewing writes nothing
+
+- **WHEN** a list is expanded and its previews render
+- **THEN** the server's data file SHALL be unchanged, and no write request SHALL have been issued
+
+### Requirement: Loadouts Carry an Editable Description
+
+*(added 2026-08-10; not yet implemented)*
+
+Each saved loadout record MAY carry a `description` field on the record **envelope**, sibling to `name`, `listId` and `updatedAt`. The `description` field MUST NOT be placed inside the loadout's `data` payload.
+
+The field SHALL distinguish three states, and consuming code MUST NOT collapse them into two:
+
+| Stored value | Meaning | Rendered as |
+|---|---|---|
+| absent or null | never edited | the inherited default, resolved live |
+| empty string | deliberately blank | nothing |
+| non-empty string | the user's own text | that text |
+
+**The default is resolved, not copied.** When `description` is null, the UI SHALL render the description of the hunter referenced by the list the loadout is filed into, resolved through the hunters dataset at render time. The system MUST NOT write that text into the record in order to display it.
+
+Two consequences follow, and both are intended:
+
+- Moving an **unedited** loadout to a list with a different hunter SHALL re-inherit that list's hunter description. Moving an **edited** loadout SHALL preserve the user's text unchanged
+- A re-scrape that improves a hunter's description SHALL be reflected on every unedited loadout without touching a single stored record
+
+A loadout with no hunter to inherit from — filed into Unassigned, filed into a list carrying no `hunterId`, or filed into a list whose `hunterId` is absent from the dataset — SHALL render no description and SHALL remain fully usable. Absence of a default is an ordinary state, not an error.
+
+**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest. Hunter lore runs to several hundred characters and shares a row with the preview, so an unclamped description would dominate the row it is meant to annotate and would defeat the overflow guarantee "Filed Loadouts Preview Their Contents" makes. A description MUST NOT cause the row to overflow at any width.
+
+**Inheritance SHALL be restorable.** A user who has edited a description SHALL be able to return the loadout to the inherited state; editing MUST NOT be a one-way door. Clearing the field to empty is *not* that path — empty means deliberately blank — so restoring inheritance SHALL be a distinct, explicitly offered action that sets the stored value back to null.
+
+On the wire, the distinction between the three states SHALL be carried explicitly:
+
+- A write supplying `description: null` SHALL reset the field to the inherited state
+- A write supplying `description: ""` SHALL store the deliberately-blank state
+- A write **omitting** the `description` key SHALL leave the field unchanged
+
+The same distinction SHALL apply to `listId` on the same endpoint, where an explicit null files the loadout into Unassigned and an omitted key leaves its filing untouched. A write supplying neither key SHALL be rejected, so that "move" and "describe" remain independent operations rather than mutually required ones.
+
+Editing a description SHALL persist it under the same ownership rules as every other field on the record. The description SHALL be length-capped on the server with an explicit maximum. Editing a description MUST NOT alter `data`, the format version, `listId`, or the loadout's position in any list.
+
+#### Scenario: An unedited loadout shows its list's hunter description
+
+- **WHEN** a loadout with no stored description is filed into a list whose hunter is "The Turncoat"
+- **THEN** the loadout SHALL render The Turncoat's description from the hunters dataset, and the stored record SHALL still carry no `description` field
+
+#### Scenario: Editing replaces the inherited text
+
+- **WHEN** a user edits the description of a loadout that was showing an inherited default
+- **THEN** the typed text SHALL persist on the record, and the inherited default SHALL NOT be shown again for that loadout
+
+#### Scenario: Clearing a description leaves it blank rather than re-inheriting
+
+- **WHEN** a user clears an edited description to empty
+- **THEN** the record SHALL store an empty string, the loadout SHALL render no description, and the hunter's text MUST NOT reappear
+
+#### Scenario: Moving an unedited loadout re-inherits
+
+- **WHEN** a loadout with no stored description is moved from a list whose hunter is "The Turncoat" to one whose hunter is "The Rat"
+- **THEN** the loadout SHALL render The Rat's description
+
+#### Scenario: Moving an edited loadout preserves its text
+
+- **WHEN** a loadout with a user-written description is moved between lists
+- **THEN** its description SHALL be unchanged
+
+#### Scenario: A loadout with no hunter to inherit from
+
+- **WHEN** a loadout with no stored description sits in Unassigned, or in a list with no portrait
+- **THEN** no description SHALL be rendered, and the row SHALL remain fully usable
+
+#### Scenario: A hunter absent from the dataset yields no default
+
+- **WHEN** a loadout with no stored description is filed into a list whose `hunterId` no longer appears in the dataset
+- **THEN** no description SHALL be rendered, and neither the loadout nor the list SHALL fail
+
+#### Scenario: Inheritance can be restored after editing
+
+- **WHEN** a user restores an edited loadout to the inherited state
+- **THEN** the stored `description` SHALL be null again, and the loadout SHALL render its list hunter's description as it did before the edit
+
+#### Scenario: An omitted key is not a reset
+
+- **WHEN** a write changes a loadout's `listId` without supplying a `description` key
+- **THEN** the stored `description` SHALL be unchanged, and MUST NOT be reset to the inherited state
+
+#### Scenario: A write carrying neither field is rejected
+
+- **WHEN** a write to a loadout supplies neither `listId` nor `description`
+- **THEN** it SHALL be rejected with a client error and the stored record SHALL be unchanged
+
+#### Scenario: An over-long description is rejected
+
+- **WHEN** a description exceeding the server's cap is submitted
+- **THEN** the write SHALL be rejected with a client error and the stored record SHALL be unchanged
+
 ### Requirement: The Saved-Loadout Wire Format Is Unchanged
 
-This capability MUST NOT change the loadout wire format. The format version SHALL remain unchanged, and the encode and decode functions SHALL be unmodified. The `listId` field MUST NOT appear in any encoded loadout payload, share URL, or local draft.
+This capability MUST NOT change the loadout wire format. The format version SHALL remain unchanged, and the encode and decode functions SHALL be unmodified. The `listId` and `description` fields MUST NOT appear in any encoded loadout payload, share URL, or local draft.
+
+`description` is subject to this requirement for exactly the reason `listId` is: it is a property of the user's filing, not of the loadout itself. A recipient opening a share URL receives the build, not the sender's notes about it *(clause added 2026-08-10)*.
 
 #### Scenario: Share URLs are unaffected
 
@@ -415,6 +631,11 @@ This capability MUST NOT change the loadout wire format. The format version SHAL
 
 - **WHEN** the server validates an incoming loadout payload
 - **THEN** the validation applied to the `data` object SHALL be identical to the validation applied before this capability existed
+
+#### Scenario: A description never reaches the wire format
+
+- **WHEN** a user shares a loadout that carries a description
+- **THEN** the resulting share URL SHALL be byte-identical to the URL the same loadout would produce with no description, and the description SHALL NOT appear in it
 
 ### Requirement: The Selected List Is Client State
 
@@ -487,9 +708,11 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 | POST | /api/loadout-lists | Token-scoped | Create a list |
 | PATCH | /api/loadout-lists/:id | Token-scoped | Rename a list or change its portrait |
 | DELETE | /api/loadout-lists/:id | Token-scoped | Retire a list |
-| POST | /api/loadouts | Token-scoped | Save a loadout, optionally with a `listId` |
-| PATCH | /api/loadouts/:id | Token-scoped | Move a loadout between lists |
+| POST | /api/loadouts | Token-scoped | Save a loadout, optionally with a `listId` and a `description` |
+| PATCH | /api/loadouts/:id | Token-scoped | Move a loadout between lists, and/or edit its `description` |
 | DELETE | /api/loadouts/:id | Token-scoped | Delete a loadout |
+
+*(added 2026-08-10)* `POST` SHALL accept an optional `description`, so that saving a loadout with one written up front is a single write rather than a save followed by a patch. `PATCH /api/loadouts/:id` currently requires `listId` in the body; it SHALL accept `listId` and `description` independently. The length cap and the null-versus-omitted semantics defined in "Loadouts Carry an Editable Description" apply identically on both verbs.
 
 **"Token-scoped" is the honest designation and is REQUIRED on every endpoint in this capability.** No endpoint in this capability SHALL be public. The one public endpoint in the application — the liveness probe at `/healthz` — is outside this capability's scope and is public because orchestrator health checks require unauthenticated access.
 
@@ -512,6 +735,12 @@ Responses SHALL set `X-Content-Type-Options: nosniff`. The application SHALL set
 ### Request Body Size Limits
 
 The JSON body parser SHALL enforce an explicit maximum request body size rather than relying on an implicit default. List names SHALL be length-capped on the server, and `hunterId` SHALL be length-capped and validated against the known library.
+
+Loadout descriptions SHALL be length-capped on the server with an explicit maximum, declared as a named constant beside the existing name cap *(added 2026-08-10)*. The cap SHALL be **at least 1000 characters**, which leaves room above the longest description the dataset currently carries (404 characters, "The Night Seer") — the text a user most often starts from when they edit, so a cap that truncated it would reject the default the app itself offered.
+
+The cap governs **stored** text only. A description resolved live from the dataset is never written to the record and is therefore not subject to it, so a future scrape producing longer prose cannot retroactively invalidate stored records or fail a read.
+
+Both a user-supplied description and a description resolved from the hunters dataset MUST be treated as untrusted on output and MUST NOT be inserted as markup. The scraped text is the *less* trustworthy of the two — it originates off-origin — so a rule scoped only to user input would miss the larger risk.
 
 ### CSRF Protection
 
@@ -539,6 +768,24 @@ All icon-only controls MUST include an `aria-label` describing their purpose. Th
 
 Portrait images used as list identifiers MUST have accessible names. A portrait that is purely decorative alongside a visible list name SHOULD be marked `alt=""` so screen readers announce the name once rather than twice.
 
+### Loadout Previews Are Supplementary, Not the Row's Identity
+
+*(added 2026-08-10)*
+
+The loadout's name remains the accessible identity of its row. A preview MUST NOT turn one row into a dozen separately announced images.
+
+Preview imagery MUST be marked decorative, and the preview as a whole MUST carry a **single** text equivalent summarising what the loadout holds — for example "Sparks LRR, Caldwell Conversion, 3 tools, 2 consumables". A screen-reader user MUST be able to reach the next row without traversing every previewed item.
+
+Where the preview sheds content at narrow widths, the text equivalent MUST describe everything the loadout holds that resolves in the catalog, rather than the subset currently drawn, so what is announced does not change with viewport width.
+
+### The Favorites Section Is Exposed, Not Merely Drawn
+
+*(added 2026-08-10)*
+
+The split between favorited and unfavorited hunters MUST be conveyed to assistive technology, not only visually. Each section MUST carry an accessible name identifying it and its count, so a screen-reader user knows which group they are in and how large it is.
+
+Sectioning MUST NOT break the picker's existing composite-widget semantics: arrow-key navigation MUST continue to move between tiles across a section boundary, and the roving tabindex MUST still present the grid as a single tab stop rather than one per section.
+
 ### Dynamic Content Regions
 
 Content updated without a page load — the saved-loadouts region after a save, move, or retirement, and the message banner — MUST use `aria-live` regions. Routine confirmations SHALL use `aria-live="polite"`. Failures SHALL use `aria-live="assertive"`.
@@ -548,6 +795,10 @@ Content updated without a page load — the saved-loadouts region after a save, 
 All interactive elements MUST be operable via keyboard: logical tab order following visual layout, Enter or Space to activate controls, Escape to dismiss the portrait picker and the retire confirmation, and arrow keys for navigation within the portrait picker if it is presented as a composite grid widget.
 
 Filing a loadout into a list MUST be achievable without a pointer. The initial move affordance SHALL be an explicit control on the loadout row — a menu or select — rather than drag-and-drop. Drag-and-drop is deferred as a future enhancement; if it is later added, the explicit keyboard-operable control MUST remain rather than being replaced by it.
+
+Editing a loadout's description MUST be achievable without a pointer *(added 2026-08-10)*. The edit control MUST have an accessible name identifying both the action and the loadout, MUST be reachable in the row's tab order, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
+
+An inherited description MUST NOT be announced as though the user wrote it. Where the distinction is surfaced visually, it MUST also be available non-visually.
 
 ### Focus Management
 
