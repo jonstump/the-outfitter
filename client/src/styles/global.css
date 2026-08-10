@@ -20,6 +20,27 @@
   --input-bg-active: #2c2315;
   --row-hover: #221b12;
   --scroll-track: #17130c;
+
+  /* Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait
+     and Name" — the fixed six-value list accent palette (issue #88). Ad-hoc accent values
+     MUST NOT be used; client/src/utils/listAccent.js maps a stored hex onto the property
+     that paints it, so this block is the only place a palette value is written.
+
+     Every value clears WCAG 2.1 SC 1.4.11 (3:1 non-text) against --panel, --scroll-track
+     and --bg — measured, 3.36:1 to 4.81:1; the table is in design.md.
+
+     They separate by HUE, NOT LUMINANCE: olive vs teal is 1.02:1, clay vs plum 1.03:1.
+     A colour-blind user may see adjacent accents as identical, which is why the accent is
+     never the sole differentiator and the list name stays the primary identity.
+
+     --gold (#c4a05e) is deliberately NOT among them: it is the theme's interactive colour,
+     so a gold-framed card would read as selected. #5a6e96 slate replaced it. */
+  --list-accent-1: #b04a3e; /* clay  */
+  --list-accent-2: #7a8a4e; /* olive */
+  --list-accent-3: #5a6e96; /* slate */
+  --list-accent-4: #5e8a8a; /* teal  */
+  --list-accent-5: #8a5e86; /* plum  */
+  --list-accent-6: #a3703e; /* amber */
 }
 
 * {
@@ -823,9 +844,11 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
-   Loadout lists (SPEC-0003). Portraits and per-list accent colours are #88;
-   this is the names-only phase — monogram tiles stand in for portraits.
-   Every colour below is an existing token; no new palette is introduced here.
+   Loadout lists (SPEC-0003). Hunter portraits and per-list accent colours
+   landed with issue #88; the accent itself is applied inline from the record's
+   stored value via listAccent.js, which resolves it to one of the
+   --list-accent-{1..6} properties declared in :root above. Every other colour
+   here is an existing token — the accent palette is the only one introduced.
    --------------------------------------------------------------------------- */
 
 .sr-only {
@@ -864,7 +887,10 @@ button {
   align-items: center;
   justify-content: center;
   background: var(--scroll-track);
-  border: 3px solid var(--border);
+  /* --ll-accent is set inline from the list's stored accent (listAccent.js). The fallback
+     covers Unassigned, which never carries one, and any record whose accent does not
+     resolve — both stay perfectly usable, identified by their name. */
+  border: 3px solid var(--ll-accent, var(--border));
   color: var(--text);
   cursor: pointer;
   padding: 0;
@@ -912,6 +938,10 @@ button {
 .ll-expanded {
   margin-top: 14px;
   border: 1px solid var(--border);
+  /* The group heading carries the same accent as the card, so a list is recognisable in
+     both places (SPEC-0003). A 3px left rule rather than a full frame: the expanded panel
+     is wide, and a full accent frame at that size competes with the card grid above it. */
+  border-left: 3px solid var(--ll-accent, var(--border));
   background: var(--scroll-track);
 }
 .ll-expanded-head {
@@ -921,6 +951,65 @@ button {
   flex-wrap: wrap;
   padding: 12px 14px;
   border-bottom: 1px solid var(--divider);
+}
+.ll-expanded-art {
+  flex: none;
+  width: 52px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--input-bg);
+  border: 1px solid var(--divider);
+  overflow: hidden;
+}
+.ll-expanded-art .item-thumb {
+  background: none;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+.ll-expanded-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ll-expanded-art svg {
+  width: 80%;
+  height: auto;
+}
+.ll-expanded-mono {
+  font-family: "IM Fell English SC", serif;
+  font-size: 28px;
+  color: var(--border);
+}
+.ll-expanded-hunter {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* Accent editor in the expanded header. Six swatches in a radiogroup: exactly one value
+   is in effect, and each is labelled with its colour NAME because a bare swatch announces
+   as nothing. Duplicates across lists are permitted, so nothing here can be rejected. */
+.ll-accent-picker {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.ll-accent-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+  border: 1px solid var(--border-soft);
+}
+.ll-accent-swatch-on {
+  border-color: var(--gold-bright);
+  outline: 1px solid var(--gold-border);
+}
+.ll-accent-swatch:hover,
+.ll-accent-swatch:focus-visible {
+  border-color: var(--gold-bright);
 }
 .ll-expanded-title {
   flex: 1;
@@ -1026,6 +1115,12 @@ button {
   background: var(--scroll-track);
   border: 1px solid var(--gold-border);
 }
+.ll-create-title {
+  flex-basis: 100%;
+  font-family: "IM Fell English SC", serif;
+  font-size: 17px;
+  color: var(--gold-bright);
+}
 .ll-create-label {
   display: flex;
   flex-direction: column;
@@ -1035,6 +1130,45 @@ button {
   font-size: 13px;
   letter-spacing: 1px;
   color: var(--text-muted);
+}
+.ll-create-portrait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ll-create-portrait-art {
+  width: 28px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--input-bg);
+  border: 1px solid var(--divider);
+  color: var(--text-dim);
+}
+.ll-create-portrait-art .item-thumb {
+  background: none;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+.ll-create-portrait-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ll-create-portrait-art svg {
+  width: 90%;
+  height: auto;
+}
+/* Preview of the accent the server will assign. Decorative — the user did not choose it,
+   can change it after creation, and the name field beside it is the real identity. */
+.ll-create-accent {
+  width: 18px;
+  height: 18px;
+  align-self: center;
+  border: 1px solid var(--border-soft);
 }
 
 .ll-overlay {
@@ -1063,6 +1197,110 @@ button {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+
+/* ---------------------------------------------------------------------------
+   Hunter picker (SPEC-0003 REQ "The Hunter Picker Is Filterable and Bounded").
+   Wider and taller than the retire confirmation because it holds a scrolling
+   roster of 242; the grid is the only thing that scrolls, so the filters stay
+   reachable without scrolling back up.
+
+   Nothing below styles a hunter differently for being used by another list —
+   the picker is never told which those are. The only conditional class is
+   .hp-tile-picked, which marks the CURRENT selection in THIS picker.
+   --------------------------------------------------------------------------- */
+.hp-dialog {
+  max-width: 760px;
+  width: min(760px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.hp-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.hp-filter {
+  display: flex;
+  flex: 1;
+  min-width: 150px;
+}
+.hp-filter input,
+.hp-filter select {
+  width: 100%;
+}
+.hp-count {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+.hp-empty {
+  margin: 0 0 10px;
+  font-style: italic;
+  color: var(--text-dim);
+}
+.hp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.hp-tile {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  background: var(--scroll-track);
+  border: 2px solid var(--border);
+  color: var(--text);
+}
+.hp-tile:hover,
+.hp-tile:focus-visible {
+  border-color: var(--gold-border);
+}
+.hp-tile-picked {
+  border-color: var(--gold);
+}
+.hp-tile-art {
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--input-bg);
+}
+.hp-tile-art .item-thumb {
+  background: none;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+.hp-tile-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hp-tile-art svg {
+  width: 70%;
+  height: auto;
+}
+.hp-tile-mono {
+  font-family: "IM Fell English SC", serif;
+  font-size: 40px;
+  color: var(--border);
+}
+.hp-tile-name {
+  padding: 6px 8px;
+  font-size: 13.5px;
+  color: var(--text-bright);
+  text-align: center;
+}
+.hp-tile-name-none {
+  font-style: italic;
+  color: var(--text-muted);
 }
 
 /* Hunter art on a list card: fills the tile, with the name plate overlaying it.

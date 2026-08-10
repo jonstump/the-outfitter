@@ -7,24 +7,50 @@
 // Expanding a list IS selecting it, so the two states cannot drift apart and no separate
 // selection affordance is needed.
 //
-// Portraits and per-list accent colours are issue #88. This is the names-only phase the
-// design handoff describes: monogram tiles stand in for portraits, and the layout is
-// otherwise final.
+// Also: SPEC-0003 REQ "Hunter Dataset Consumption Contract", SPEC-0003 REQ "Lists Are
+// Visually Distinguishable Independent of Portrait and Name" (issue #88). Portraits render
+// through HunterPortrait, which owns the size-then-placeholder fallback ladder; the accent
+// renders as the card frame and the expanded header's rule, and is editable there.
+//
+// The accent is never the only thing separating two lists — the name is on every card, in
+// the expanded header, and in the move-to-list select. The palette separates by hue rather
+// than luminance, so anything that made the accent load-bearing would be unreadable to a
+// colour-blind user.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { hunterThumb } from "../../data/catalog.js";
-import ItemThumb from "../ItemThumb/ItemThumb.jsx";
+import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
+import HunterPicker from "../HunterPicker/HunterPicker.jsx";
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
 import { HUNTERS, hunterNameFor } from "../../data/hunters.js";
+import { LIST_ACCENTS, accentName, accentVar, previewNextAccent } from "../../utils/listAccent.js";
+import { useFocusTrap } from "../../utils/focusTrap.js";
 import { loadSavedThunk } from "../../store/thunks.js";
 import { deleteSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
-import { createListThunk, renameListThunk, retireListThunk } from "../../store/loadoutListsSlice.js";
+import {
+  createListThunk,
+  renameListThunk,
+  retireListThunk,
+  setListAccentThunk,
+} from "../../store/loadoutListsSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 
 const monogram = (name) => (name || "?").trim().charAt(0).toUpperCase();
+
+/**
+ * What to say about a list's hunter under its name in the expanded header.
+ *
+ * Three distinct states, deliberately not collapsed into two: a list that chose no
+ * portrait never claimed an identity, while a list whose hunter left the roster claimed one
+ * the dataset can no longer resolve. Both stay fully usable; only the copy differs, and
+ * saying "no portrait" for the second would quietly rewrite the user's choice.
+ */
+function hunterLine(hunterId) {
+  if (!hunterId) return "no portrait";
+  return hunterNameFor(hunterId) ?? "hunter missing from roster";
+}
 
 export default function LoadoutListsPanel() {
   const dispatch = useDispatch();
@@ -113,6 +139,7 @@ export default function LoadoutListsPanel() {
             id={l.id}
             name={l.name}
             hunterId={l.hunterId}
+            accent={l.accent}
             count={countFor(l.id)}
             open={isOpen(l.id)}
             onToggle={() => toggle(l.id)}
@@ -140,27 +167,35 @@ export default function LoadoutListsPanel() {
   );
 }
 
-function ListCard({ id, name, hunterId, count, open, onToggle, unassigned = false }) {
-  // A hunter with no portrait asset yet falls back to a schematic silhouette via ItemThumb's
-  // existing photo-first chain. A list with NO hunter keeps its list-name monogram: there is
-  // no identity to depict, and drawing a figure would imply one the list never claimed.
-  const silhouette = unassigned ? null : hunterThumb(hunterId);
+function ListCard({ id, name, hunterId, accent, count, open, onToggle, unassigned = false }) {
+  // A hunter that resolves to no portrait asset falls back to a schematic silhouette; one
+  // absent from the dataset does the same without issuing a request. A list with NO hunter
+  // keeps its list-name monogram: there is no identity to depict, and drawing a figure
+  // would imply one the list never claimed.
+  //
+  // Decorative alt="": the list name is in the plate below, so announcing the portrait too
+  // would read it twice (SPEC-0003 accessibility).
+  const hasHunter = !unassigned && Boolean(hunterId);
 
   return (
     <button
       type="button"
       className={`ll-card${unassigned ? " ll-card-unassigned" : ""}${open ? " ll-card-open" : ""}`}
+      // Unassigned is a structural group, never a peer of the user's lists, so it never
+      // carries an accent — it keeps its neutral dashed frame (design handoff §2).
+      //
+      // Set as a custom PROPERTY rather than `borderColor` directly: an inline
+      // border-color would outrank every stylesheet rule, silently killing the gold
+      // hover/focus-visible frame that tells a keyboard user where they are.
+      style={unassigned ? undefined : { "--ll-accent": accentVar(accent) }}
+      data-accent={unassigned ? undefined : accent}
       aria-pressed={open}
       onClick={onToggle}
       data-testid={`list-card-${id}`}
     >
-      {silhouette ? (
+      {hasHunter ? (
         <span className="ll-card-art" data-testid={`list-art-${id}`}>
-          {/* Decorative: the list name is in the plate below, so announcing the portrait
-              too would read it twice (SPEC-0003 accessibility). Without an explicit alt="",
-              ItemThumb would label it with the raw hunter id — "the-rat" — which is worse
-              than either alternative. */}
-          <ItemThumb category="hunters" name={hunterId} alt="" svgPath={silhouette} />
+          <HunterPortrait hunterId={hunterId} size="thumb" alt="" />
         </span>
       ) : (
         <span className="ll-card-mono" aria-hidden="true">
@@ -205,8 +240,32 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   };
 
   return (
-    <div className="ll-expanded" ref={rootRef}>
+    <div
+      className="ll-expanded"
+      ref={rootRef}
+      // The group heading carries the same accent as the card, so a list is recognisable
+      // in both places (SPEC-0003: "each SHALL render that accent in the list selector and
+      // in its group heading"). Unassigned never carries one.
+      style={unassigned ? undefined : { "--ll-accent": accentVar(list?.accent) }}
+      data-accent={unassigned ? undefined : list?.accent}
+      data-testid="list-expanded"
+    >
       <div className="ll-expanded-head">
+        {!unassigned && list && (
+          <span className="ll-expanded-art" data-testid="list-expanded-art">
+            {/* Full size here, thumbnail on the cards — and each falls back to the other
+                before the placeholder (SPEC-0003 "Hunter Dataset Consumption Contract").
+                Eager: it is one image, already on screen, and the header is the thing the
+                user just opened. */}
+            {list.hunterId ? (
+              <HunterPortrait hunterId={list.hunterId} size="full" alt="" lazy={false} />
+            ) : (
+              <span className="ll-card-mono ll-expanded-mono" aria-hidden="true">
+                {monogram(list.name)}
+              </span>
+            )}
+          </span>
+        )}
         <div className="ll-expanded-title">
           {renaming ? (
             <input
@@ -234,10 +293,12 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
               )}
             </>
           )}
+          {!unassigned && list && <span className="ll-expanded-hunter">{hunterLine(list.hunterId)}</span>}
           <span className="ll-badge">
             {unassigned ? "Not filed into any list" : "Default list for saved loadouts"}
           </span>
         </div>
+        {!unassigned && list && <AccentPicker list={list} />}
         {!unassigned && list && (
           <button
             className="btn-outline ll-retire"
@@ -259,6 +320,43 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
           loadouts.map((item) => <LoadoutRow key={item.id} item={item} lists={lists} />)
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Edit a list's accent.
+ *
+ * Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+ * Name".
+ *
+ * A radiogroup rather than six independent buttons: exactly one value is in effect, arrow
+ * keys move between the swatches for free, and assistive tech announces "3 of 6" instead of
+ * six unrelated toggles. Each swatch is labelled with its colour NAME, because a swatch
+ * announced only as a colour block is nothing to a screen-reader user and the palette
+ * separates by hue rather than luminance.
+ *
+ * Nothing here consults the other lists. Picking a colour a sibling already uses is a
+ * permitted outcome, so there is no check to fail and no warning to render.
+ */
+function AccentPicker({ list }) {
+  const dispatch = useDispatch();
+
+  return (
+    <div className="ll-accent-picker" role="radiogroup" aria-label={`Accent colour for ${list.name}`}>
+      {LIST_ACCENTS.map((a) => (
+        <button
+          key={a.value}
+          type="button"
+          role="radio"
+          aria-checked={list.accent === a.value}
+          aria-label={a.name}
+          title={a.name}
+          className={`ll-accent-swatch${list.accent === a.value ? " ll-accent-swatch-on" : ""}`}
+          style={{ background: `var(${a.cssVar})` }}
+          onClick={() => dispatch(setListAccentThunk({ id: list.id, accent: a.value }))}
+        />
+      ))}
     </div>
   );
 }
@@ -319,50 +417,114 @@ function LoadoutRow({ item, lists }) {
 
 function CreateList({ onDone }) {
   const dispatch = useDispatch();
+  const lists = useSelector((s) => s.loadoutLists.items);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // `null` here means "no portrait chosen", which is also the value the picker's explicit
+  // "No portrait" option produces — they are the same list, so they are the same state.
+  const [hunter, setHunter] = useState(null);
+  // Whether the user has typed a name of their own. Picking a portrait defaults the name
+  // (design handoff §5), but only while the field is still the picker's to fill; once the
+  // user has typed, changing portrait must never overwrite what they wrote.
+  const [nameTouched, setNameTouched] = useState(false);
+
+  // Preview only. The server assigns the real accent least-used-first against the owner's
+  // persisted lists and returns it on the created record, which is what then renders.
+  const accentPreview = previewNextAccent(lists);
 
   const submit = async (e) => {
     e.preventDefault();
-    // An empty name with no hunter falls back to a generic default in the thunk. The
-    // hunter picker that supplies hunterId/hunterName is issue #88.
+    // An empty name with no hunter falls back to a generic default in the thunk; with a
+    // hunter it defaults to the hunter's name.
     //
     // Await before closing: dismissing optimistically threw away the typed name whenever
     // the request failed, and the banner error then referred to a form no longer on screen.
     setSaving(true);
     try {
-      await dispatch(createListThunk({ name })).unwrap();
+      const created = await dispatch(
+        createListThunk({ name, hunterId: hunter?.hunterId ?? null, hunterName: hunter?.hunterName ?? null })
+      ).unwrap();
       setName("");
+      setHunter(null);
+      setNameTouched(false);
+      // Creating a list selects it, matching the design handoff: the new card expands
+      // immediately, so "created" and "ready to file into" are the same moment.
+      dispatch(uiActions.selectList(created.id));
       onDone();
     } catch {
-      // Thunk already surfaced the failure; keep the form and the name intact.
+      // Thunk already surfaced the failure; keep the form, the name and the portrait intact.
     } finally {
       setSaving(false);
     }
   };
 
+  const portraitLabel = hunter?.hunterName ?? "No portrait";
+
   return (
-    <form className="ll-create" onSubmit={submit}>
-      <label className="ll-create-label">
-        <span>Name</span>
-        <input
-          autoFocus
-          value={name}
-          placeholder="defaults to the hunter's name"
-          aria-label="New list name"
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") onDone();
+    <>
+      <form className="ll-create" onSubmit={submit}>
+        <span className="ll-create-title">New list — choose a portrait</span>
+
+        <button className="btn-outline ll-create-portrait" type="button" onClick={() => setPicking(true)}>
+          <span className="ll-create-portrait-art" aria-hidden="true">
+            {hunter?.hunterId ? (
+              <HunterPortrait hunterId={hunter.hunterId} size="thumb" alt="" lazy={false} />
+            ) : (
+              "?"
+            )}
+          </span>
+          <span>Portrait: {portraitLabel}</span>
+        </button>
+
+        <label className="ll-create-label">
+          <span>Name</span>
+          <input
+            autoFocus
+            value={name}
+            placeholder="defaults to the hunter's name"
+            aria-label="New list name"
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameTouched(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onDone();
+            }}
+          />
+        </label>
+
+        {/* Decorative: the accent is a preview of a value the user did not choose and can
+            change afterwards, and it is never the sole differentiator. The name field
+            beside it is the identity that matters here. */}
+        <span
+          className="ll-create-accent"
+          style={{ background: accentVar(accentPreview) }}
+          title={`Accent: ${accentName(accentPreview)}`}
+          aria-hidden="true"
+          data-testid="create-accent-preview"
+        />
+
+        <button className="btn-primary" type="submit" disabled={saving}>
+          {saving ? "Creating…" : "Create list"}
+        </button>
+        <button className="btn-outline" type="button" onClick={onDone}>
+          Cancel
+        </button>
+      </form>
+
+      {picking && (
+        <HunterPicker
+          selectedHunterId={hunter?.hunterId ?? null}
+          onClose={() => setPicking(false)}
+          onSelect={(chosen) => {
+            setHunter(chosen.hunterId ? chosen : null);
+            if (!nameTouched) setName(chosen.hunterName ?? "");
+            setPicking(false);
           }}
         />
-      </label>
-      <button className="btn-primary" type="submit" disabled={saving}>
-        {saving ? "Creating…" : "Create list"}
-      </button>
-      <button className="btn-outline" type="button" onClick={onDone}>
-        Cancel
-      </button>
-    </form>
+      )}
+    </>
   );
 }
 
@@ -370,40 +532,25 @@ function RetireDialog({ list, count }) {
   const dispatch = useDispatch();
   const confirmRef = useRef(null);
   const dialogRef = useRef(null);
-  const returnFocusRef = useRef(null);
 
   const close = () => {
     dispatch(uiActions.setConfirmRetireListId(null));
     // Return focus to whatever opened the dialog, rather than dropping it on <body>.
-    returnFocusRef.current?.focus?.();
+    returnFocus();
   };
-
-  useEffect(() => {
-    returnFocusRef.current = document.activeElement;
-    confirmRef.current?.focus();
-  }, []);
 
   // aria-modal tells assistive tech the rest of the page does not exist; without a trap,
-  // Tab walks straight out of it. Keep Tab inside, and handle Escape at the dialog root so
-  // it works wherever focus currently sits.
-  const onKeyDown = (e) => {
-    if (e.key === "Escape") {
-      close();
-      return;
-    }
-    if (e.key !== "Tab") return;
-    const focusable = dialogRef.current?.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
-    if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  // Tab walks straight out of it. The trap, the entry focus and the return focus are now
+  // shared with the portrait picker (utils/focusTrap.js) — the spec requires identical
+  // behaviour from both dialogs, and two hand-written copies is how they stop matching.
+  //
+  // This dialog overrides the entry point to its confirm button rather than the generic
+  // "first focusable": the destructive action is the one being confirmed, and Cancel is a
+  // single Shift+Tab away.
+  const { onKeyDown, returnFocus } = useFocusTrap(dialogRef, {
+    onEscape: close,
+    initialFocusRef: confirmRef,
+  });
 
   if (!list) return null;
 
