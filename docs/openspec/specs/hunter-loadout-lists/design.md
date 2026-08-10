@@ -219,6 +219,8 @@ Not persisting the override follows the rule already governing the selected list
 
 ### Loadout previews are derived from the record, never stored
 
+> **Partly superseded 2026-08-10** by "The preview is a categorised panel on a card" below. Deriving from the record still holds and is unaffected. The *shedding order* does not: it was written for a strip degrading along one ordered list, and a fixed-cell grid has no such list.
+
 *Added 2026-08-10.*
 
 **Choice**: Each loadout row previews its contents by decoding the `data` payload the record already carries. No summary field is added, no extra request is made, and nothing is written.
@@ -227,9 +229,9 @@ Not persisting the override follows the rule already governing the selected list
 
 Deriving also inherits a property the decoder already guarantees: unknown catalog ids are dropped rather than rendered. A loadout saved against a since-removed item previews as the items that survive, with no per-item placeholder and no error, because that behaviour lives in `fromData` rather than in the preview.
 
-**Responsiveness is a shedding order, not a breakpoint table.** The row's non-negotiable elements are its name, its cost and its move control — those are how the user identifies and files the loadout, and they survive every width. The preview is the part that yields.
+*(Superseded 2026-08-10 — the whole of this sub-decision, not only the ordering paragraph. A fixed-cell grid cannot shed cells without destroying the constant shape it exists to hold, so responsiveness moved to the card.)* **Responsiveness is a shedding order, not a breakpoint table.** The row's non-negotiable elements are its name, its cost and its move control — those are how the user identifies and files the loadout, and they survive every width. The preview is the part that yields.
 
-The order is **equipment before weapons, later slots before earlier ones**, with whatever was dropped summarised as a count. That ranking is not arbitrary: weapons are what people name a loadout after ("Sparks + Conversion"), and the first weapon slot is the one that identifies a build. Equipment is more interchangeable and more numerous, so it is where shedding costs the least recognition. Saying only "show fewer items" would have left two implementations dropping opposite ends of the same list, both conforming and one useless.
+*(Superseded 2026-08-10.)* The order was **equipment before weapons, later slots before earlier ones**, with whatever was dropped summarised as a count. That ranking is not arbitrary: weapons are what people name a loadout after ("Sparks + Conversion"), and the first weapon slot is the one that identifies a build. Equipment is more interchangeable and more numerous, so it is where shedding costs the least recognition. Saying only "show fewer items" would have left two implementations dropping opposite ends of the same list, both conforming and one useless.
 
 Specifying an order rather than pixel breakpoints keeps this implementable in whatever layout the panel ends up with, and keeps "the row must never overflow" as the property a test can actually assert.
 
@@ -237,6 +239,44 @@ Specifying an order rather than pixel breakpoints keeps this implementable in wh
 - *Store a denormalised summary on the record*: rejected — a second source of truth for data already present, stale on catalog change, and a schema addition for a rendering convenience.
 - *Fetch preview data on expand*: rejected — the payload is already in the record the client holds; a request would add latency to buy nothing.
 - *Render the full loadout inline*: rejected — that is the builder, and it would make a list of ten loadouts unreadable.
+
+### The preview is a categorised panel on a card, not a strip on a row
+
+*Added 2026-08-10, the same day #139 shipped the strip it replaces.*
+
+**Choice**: The preview becomes three grouped regions — weapons drawn largest, an eight-cell equipment grid as two rows of four, and a fifteen-cell trait grid — and saved loadouts move from rows to a card grid to hold it.
+
+**Rationale**: The shipped strip conformed to the requirement as written and was smaller than what was asked for. That is a spec-authoring failure, not an implementation one, and it is worth naming precisely: the original requirement said "preview" and specified a shedding order, which is the vocabulary of *compression*. What was wanted was the vocabulary of *arrangement* — the loadout laid out the way the builder lays it out, so the same build reads the same way in both places.
+
+The measurements make the gap concrete. Weapon art is 512×128 and was being drawn at 34×24 — roughly 7% of the width the asset carries. Tools and consumables are 128×128, traits 64×64 and were not drawn at all. The strip was not merely modest; it was discarding almost everything the assets offered.
+
+**Fixed cell counts are the load-bearing choice.** Eight equipment cells and fifteen trait cells are constants, not functions of what the loadout holds. A grid whose shape depends on its contents cannot be scanned across a list — the eye has to re-find each category in every card. Fixing the shape means a filled cell is information and an empty cell is information, and comparing two loadouts is comparing two identically-shaped grids.
+
+Fifteen is the game's own per-hunter trait maximum, deliberately **not** derived from the trait-point cap. The cap is user-settable, so deriving from it would make the grid reflow when a setting changed, which is exactly what fixing the shape is meant to prevent.
+
+**Stated as cells occupied, not as an array shape.** SPEC-0006 changes `state.equip` from a packed array to a fixed sparse one and raises the wire format to v2. A preview specified against either representation alone would need rewriting when the other landed. Specifying "each item at its stored cell, empty cells rendered empty" is true under both: a packed array fills cells in order, a sparse one places them where the user put them. The follow-on work SPEC-0006 brings — consumable stacks and per-cell blocking — is additive to that, not a rewrite of it.
+
+**Alternatives considered**:
+- *Keep the strip, just enlarge it*: rejected — larger tiles in one undifferentiated line still lose the category structure that makes a loadout readable, and traits still have nowhere to go.
+- *Derive the trait grid from the trait-point cap*: rejected — the grid reflows when a user changes a setting, defeating the constant shape.
+- *Build against SPEC-0006's sparse model and block on it*: rejected — SPEC-0006 is draft with no issues behind it, and the preview does not actually need free placement to be correct.
+- *Keep rows and let them grow tall*: rejected — ten loadouts becomes an unscannable column, and it wastes horizontal space entirely.
+
+### Loadouts become cards, and must not read as lists
+
+*Added 2026-08-10.*
+
+**Choice**: Saved loadouts render as a card grid. A loadout card must be distinguishable from a list card by more than size.
+
+**Rationale**: The categorised preview does not fit a row, and stacking full-height rows makes a list of ten unreadable. Cards also use the horizontal space the row layout was leaving empty.
+
+The risk this creates is specific and worth stating as a requirement rather than trusting to taste: the list selector immediately above is *already* a card grid, so the panel would hold two nested grids of cards. A reader glancing at the page needs to know instantly whether a card is a list or a thing inside a list. Size will not carry that distinction, because both grids reflow with the viewport and a narrow window can make them similar. The list card's identity is a portrait, an accent frame and a loadout count; the spec forbids a loadout card reusing that combination, which leaves the design free without leaving it ambiguous.
+
+**Responsiveness moves from the preview to the card.** The strip sheds content as width decreases; the grid must not, because shedding cells destroys the constant shape. So the card reflows — fewer cards per row — while each preview keeps its structure. That is a straight trade: the page gets taller on a phone instead of the previews getting less informative.
+
+**Alternatives considered**:
+- *One row expands at a time*: viable, and rejected as more machinery — it adds a selection state to a surface that already has one at the list level.
+- *Distinguish the two card kinds by size alone*: rejected explicitly in the requirement; both grids reflow, so size is not a stable signal.
 
 ### Descriptions are resolved from the dataset, not copied into the record
 
@@ -405,6 +445,10 @@ Note `.ll-empty` on `main` carries the same violation and is deliberately untouc
 
 ## Risks / Trade-offs
 
+- **Two nested card grids invite confusion** → The list selector and the loadout grid are both card grids on one panel. Addressed as a requirement rather than a taste question: a loadout card may not reuse the list card's portrait + accent frame + count combination, and the distinction may not rest on size, since both reflow with the viewport.
+- **A card grid of full previews is a lot of DOM per list** → Twenty-three cells per loadout across weapons, equipment and traits, multiplied by however many loadouts a list holds. Mitigated by the lazy imagery already required and by previews being pure functions of data already in hand. If it proves heavy, virtualising the card grid is the lever — not shrinking the preview, which is the thing being fixed.
+- **The preview is specified against a model that is mid-change** → SPEC-0006 turns `equip` sparse and raises the wire format to v2. The requirement is written in terms of cells occupied rather than array shape so both readings conform, but SPEC-0006's follow-on features — consumable stacks and per-cell blocking — are not yet specified for the preview and will need a small amendment when they land.
+
 - **Cross-collection ownership check is new and easy to omit** → It is called out as the first bold item in the spec's Confirmation list, and gets a dedicated scenario. The test asserting token A cannot file into token B's list should be written before the endpoint.
 - **Two lists sharing a portrait look alike at a glance** → Addressed by the per-list accent colour alone; the picker deliberately does not mark reuse. Residual risk is that the accent is not accessible on its own — the palette separates by hue rather than luminance — so the list name remains the primary accessible identity and the accent must never be the sole differentiator.
 - **`lowdb` read-modify-write interleaving under concurrent requests** → Pre-existing in the loadouts routes, but retirement's multi-step mutation raises the stakes. Addressed by the atomic-write requirement; if interleaving proves real in practice, serializing writes behind a queue is the smallest available fix.
@@ -414,7 +458,7 @@ Note `.ll-empty` on `main` carries the same violation and is deliberately untouc
 - **Cross-artifact edges must stay in step with reversals** → SPEC-0003 `implements` ADR-0006, so a decision reversed here has to be reflected there or the graph reports two sources of truth. The in-use-marker reversal required an amendment to ADR-0006 for exactly this reason. The 2026-08-10 amendments do not reach ADR-0006: it records the filing model and the identity/imagery split, and says nothing about favorites ordering, row previews, or descriptions.
 - **`description`'s three states will get collapsed to two** → The obvious implementation is a truthy check, which silently merges "never edited" with "deliberately blank" and makes the field impossible to empty. Addressed by specifying the states as a table with a dedicated scenario for the cleared case; the test for "clearing does not re-inherit" is the one that catches the regression.
 - **Auto-enabling "favorites only" reads as a gate to a future reviewer** → It is a default, not a state the user cannot leave, but the two look alike in a screenshot. Addressed by stating the distinction in both the requirement and the decision, and by the scenario asserting every hunter stays one control away.
-- **Previews multiply image requests per expanded list** → A list of twenty loadouts could reference well over a hundred item icons. Mitigated by lazy loading and by shedding items at narrow widths; the icons are also the same small assets already cached from the equipment panel, so a returning user mostly re-renders from cache rather than refetching.
+- **Previews multiply image requests per expanded list** → A list of twenty loadouts could reference well over a hundred item icons. Mitigated by lazy loading — the shed-at-narrow-widths half of this mitigation was withdrawn on 2026-08-10 with the strip, and the DOM cost is now carried by the card-grid risk above; the icons are also the same small assets already cached from the equipment panel, so a returning user mostly re-renders from cache rather than refetching.
 - **Live-resolved descriptions change under the user on a re-scrape** → Intended, and the reason the field is resolved rather than copied, but it does mean text a user read yesterday may differ today. Bounded by the fact that it only ever affects loadouts the user has never edited; anything they typed is theirs and is never overwritten.
 
 ## Migration Plan
@@ -433,7 +477,7 @@ Rollback: steps 2 and 3 are additive. Reverting the server change leaves `listId
 
 Settled during review of the initial draft, recorded so the reasoning is not re-litigated:
 
-- **Move affordance** — a native `<select>` on the loadout row whose value is the loadout's current list, not drag-and-drop. DnD may be added later; if it is, the explicit control stays rather than being replaced. Full detail in the decision below and in #87.
+- **Move affordance** — a native `<select>` whose value is the loadout's current list, not drag-and-drop. *(Re-scoped 2026-08-10: it sits on the loadout card, not a row. The decision itself is unchanged — only the surface carrying it.)* DnD may be added later; if it is, the explicit control stays rather than being replaced. Full detail in the decision below and in #87.
 - **List ordering** — alphabetical by list name by default, with hunter name, creation date, and loadout count as alternatives. Hunter-name ordering places hunterless and unresolvable lists after everything that resolves. (Most-recently-used was dropped on 2026-08-10; see the ordering decision above.)
 - **Picker behaviour for already-used hunters** — never restrict them, and never mark them either. Reuse is unremarkable; the per-list accent colour is what keeps lists distinguishable. (An earlier draft required an in-use marker; see the decision above for why it was dropped.)
 - **Collection name** — `loadoutLists`, not `hunterLists`, because lists need not correspond to hunters and a `hunters` dataset is coming.
@@ -458,8 +502,9 @@ Settled on 2026-08-10, when three changes were accepted after using the shipped 
 
 Raised by the 2026-08-10 amendments:
 
-- ~~Does the preview show traits?~~ **Resolved by #139: a count, no tiles.** Traits appear in the preview's single text equivalent ("…3 tools, 2 consumables, 1 trait") and draw no imagery. A traits-only loadout reads "Empty — no weapons or equipment · 1 trait", because what is empty is the *strip*, not the record — asserting "Empty" about a loadout that holds something would be a wrong claim about the record.
+- ~~Does the preview show traits?~~ **Resolved twice.** #139 answered "a count, no tiles"; the 2026-08-10 amendment overrides that with a fifteen-cell trait grid, the game's per-hunter maximum. The count survives only in the preview's single text equivalent, where announcing fifteen cells individually would be worse than useless.  
+  *(original #139 note kept for the record:)* a count, no tiles. Traits appear in the preview's single text equivalent ("…3 tools, 2 consumables, 1 trait") and draw no imagery. A traits-only loadout reads "Empty — no weapons or equipment · 1 trait", because what is empty is the *strip*, not the record — asserting "Empty" about a loadout that holds something would be a wrong claim about the record.
 - Should an inherited description be distinguished *visually* from a written one — greyed, italic, marked "from The Turncoat"? The spec already settles the non-visual half: it MUST NOT be announced as though the user wrote it. What remains open is whether to also mark it on screen, which is more honest and more cluttered.
 - Is 10 the right threshold? It is a judgement recorded as one. Worth revisiting once there is any usage data, and cheap to change by design.
-- **Where** in the loadout row does the description sit, and how tall is it before it clamps? The spec requires it to be bounded with a reveal affordance and to never overflow the row, but not where the clamp falls — one line beside the preview and a full paragraph on expand are both conforming, and they read very differently.
+- **Where** on the loadout *card* does the description sit, and how tall is it before it clamps? *(Reworded 2026-08-10: it was "in the loadout row" until loadouts became cards.)* The spec requires it bounded with a reveal affordance and never overflowing its card, but not where the clamp falls — one line beside the preview and a full paragraph on expand are both conforming, and they read very differently. #140 is still unimplemented, so this is cheap to settle now.
 - Should restoring inheritance be an explicit control ("use The Turncoat's description") or should clearing the field twice mean reset? The spec requires a distinct action and deliberately does not name it, since a double-clear gesture is undiscoverable.
