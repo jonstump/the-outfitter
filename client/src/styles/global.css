@@ -1073,7 +1073,7 @@ button {
    size floors it exists to protect cannot drift apart. */
 .ll-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--ll-card-min, 288px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--ll-card-min, 282px), 1fr));
   gap: 12px;
   padding: 12px;
   /* The track floor is a MINIMUM, and one column of it must still fit: below that width the
