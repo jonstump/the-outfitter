@@ -146,19 +146,19 @@ describe("LoadoutListsPanel", () => {
   it("offers only sorts that are backed by data", () => {
     renderPanel(base([list("a", "Alpha")], []));
     const opts = within(screen.getByLabelText(/order lists by/i)).getAllByRole("option").map((o) => o.textContent);
-    expect(opts).toEqual(["Sort: List name", "Sort: Creation date", "Sort: Loadouts held"]);
 
-    // Two absences with two different causes, asserted separately because only one of
-    // them is temporary — a single combined regex hid that distinction.
+    // ARRIVED. This assertion previously withheld "Hunter name" and predicted its own failure
+    // "once #109 populates hunters.js". SPEC-0004's scrape has now landed the roster, so the
+    // comparator the panel always passed has something to resolve and the option is offered.
+    expect(opts).toEqual([
+      "Sort: List name",
+      "Sort: Hunter name",
+      "Sort: Creation date",
+      "Sort: Loadouts held",
+    ]);
 
-    // WITHHELD. The comparator exists and the panel already passes hunterNameFor, but an
-    // empty roster resolves nothing, so the ordering would silently duplicate the default.
-    // This entry is expected to appear on its own once #109 populates hunters.js — at which
-    // point this assertion is the one that should fail and be updated.
-    expect(opts.join()).not.toMatch(/Hunter name/);
-
-    // GONE. SPEC-0003 dropped the requirement outright (2026-08-10) rather than deferring
-    // it, so unlike the above this must not come back without a spec change first.
+    // GONE. SPEC-0003 dropped the requirement outright (2026-08-10) rather than deferring it,
+    // so unlike the hunter sort this must not come back without a spec change first.
     expect(opts.join()).not.toMatch(/Recently used/);
   });
 

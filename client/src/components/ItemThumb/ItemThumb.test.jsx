@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import ItemThumb, { slugify } from "./ItemThumb.jsx";
+import ItemThumb, { extensionsFor, slugify } from "./ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
@@ -104,6 +104,35 @@ describe("ItemThumb", () => {
   it("renders without an extra modifier class when none is passed", () => {
     const { container } = render(<ItemThumb name="Mystery Item" svgPath={SVG_PATH} />);
     expect(container.querySelector("span")).toHaveClass("item-thumb");
+  });
+});
+
+describe("hunter portraits (SPEC-0004 assets)", () => {
+  it("requests the AVIF the scrape actually writes, first try", () => {
+    // SPEC-0004 encodes portraits as AVIF only. Walking jpg/jpeg/png/webp first would cost four
+    // guaranteed 404s per portrait on a picker that renders the whole roster.
+    const { container } = render(
+      <ItemThumb category="hunters" name="bad-hand" alt="" svgPath={SVG_PATH} />
+    );
+    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/bad-hand.avif");
+  });
+
+  it("falls straight to the silhouette when the portrait is absent", () => {
+    // SPEC-0003 requires a hunter with no portrait asset to render the placeholder, not a broken
+    // image — and to get there in one step, not five.
+    const { container } = render(
+      <ItemThumb category="hunters" name="no-art" alt="" svgPath={SVG_PATH} />
+    );
+    fireEvent.error(container.querySelector("img"));
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("leaves every other category's chain untouched", () => {
+    expect(extensionsFor("weapons")).toEqual(["jpg", "jpeg", "png", "webp"]);
+    expect(extensionsFor("traits")).toEqual(["jpg", "jpeg", "png", "webp"]);
+    expect(extensionsFor(undefined)).toEqual(["jpg", "jpeg", "png", "webp"]);
+    expect(extensionsFor("hunters")).toEqual(["avif"]);
   });
 });
 

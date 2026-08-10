@@ -14,10 +14,11 @@
     "dev": "concurrently -n server,client -c blue,yellow \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "test": "npm run test -w client && npm run test -w server && npm run test:scrape-images",
-    "test:scrape-images": "node --test scripts/*.test.mjs"
+    "test": "npm run test -w client && npm run test -w server && npm run test:scrape",
+    "test:scrape": "node --test scripts/*.test.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "sharp": "^0.35.3"
   }
 }
