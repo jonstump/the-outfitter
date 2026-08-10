@@ -41,8 +41,37 @@ jobs:
       - name: Build the client
         run: npm run build -w client
 
-      - name: Run client unit tests
-        run: npm run test -w client
+      # Governing: SPEC-0002 REQ "Task Interface Stability".
+      # One command, the same one the README documents and a contributor runs.
+      # It previously ran the client and scrape suites step-by-step and simply
+      # omitted the server's — 48 tests, including the cross-token ownership
+      # assertions ADR-0006 calls the rule "most likely to be missed" (issue
+      # #118). Fanning out from a single root script means adding a workspace
+      # cannot leave CI silently behind again.
+      - name: Run the test suites
+        run: npm test
 
-      - name: Run scrape-script tests
-        run: npm run test:scrape-images
+  # Governing: ADR-0004 (Confirmation), SPEC-0002 REQ "Toolchain Enforcement at Install Time".
+  # `engine-strict=true` in .npmrc is what turns a wrong Node major into a failed install
+  # rather than a warning nobody reads — but nothing proved it actually fires. This job
+  # installs on a major the root `engines.node` range excludes and asserts npm refuses.
+  # The version below is hardcoded and MUST stay outside the .nvmrc range: it is the
+  # negative case, so deriving it from the canonical pin would defeat the test.
+  engine-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # --dry-run resolves the tree and validates engines without writing node_modules,
+      # so the guard costs seconds. npm exits 1 with EBADENGINE naming the required range.
+      - name: npm ci must refuse an unsupported Node major
+        run: |
+          if npm ci --dry-run; then
+            echo "::error::npm ci succeeded on $(node -v) despite engines.node excluding it — engine-strict is not enforcing the root range"
+            exit 1
+          fi
+          echo "npm ci correctly refused $(node -v)"

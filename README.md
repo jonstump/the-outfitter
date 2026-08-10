@@ -38,6 +38,8 @@ Run from the repo root:
 | `npm run dev` | Run client and server concurrently in watch mode |
 | `npm run build` | Build the client for production |
 | `npm start` | Start the production server (sets `NODE_ENV=production` itself; serves the built client) |
+| `npm test` | Run every suite — client, server, and the scrape scripts. This is what CI runs |
+| `npm run test:scrape-images` | Run only the scrape-script tests |
 
 ## Project structure
 
