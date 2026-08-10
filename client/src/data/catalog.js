@@ -82,7 +82,21 @@ export const WEAPONS = [
   ["winfield-m1873", "Winfield M1873", 3, 63, "compact", "Rifles"],
   ["romero-77", "Romero 77", 3, 60, "shotgun", "Shotguns"],
   ["crossbow", "Crossbow", 3, 60, "xbow", "Bows"],
-  ["frontier-73c", "Frontier 73C", 3, 72, "medium", "Rifles"],
+  // Compact, not medium: this entry and "Winfield M1873C" above are the same weapon under its
+  // post- and pre-1896 names, and they disagreed on ammo class. The wiki describes the Frontier
+  // 73C as a lightened Ranger 73 (a Compact rifle), so "medium" was wrong and was pricing this
+  // weapon's ammo out of the wrong AMMO pool. See docs/audits/weapon-catalog-wiki-audit.md.
+  //
+  // Known one-time cost of this correction (PR #116 review): a weapon's selected ammo is
+  // persisted as a bare INDEX into AMMO[ammoClass] (loadoutCodec.js `w.a`, read back by
+  // calc.js's `AMMO[WEAPONS[w.i][4]][w.a][1]`), not as an ammo id. AMMO.medium and AMMO.compact
+  // are both length 5, so no bounds check trips — an already-saved loadout with this weapon and
+  // an ammo variant selected silently re-resolves to the same index in the other pool. Index 1
+  // is the worst case: Spitzer ($60) becomes High Velocity ($13). Accepted rather than migrated,
+  // because it needs a FORMAT_VERSION bump to fix properly and the affected set is loadouts that
+  // both use this weapon and picked a non-default ammo. Changing ANY weapon's ammoClass has this
+  // shape — see ADR-0005's amendment, since the scraper is allowed to write ammoClass through.
+  ["frontier-73c", "Frontier 73C", 3, 72, "compact", "Rifles"],
   ["bomb-lance", "Bomb Lance", 3, 75, "none", "Melee"],
   ["caldwell-rival-78", "Caldwell Rival 78", 3, 125, "shotgun", "Shotguns"],
   ["vetterli-71-karabiner", "Vetterli 71 Karabiner", 3, 152, "medium", "Rifles"],

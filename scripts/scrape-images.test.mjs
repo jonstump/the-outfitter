@@ -89,44 +89,75 @@ test("buildItemPageUrl: special characters inside a segment are percent-encoded"
 // ---------------------------------------------------------------------------
 
 test("resolveWikiPath: defaults to the item's own category namespace", () => {
-  assert.equal(resolveWikiPath("weapons", "Nagant M1895"), "Weapons/Nagant_M1895");
-  assert.equal(resolveWikiPath("traits", "Bulletgrubber"), "Traits/Bulletgrubber");
+  assert.equal(resolveWikiPath("weapons", "nagant-m1895", "Nagant M1895"), "Weapons/Nagant_M1895");
+  assert.equal(resolveWikiPath("traits", "bulletgrubber", "Bulletgrubber"), "Traits/Bulletgrubber");
 });
 
 test("resolveWikiPath: applies pre-1896 rename overrides", () => {
-  assert.equal(resolveWikiPath("weapons", "Sparks LRR"), "Weapons/Sparks");
-  assert.equal(resolveWikiPath("weapons", "Caldwell Pax"), "Weapons/Pax");
-  assert.equal(resolveWikiPath("weapons", "Winfield 1876 Centennial"), "Weapons/Centennial");
+  assert.equal(resolveWikiPath("weapons", "sparks-lrr", "Sparks LRR"), "Weapons/Sparks");
+  assert.equal(resolveWikiPath("weapons", "caldwell-pax", "Caldwell Pax"), "Weapons/Pax");
+  assert.equal(
+    resolveWikiPath("weapons", "winfield-1876-centennial", "Winfield 1876 Centennial"),
+    "Weapons/Centennial"
+  );
 });
 
 test("resolveWikiPath: maps weapon variants to their subpage", () => {
-  assert.equal(resolveWikiPath("weapons", "Sparks Pistol"), "Weapons/Sparks/Pistol");
-  assert.equal(resolveWikiPath("weapons", "Mosin-Nagant Avtomat"), "Weapons/Mosin-Nagant/Avtomat");
-  assert.equal(resolveWikiPath("weapons", "Nagant Officer Carbine"), "Weapons/Officer/Carbine");
+  assert.equal(resolveWikiPath("weapons", "sparks-pistol", "Sparks Pistol"), "Weapons/Sparks/Pistol");
+  assert.equal(
+    resolveWikiPath("weapons", "mosin-nagant-avtomat", "Mosin-Nagant Avtomat"),
+    "Weapons/Mosin-Nagant/Avtomat"
+  );
+  assert.equal(
+    resolveWikiPath("weapons", "nagant-officer-carbine", "Nagant Officer Carbine"),
+    "Weapons/Officer/Carbine"
+  );
 });
 
 test("resolveWikiPath: can cross categories (the Katana is a Tool here, a Weapon on the wiki)", () => {
-  assert.equal(resolveWikiPath("tools", "Katana"), "Weapons/Katana");
+  assert.equal(resolveWikiPath("tools", "katana", "Katana"), "Weapons/Katana");
 });
 
 test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
-  assert.equal(resolveWikiPath("tools", "Alert Trip Mine"), "Tools/Alert_Trip_Mines");
-  assert.equal(resolveWikiPath("tools", "Poison Trip Mine"), "Tools/Poison_Trip_Mines");
+  assert.equal(
+    resolveWikiPath("tools", "alert-trip-mine", "Alert Trip Mine"),
+    "Tools/Alert_Trip_Mines"
+  );
+  assert.equal(
+    resolveWikiPath("tools", "poison-trip-mine", "Poison Trip Mine"),
+    "Tools/Poison_Trip_Mines"
+  );
 });
 
 test("resolveWikiPath: returns null for known catalog duplicates", () => {
-  assert.equal(resolveWikiPath("weapons", "Winfield M1873"), null);
-  assert.equal(resolveWikiPath("weapons", "Winfield M1873C"), null);
-  assert.equal(resolveWikiPath("consumables", "Choke Bomb"), null);
+  assert.equal(resolveWikiPath("weapons", "winfield-m1873c", "Winfield M1873C"), null);
+  assert.equal(resolveWikiPath("consumables", "choke-bomb", "Choke Bomb"), null);
+});
+
+// Regression: "Winfield M1873" is the live weapon the wiki calls "Ranger 73", not a duplicate.
+// It was mapped to null, so the only catalog entry for that weapon was skipped by every run.
+test("resolveWikiPath: Winfield M1873 resolves to the renamed Ranger 73 page, not null", () => {
+  assert.equal(resolveWikiPath("weapons", "winfield-m1873", "Winfield M1873"), "Weapons/Ranger_73");
+});
+
+// The override table is keyed by catalog id precisely so that ADR-0005's name write-through
+// (the wiki is authoritative for display names) cannot silently invalidate it. Renaming an item
+// must not change which page it resolves to.
+test("resolveWikiPath: overrides survive a display-name change", () => {
+  assert.equal(
+    resolveWikiPath("weapons", "nagant-officer-carbine", "Officer Carbine"),
+    "Weapons/Officer/Carbine"
+  );
+  assert.equal(resolveWikiPath("weapons", "caldwell-pax", "Pax"), "Weapons/Pax");
 });
 
 test("every null override has an explanation in KNOWN_CATALOG_DUPLICATES", () => {
   for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
-    for (const [name, target] of Object.entries(overrides)) {
+    for (const [id, target] of Object.entries(overrides)) {
       if (target === null) {
         assert.ok(
-          KNOWN_CATALOG_DUPLICATES[name],
-          `${category}/"${name}" is mapped to null but has no KNOWN_CATALOG_DUPLICATES entry`
+          KNOWN_CATALOG_DUPLICATES[id],
+          `${category}/"${id}" is mapped to null but has no KNOWN_CATALOG_DUPLICATES entry`
         );
       }
     }
@@ -135,9 +166,23 @@ test("every null override has an explanation in KNOWN_CATALOG_DUPLICATES", () =>
 
 test("every override key names a real catalog item", () => {
   for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
-    const names = new Set(collectCatalogItems([category]).map((i) => i.name));
-    for (const name of Object.keys(overrides)) {
-      assert.ok(names.has(name), `override ${category}/"${name}" does not match any catalog item`);
+    const ids = new Set(collectCatalogItems([category]).map((i) => i.id));
+    for (const id of Object.keys(overrides)) {
+      assert.ok(ids.has(id), `override ${category}/"${id}" does not match any catalog item`);
+    }
+  }
+});
+
+// Guards the ADR-0005 invariant that ids are the stable key: a name-keyed override would pass
+// the test above today and start failing silently the first time a rename lands.
+test("override keys are catalog ids, never display names", () => {
+  for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
+    for (const id of Object.keys(overrides)) {
+      assert.equal(
+        id,
+        slugify(id),
+        `override ${category}/"${id}" is not a slug-style catalog id (did you key it by display name?)`
+      );
     }
   }
 });
@@ -436,7 +481,13 @@ test("scrapeItem: skips a known catalog duplicate without spending a request", a
   };
   const fs = makeFsStub();
   const result = await scrapeItem(
-    { category: "weapons", name: "Winfield M1873C", slug: "winfield-m1873c", wikiPath: null },
+    {
+      category: "weapons",
+      id: "winfield-m1873c",
+      name: "Winfield M1873C",
+      slug: "winfield-m1873c",
+      wikiPath: null,
+    },
     { fetchFn, rateLimiter: okRateLimiter, robotsGroups: okRobots, ...fs }
   );
   assert.equal(result.status, "skipped");

@@ -224,14 +224,15 @@ export async function scrapeItem(target, deps) {
     dryRun = false,
   } = deps;
 
-  const { category, name: item, slug } = target;
-  const wikiPath = target.wikiPath !== undefined ? target.wikiPath : resolveWikiPath(category, item);
+  const { category, id, name: item, slug } = target;
+  const wikiPath =
+    target.wikiPath !== undefined ? target.wikiPath : resolveWikiPath(category, id, item);
   const destDir = path.join(imagesRoot, category);
 
   // Known catalog duplicates have no wiki page of their own. Skip them before spending a request
   // so they surface as an explained skip rather than a 404 in the failed bucket.
   if (wikiPath === null) {
-    const reason = KNOWN_CATALOG_DUPLICATES[item] || "no wiki page mapped for this catalog entry";
+    const reason = KNOWN_CATALOG_DUPLICATES[id] || "no wiki page mapped for this catalog entry";
     return { status: "skipped", category, item, slug, reason: `no wiki page: ${reason}` };
   }
 
