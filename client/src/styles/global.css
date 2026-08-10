@@ -750,6 +750,18 @@ button {
   height: 56px;
 }
 
+/* Once the two columns stack, the picker is only as wide as the viewport, and the 176px
+   Weapons band leaves the badge and cost with nowhere to go — .picker-list would clip them
+   rather than reflow. The widest weapon row needs ~435px of row width, so clipping starts
+   around a 493px viewport; break at 600px for headroom, where a band that wide has stopped
+   earning its space anyway. Below this the Weapons tab uses the square shape. */
+@media (max-width: 600px) {
+  .picker-row-thumb.wide {
+    width: 56px;
+    height: 56px;
+  }
+}
+
 .picker-row-body {
   flex: 1;
 }
