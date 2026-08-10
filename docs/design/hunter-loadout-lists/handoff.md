@@ -7,7 +7,9 @@
 >    `--gold`, the theme's primary interactive colour, so a gold-framed card reads as
 >    selected. The replacement clears 3:1 against all three backgrounds with the widest
 >    hue separation of the candidates tested. Final palette:
->    `#b04a3e` `#7a8a4e` `#5a6e96` `#5e8a8a` `#8a5e86` `#a3703e`.
+>    `#b04a3e` `#7a8a4e` `#5a6e96` `#5e8a8a` `#8a5e86` `#a3703e`. The prototype's
+>    `PALETTE` constant and the token list below were updated to match; every other
+>    `#c4a05e` in the prototype is a legitimate `--gold` use (links, titles, cost).
 > 2. **"Recently used"** is defined as *last opened*, resolving the open question this
 >    document notes in § State Management.
 >
@@ -90,7 +92,7 @@ All from `client/src/styles/global.css` — use the variables:
 - Borders: `--border` #3a2f1e, `--border-soft` #2a2216, `--divider` #241d12, `--gold-border` #8a6f42
 - Text: `--text` #e6d9ba, `--text-bright` #f0e6c8, `--text-muted` #a3936f, `--text-dim` #857659
 - Accents: `--gold` #c4a05e, `--gold-bright` #e5c78b, `--red` #7f2b26, `--red-border` #a04338, `--red-bright` #c96b5b, `--olive` #9aa06b
-- **New — list accent palette** (muted, distinguishable on `--panel`, assigned least-used-first, duplicates allowed): `#b04a3e`, `#7a8a4e`, `#c4a05e`, `#5e8a8a`, `#8a5e86`, `#a3703e`. Verify against WCAG contrast where accents carry meaning; the list name remains the primary accessible identity.
+- **New — list accent palette** (muted, distinguishable on `--panel`, assigned least-used-first, duplicates allowed): `#b04a3e`, `#7a8a4e`, `#5a6e96`, `#5e8a8a`, `#8a5e86`, `#a3703e`. Contrast verified — all six clear 3:1 against `--panel`, `--scroll-track`, and `--bg`; see the table in design.md. The list name remains the primary accessible identity because the palette separates by hue, not luminance.
 - Type: Alegreya (body), IM Fell English SC (display). Accent frame 3px; row left-accent 3px; poster card height 220px; grid gap 14px; row gap 6px.
 
 ## Assets

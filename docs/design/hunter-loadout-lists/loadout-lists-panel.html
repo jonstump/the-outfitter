@@ -186,14 +186,14 @@ const HUNTERS = [
   { id: "chaplain", name: "The Chaplain" },
   { id: "scout", name: "Scout" }
 ];
-const PALETTE = ["#b04a3e", "#7a8a4e", "#c4a05e", "#5e8a8a", "#8a5e86", "#a3703e"];
+const PALETTE = ["#b04a3e", "#7a8a4e", "#5a6e96", "#5e8a8a", "#8a5e86", "#a3703e"]; // #c4a05e -> #5a6e96: see handoff.md deviations
 const T = Date.now();
 class Component extends DCLogic {
   state = {
     lists: [
       { id: "l1", name: "The Rat", hunterId: "rat", accent: "#b04a3e", createdAt: T - 86e6 * 40, lastUsed: T - 86e6 * 2 },
       { id: "l2", name: "shotgun experiments", hunterId: "rat", accent: "#7a8a4e", createdAt: T - 86e6 * 30, lastUsed: T - 86e6 * 1 },
-      { id: "l3", name: "Scout", hunterId: "scout", accent: "#c4a05e", createdAt: T - 86e6 * 25, lastUsed: T - 86e6 * 9 },
+      { id: "l3", name: "Scout", hunterId: "scout", accent: "#5a6e96", createdAt: T - 86e6 * 25, lastUsed: T - 86e6 * 9 },
       { id: "l4", name: "duo runs with Dave", hunterId: "widow", accent: "#5e8a8a", createdAt: T - 86e6 * 12, lastUsed: T - 86e6 * 4 },
       { id: "l5", name: "bounty clash", hunterId: null, accent: "#8a5e86", createdAt: T - 86e6 * 6, lastUsed: T - 86e6 * 6 },
       { id: "l6", name: "The Doctor", hunterId: "doctor", accent: "#a3703e", createdAt: T - 86e6 * 3, lastUsed: T - 86e6 * 3 }
