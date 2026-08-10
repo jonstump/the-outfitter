@@ -79,12 +79,24 @@
 // Two grids, or a section that was its own role="grid", would have bought the visual split
 // at the price of both properties.
 //
+// The COLUMN half of that bookkeeping did have to change (#138, PR #151 review). `.hp-grid`
+// is a flex column now and `.hp-section` is the CSS grid, so there is no longer one column
+// count for the widget to read: each section is laid out on its own, and a Favorites section
+// with fewer members than a row is narrower than the roster below it. Down and Up therefore
+// measure the section holding the active row and cross the boundary deliberately — see
+// `columnsIn`/`verticalTarget`. Left, Right, Home and End never needed the column count and
+// still walk the flat row sequence unchanged.
+//
+// Sections are also separate DOM PARENTS, so favoriting a hunter unmounts its tile from one
+// and mounts a new one in the other. Focus does not survive that on its own and has to be
+// handed to the moved tile explicitly — see `pendingFocus`.
+//
 // The visible section caption is aria-hidden and the ROWGROUP carries the accessible name
 // including the count ("Favorites, 3 hunters"). A bare heading element between rows would be
 // an invalid child of a grid; hiding it and naming the rowgroup gives assistive technology
 // the same information through a structure the grid role actually permits.
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import {
@@ -212,23 +224,73 @@ export default function HunterPicker({
   // can only be read back from layout. Falls back to a single column when layout has not
   // happened (which also makes Up/Down degrade to Previous/Next rather than misfire).
   //
+  // MEASURED PER ROWGROUP, not per grid (#138). `.hp-section` is the CSS grid now, not
+  // `.hp-grid` — so "the rows sharing the FIRST row's offsetTop" answers a question about
+  // the Favorites section rather than about the widget. A Favorites section shorter than one
+  // row is the common case the whole feature exists for, and measuring it gave a 60-tile
+  // roster below it a column count of 1..n favorites: Down stepped sideways instead of down.
+  //
   // "No layout yet" cannot be inferred from offsetTop alone: unlaid-out tiles all report 0,
   // and so do the tiles of a genuine single row. Counting equal offsetTops would then yield
   // the whole tile count in BOTH cases — which is right for one row and badly wrong before
   // layout, where it sends Up/Down to the last/first tile instead of one step. Ask about
   // layout directly instead: an unlaid-out element has no box, so its offset size is 0.
-  const columnCount = () => {
-    const rows = rowEls();
-    if (rows.length < 2) return 1;
-    const first = rows[0];
+  const columnsIn = (groupRows) => {
+    if (groupRows.length < 2) return 1;
+    const first = groupRows[0];
     if (first.offsetWidth === 0 && first.offsetHeight === 0) return 1;
     const top = first.offsetTop;
     let n = 0;
-    for (const el of rows) {
+    for (const el of groupRows) {
       if (el.offsetTop !== top) break;
       n += 1;
     }
     return Math.max(1, n);
+  };
+
+  // Each rowgroup's slice of the flat row sequence, plus its own column count. Read from
+  // the DOM rather than from `sections` so the "no portrait" rowgroup is described by the
+  // same rule as the hunter sections instead of being a special case in the key handler.
+  const rowGroups = () => {
+    const groups = Array.from(gridRef.current?.querySelectorAll('[role="rowgroup"]') ?? []);
+    let start = 0;
+    return groups.map((el) => {
+      const groupRows = Array.from(el.querySelectorAll('[role="row"]'));
+      const g = { start, length: groupRows.length, cols: columnsIn(groupRows) };
+      start += groupRows.length;
+      return g;
+    });
+  };
+
+  // Governing: SPEC-0003 Accessibility "The Favorites Section Is Exposed, Not Merely Drawn"
+  //
+  // The flat row index that Down (dir 1) or Up (dir -1) should land on. Inside a section a
+  // row step is that section's own column count. At the section's edge the move CROSSES the
+  // boundary and keeps the visual column, so Down out of Favorites lands directly below
+  // rather than at the roster's start — and clamps when the neighbouring row is shorter.
+  //
+  // A section shorter than one row needs no special case: all of its tiles sit on one visual
+  // row, so its measured column count equals its length and `index % cols` is still the
+  // tile's real column. Every step out of such a section is a boundary crossing, which is
+  // the truth about it.
+  //
+  // Past the first or last section there is no neighbour, so the plain step is returned and
+  // focusCell clamps it to the end of the grid — the behaviour before sections existed.
+  const verticalTarget = (row, dir) => {
+    const groups = rowGroups();
+    const i = groups.findIndex((g) => row >= g.start && row < g.start + g.length);
+    if (i < 0) return row + dir;
+    const g = groups[i];
+    const within = row - g.start;
+    const col = within % g.cols;
+    const next = within + dir * g.cols;
+    if (next >= 0 && next < g.length) return g.start + next;
+    const neighbour = groups[i + dir];
+    if (!neighbour) return row + dir * g.cols;
+    if (dir > 0) return neighbour.start + Math.min(col, neighbour.length - 1);
+    // Coming up INTO a section lands in its last visual row, not its last tile.
+    const lastRowStart = Math.floor((neighbour.length - 1) / neighbour.cols) * neighbour.cols;
+    return neighbour.start + Math.min(lastRowStart + col, neighbour.length - 1);
   };
 
   /** Move focus to (row, col), clamping both to what actually exists. */
@@ -249,9 +311,58 @@ export default function HunterPicker({
     onSelect(hunter ? { hunterId: hunter.id, hunterName: hunter.name } : { hunterId: null, hunterName: null });
   };
 
+  // Governing: SPEC-0003 REQ "Focus Management", SPEC-0003 REQ "Keyboard Navigation"
+  //
+  // FAVORITING MOVES THE TILE BETWEEN TWO DOM PARENTS (#138). The sections are separate
+  // elements, so React cannot relocate a keyed tile between them: it unmounts the tile from
+  // one rowgroup and mounts a new one in the other — destroying the very button the user
+  // just pressed. Focus falls to <body>, which is OUTSIDE dialogRef, so the focus trap never
+  // sees the next Tab and cannot pull it back: pressing a control inside the dialog ejects a
+  // keyboard user from the dialog. The tile is remembered here and re-found below.
+  //
+  // Only when focus is actually inside the grid. A mouse click on a star must not yank focus
+  // across the widget, and in browsers that do not focus a button on mousedown it would.
+  const pendingFocus = useRef(null);
+
   const toggleFavorite = (hunter) => {
+    const active = document.activeElement;
+    const activeRowEl = active?.closest?.('[role="row"]');
+    pendingFocus.current =
+      active && gridRef.current?.contains(active)
+        ? { hunterId: hunter.id, col: Math.max(0, cellsIn(activeRowEl).indexOf(active)) }
+        : null;
     onToggleFavorite({ hunterId: hunter.id, hunterName: hunter.name, favorite: !favored.has(hunter.id) });
   };
+
+  // A stable identity for the favorite SET, not for the array carrying it. `favorites` is a
+  // prop off a server round-trip and a caller re-rendering with an equal-but-new array must
+  // not count as a change — that would reset the roving tabindex under a user mid-navigation.
+  const favoritesKey = useMemo(() => [...favored].sort().join(" "), [favored]);
+
+  // Every other input that reorders rows calls resetActive(); `favorites` was the one that
+  // did not, leaving activeRow pointing at a flat index that now holds a different hunter.
+  // Layout, not passive: focus must be back on a real element before the browser paints, or
+  // the user gets a frame with focus on <body>.
+  useLayoutEffect(() => {
+    const pending = pendingFocus.current;
+    pendingFocus.current = null;
+    if (!pending) {
+      resetActive();
+      return;
+    }
+    const rows = rowEls();
+    const moved = rows.findIndex((r) => r.dataset.hunterId === pending.hunterId);
+    // Not found means the hunter left the grid entirely — unfavoriting while "favorites
+    // only" is on. There is nothing to return focus TO, and leaving it on <body> is the bug
+    // itself, so it goes to the top of the grid, which is where the shortened list starts.
+    if (moved < 0) {
+      resetActive();
+      focusCell(0, 0);
+      return;
+    }
+    focusCell(moved, pending.col);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoritesKey]);
 
   // COLS_END is any index past the widest row; focusCell clamps it to that row's last cell.
   const COLS_END = 99;
@@ -259,7 +370,6 @@ export default function HunterPicker({
   const onGridKeyDown = (e) => {
     const rows = rowEls();
     const lastRow = rows.length - 1;
-    const cols = columnCount();
     const inRow = cellsIn(rows[activeRow]).length;
     switch (e.key) {
       case "ArrowRight":
@@ -276,11 +386,11 @@ export default function HunterPicker({
         break;
       case "ArrowDown":
         e.preventDefault();
-        focusCell(activeRow + cols, activeCol);
+        focusCell(verticalTarget(activeRow, 1), activeCol);
         break;
       case "ArrowUp":
         e.preventDefault();
-        focusCell(activeRow - cols, activeCol);
+        focusCell(verticalTarget(activeRow, -1), activeCol);
         break;
       case "Home":
         e.preventDefault();
@@ -464,6 +574,9 @@ export default function HunterPicker({
                       <div
                         key={h.id}
                         role="row"
+                        // The hunter this row is for, so focus can be handed back to the
+                        // same tile after a favorite moves it to the other section.
+                        data-hunter-id={h.id}
                         className={`hp-tile${selectedHunterId === h.id ? " hp-tile-picked" : ""}${
                           favorite ? " hp-tile-fav" : ""
                         }`}

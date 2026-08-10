@@ -87,8 +87,8 @@ const hunterFavoritesSlice = createSlice({
         state.status = "failed";
         state.error = action.error.message;
         // `ids` is left alone rather than cleared: a failed refetch is not evidence that
-        // the user unfavorited anything, and blanking the list would silently drop the
-        // sort priority the picker is already rendering.
+        // the user unfavorited anything, and blanking the list would silently collapse the
+        // Favorites section the picker is already rendering.
       })
       // Both reducers are idempotent in the same way their endpoints are, so a duplicate
       // fulfilment (two tabs, a retried request) converges instead of double-applying.

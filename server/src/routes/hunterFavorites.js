@@ -91,7 +91,7 @@ function respondToUnknownHunter(res, err, op) {
  *
  * Never a filter, never a gate: this returns what the caller has favorited and nothing
  * about the roster. The picker shows all 242 either way — SPEC-0003 REQ "Favorite Hunters"
- * makes favorites a sort priority plus an optional client-side toggle — so an empty array
+ * makes favorites their own section plus an optional client-side toggle — so an empty array
  * here is an ordinary, expected answer and not an empty picker.
  */
 hunterFavoritesRouter.get("/", async (req, res) => {

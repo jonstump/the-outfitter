@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import HunterPicker from "./HunterPicker.jsx";
 
@@ -88,6 +88,15 @@ const tiles = () => rows().map((row) => within(row).getAllByRole("gridcell")[0])
 const nameOf = (el) => el.querySelector(".hp-tile-name").textContent.trim();
 const tileNames = () => tiles().map(nameOf);
 const favButton = (hunterId) => screen.getByTestId(`hunter-fav-${hunterId}`);
+// Put the user on a tile. Wrapped in act() because focusing a cell updates the picker's
+// row/column bookkeeping: unwrapped, that update is still pending when the next key press
+// dispatches, and the key runs against the PREVIOUS position. Only matters when landing
+// somewhere other than the grid's first row, which is why the older tests get away without it.
+const focusTile = (hunterId) => {
+  const el = screen.getByTestId(`hunter-tile-${hunterId}`);
+  act(() => el.focus());
+  return el;
+};
 
 // Sections. The last rowgroup always holds the "no portrait" escape hatch, so
 // `hunterSections()` drops it: it is not a hunter group and carries no count.
@@ -663,6 +672,107 @@ describe("HunterPicker focus and keyboard", () => {
     // End still reaches the "no portrait" tile past both sections, with its single cell.
     fireEvent.keyDown(grid(), { key: "End" });
     expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-none"));
+  });
+
+  // Governing: SPEC-0003 Accessibility "The Favorites Section Is Exposed, Not Merely Drawn"
+  //
+  // Regression, PR #151 review. The Down/Up test above renders NO favorites, so it exercises
+  // a grid with a single hunter section — precisely the shape sectioning did not change. Once
+  // `.hp-section` became the CSS grid, a column count measured from the first row measured
+  // the FAVORITES section, and a one-favorite section made Down step one tile instead of one
+  // row through the whole roster below it. Each section is laid out on its own here.
+  it("moves Down/Up by a whole row inside a section, and crosses the boundary in column", () => {
+    render(<Harness initialFavorites={["bad-hand"]} />);
+    openPicker();
+
+    // Favorites holds Bad Hand alone; the roster holds the other four, two per row; the
+    // "no portrait" rowgroup trails both. offsetTop is a document coordinate, so it keeps
+    // climbing ACROSS sections — which is exactly why a first-row measurement saw only the
+    // one-tile Favorites section and reported one column for the whole widget.
+    const y = { "bad-hand": 0, "the-rat": 100, "the-raven": 100, "the-ol-cowpoke": 180, kingsnake: 180 };
+    rows().forEach((el) => {
+      Object.defineProperty(el, "offsetWidth", { configurable: true, value: 120 });
+      Object.defineProperty(el, "offsetHeight", { configurable: true, value: 80 });
+      Object.defineProperty(el, "offsetTop", { configurable: true, value: y[el.dataset.hunterId] ?? 260 });
+    });
+
+    // Down inside the roster is a whole row of the ROSTER's two columns — not one tile,
+    // which is what the one-member Favorites section's width would have given.
+    focusTile("the-rat");
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-ol-cowpoke"));
+
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
+
+    // The second column moves straight down its own column, too.
+    focusTile("the-raven");
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-kingsnake"));
+
+    // Down out of a section shorter than a row crosses into the next one, keeping the
+    // column; Up out of the roster's first row comes back to it.
+    focusTile("bad-hand");
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
+
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-bad-hand"));
+
+    // Down off the roster's last row lands on the "no portrait" rowgroup rather than
+    // stopping at the boundary; Up out of it returns to that row, not to the roster's first.
+    focusTile("the-ol-cowpoke");
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-none"));
+
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-ol-cowpoke"));
+  });
+
+  // Governing: SPEC-0003 REQ "Focus Management"
+  //
+  // Regression, PR #151 review. The sections are separate DOM parents, so React unmounts the
+  // tile from one and mounts a new one in the other — taking the button the user pressed
+  // with it. Focus landed on <body>, OUTSIDE the dialog, where the trap cannot recover it:
+  // pressing a control inside the dialog ejected a keyboard user from the dialog.
+  it("keeps focus on the star when favoriting moves the tile to the other section", () => {
+    render(<Harness initialFavorites={["bad-hand"]} />);
+    openPicker();
+
+    const star = favButton("kingsnake");
+    act(() => star.focus());
+    fireEvent.click(star);
+
+    // The tile really did move — so the button below is a different node from `star`.
+    expect(namesInSection("favorites")).toEqual(["Bad Hand", "Kingsnake"]);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(favButton("kingsnake"));
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    // …and the roving tabindex followed it, so Tab out and back returns to the same place.
+    expect(favButton("kingsnake").tabIndex).toBe(0);
+
+    // The same in the other direction, back down into the roster.
+    fireEvent.click(favButton("kingsnake"));
+    expect(namesInSection("favorites")).toEqual(["Bad Hand"]);
+    expect(document.activeElement).toBe(favButton("kingsnake"));
+    expect(favButton("kingsnake").tabIndex).toBe(0);
+  });
+
+  it("keeps focus inside the dialog when unfavoriting removes the tile altogether", () => {
+    // "Favorites only" is on, so unfavoriting does not move the tile — it deletes it. There
+    // is no same-tile answer, and <body> is the one answer that breaks the trap.
+    render(<Harness initialFavorites={["kingsnake", "bad-hand"]} />);
+    openPicker();
+    fireEvent.click(screen.getByRole("checkbox", { name: /favorites only/i }));
+
+    const star = favButton("kingsnake");
+    act(() => star.focus());
+    fireEvent.click(star);
+
+    expect(screen.queryByTestId("hunter-fav-kingsnake")).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-bad-hand"));
   });
 
   it("keeps the roving tabindex in range when a filter shortens the list", () => {
