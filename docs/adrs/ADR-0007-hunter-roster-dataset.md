@@ -215,7 +215,7 @@ Recorded rather than silently rewritten, so the reversal is auditable and the or
 
 Trimming that padding changes the arithmetic the original decision rested on:
 
-* The subject is **204–256px tall at native** across all 242 hunters, so a single trimmed asset is large enough for every surface that renders one except the list card (see *Known limit* below). A picker tile needs 192px at 2×: **all 242 clear it in height, and 191 of 242 in width** — the 51 narrowest upscale by at most 1.08× on a square tile, against 1.5× for every hunter today.
+* The subject is **204–256px tall at native** across all 242 hunters, so a single trimmed asset is large enough for every surface that renders one except the list card (see *Known limit* below). A picker tile needs 192px at 2×: **all 242 clear it in height, and 191 of 242 in width** — the 51 narrowest upscale by at most 1.09× on a square tile, against 1.5× for every hunter today. *(1.08× at the time of writing; corrected to the measured 1.09× once the first real run produced a 176px floor.)*
 * Once trimmed, "full size" and "thumbnail" are 207px and 192px wide — 7% apart. For the narrowest subjects the two encodes are byte-identical, because `withoutEnlargement` produces the same image twice. Two sizes had stopped being two sizes.
 * One asset per hunter projects to **~2.39 MB across the roster, below the 2.91 MB two-size padded set it replaces**, while making every picker tile sharp for the first time.
 

@@ -14,7 +14,7 @@ This spec covers **production**. SPEC-0003 specifies **consumption** — the fal
 
 See ADR-0007 for the decision record, including why this is one script rather than the images/stats split ADR-0005 established.
 
-**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.08× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
+**Amended 2026-08-10 — one trimmed portrait, not two sizes.** The two-size pipeline this spec originally required has been replaced, per the ADR-0007 amendment of the same date. Measurement showed the wiki original is 384×256 with an alpha channel and the hunter occupies only about 54% of that width — the pipeline was spending its budget and its resolution on transparent padding. Trimming to the subject makes a single native-resolution asset large enough for every surface except the list card, and for the picker tile in height with a bounded 1.09× shortfall in width on the 51 narrowest hunters, so the second size stopped earning its place. Requirements marked *(amended 2026-08-10; not yet implemented)* below describe the new pipeline; the committed assets still follow the old one until a re-scrape runs.
 
 ## Requirements
 
@@ -107,6 +107,8 @@ Before encoding, the scrape SHALL **trim the source to the subject's bounding bo
 
 The trimmed subject SHALL then be encoded at its **native trimmed resolution**: neither downscaled nor upscaled.
 
+**The trim is asserted against the rectangle selected for encoding, not against the decoded output** *(clarified 2026-08-10)*. Lossy AVIF alpha can zero an edge band after a correct trim — measured at 26 of 242 assets at quality 70 — so an emitted asset MAY decode with a fully transparent border row or column even though the trim was exact. Conformance tests SHALL therefore assert the selected bounding box, and MUST NOT assert the absence of transparent borders in the decoded asset. Requiring the latter would oblige either lossless alpha or a quality setting chosen to satisfy a test rather than the eye, for no visible benefit: a transparent edge row renders identically to the margin it replaced.
+
 Portraits SHALL be encoded as **AVIF at quality 70**, and the encoding SHALL preserve the source's alpha channel so a portrait composites onto the page background rather than carrying an opaque box. The quality value is normative because the per-asset budget below is derived from it; changing it is a spec edit.
 
 Two source shapes fall outside the trim and SHALL be handled explicitly rather than left to the image library:
@@ -120,11 +122,13 @@ Trimming rather than downscaling is what makes one asset sufficient. Every store
 
 | Surface | Needs at 2× | Trimmed subject provides |
 |---|---|---|
-| Picker tile (96px square) | 192×192 | 204–256 tall for all 242; **178–334 wide, so 51 fall short on width** and upscale by at most 1.08× |
+| Picker tile (96px square) | 192×192 | 205–256 tall for all 242; **176–333 wide, so 51 fall short on width** and upscale by at most 1.09× |
 | Expanded list header (52×68) | 104×136 | clears both dimensions for every hunter |
 | List card (154×220) | 308×440 | **no hunter reaches it — see the next requirement** |
 
-The scrape MUST NOT upscale a subject to meet any of these figures. Where the source cannot supply what a surface wants, the shortfall SHALL be accepted as a source-resolution limit rather than manufactured. The 1.08× worst case on a narrow tile is recorded rather than hidden: it is an improvement on the 1.5× every hunter is upscaled by today, but it is not zero, and a requirement claiming otherwise would be false.
+The scrape MUST NOT upscale a subject to meet any of these figures. Where the source cannot supply what a surface wants, the shortfall SHALL be accepted as a source-resolution limit rather than manufactured. The 1.09× worst case on a narrow tile is recorded rather than hidden: it is an improvement on the 1.5× every hunter is upscaled by today, but it is not zero, and a requirement claiming otherwise would be false.
+
+*(figures corrected 2026-08-10 after the first real run: this table originally read 178–334 wide and 1.08×, derived by scaling the committed 320px assets rather than measuring the 384px originals. The true floor is 176px — `the-rednecks-daughter` and `wight-raven` — giving 192/176 = 1.09×. The bound was wrong by two pixels of source width, and the run that produced conforming assets was failed by it.)*
 
 **Stale size variants SHALL be removed.** The scrape SHALL delete any previously emitted asset for a hunter that does not match the current single-asset path, so that a run leaves no orphaned size variant behind, and SHALL report the count of stale assets removed. Without this the 242 `-thumb` assets already committed would survive every future run, and the disk-state and payload scenarios below could never pass.
 
@@ -136,7 +140,7 @@ The scrape MUST NOT upscale a subject to meet any of these figures. Where the so
 #### Scenario: Transparent margin is removed
 
 - **WHEN** a source portrait carries fully transparent margin around the subject
-- **THEN** the emitted asset SHALL be no larger than the source in either dimension, SHALL be strictly smaller in every dimension that carried margin, and SHALL contain no fully transparent border row or column
+- **THEN** the emitted asset SHALL be no larger than the source in either dimension, SHALL be strictly smaller in every dimension that carried margin, and the rectangle selected for encoding SHALL contain no fully transparent border row or column
 
 #### Scenario: Alpha survives encoding
 
@@ -191,7 +195,7 @@ The card is therefore rendered at roughly **1.9× upscale**. This SHALL be treat
 #### Scenario: The picker tile's residual upscale is bounded
 
 - **WHEN** the emitted portrait is rendered in a 96px square picker tile
-- **THEN** the asset SHALL clear the required 192px in height for every hunter, and a hunter whose trimmed width falls below 192px SHALL be upscaled by no more than 1.08× rather than by an unbounded amount
+- **THEN** the asset SHALL clear the required 192px in height for every hunter, and a hunter whose trimmed width falls below 192px SHALL be upscaled by no more than 1.09× rather than by an unbounded amount
 
 ### Requirement: Portrait Payload Budget
 
