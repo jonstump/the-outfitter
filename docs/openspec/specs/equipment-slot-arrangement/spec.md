@@ -29,7 +29,9 @@ Three changes follow from that one decision, and they are not separable:
 
 **Implementation status.** Nothing in this capability is implemented. `state.equip` is still packed, `blocked` is still a count, `FORMAT_VERSION` is still 1, and the panel has no drag affordance.
 
-**Interaction with SPEC-0003.** SPEC-0003's not-yet-implemented "Filed Loadouts Preview Their Contents" reads the equipment payload in slot order and sheds "later slots before earlier ones" as width narrows. Under a sparse array it must skip holes rather than index blindly. That requirement is unimplemented, so this capability creates no regression — but SPEC-0003 needs a one-line amendment in the same commit that lands the sparse model, rather than being left to diverge silently.
+**Interaction with SPEC-0003** *(updated 2026-08-10)*. This paragraph previously said SPEC-0003's preview "sheds later slots before earlier ones as width narrows" and would need a one-line amendment when the sparse model landed. **That amendment has already happened**, and it went further than one line: SPEC-0003's preview is now a fixed-cell categorised panel, the shed-by-width rule is withdrawn, and the requirement is stated in terms of *cells occupied* rather than array shape — so it reads correctly under both the packed array and this capability's sparse one, and needs no change when this lands.
+
+What remains owed to SPEC-0003 is narrower and additive: this capability introduces **consumable stacking** and **per-cell blocking**, and SPEC-0003 explicitly scopes both out of its preview for now. When this capability is implemented, SPEC-0003 needs a clause saying whether a preview renders a stack as one badged cell (as the builder will) or as repeated cells, and whether a blocked cell is drawn distinctly from an empty one. Two of SPEC-0003's preview scenarios are also marked as unexercisable until the sparse model exists, and become live then.
 
 ## Requirements
 

@@ -21,10 +21,10 @@ See ADR-0006 for the decision record and the rejected alternatives.
 
 **Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
 
-Three **additive** changes were accepted on **2026-08-10**; **two have since shipped**. Each is marked where it appears. (A fourth change of that date — dropping most-recently-used ordering — was a removal and is recorded in "List Ordering and Sorting".)
+Three changes were accepted on **2026-08-10**; **one has shipped and survived**. A further change was accepted later that day — the row→card preview replacement, which also withdraws the shed-by-width rule, so the set is no longer purely additive. Each is marked where it appears. (Dropping most-recently-used ordering also happened on that date; it was a removal and is recorded in "List Ordering and Sorting".)
 
 - ~~**Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold~~ — **implemented in #138.** Amended "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
-- ~~**Loadout rows preview what they hold**~~ — **implemented in #139.** New requirement, "Filed Loadouts Preview Their Contents"
+- ~~**Loadout rows preview what they hold**~~ — shipped in #139 as a compact strip, then **superseded the same day**: the requirement licensed something smaller than intended, and is now "Filed Loadouts Preview Their Contents" as a categorised panel plus "Saved Loadouts Render as a Card Grid". Both are **not yet implemented**
 - **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged". **Still outstanding — #140.**
 
 A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is **still outstanding — #148**. SPEC-0004 owns the production half, which shipped in #147; the consumption half is amended here rather than overridden from there, and is what #148 implements.
@@ -488,46 +488,108 @@ A user's chosen sort order SHALL be treated as client state under the same rules
 
 ### Requirement: Filed Loadouts Preview Their Contents
 
-*(added 2026-08-10; implemented in #139)*
+*(added 2026-08-10; shipped in #139 as a compact strip and superseded the same day — the replacement below is not yet implemented)*
 
-A loadout row currently shows a name and a cost. Neither tells the user what the loadout actually holds, so choosing among a list's loadouts means loading each one in turn and undoing the ones that were wrong.
+A saved loadout currently shows only a name and a cost. Neither tells the user what the loadout actually holds, so choosing among a list's loadouts means loading each one in turn and undoing the ones that were wrong.
 
-Each loadout row SHALL present a preview of what that loadout holds. The preview SHALL be derived from the record's existing `data` payload, and SHALL require **no additional request for loadout data** and no change to the stored record. Fetching the imagery that depicts it is not such a request.
+Each saved loadout SHALL present a preview of what that loadout holds. The preview SHALL be derived from the record's existing `data` payload, and SHALL require **no additional request for loadout data** and no change to the stored record. Fetching the imagery that depicts it is not such a request.
 
-The preview SHALL cover the loadout's weapons and its equipment. Whether it also depicts traits is left open, since traits are textual rather than iconographic and may summarise better as a count. Preview imagery SHALL use SPEC-0001's asset-path convention and its fallback chain, and SHALL be lazy-loaded, so a list holding many loadouts fetches imagery proportional to what has been scrolled to rather than to the number of rows.
+*(amended 2026-08-10 — replaces the compact-strip preview shipped in #139, which conformed to this requirement as originally written and was smaller than intended.)*
 
-**The preview SHALL be responsive, and narrowing the viewport MUST NOT cause the row to overflow horizontally or clip any control.** As available width decreases the preview SHALL shed content in this order — **equipment before weapons, and within each, later slots before earlier ones** — and SHALL summarise whatever it dropped as a count. Weapons SHALL be the last preview content to shed. The loadout's name, its cost, and its move control SHALL survive every width; the preview is the part that yields.
+The preview SHALL be a **categorised panel**, not a single undifferentiated strip. Its categories SHALL match the builder's **grouping and cell counts**, so a loadout is read the same way in a list as in the panel that produced it. Parity is scoped to grouping and counts deliberately: SPEC-0006 adds consumable stacking and per-cell blocking to the builder, and **neither is required of the preview by this requirement** — they need their own clause when that spec lands:
 
-An item that no longer resolves in the catalog SHALL be omitted from the preview, consistent with the decoder already dropping unknown ids. The preview SHALL render whatever resolves rather than a broken tile, a placeholder per missing item, or an error.
+- **Weapons** SHALL be the visually largest element of the preview, reflecting that a loadout is identified first by what it shoots with
+- **Tools and consumables** SHALL occupy an **eight-cell grid laid out as two rows of four**, matching the equipment grid's cell count
+- **Traits** SHALL be rendered as a grid of **fifteen cells** — the per-hunter maximum in *Hunt: Showdown*, and independent of the trait-point budget — so the grid's shape does not change as traits are added or removed.
 
-A loadout holding nothing SHALL be stated as empty rather than rendered as an empty strip.
+  Fifteen is a fact about the game, **not** an invariant this application enforces: the trait-point budget is off by default (`upBudgetOn: false`), the catalog holds 32 traits, and the server accepts up to 40, so a loadout holding more than fifteen is an ordinary savable record today. Where a loadout holds more traits than the grid has cells, the preview SHALL fill the fifteen cells and SHALL state the remainder as a count. The grid MUST NOT grow, scroll, or clip silently
+
+Preview imagery SHALL be sized so an item is identifiable at a glance, and that SHALL be pinned rather than left to judgement: at the widest supported viewport a weapon SHALL be drawn at **no less than 50% of its intrinsic asset width**, and each equipment or trait cell SHALL be **no less than 48 CSS px on its shorter edge**.
+
+Those floors exist because the strip this replaces drew 512×128 weapon art at 34×24 — about 7% of the available width — while conforming to a requirement that said only "preview". An unassertable size rule is what let that ship.
+
+**The equipment grid SHALL place each item at its stored cell.** Where the underlying model supplies a cell index, the preview SHALL honour it; where it supplies a packed sequence, the preview SHALL fill cells in that order. Empty cells SHALL be rendered as empty rather than collapsed away, so the grid keeps a constant shape. This is stated in terms of *cells occupied* rather than a particular array shape deliberately: SPEC-0006 changes `state.equip` from a packed array to a fixed sparse one, and a preview written against either representation alone would need rewriting when the other lands.
+
+Preview imagery SHALL use SPEC-0001's asset-path convention and its fallback chain, and SHALL be lazy-loaded, so a list holding many loadouts fetches imagery proportional to what has been scrolled to rather than to the number of loadouts.
+
+An item that no longer resolves in the catalog SHALL be omitted, consistent with the decoder already dropping unknown ids. The preview SHALL render whatever resolves rather than a broken tile, a placeholder per missing item, or an error. **An omitted item SHALL leave its cell empty rather than shifting later items forward**, so a stale reference never silently relocates the rest of the grid.
+
+A loadout holding nothing SHALL be stated as empty rather than rendered as three empty grids.
 
 Rendering a preview MUST NOT write to the record, MUST NOT alter `data`, and MUST NOT issue any request that mutates state.
+
+**The shed-by-width rule is withdrawn.** It was written for a strip that degraded along one ordered list; a fixed-cell categorised grid has no such list, and dropping cells would change the shape the grid exists to hold constant. Responsiveness is instead the card's concern — see "Saved Loadouts Render as a Card Grid".
 
 #### Scenario: The preview comes from the stored record
 
 - **WHEN** a list containing saved loadouts is expanded
-- **THEN** each row SHALL show a preview derived from that record's existing `data`, and no additional request SHALL be issued to fetch loadout contents
+- **THEN** each loadout SHALL show a preview derived from that record's existing `data`, and no additional request SHALL be issued to fetch loadout contents
 
-#### Scenario: An unresolvable item is omitted, not broken
+#### Scenario: The three categories are separately grouped
+
+- **WHEN** a loadout holding weapons, tools, consumables and traits is previewed
+- **THEN** weapons SHALL be rendered largest, tools and consumables SHALL occupy an eight-cell grid of two rows of four, and traits SHALL occupy a fifteen-cell grid
+
+#### Scenario: The trait grid does not change shape with the trait budget
+
+- **WHEN** two loadouts hold different numbers of traits, or the trait-point cap differs between them
+- **THEN** both SHALL render fifteen trait cells, and the filled cells SHALL differ while the grid's shape does not
+
+#### Scenario: Equipment sits in its own cell
+
+*(exercisable once SPEC-0006's sparse model lands — today's decoder returns a packed array, so gaps are unreachable and this scenario is not yet falsifiable)*
+
+- **WHEN** a loadout's stored equipment leaves gaps between items
+- **THEN** each item SHALL be drawn in the cell it occupies and the gaps SHALL render as empty cells, rather than items being packed toward the start of the grid
+
+#### Scenario: An unresolvable item leaves a hole
+
+*(exercisable once SPEC-0006's sparse model lands — today's decoder filters unresolvable ids before the preview sees them, closing the hole)*
 
 - **WHEN** a saved loadout references a catalog item that no longer exists
-- **THEN** the preview SHALL render the items that do resolve and SHALL omit the one that does not, without rendering a broken image or failing the row
-
-#### Scenario: A narrow viewport sheds preview content
-
-- **WHEN** the panel is rendered at a phone width
-- **THEN** the row SHALL NOT overflow horizontally, the name, cost and move control SHALL remain present and operable, and the preview SHALL shed equipment before weapons with the remainder summarised as a count
+- **THEN** the preview SHALL render the items that do resolve, the unresolvable item's cell SHALL be empty, and no later item SHALL move into it
 
 #### Scenario: An empty loadout says so
 
-- **WHEN** a saved loadout holds no weapons and no equipment
-- **THEN** the row SHALL state that it is empty rather than rendering an empty preview area
+- **WHEN** a saved loadout holds no weapons, no equipment and no traits
+- **THEN** the preview SHALL state that it is empty rather than rendering three empty grids
 
 #### Scenario: Previewing writes nothing
 
 - **WHEN** a list is expanded and its previews render
 - **THEN** the server's data file SHALL be unchanged, and no write request SHALL have been issued
+
+### Requirement: Saved Loadouts Render as a Card Grid
+
+*(added 2026-08-10; not yet implemented)*
+
+Saved loadouts SHALL be presented as a **grid of cards**, not as rows. A categorised preview does not fit a row, and stacking full-height rows down a page makes a list of ten unreadable.
+
+Each card SHALL carry at least: the loadout's name, its cost, its preview, controls to move it between lists and to delete it, and — where one is rendered — its description and that description's edit control (see "Loadouts Carry an Editable Description"). The list is a floor, not an exhaustive enumeration. Every control that was reachable on the row SHALL remain reachable on the card — **the move affordance in particular SHALL remain an explicit, keyboard-operable control** rather than becoming drag-only, preserving the rule "Keyboard Navigation" already states.
+
+**A loadout card MUST be visually distinguishable from a list card at a glance.** The list selector directly above is already a grid of cards, and two nested card grids in one panel invite the reader to mistake a loadout for a list. The distinction MUST NOT rest on size alone, since both grids reflow with the viewport. The list card's identity is a portrait, an accent frame and a loadout count; a loadout card SHALL NOT reuse that combination.
+
+The card grid SHALL be responsive: cards SHALL reflow by count rather than being clipped, and no card SHALL overflow horizontally at any supported width. Where a preview cannot be drawn at full size, the **card** SHALL adapt by scaling cells down toward the 48 CSS px floor and, once that floor is reached, by growing taller rather than clipping. The preview's category structure and cell counts SHALL be preserved at every width; cells SHALL NOT be shed.
+
+#### Scenario: Loadouts render as cards, not rows
+
+- **WHEN** a list containing several saved loadouts is expanded
+- **THEN** each loadout SHALL be rendered as a card in a grid, each carrying its name, cost, preview, move control and delete control
+
+#### Scenario: Filing stays possible without a pointer
+
+- **WHEN** a keyboard user moves a loadout to another list from its card
+- **THEN** the move SHALL be achievable using an explicit control reachable in the tab order, and MUST NOT require a pointer gesture
+
+#### Scenario: A loadout card is not mistakable for a list card
+
+- **WHEN** an expanded list is rendered beneath the list selector
+- **THEN** a loadout card SHALL NOT reuse the list card's combination of portrait, accent frame and loadout count
+
+#### Scenario: Narrowing reflows rather than sheds
+
+- **WHEN** the panel is rendered at a phone width
+- **THEN** the cards SHALL reflow to fewer per row, no card SHALL overflow horizontally, and each preview SHALL retain its category structure and cell counts
 
 ### Requirement: Loadouts Carry an Editable Description
 
@@ -552,7 +614,7 @@ Two consequences follow, and both are intended:
 
 A loadout with no hunter to inherit from — filed into Unassigned, filed into a list carrying no `hunterId`, or filed into a list whose `hunterId` is absent from the dataset — SHALL render no description and SHALL remain fully usable. Absence of a default is an ordinary state, not an error.
 
-**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest. Hunter lore runs to several hundred characters and shares a row with the preview, so an unclamped description would dominate the row it is meant to annotate and would defeat the overflow guarantee "Filed Loadouts Preview Their Contents" makes. A description MUST NOT cause the row to overflow at any width.
+**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest. Hunter lore runs to several hundred characters and shares a card with the preview, so an unclamped description would dominate the card it is meant to annotate. A description MUST NOT cause its card to overflow at any width, and MUST NOT displace the preview's category structure *(re-scoped from row to card 2026-08-10, before implementation — see "Saved Loadouts Render as a Card Grid")*.
 
 **Inheritance SHALL be restorable.** A user who has edited a description SHALL be able to return the loadout to the inherited state; editing MUST NOT be a one-way door. Clearing the field to empty is *not* that path — empty means deliberately blank — so restoring inheritance SHALL be a distinct, explicitly offered action that sets the stored value back to null.
 
@@ -594,7 +656,7 @@ Editing a description SHALL persist it under the same ownership rules as every o
 #### Scenario: A loadout with no hunter to inherit from
 
 - **WHEN** a loadout with no stored description sits in Unassigned, or in a list with no portrait
-- **THEN** no description SHALL be rendered, and the row SHALL remain fully usable
+- **THEN** no description SHALL be rendered, and the card SHALL remain fully usable
 
 #### Scenario: A hunter absent from the dataset yields no default
 
@@ -623,14 +685,14 @@ Editing a description SHALL persist it under the same ownership rules as every o
 
 ### Requirement: The Saved-Loadout Wire Format Is Unchanged
 
-This capability MUST NOT change the loadout wire format. The format version SHALL remain unchanged, and the encode and decode functions SHALL be unmodified. The `listId` and `description` fields MUST NOT appear in any encoded loadout payload, share URL, or local draft.
+This capability MUST NOT change the loadout wire format. **Nothing in this spec** SHALL raise the format version or modify the encode and decode functions *(scoped 2026-08-10)*. This constrains SPEC-0003 only — it is not a repo-wide freeze, and SPEC-0006 raising `FORMAT_VERSION` to 2 for cell position is outside it. What this requirement forbids is *this capability's* fields reaching the wire. The `listId` and `description` fields MUST NOT appear in any encoded loadout payload, share URL, or local draft.
 
 `description` is subject to this requirement for exactly the reason `listId` is: it is a property of the user's filing, not of the loadout itself. A recipient opening a share URL receives the build, not the sender's notes about it *(clause added 2026-08-10)*.
 
 #### Scenario: Share URLs are unaffected
 
 - **WHEN** a user shares a loadout that is filed into a list
-- **THEN** the resulting share URL SHALL be byte-identical to the URL the same loadout would have produced before this capability existed
+- **THEN** the resulting share URL SHALL be byte-identical to the URL the same loadout would produce with no `listId`, at the same format version
 
 #### Scenario: Loading a shared loadout produces no list assignment
 
@@ -640,7 +702,7 @@ This capability MUST NOT change the loadout wire format. The format version SHAL
 #### Scenario: Payload validation is unchanged
 
 - **WHEN** the server validates an incoming loadout payload
-- **THEN** the validation applied to the `data` object SHALL be identical to the validation applied before this capability existed
+- **THEN** the validation applied to the `data` object SHALL be unchanged **by this capability**, and no `listId` or `description` field SHALL be accepted inside `data`
 
 #### Scenario: A description never reaches the wire format
 
@@ -778,15 +840,15 @@ All icon-only controls MUST include an `aria-label` describing their purpose. Th
 
 Portrait images used as list identifiers MUST have accessible names. A portrait that is purely decorative alongside a visible list name SHOULD be marked `alt=""` so screen readers announce the name once rather than twice.
 
-### Loadout Previews Are Supplementary, Not the Row's Identity
+### Loadout Previews Are Supplementary, Not the Card's Identity
 
-*(added 2026-08-10)*
+*(added 2026-08-10; re-scoped from row to card the same day, when the preview became a categorised panel)*
 
-The loadout's name remains the accessible identity of its row. A preview MUST NOT turn one row into a dozen separately announced images.
+The loadout's name remains the accessible identity of its card. A preview MUST NOT turn one card into three grids of separately announced images — twenty-three equipment and trait cells plus two weapons is not a navigable substitute for a name.
 
-Preview imagery MUST be marked decorative, and the preview as a whole MUST carry a **single** text equivalent summarising what the loadout holds — for example "Sparks LRR, Caldwell Conversion, 3 tools, 2 consumables". A screen-reader user MUST be able to reach the next row without traversing every previewed item.
+Preview imagery MUST be marked decorative, and the preview as a whole MUST carry a **single** text equivalent summarising what the loadout holds — for example "Sparks LRR, Caldwell Conversion, 3 tools, 2 consumables, 4 traits". A screen-reader user MUST be able to reach the next card without traversing every previewed cell, and **empty cells MUST NOT be announced at all**: a fifteen-cell trait grid holding four traits must not read as eleven blanks.
 
-Where the preview sheds content at narrow widths, the text equivalent MUST describe everything the loadout holds that resolves in the catalog, rather than the subset currently drawn, so what is announced does not change with viewport width.
+The text equivalent MUST describe everything the loadout holds that resolves in the catalog. Because the categorised preview no longer sheds content by width, that text is now the same at every viewport by construction rather than by rule — but it MUST still describe contents rather than what is drawn, so an unresolvable item is excluded from both.
 
 ### The Favorites Section Is Exposed, Not Merely Drawn
 
@@ -804,9 +866,9 @@ Content updated without a page load — the saved-loadouts region after a save, 
 
 All interactive elements MUST be operable via keyboard: logical tab order following visual layout, Enter or Space to activate controls, Escape to dismiss the portrait picker and the retire confirmation, and arrow keys for navigation within the portrait picker if it is presented as a composite grid widget.
 
-Filing a loadout into a list MUST be achievable without a pointer. The initial move affordance SHALL be an explicit control on the loadout row — a menu or select — rather than drag-and-drop. Drag-and-drop is deferred as a future enhancement; if it is later added, the explicit keyboard-operable control MUST remain rather than being replaced by it.
+Filing a loadout into a list MUST be achievable without a pointer. The initial move affordance SHALL be an explicit control on the loadout card — a menu or select — rather than drag-and-drop *(re-scoped from row to card 2026-08-10)*. Drag-and-drop is deferred as a future enhancement; if it is later added, the explicit keyboard-operable control MUST remain rather than being replaced by it.
 
-Editing a loadout's description MUST be achievable without a pointer *(added 2026-08-10)*. The edit control MUST have an accessible name identifying both the action and the loadout, MUST be reachable in the row's tab order, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
+Editing a loadout's description MUST be achievable without a pointer *(added 2026-08-10)*. The edit control MUST have an accessible name identifying both the action and the loadout, MUST be reachable in the card's tab order, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
 
 An inherited description MUST NOT be announced as though the user wrote it. Where the distinction is surfaced visually, it MUST also be available non-visually.
 
