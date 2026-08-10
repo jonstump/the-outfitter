@@ -1,0 +1,66 @@
+name: Feature request
+description: Suggest a change or addition to The Outfitter.
+title: "[area] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Replace `[area]` in the title with the part of the app involved — e.g.
+        `[lists]`, `[ui]`, `[hunters]`, `[api]`.
+
+        Larger changes are usually governed by an ADR or spec under `docs/`. If
+        this reshapes existing behaviour rather than adding to it, say which spec
+        it touches so the decision gets recorded alongside the work.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: The situation you hit today, before any proposed solution.
+      placeholder: >
+        With more than a dozen lists the sidebar scrolls, and the list I use every
+        session ends up below the fold.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like instead?
+      placeholder: Let a list be pinned so it sorts above the rest.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Loadout builder (weapons, equipment, traits)
+        - Hunter picker or favorites
+        - Loadout lists
+        - Saved loadouts, share links, or the URL hash
+        - Item images or catalog data
+        - Hunter roster data or portraits
+        - Server / API
+        - Dev setup, build, Docker, or tests
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including workarounds you're using today.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for a duplicate.
+          required: true
