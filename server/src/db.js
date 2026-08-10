@@ -4,7 +4,16 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbFile = path.join(__dirname, "..", "data", "db.json");
+
+// Data file location. Defaults to server/data/db.json; OUTFITTER_DB_FILE overrides it
+// so the test suite can point at a throwaway file instead of a developer's real data.
+// The suite exercises the real lowdb JSONFile store rather than a mock, which is worth
+// keeping — but it must not share a file with dev data. An inverted cleanup predicate
+// in loadouts.test.js previously deleted real loadouts on every run, and because this
+// file is gitignored there was no history to recover them from.
+const dbFile = process.env.OUTFITTER_DB_FILE
+  ? path.resolve(process.env.OUTFITTER_DB_FILE)
+  : path.join(__dirname, "..", "data", "db.json");
 
 const defaultData = { loadouts: [] };
 
