@@ -8,4 +8,10 @@ server/data/db.test.json
 
 # Local environment overrides (copy of .env.example); never commit real values
 .env
+# Local Claude Code artifacts. worktrees/ holds /sdd:work scratch checkouts;
+# settings.local.json is the documented per-developer override; launch.json encodes
+# machine-specific ports and whether to start or attach to a dev server.
+# A shared launch.json could be committed later by removing that line.
 .claude/worktrees/
+.claude/launch.json
+.claude/settings.local.json
