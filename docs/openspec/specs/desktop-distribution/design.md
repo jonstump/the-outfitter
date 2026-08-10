@@ -20,7 +20,7 @@ The one thing the packaging choice costs is a trust boundary. That is what most 
 - Self-hosting stays first-class, with its existing CI guard green
 - lowdb's single-writer constraint becomes true by construction rather than documented as a hazard
 - The Node major the desktop ships stays tied to `.nvmrc` (SPEC-0002)
-- Signed, notarized artifacts from CI on a tag — never from a laptop
+- Artifacts built by CI on a tag, never from a laptop; explicitly designated signed or unsigned, with signing and notarization in place before broad promotion *(amended 2026-08-10 — this goal previously read "Signed, notarized artifacts from CI on a tag," which contradicted the unsigned-publication decision below)*
 
 ### Non-Goals
 
@@ -96,17 +96,30 @@ Writing inside the application bundle is not an option: macOS app bundles are re
 - *Pin Electron exactly and rely on review*: rejected — it makes every Electron security patch a manual parity audit, which is the cadence most likely to be skipped.
 - *Accept divergence and test the desktop build separately*: rejected. Two runtime majors means the server suite's guarantees apply to one target and are merely suggestive for the other.
 
-### Unsigned artifacts are not published
+### Unsigned publication is permitted; silent unsigned publication is not
 
-**Choice**: macOS DMGs are Developer ID signed and notarized; Windows installers are Authenticode signed. A release build without credentials fails rather than emitting unsigned output.
+*(amended 2026-08-10 — this decision originally read "Unsigned artifacts are not published")*
 
-**Rationale**: Gatekeeper refuses unsigned applications outright and SmartScreen flags unsigned installers, so an unsigned release does not merely look unpolished — it converts a download into a support burden and trains users to bypass OS protections. Failing loudly prevents the specific bad outcome of a credential misconfiguration silently producing artifacts that get published anyway.
+**Choice**: A release is explicitly designated signed or unsigned. Unsigned releases may be published on any platform provided the download page documents the per-platform bypass. Signing is required before broad promotion. A release designated *signed* fails when credentials are missing rather than falling back to unsigned output.
 
-This is the decision with a recurring cash cost (an Apple Developer account annually, plus a Windows certificate), and it is the one most likely to stall the first release. It is stated as a requirement so that stalling is a visible, deliberate choice rather than a quiet downgrade to unsigned builds.
+**Rationale**: The original rule conflated two different things under one prohibition. What actually needed preventing was a *silent* downgrade — a credential misconfiguration quietly emitting unsigned artifacts that get published as though they were signed. What did not need preventing was a maintainer deciding, with open eyes, to ship free and see whether anyone wants the app. Separating the designation from the credential check preserves the first protection while unblocking the second.
+
+The friction being traded away is real but wildly asymmetric between platforms, and the asymmetry is why one blanket rule was wrong:
+
+- **Linux**: none. AppImage and deb need no signing.
+- **Windows**: a SmartScreen dialog whose "Run anyway" hides behind "More info." Two clicks.
+- **macOS**: a trip to System Settings → Privacy & Security. Sequoia removed the Control-click override, so this is no longer a one-step dismissal.
+
+Two facts sharpen the cost/benefit and are recorded because both cut against the intuitive answer. First, **Windows signing may not remove the warning**: SmartScreen keys on reputation, and a new OV certificate has none, so signed builds keep warning until downloads accumulate — only EV certificates carry instant reputation. Paying for OV signing can buy the same dialog for months. Second, **the credential cannot be a file any more**: publicly-trusted code-signing keys must live on a hardware token or cloud HSM, so CI signing requires a cloud signing service rather than a secret-held certificate. Together these make Apple's $99/yr the far higher-value spend — it converts a System Settings expedition into a double-click, which no amount of Windows spend reliably matches.
+
+The Homebrew cask path is worth calling out as the free mitigation with the best ratio: Homebrew strips the quarantine attribute, so an unsigned app installed from a tap launches normally, and a personal tap has none of the notability requirements the official cask repo imposes.
 
 **Alternatives considered**:
 
-- *Ship Linux first, defer signing*: viable as sequencing — AppImage and deb need no signing — and compatible with this decision. It does not change the rule for the other two platforms.
+- *Keep the blanket prohibition*: rejected. It reads as prudence but its practical effect is to make a hobby project's first release contingent on an Apple Developer account, while doing nothing the narrower silent-downgrade rule does not already do.
+- *Permit unsigned publication with no documentation requirement*: rejected. An unsigned macOS build with no instructions is not a release; it is a download that appears broken. The instructions are what make the choice honest, which is why they are a release gate rather than a docs task.
+- *Ship Linux first, defer the other two*: still the recommended sequencing, and now compatible with shipping all three unsigned in the interim rather than holding Windows and macOS back entirely.
+- *Instruct users to disable Gatekeeper/SmartScreen*: rejected outright, and forbidden in the spec. Teaching users to turn off OS protections to run a loadout builder is a worse outcome than not shipping to that platform.
 
 ## Architecture
 
@@ -151,7 +164,8 @@ The `desktop/` workspace contains no request-path code other than the secret plu
 - **The authentication boundary is the whole security posture.** If it is implemented late, weakly, or after the routers, the desktop app is strictly worse than the hosted one. It is specified first and scenario-tested for exactly this reason.
 - **Installer size is disproportionate** — roughly 80–150 MB of runtime for a few megabytes of app. Accepted; ADR-0008 records it as Tauri's strongest argument.
 - **Chromium's CVE cadence becomes a shipping obligation.** An unpatched shipped app cannot be fixed by redeploying a server. This implies a release cadence commitment and, in practice, auto-update — both outside this spec.
-- **Signing cost may stall the first release.** Mitigated by the option to ship Linux first, where no signing is required.
+- **Unsigned macOS builds will cost real adoption.** Sequoia's System Settings route is a meaningful drop-off for a non-technical audience, and the Homebrew tap only helps users who already have Homebrew. This is the accepted price of shipping before spending; the signed-before-broad-promotion gate is what keeps it from becoming permanent.
+- **The signed/unsigned designation is a new thing to get wrong.** A release mislabelled `signed` fails closed (no credentials, no artifacts), which is the safe direction. One mislabelled `unsigned` publishes unsigned artifacts on purpose — which is why the bypass-instruction gate sits in front of it.
 - **Token-scoped ownership is near-vestigial on the desktop** — one user, one token. It costs nothing and keeps the targets code-identical, but no desktop behavior depends on it, so a future change could break it without a desktop symptom. The server suite is the guard.
 - **A user running both the desktop app and a self-hosted instance has two separate data stores** with no sync. Expected, and the ephemeral port keeps them from colliding, but it will surprise someone.
 
@@ -162,8 +176,9 @@ Nothing to migrate — this is purely additive. Sequencing that keeps each step 
 1. Refactor `server/src/index.js` to export `app` behind a guarded listen. Ship alone; the existing server suite and container smoke job are the proof it changed nothing.
 2. Add the `desktop/` workspace: bind, secret generation, preload bridge, `userData` resolution. Land the loopback authentication tests with this step, not after it.
 3. Add the Node-major parity check to CI.
-4. Add the release matrix, Linux artifacts first (no signing required), then macOS and Windows once credentials are in place.
-5. Document both install paths in the README, keeping the existing lowdb single-writer warnings on the hosted path.
+4. Add the release matrix. Linux first — no signing, no instructions needed. Then Windows and macOS as `unsigned` releases, landing the download page's bypass instructions in the same step that first publishes them.
+5. Switch to `signed` releases before broad promotion: Apple Developer ID and notarization first (the higher-value spend by a wide margin), Windows cloud signing after.
+6. Document both install paths in the README, keeping the existing lowdb single-writer warnings on the hosted path.
 
 ## Open Questions
 
