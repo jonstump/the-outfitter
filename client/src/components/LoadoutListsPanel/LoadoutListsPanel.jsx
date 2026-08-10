@@ -150,9 +150,11 @@ function ListCard({ id, name, hunterId, count, open, onToggle, unassigned = fals
     >
       {silhouette ? (
         <span className="ll-card-art" data-testid={`list-art-${id}`}>
-          {/* alt="" — the list name is visibly adjacent in the plate below, so announcing
-              the portrait too would read it twice (SPEC-0003 accessibility). */}
-          <ItemThumb category="hunters" name={hunterId} svgPath={silhouette} />
+          {/* Decorative: the list name is in the plate below, so announcing the portrait
+              too would read it twice (SPEC-0003 accessibility). Without an explicit alt="",
+              ItemThumb would label it with the raw hunter id — "the-rat" — which is worse
+              than either alternative. */}
+          <ItemThumb category="hunters" name={hunterId} alt="" svgPath={silhouette} />
         </span>
       ) : (
         <span className="ll-card-mono" aria-hidden="true">
