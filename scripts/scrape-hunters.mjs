@@ -80,7 +80,7 @@
 // rate limiter, the user agent, and the sentinel error classes are imported from scripts/lib/wiki.mjs
 // and defined nowhere here.
 
-import { mkdir, writeFile, readFile, access } from "node:fs/promises";
+import { mkdir, writeFile, readFile, access, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -590,11 +590,119 @@ async function pathExists(fsAccess, filePath) {
 }
 
 /**
+ * Fetch, encode and write one variant's two portrait sizes.
+ *
+ * All-or-nothing on disk. `encodePortraits` encodes and budget-checks both sizes before either is
+ * written, and if the second write fails the first is removed again — so a variant never leaves a
+ * half-written pair behind. Callers isolate this per variant so one variant's failure cannot
+ * discard a sibling's work.
+ *
+ * Returns { assets, bytes, skipped }. Throws a sentinel with hunter/url context on failure.
+ */
+export async function producePortrait({ variant, name, portrait }, deps) {
+  const {
+    fetchFn,
+    rateLimiter,
+    robotsGroups,
+    userAgent = USER_AGENT,
+    imagesRoot = HUNTERS_IMAGES_ROOT,
+    fsMkdir = mkdir,
+    fsWriteFile = writeFile,
+    fsAccess = access,
+    fsUnlink = unlink,
+    sharp = null,
+    force = false,
+    log = logStructured,
+  } = deps;
+
+  const fullPath = portraitAssetPath(imagesRoot, portrait, "full");
+  if (!force && (await pathExists(fsAccess, fullPath))) {
+    log({ level: "info", event: "portrait-skipped", hunter: name, portrait, reason: "already on disk" });
+    return { assets: [], bytes: 0, skipped: true };
+  }
+
+  const mediaUrl = buildMediaUrl(variant.file);
+  const mediaPath = new URL(mediaUrl).pathname;
+  if (!isAllowedByRobots(robotsGroups, userAgent, mediaPath)) {
+    throw new RobotsDisallowedError(`robots.txt disallows fetching portrait for "${name}" at ${mediaPath}`, {
+      item: name,
+      url: mediaUrl,
+    });
+  }
+
+  await rateLimiter.wait();
+
+  let imageRes;
+  try {
+    imageRes = await fetchFn(mediaUrl, { headers: { "User-Agent": userAgent } });
+  } catch (err) {
+    throw new NetworkFailureError(`network failure fetching portrait for "${name}" at ${mediaUrl}: ${err.message}`, {
+      cause: err,
+      item: name,
+      url: mediaUrl,
+    });
+  }
+  if (!imageRes.ok) {
+    if (imageRes.status === 404) {
+      throw new ImageAssetNotFoundError(`portrait asset not found for "${name}": HTTP 404 at ${mediaUrl}`, {
+        item: name,
+        url: mediaUrl,
+      });
+    }
+    throw new NetworkFailureError(`failed to fetch portrait for "${name}": HTTP ${imageRes.status} at ${mediaUrl}`, {
+      item: name,
+      url: mediaUrl,
+    });
+  }
+
+  let sourceBuffer;
+  try {
+    sourceBuffer = Buffer.from(await imageRes.arrayBuffer());
+  } catch (err) {
+    throw new NetworkFailureError(`failed to read portrait bytes for "${name}" at ${mediaUrl}: ${err.message}`, {
+      cause: err,
+      item: name,
+      url: mediaUrl,
+    });
+  }
+
+  // Throws BudgetExceededError before returning, so an over-budget size never reaches disk.
+  const encodedSizes = await encodePortraits(sourceBuffer, sharp, { hunter: name, url: mediaUrl });
+
+  const assets = [];
+  const written = [];
+  let bytes = 0;
+
+  try {
+    await fsMkdir(imagesRoot, { recursive: true });
+    for (const encoded of encodedSizes) {
+      const destPath = portraitAssetPath(imagesRoot, portrait, encoded.name);
+      await fsWriteFile(destPath, encoded.buffer);
+      written.push(destPath);
+      assets.push({ path: destPath, size: encoded.name, bytes: encoded.bytes });
+      bytes += encoded.bytes;
+    }
+  } catch (err) {
+    // Roll back this variant's partial pair; a lone thumbnail with no full size is exactly the
+    // uncataloged orphan this function exists to prevent.
+    await Promise.all(written.map((p) => Promise.resolve(fsUnlink(p)).catch(() => {})));
+    throw new ScrapeError(`failed to write portrait for "${name}" to ${imagesRoot}: ${err.message}`, {
+      cause: err,
+      item: name,
+      url: mediaUrl,
+    });
+  }
+
+  return { assets, bytes, skipped: false };
+}
+
+/**
  * Scrape one hunter page.
  *
- * Returns { entries, assets, bytes } where `entries` is one dataset row per variant. Every failure
- * mode throws a sentinel with hunter/url context; runScrape catches per page so one bad page never
- * ends the run.
+ * Returns { entries, assets, bytes, failures } where `entries` is one dataset row per variant that
+ * succeeded. Page-level failures (fetch, 404) throw a sentinel and runScrape catches per page;
+ * per-variant portrait failures are isolated and reported in `failures` without discarding the
+ * variants that did succeed.
  */
 export async function scrapeHunterPage(target, deps) {
   const {
@@ -606,6 +714,7 @@ export async function scrapeHunterPage(target, deps) {
     fsMkdir = mkdir,
     fsWriteFile = writeFile,
     fsAccess = access,
+    fsUnlink = unlink,
     sharp = null,
     namesOnly = false,
     force = false,
@@ -668,7 +777,7 @@ export async function scrapeHunterPage(target, deps) {
   // guarantee SPEC-0003 depends on.
   if (seenCanonical) {
     if (seenCanonical.has(canonicalPage)) {
-      return { entries: [], assets: [], bytes: 0, pageTitle, revision, canonicalPage, duplicate: true };
+      return { entries: [], assets: [], bytes: 0, failures: [], pageTitle, revision, canonicalPage, duplicate: true };
     }
     seenCanonical.add(canonicalPage);
   }
@@ -678,6 +787,7 @@ export async function scrapeHunterPage(target, deps) {
 
   const entries = [];
   const assets = [];
+  const failures = [];
   let bytes = 0;
 
   for (const variant of variants) {
@@ -698,7 +808,7 @@ export async function scrapeHunterPage(target, deps) {
     const derivedId = portrait || slugify(name);
     const id = (portrait && idsByPortrait.get(portrait)) || derivedId;
 
-    entries.push({
+    const entry = {
       id,
       name,
       description: variant.description || null,
@@ -708,81 +818,64 @@ export async function scrapeHunterPage(target, deps) {
       obtainable: deriveObtainable(acquisition),
       sourceRevision: revision === null ? null : String(revision),
       ingestedAt,
-    });
+    };
 
-    if (namesOnly || dryRun || !variant.file || !portrait) continue;
-
-    const fullPath = portraitAssetPath(imagesRoot, portrait, "full");
-    if (!force && (await pathExists(fsAccess, fullPath))) {
-      log({ level: "info", event: "portrait-skipped", hunter: name, portrait, reason: "already on disk" });
+    // No portrait work to do: the entry stands on its own. SPEC-0004 requires a hunter with no
+    // usable portrait to appear in the dataset regardless, so this is a success, not a failure.
+    if (namesOnly || dryRun || !variant.file || !portrait) {
+      entries.push(entry);
       continue;
     }
 
-    const mediaUrl = buildMediaUrl(variant.file);
-    const mediaPath = new URL(mediaUrl).pathname;
-    if (!isAllowedByRobots(robotsGroups, userAgent, mediaPath)) {
-      throw new RobotsDisallowedError(`robots.txt disallows fetching portrait for "${name}" at ${mediaPath}`, {
-        item: name,
-        url: mediaUrl,
-      });
-    }
-
-    await rateLimiter.wait();
-
-    let imageRes;
+    // Isolated per variant. A tabbed page holds several independent hunters, and one of them
+    // busting its byte budget is no reason to discard the siblings that encoded cleanly — nor to
+    // leave their already-written art on disk with no dataset row pointing at it, which is what
+    // letting this throw out of the whole page used to do.
     try {
-      imageRes = await fetchFn(mediaUrl, { headers: { "User-Agent": userAgent } });
+      const produced = await producePortrait(
+        { variant, name, portrait },
+        {
+          fetchFn,
+          rateLimiter,
+          robotsGroups,
+          userAgent,
+          imagesRoot,
+          fsMkdir,
+          fsWriteFile,
+          fsAccess,
+          fsUnlink,
+          sharp,
+          force,
+          log,
+        }
+      );
+      assets.push(...produced.assets);
+      bytes += produced.bytes;
+      entries.push(entry);
     } catch (err) {
-      throw new NetworkFailureError(`network failure fetching portrait for "${name}" at ${mediaUrl}: ${err.message}`, {
-        cause: err,
-        item: name,
-        url: mediaUrl,
+      // SPEC-0004: an over-budget asset "SHALL fail that hunter with a recorded reason rather than
+      // being written". Failing the hunter means no dataset row — a row here would misrepresent a
+      // budget failure as a hunter that merely has no art.
+      failures.push({
+        hunter: name,
+        portrait,
+        errorType: err.name,
+        reason: err.message,
+        url: err.url,
       });
-    }
-    if (!imageRes.ok) {
-      if (imageRes.status === 404) {
-        throw new ImageAssetNotFoundError(`portrait asset not found for "${name}": HTTP 404 at ${mediaUrl}`, {
-          item: name,
-          url: mediaUrl,
-        });
-      }
-      throw new NetworkFailureError(`failed to fetch portrait for "${name}": HTTP ${imageRes.status} at ${mediaUrl}`, {
-        item: name,
-        url: mediaUrl,
+      log({
+        level: "error",
+        event: "variant-failed",
+        hunter: name,
+        portrait,
+        errorType: err.name,
+        reason: err.message,
+        url: err.url,
       });
-    }
-
-    let sourceBuffer;
-    try {
-      sourceBuffer = Buffer.from(await imageRes.arrayBuffer());
-    } catch (err) {
-      throw new NetworkFailureError(`failed to read portrait bytes for "${name}" at ${mediaUrl}: ${err.message}`, {
-        cause: err,
-        item: name,
-        url: mediaUrl,
-      });
-    }
-
-    const encodedSizes = await encodePortraits(sourceBuffer, sharp, { hunter: name, url: mediaUrl });
-
-    for (const encoded of encodedSizes) {
-      const destPath = portraitAssetPath(imagesRoot, portrait, encoded.name);
-      try {
-        await fsMkdir(imagesRoot, { recursive: true });
-        await fsWriteFile(destPath, encoded.buffer);
-      } catch (err) {
-        throw new ScrapeError(`failed to write portrait for "${name}" to ${destPath}: ${err.message}`, {
-          cause: err,
-          item: name,
-          url: mediaUrl,
-        });
-      }
-      assets.push({ path: destPath, size: encoded.name, bytes: encoded.bytes });
-      bytes += encoded.bytes;
     }
   }
 
-  return { entries, assets, bytes, pageTitle, revision, canonicalPage, duplicate: false };
+  return { entries, assets, bytes, failures, pageTitle, revision, canonicalPage, duplicate: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -902,6 +995,7 @@ export async function runScrape(options = {}, deps = {}) {
           fsMkdir,
           fsWriteFile,
           fsAccess: deps.fsAccess,
+          fsUnlink: deps.fsUnlink,
           sharp,
           namesOnly,
           force,
@@ -929,6 +1023,13 @@ export async function runScrape(options = {}, deps = {}) {
         allEntries.push(entry);
         if (entry.source && entry.acquisition === null) unmappedSources.add(entry.source);
       }
+
+      // Variants that failed their portrait stage are individually failed hunters, not a failed
+      // page — the page itself parsed, and its other variants are in the dataset.
+      for (const failure of result.failures ?? []) {
+        recordResult(summary, { status: "failed", wikiPath, ...failure });
+      }
+
       totalBytes += result.bytes;
 
       // The total ceiling is checked as the run proceeds so it fails before committing a set that

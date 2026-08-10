@@ -214,6 +214,10 @@ function memoryFs() {
     fsAccess: async (p) => {
       if (!files.has(p)) throw new Error("ENOENT");
     },
+    // Defined so a rollback path can never fall through to the real filesystem.
+    fsUnlink: async (p) => {
+      files.delete(p);
+    },
     fsReadFile: async (p) => {
       if (!files.has(p)) throw new Error("ENOENT");
       return files.get(p);
@@ -550,11 +554,75 @@ describe("scrapeHunterPage", () => {
 
   it("does not write an oversized asset — the budget is checked before disk", async () => {
     const fs = memoryFs();
-    await assert.rejects(
-      () => scrapeHunterPage({ wikiPath: "Hunters/Caitlyn_Hammond" }, pageDeps({ ...fs, sharp: fakeSharp({ 192: 99_000, 320: 6000 }) })),
-      BudgetExceededError
+    const result = await scrapeHunterPage(
+      { wikiPath: "Hunters/Caitlyn_Hammond" },
+      pageDeps({ ...fs, sharp: fakeSharp({ 192: 99_000, 320: 6000 }) })
     );
-    assert.equal(fs.files.size, 0, "no partial write survived the rejection");
+
+    assert.equal(fs.files.size, 0, "nothing was written");
+    // The hunter is failed, not silently downgraded to "has no art" — a dataset row here would
+    // misrepresent a budget failure as a missing portrait.
+    assert.deepEqual(result.entries, []);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].errorType, "BudgetExceededError");
+    assert.match(result.failures[0].reason, /99000.*15360/s);
+  });
+
+  it("leaves no orphaned art when a later variant on a tabbed page busts its budget", async () => {
+    // The regression: portraits are written variant by variant, so an earlier variant's files
+    // were already on disk when a later one threw — and the throw discarded the whole page's
+    // entries. That left committed AVIFs with no dataset row pointing at them, invisible in
+    // review because a reviewer sees a filename, not a catalogue.
+    const fs = memoryFs();
+    // metadata() runs exactly once per encodePortraits call, so it counts variants — keying off
+    // raw call count instead would straddle the resize calls and fail the wrong variant.
+    let variantIdx = -1;
+    const sharp = () => {
+      const api = {
+        metadata: async () => {
+          variantIdx += 1;
+          return { width: 384, height: 256, format: "png" };
+        },
+        resize: () => api,
+        avif: () => api,
+        // First variant encodes small; second blows its budget.
+        toBuffer: async () => Buffer.alloc(variantIdx === 0 ? 3000 : 99_000),
+      };
+      return api;
+    };
+
+    const result = await scrapeHunterPage({ wikiPath: "Hunters/Bad_Hand" }, pageDeps({ ...fs, sharp }));
+
+    // The healthy variant survives, with both of its sizes.
+    assert.deepEqual(result.entries.map((e) => e.id), ["the-revenant"]);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].errorType, "BudgetExceededError");
+    assert.equal(result.failures[0].portrait, "bad-hand");
+
+    // Every file on disk is claimed by an entry — no orphans.
+    const cataloged = new Set(result.entries.flatMap((e) => [`${e.portrait}.avif`, `${e.portrait}-thumb.avif`]));
+    for (const p of fs.files.keys()) {
+      assert.ok(cataloged.has(p.split("/").pop()), `${p} is on disk but in no dataset entry`);
+    }
+    assert.ok(![...fs.files.keys()].some((p) => p.includes("bad-hand")), "failed variant wrote nothing");
+  });
+
+  it("rolls back a half-written pair when the second size fails to write", async () => {
+    const fs = memoryFs();
+    let writes = 0;
+    const fsWriteFile = async (p, data) => {
+      if (++writes === 2) throw new Error("ENOSPC");
+      fs.files.set(p, data);
+    };
+
+    const result = await scrapeHunterPage(
+      { wikiPath: "Hunters/Caitlyn_Hammond" },
+      pageDeps({ ...fs, fsWriteFile })
+    );
+
+    assert.equal(fs.files.size, 0, "the first-written size was removed again");
+    assert.equal(result.failures.length, 1);
+    assert.deepEqual(result.entries, []);
   });
 
   it("raises a page-not-found sentinel, distinct from a missing portrait", async () => {
