@@ -12,6 +12,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4100
+      # TRUST_PROXY is deliberately absent (issue #199). This topology publishes the
+      # container port straight to the host, so nothing rewrites headers and no
+      # `X-Forwarded-*` may be believed — trusting them here would let any client key the
+      # rate limiters on a value it chose. Put a reverse proxy in front and you set it, to
+      # that proxy's address or CIDR; see .env.example.
     volumes:
       - outfitter-data:/app/server/data
     restart: unless-stopped

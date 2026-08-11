@@ -6,6 +6,9 @@ server/data/db.test.json
 # store of its own: it runs with NODE_ENV=production and would otherwise write the
 # developer's real db.json.
 server/data/db.cors-test.json
+# The same file boots a SECOND instance for issue #199 — one configured as if a proxy were
+# in front, one as if nothing were — and two processes must not share a store.
+server/data/db.direct-test.json
 .DS_Store
 *.log
 .sdd/

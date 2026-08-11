@@ -5,6 +5,7 @@ import cors from "cors";
 import { loadoutsRouter } from "./routes/loadouts.js";
 import { loadoutListsRouter } from "./routes/loadoutLists.js";
 import { hunterFavoritesRouter } from "./routes/hunterFavorites.js";
+import { trustProxySetting } from "./lib/trustProxy.js";
 import { db } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,9 +13,26 @@ const PORT = process.env.PORT || 4100;
 
 const app = express();
 
-// Trust one reverse-proxy hop so express-rate-limit's IP keying works (and
-// doesn't throw ER_ERL_UNEXPECTED_X_FORWARDED_FOR) behind nginx/Render/Fly.
-app.set("trust proxy", 1);
+// Governing: issue #199, SPEC-0003 REQ "Rate Limiting" (this setting decides what `req.ip`
+// resolves to, and `req.ip` is the key the spec'd budgets are counted against).
+//
+// Which peers this server believes `X-Forwarded-*` from — a property of the DEPLOYMENT,
+// so it is configured rather than hardcoded. `TRUST_PROXY` names the front-facing proxy
+// ("loopback", an address, a CIDR, a comma-separated list, or a hop count); unset means
+// nothing is in front and no forwarded header is believed.
+//
+// Deployment note, because it cuts the other way and no test can catch it: this also
+// governs `req.protocol`, which isSameOrigin() below compares against the browser's Origin.
+// Behind a proxy that terminates TLS, leaving this unset makes the API answer 403 to every
+// write from its own client. See README "Reverse proxies and TRUST_PROXY".
+//
+// This was `1`, which reads as "one proxy hop" but compiles to a predicate that ignores
+// the peer address entirely — so on the two documented topologies with no proxy
+// (docker-compose's published port, the Procfile VM) any client could set its own
+// `X-Forwarded-For` and land in a fresh rate-limit bucket per request. See
+// lib/trustProxy.js for the full reasoning, and note that `req.ip` — what both limiters
+// in lib/ownership.js key on — is governed by this setting.
+app.set("trust proxy", trustProxySetting(process.env));
 
 // The app is designed as a single origin serving both the API and the built
 // client (see README). In dev, Vite's proxy forwards /api to this server with a
