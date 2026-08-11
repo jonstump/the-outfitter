@@ -25,7 +25,7 @@ Three changes follow from that one decision, and they are not separable:
 
 **Item imagery is unchanged and inherited.** Every cell that depicts an item — an ordinary tile or a stack anchor — renders through the same shared container and the same scraped-image-then-SVG-fallback chain that SPEC-0001 (Equipment Iconography) specifies. This capability changes which cell a tile is drawn in and how many tiles a run of identical consumables produces; it changes nothing about how the image inside a tile is resolved.
 
-**Duplicate consumables are already legal.** The existing cap is four per *category* (`CONS[i][3]` — `Shot`, `Throwable`, …), not per item, so two Vitality Shots is a valid loadout today and consumes two of eight cells. This capability changes how that reads, not whether it is allowed.
+**Duplicate consumables are already legal.** The existing cap is four copies of one *specific* consumable — `consCount()` counts entries whose `i` matches a single `CONS` index — so two Vitality Shots is a valid loadout today and consumes two of eight cells, and four Dynamite Sticks do not block a Dynamite Bundle. A consumable's `type` (`CONS[i][3]` — `Shot`, `Throwable`, …) is descriptive and is not a rules input; two different consumables never share a budget. This capability changes how repeats read, not whether they are allowed.
 
 **Implementation status.** Nothing in this capability is implemented. `state.equip` is still packed, `blocked` is still a count, `FORMAT_VERSION` is still 1, and the panel has no drag affordance.
 
