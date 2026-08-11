@@ -2,6 +2,10 @@ node_modules/
 client/dist/
 server/data/db.json
 server/data/db.test.json
+# server/src/index.test.js boots the real entry point as a child process, which needs a
+# store of its own: it runs with NODE_ENV=production and would otherwise write the
+# developer's real db.json.
+server/data/db.cors-test.json
 .DS_Store
 *.log
 .sdd/

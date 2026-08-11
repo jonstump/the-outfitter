@@ -5,10 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>The Outfitter — Hunt Loadout Builder</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Loaded as `media="print"` and switched to `all` once it arrives, which is the
+      standard trick for taking a third-party stylesheet off the critical path.
+
+      It is here because a render-blocking <link> in <head> does not merely delay the
+      fonts: a pending stylesheet blocks execution of every script after it, and this
+      app's entire UI is painted by such a script. When fonts.googleapis.com is slow or
+      unreachable — a content blocker, a private-DNS blocklist, a captive portal, all of
+      them ordinary on phones — the request does not fail, it hangs, and the page stays a
+      blank <div id="root"> for as long as it does. A stylesheet that applies to `print`
+      is not render-blocking, so the app now paints on schedule and the fonts arrive when
+      (or if) they do.
+
+      The <noscript> copy keeps the fonts for scripted-off readers, who have no onload to
+      run and nothing to block either way.
+    -->
     <link
       href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>

@@ -142,10 +142,17 @@ VITE_API_URL=https://api.example.com npm run build -w client
 ```
 
 The same-origin relative path remains the default and is what the
-single-process model uses. Note that CORS is restricted to the dev origins by
-default (`http://localhost:5173`); for cross-origin production requests, set
-the server's `CORS_ORIGIN` env var to the client's origin (comma-separated
-for multiple).
+single-process model uses.
+
+`CORS_ORIGIN` names **additional, genuinely cross-origin** callers, comma-separated
+— set it only for the split deployment above. The origin the server is itself
+being served from is always accepted, whatever the host, so a single-process
+deploy needs no CORS configuration at all. That is deliberate: a browser sends an
+`Origin` header on same-origin requests too (on any method other than GET/HEAD, and
+on anything fetched in CORS mode — which includes the `crossorigin` bundle Vite
+writes into `index.html`), so a policy that recognised same-origin only by the
+*absence* of the header answered 403 to the app's own JavaScript and served a blank
+page. `server/src/index.test.js` holds that behaviour in place.
 
 
 ## Attribution
