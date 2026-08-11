@@ -31,7 +31,7 @@ SPEC-0006 carries the requirements; ADR-0009 carries the decision and its reject
 
 - **Dragging from the picker into a chosen cell.** The picker keeps its current append semantics, refined to "lowest free unblocked cell". Adding a second drag source doubles the drop-target surface and the touch-gesture surface for a convenience the user did not ask for.
 - **Splitting a stack by dragging one copy out of it.** A stack moves as a unit; reducing it is done by removing copies. The peel-one-off gesture is discussed under Open Questions.
-- **Changing any game rule.** The per-category cap of four, the one-of-each-tool rule, and the eight-cell ceiling are unchanged. This capability changes where items sit, not which items are legal.
+- **Changing any game rule.** The four-copies-of-one-consumable cap, the one-of-each-tool rule, and the eight-cell ceiling are unchanged. This capability changes where items sit, not which items are legal.
 - **Closing the security-headers gap.** The app ships no CSP today. That is real and it is not this capability's to fix; SPEC-0006 only forbids making it harder to fix.
 - **Server-side migration of stored records.** Old records stay v1 in the data file until re-saved.
 - **Reworking the loadout row preview.** SPEC-0003 owns that; this capability constrains it and flags the amendment it needs.
@@ -116,7 +116,7 @@ graph TD
     end
 
     subgraph PURE["Pure helpers — client/src/utils"]
-        CALC["calc.js<br/><i>slotMax, catCount, totalCost<br/>skip holes</i>"]
+        CALC["calc.js<br/><i>slotMax, consCount, totalCost<br/>skip holes</i>"]
         PLACE["placement.js <b>(new)</b><br/>firstFreeCell, hasFreeCell,<br/>runsOf, canDrop"]
         RND["randomize.js<br/><i>emits 8-element grid</i>"]
         CODEC["loadoutCodec.js<br/><i>FORMAT_VERSION 2<br/>fromV1 lifts to sparse<br/>legacy tables untouched</i>"]
@@ -191,7 +191,7 @@ Both branches end by moving focus deliberately and announcing the outcome. That 
 
 ## Risks / Trade-offs
 
-- **Six files must learn to tolerate holes, with no compiler to find the misses.** `catCount`, `totalCost`, `toData`, `randomize`, `selectEquipCount`, and `Picker.jsx`'s capacity test each iterate or measure `state.equip` and each is wrong the moment it is sparse — silently, and in ways that produce plausible numbers. → Route every one of them through `placement.js` or an explicit `.filter(Boolean)`, and add a test per consumer asserting behaviour on a grid with gaps, not only on a full or empty one. The capacity predicate is the highest-risk of the six because a naive port disables the entire picker and a careless fix ignores blocked cells.
+- **Six files must learn to tolerate holes, with no compiler to find the misses.** `consCount`, `totalCost`, `toData`, `randomize`, `selectEquipCount`, and `Picker.jsx`'s capacity test each iterate or measure `state.equip` and each is wrong the moment it is sparse — silently, and in ways that produce plausible numbers. → Route every one of them through `placement.js` or an explicit `.filter(Boolean)`, and add a test per consumer asserting behaviour on a grid with gaps, not only on a full or empty one. The capacity predicate is the highest-risk of the six because a naive port disables the entire picker and a careless fix ignores blocked cells.
 
 - **The client cannot ship before the server.** A v2 payload is a 400 against today's `isValidData`, so a client-first release turns every save into an error. → The validator branch lands and deploys first; it accepts v2 before any client emits it, and accepting a shape nothing sends yet is harmless.
 

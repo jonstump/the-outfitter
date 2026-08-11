@@ -41,7 +41,7 @@ What remains owed to SPEC-0003 is narrower and additive: this capability introdu
 
 Removing an item SHALL write `null` into that item's cell. It MUST NOT splice the array, MUST NOT change the length of the array, and MUST NOT alter the cell of any other item.
 
-Every consumer that iterates, counts, or encodes `state.equip` SHALL tolerate holes. Specifically, `catCount()`, `totalCost()`, `toData()`, the randomizer, and the equipment-count selector SHALL each derive their result from the occupied cells only, and MUST NOT treat the array length as the number of equipped items.
+Every consumer that iterates, counts, or encodes `state.equip` SHALL tolerate holes. Specifically, `consCount()`, `totalCost()`, `toData()`, the randomizer, and the equipment-count selector SHALL each derive their result from the occupied cells only, and MUST NOT treat the array length as the number of equipped items.
 
 #### Scenario: Removing an item leaves the others where they were
 
@@ -179,20 +179,20 @@ Capacity SHALL be expressed as a single predicate — **a free, unblocked cell e
 The three existing game rules SHALL be preserved exactly:
 
 - At most one of each specific Tool per loadout.
-- At most four consumables of any one **category**, counted across all cells regardless of adjacency.
+- At most four copies of any one **specific consumable**, counted across all cells regardless of adjacency. Two different consumables never share a budget, even when they share a `type`.
 - At most eight occupied cells, of which blocked cells are not available.
 
 The picker's enabled/disabled state for an item SHALL be derived from the same predicate and the same rules that the reducer enforces, so an item the picker offers is always an item the reducer will accept.
 
-#### Scenario: The category cap counts across non-adjacent cells
+#### Scenario: The per-item cap counts across non-adjacent cells
 
-- **WHEN** a loadout holds four `Shot`-category consumables spread across non-adjacent cells
-- **THEN** every further `Shot`-category consumable SHALL be rejected by the reducer and SHALL render as unavailable in the picker
+- **WHEN** a loadout holds four Vitality Shots spread across non-adjacent cells
+- **THEN** every further Vitality Shot SHALL be rejected by the reducer and SHALL render as unavailable in the picker, while a Stamina Shot SHALL still be accepted
 
-#### Scenario: A stack counts toward the category cap by its full quantity
+#### Scenario: A stack counts toward its own cap by its full quantity
 
-- **WHEN** a loadout holds a `×3` stack of Vitality Shots and one Stamina Shot
-- **THEN** the `Shot` category SHALL be counted as 4, and every further `Shot`-category consumable SHALL be rejected
+- **WHEN** a loadout holds a `×3` stack of Vitality Shots and one further Vitality Shot is added
+- **THEN** the stack SHALL be counted as 3, the add SHALL be accepted, and a fifth Vitality Shot SHALL be rejected
 
 #### Scenario: A full grid with holes is still full
 

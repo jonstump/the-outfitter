@@ -16,7 +16,7 @@ import {
   traitThumb,
   weaponThumb,
 } from "../../data/catalog.js";
-import { capMax, catCount, slotMax, upTotal } from "../../utils/calc.js";
+import { capMax, consCount, slotMax, upTotal } from "../../utils/calc.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { addTraitIfAllowed } from "../../store/thunks.js";
@@ -87,12 +87,12 @@ function buildRows(tab, ui, loadout, dispatch) {
     return CONS.map((c, i) => ({ c, i }))
       .filter((x) => match(x.c[1]) && gOK(x.c[4]))
       .map((x) => {
-        const cnt = catCount(loadout, x.c[3]);
+        const cnt = consCount(loadout, x.i);
         const ok = loadout.equip.length < sMax && cnt < 4;
         return {
           key: x.i,
           name: x.c[1],
-          meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 of type equipped",
+          meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 equipped",
           badge: x.c[3].toUpperCase(),
           badgeColor: x.c[3] === "Shot" ? "#7a8a5c" : "#a5674a",
           category: "consumables",

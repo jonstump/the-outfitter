@@ -11,7 +11,7 @@ export default function EquipmentPanel() {
       <div className="panel-header">
         <div className="panel-title">Equipment</div>
         <div className="panel-meta">
-          {equipCount}/{sMax} SLOTS · MAX 4 PER CONSUMABLE TYPE
+          {equipCount}/{sMax} SLOTS · MAX 4 PER CONSUMABLE
         </div>
       </div>
       <div className="equip-grid">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONS, FIRST_AID_KIT, TOOLS } from "../data/catalog.js";
+import { FIRST_AID_KIT, TOOLS } from "../data/catalog.js";
 import { randomizeLoadout } from "./randomize.js";
 
 // Governing: issue #26 (randomize.js's loadout shape must match what the store
@@ -25,15 +25,14 @@ describe("randomizeLoadout", () => {
     }
   });
 
-  it("never exceeds the consumable per-category cap of 4", () => {
+  it("never exceeds 4 copies of the same consumable", () => {
     for (let k = 0; k < 20; k++) {
       const r = randomizeLoadout({ slotMax: 8 });
       const counts = new Map();
       r.equip
         .filter((e) => e.t === "C")
         .forEach((e) => {
-          const cat = CONS[e.i][3];
-          counts.set(cat, (counts.get(cat) || 0) + 1);
+          counts.set(e.i, (counts.get(e.i) || 0) + 1);
         });
       for (const n of counts.values()) {
         expect(n).toBeLessThanOrEqual(4);

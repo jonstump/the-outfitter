@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { CONS, WEAPONS } from "../data/catalog.js";
-import { capMax, catCount, slotMax } from "../utils/calc.js";
+import { WEAPONS } from "../data/catalog.js";
+import { capMax, consCount, slotMax } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Shape of a valid loadout state object. setLoadout() rejects payloads that don't
@@ -43,7 +43,9 @@ const loadoutSlice = createSlice({
       // One of each specific Tool per loadout — re-verified against the wiki as still
       // in force after Update 2.8's equipment-slot rework (issue #41).
       if (t === "T" && state.equip.some((e) => e.t === "T" && e.i === i)) return;
-      if (t === "C" && catCount(state, CONS[i][3]) >= 4) return;
+      // Four copies of one specific consumable — the cap is per item, so a full set of
+      // Dynamite Sticks doesn't block a Dynamite Bundle.
+      if (t === "C" && consCount(state, i) >= 4) return;
       state.equip.push({ t, i });
     },
     removeEquip(state, action) {
