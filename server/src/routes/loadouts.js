@@ -56,12 +56,89 @@ function isValidData(data) {
 // so there is nothing to migrate.
 const isListRef = (v) => v === null || v === undefined || (typeof v === "string" && v.length > 0 && v.length <= 100);
 
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+//
+// The caps, as names rather than as literals. SPEC-0003's Security Requirements ask for the
+// description cap to be "declared as a named constant beside the existing name cap", and at
+// least 1000 characters: the dataset's longest description is 404 ("The Night Seer"), and
+// that text is what a user most often starts from when they edit, so a cap that could not
+// hold it would reject the default the application itself offered.
+//
+// NAME_MAX_CHARS governs the ENVELOPE's name. The identical-looking 200 inside isValidData
+// caps `data.n`, which is wire-format validation frozen by REQ "The Saved-Loadout Wire
+// Format Is Unchanged" — a different rule that happens to have landed on the same number,
+// so it is deliberately left as its own literal rather than made to share this constant.
+const NAME_MAX_CHARS = 200;
+export const DESCRIPTION_MAX_CHARS = 1000;
+
+/**
+ * How many characters a description is, in the unit its own rejection message names.
+ *
+ * `String.prototype.length` counts UTF-16 CODE UNITS, which charges two for every emoji and
+ * every other non-BMP glyph — so a 501-emoji note would be refused by a message that claims
+ * a 1000-character limit. That fails closed, but it fails closed while saying something
+ * untrue, and the user cannot act on it. Spreading iterates by code point instead, which is
+ * the unit a person counting what they typed is counting.
+ *
+ * Code points, not grapheme clusters: a flag or a family emoji is still several. Segmenting
+ * properly would need `Intl.Segmenter` and would make the cap depend on the ICU data the
+ * runtime happens to carry, which is a worse trade for a courtesy limit. What matters is
+ * that the number is bounded and the message is honest about what it counted.
+ *
+ * The storage consequence is checked, not assumed: 1000 code points is at most 4000 bytes of
+ * UTF-8, well inside the 64kb request-body limit set in index.js.
+ */
+const charCount = (s) => [...s].length;
+
 // Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
 // undefined rather than null. Serialise it explicitly so the API shape is uniform: every
 // loadout carries a `listId`, and "Unassigned" is always `null` rather than sometimes an
 // absent field. Without this, every consumer has to coalesce, and the no-op comparison in
 // PATCH below would miss the legacy shape.
-const publicLoadout = (rec) => ({ ...publicRecord(rec), listId: rec.listId ?? null });
+//
+// `description` is coalesced the same way and for the same reason, but note what the
+// coalescing does NOT do: it maps absent -> null only. An empty string survives as an empty
+// string, because absent/null ("never edited — inherit from the list's hunter") and ""
+// ("deliberately blank") are two different states and the client has to be able to tell
+// them apart. `rec.description ?? null` is deliberate — `||` here would collapse the two.
+const publicLoadout = (rec) => ({
+  ...publicRecord(rec),
+  listId: rec.listId ?? null,
+  description: rec.description ?? null,
+});
+
+/**
+ * Validate a caller-supplied description.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 Security
+ * Requirements ("Request Body Size Limits").
+ *
+ * Called ONLY when the key is present in the body — "omitted" is a third answer that means
+ * "leave the field alone", and it is the caller's job to check for the key before asking.
+ * Folding that check in here would make an omitted key indistinguishable from `null`, which
+ * is the exact collapse this requirement exists to prevent.
+ *
+ * The text is stored VERBATIM: no trim. Trimming would silently turn a whitespace-only
+ * description into the deliberately-blank state, which is a state change the user did not
+ * ask for. The cap therefore governs exactly what is stored.
+ */
+function validateDescription(description, res) {
+  if (description === null) return { ok: true, value: null };
+  if (typeof description !== "string") {
+    res.status(400).json({ error: "description must be a string or null" });
+    return { ok: false };
+  }
+  if (charCount(description) > DESCRIPTION_MAX_CHARS) {
+    // The rejected text is NOT echoed back. It is user prose, one of whose two sources was
+    // scraped off-origin, and an error body is the easiest place for it to end up somewhere
+    // it was never rendered as text — a log aggregator, a bug report, a toast built by
+    // concatenation. The cap is the only thing the caller needs told.
+    res.status(400).json({ error: `description must be at most ${DESCRIPTION_MAX_CHARS} characters` });
+    return { ok: false };
+  }
+  return { ok: true, value: description };
+}
 
 /**
  * Validate a caller-supplied listId against the lists the CALLER owns.
@@ -115,16 +192,32 @@ loadoutsRouter.get("/", async (_req, res) => {
 
 loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
   try {
-    const { name, data, listId } = req.body || {};
+    const body = req.body || {};
+    const { name, data, listId } = body;
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name must be a non-empty string" });
     }
-    if (name.trim().length > 200) {
-      return res.status(400).json({ error: "name must be at most 200 characters" });
+    if (name.trim().length > NAME_MAX_CHARS) {
+      return res.status(400).json({ error: `name must be at most ${NAME_MAX_CHARS} characters` });
     }
     if (!isValidData(data)) {
       return res.status(400).json({ error: "data must be a valid loadout payload" });
     }
+
+    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 § HTTP
+    // API — "`POST` SHALL accept an optional `description`, so that saving a loadout with one
+    // written up front is a single write rather than a save followed by a patch". The key's
+    // PRESENCE is the question, not its truthiness: `"description" in body` distinguishes
+    // "said nothing" from "said null".
+    //
+    // No client path sends the key today — the description editor lives on a saved card, so
+    // there is nothing to write up front yet, and client/src/api/loadouts.js says so at the
+    // call site and pins it with a test. This branch is kept anyway because the SHALL above
+    // is normative on the endpoint, not on the caller; deleting it would put the server out
+    // of conformance to make a coverage observation go away.
+    const describes = "description" in body;
+    const desc = describes ? validateDescription(body.description, res) : { ok: true, value: null };
+    if (!desc.ok) return;
 
     const token = callerToken(req);
     await db.read();
@@ -143,9 +236,17 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       // Only re-file when the caller said something about it. An upsert that omits listId
       // is updating the loadout, not moving it out of its list.
       if (listId !== undefined) existing.listId = ref.value;
+      // Same rule for the description, for the same reason: re-saving a build under a name
+      // that already exists must not silently discard the note the user wrote about it.
+      if (describes) existing.description = desc.value;
       record = existing;
     } else {
       record = { id: randomUUID(), owner: token, name: trimmedName, data, listId: ref.value, updatedAt: now };
+      // The key is written only when the caller supplied one. A record that has never been
+      // described carries NO `description` field at all — that is the state SPEC-0003 calls
+      // "never edited", and the API surfaces it as null through publicLoadout without the
+      // store having to hold a placeholder for it.
+      if (describes) record.description = desc.value;
       db.data.loadouts.push(record);
     }
 
@@ -158,22 +259,37 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 });
 
 /**
- * Move a loadout between lists.
+ * Move a loadout between lists, and/or edit its description.
  *
- * Governing: SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference".
+ * Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+ * SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference", SPEC-0003 REQ
+ * "Loadouts Carry an Editable Description".
  *
- * The only mutable field is `listId` — a move changes where a loadout is filed and
- * nothing else about it. Both sides are ownership-checked: the loadout must belong to
- * the caller, and so must the destination list.
+ * Two mutable fields, and they are INDEPENDENT: this endpoint used to require `listId`,
+ * which would have made "describe" impossible without also restating where the loadout is
+ * filed. Nothing else about the record is reachable from here — not `data`, not the format
+ * version, not the name.
  *
- * `listId: null` moves the loadout to Unassigned, which is an ordinary destination and
- * not a special case.
+ * The whole endpoint turns on presence rather than value. For BOTH fields:
+ *
+ *   omitted  -> leave it exactly as it is
+ *   null     -> `listId: null` files into Unassigned; `description: null` restores the
+ *               inherited default (the list hunter's text, resolved at render time — never
+ *               copied into the record, which is why "restore" is a write of null and not
+ *               a write of the hunter's prose)
+ *   a string -> store it, including `description: ""`, which is the deliberately-blank
+ *               state and must NOT re-inherit
+ *
+ * A body carrying neither key is rejected rather than treated as a no-op: it is a client
+ * that believes it is writing something, and answering 200 would hide that.
  */
 loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
   try {
     const body = req.body || {};
-    if (!("listId" in body)) {
-      return res.status(400).json({ error: "listId is required" });
+    const files = "listId" in body;
+    const describes = "description" in body;
+    if (!files && !describes) {
+      return res.status(400).json({ error: "listId or description is required" });
     }
 
     const token = callerToken(req);
@@ -186,25 +302,43 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
       return res.status(404).json({ error: "loadout not found" });
     }
 
-    const ref = validateListRef(body.listId, token, res);
+    // Both fields are validated BEFORE either is applied, so a rejected description cannot
+    // leave a half-applied move behind it.
+    const ref = files ? validateListRef(body.listId, token, res) : { ok: true, value: loadout.listId ?? null };
     if (!ref.ok) return;
+    const desc = describes
+      ? validateDescription(body.description, res)
+      : { ok: true, value: loadout.description ?? null };
+    if (!desc.ok) return;
 
     // Coalesce before comparing: a record predating SPEC-0003 has `listId` undefined, not
-    // null, so a plain === would miss "already Unassigned" and take the write path.
-    if ((loadout.listId ?? null) === ref.value) {
-      // Selecting the list it is already in is a no-op, not an error and not a write.
+    // null, so a plain === would miss "already Unassigned" and take the write path. The
+    // description comparison coalesces the same way and, again, only absent -> null: `""`
+    // compares as `""`, so clearing a description that was inherited IS a change and IS
+    // written, which is what stops the hunter's text reappearing.
+    const sameList = (loadout.listId ?? null) === ref.value;
+    const sameDescription = (loadout.description ?? null) === desc.value;
+    if (sameList && sameDescription) {
+      // Writing what is already there is a no-op, not an error and not a write.
       return res.json(publicLoadout(loadout));
     }
 
-    loadout.listId = ref.value;
+    if (files) loadout.listId = ref.value;
+    if (describes) loadout.description = desc.value;
     loadout.updatedAt = new Date().toISOString();
     await db.write();
 
-    console.info("loadout moved", { loadoutId: loadout.id, listId: ref.value });
+    console.info("loadout updated", {
+      loadoutId: loadout.id,
+      listId: sameList ? undefined : ref.value,
+      // The TEXT is never logged — it is user prose, and one of the two sources it can come
+      // from is scraped off-origin. Which state it landed in is what a log needs to say.
+      description: sameDescription ? undefined : desc.value === null ? "inherited" : `${charCount(desc.value)} chars`,
+    });
     res.json(publicLoadout(loadout));
   } catch (err) {
     console.error("PATCH /api/loadouts/:id failed:", err);
-    res.status(500).json({ error: "failed to move loadout" });
+    res.status(500).json({ error: "failed to update loadout" });
   }
 });
 

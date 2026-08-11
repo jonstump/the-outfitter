@@ -47,6 +47,15 @@ export function getLoadouts() {
 //
 // `listId` rides on the request envelope alongside `name`, never inside `data`. Omitting
 // it leaves an existing loadout's filing untouched; passing null files it to Unassigned.
+//
+// NO `description` KEY, deliberately, and this is the client half of a decision rather than
+// an oversight. SPEC-0003's HTTP API section says POST "SHALL accept an optional
+// `description`" — that is normative on the SERVER, so the branch stays there — but the
+// description editor lives on a SAVED card, so there is no surface in this app from which a
+// user can write one before the loadout exists. Sending the key here with nothing to put in
+// it could only ever send a wrong value: the save path's nearest string is `data.n`, and a
+// re-save that quietly overwrote the user's note with the build's inner name is precisely
+// the bug the omission prevents. The key set is asserted in the panel's tests.
 export function upsertLoadout(name, data, listId) {
   const body = listId === undefined ? { name, data } : { name, data, listId };
   return fetch(BASE, {
@@ -56,13 +65,54 @@ export function upsertLoadout(name, data, listId) {
   }).then(asJson);
 }
 
-/** Move a loadout between lists. `listId: null` moves it to Unassigned. */
-export function moveLoadout(id, listId) {
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+//
+// PATCH speaks in KEYS, not in values. The server reads `"listId" in body` and
+// `"description" in body`, so a key that is present and null is an instruction ("file into
+// Unassigned", "go back to inheriting") while an absent key means "leave that field alone".
+//
+// That makes `undefined` the one value that must never be handed to JSON.stringify here: it
+// deletes its own key on the way out, turning a reset into a body the server rejects for
+// carrying no instruction at all. Each wrapper below therefore builds its object with
+// exactly the keys it means, and `describeLoadout` refuses undefined outright rather than
+// letting it disappear silently between here and the wire.
+function patchLoadout(id, patch) {
   return fetch(`${BASE}/${id}`, {
     method: "PATCH",
     headers: headers(),
-    body: JSON.stringify({ listId }),
+    body: JSON.stringify(patch),
   }).then(asJson);
+}
+
+/** Move a loadout between lists. `listId: null` moves it to Unassigned. */
+export function moveLoadout(id, listId) {
+  // Guarded for the reason spelled out above, and for the same reason `describeLoadout` is:
+  // `{ listId: undefined }` serialises to `{}`, which the server rejects for carrying no
+  // instruction at all. A caller that reached here with undefined believes it is filing the
+  // loadout somewhere; a 400 with a message about a missing key is not the answer, and the
+  // invariant is not worth arguing for on one of the two writers only.
+  if (listId !== null && typeof listId !== "string") {
+    throw new TypeError("listId must be a string or null");
+  }
+  // No `description` key: a move must not disturb what the user wrote about the loadout,
+  // and the omission is what says so.
+  return patchLoadout(id, { listId });
+}
+
+/**
+ * Set a loadout's description.
+ *
+ * `null` restores the inherited default — the description of the hunter on the list the
+ * loadout is filed into, resolved at render time and never written here. `""` stores the
+ * deliberately-blank state, which renders as nothing and does NOT re-inherit.
+ */
+export function describeLoadout(id, description) {
+  if (description !== null && typeof description !== "string") {
+    throw new TypeError("description must be a string or null");
+  }
+  // No `listId` key: describing a loadout never re-files it.
+  return patchLoadout(id, { description });
 }
 
 export function deleteLoadout(id) {

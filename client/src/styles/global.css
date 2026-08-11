@@ -1161,6 +1161,121 @@ button {
   border-color: var(--gold-border);
 }
 
+/* The loadout description.
+
+   Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+   SPEC-0003 REQ "Loadouts Carry an Editable Description".
+
+   The text is either the user's own or a hunter's lore resolved live from the dataset, and
+   the second runs to several hundred characters — 404 at the roster's longest. Unclamped, it
+   would dominate the card it exists to annotate and push the preview off the bottom of a
+   phone screen, so it is BOUNDED here and revealed by the control the card renders beside
+   it. The bound is on the paragraph alone: the preview below is a sibling, so no length of
+   prose can displace its category structure. */
+.ll-lcard-desc-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.ll-lcard-desc {
+  flex-basis: 100%;
+  margin: 0;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  /* --text-muted, not --text-dim: 6.01:1 on the card's --panel against --text-dim's 4.09:1,
+     and 13px/400 is body text, so WCAG 2.1 SC 1.4.3 asks for 4.5:1 rather than the 3:1
+     large-text allowance. SPEC-0003 makes AA mandatory. The same figure is recorded on
+     `.ll-lcard` above and on `.ll-lp-empty` below — this is the third rule to measure it. */
+  color: var(--text-muted);
+  /* Lore arrives as prose, but a user can type one unbroken 300-character token. Breaking it
+     is what keeps "no card overflows horizontally at any supported width" true of the
+     CONTENT and not merely of the boxes — the same rule `.ll-lcard-name` already follows. */
+  overflow-wrap: anywhere;
+}
+.ll-lcard-desc[data-source="inherited"] {
+  font-style: italic;
+}
+/* Three lines, then it stops. `-webkit-line-clamp` is the only cross-browser way to bound by
+   LINES rather than by pixels, and it is supported everywhere this app runs; the standard
+   `line-clamp` is set alongside it so the rule survives the prefix being dropped. `overflow:
+   hidden` is what actually bounds it, and is the declaration worth asserting. */
+.ll-lcard-desc-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+/* Revealing is bounded too, and this is not a detail. Cards share a grid ROW, and a grid row
+   is as tall as its tallest cell — so an unbounded reveal on one card stretches every sibling
+   beside it (measured at 1280px: four cards, 668px -> 1234px, for one description opened).
+   The ceiling scales with nothing: the 1000-character cap could otherwise make that row ten
+   screens tall. ~14 lines is comfortably more than the roster's longest lore needs at a
+   normal card width, and the rest scrolls inside the paragraph rather than inside the page. */
+.ll-lcard-desc-open {
+  max-height: 20em;
+  overflow-y: auto;
+}
+/* Announced as the source of the text, not decoration — see the note in the component. */
+.ll-lcard-desc-from {
+  flex-basis: 100%;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* A RESTING affordance, not a hover one. These controls sit inline with the description, and
+   an inherited description is italic — so italic 13px --text-dim controls beside italic 13px
+   --text-dim prose were byte-identical to it in presentation. At 320px the wrap puts "more
+   edit" on the line under the lore, where it reads as a trailing clause of the sentence
+   rather than as two buttons; a pointer user finds them by accident and a low-vision user
+   not at all. So they refuse the prose's identity in three ways at once: upright against its
+   italic, underlined, and --gold rather than a text colour.
+
+   --gold on --panel is 7.37:1, past the 4.5:1 body-text requirement — measured, like the
+   6.01:1 on `.ll-lcard-desc` above. The underline is what carries the distinction where
+   colour cannot (SC 1.4.1: colour is never the only cue). */
+.ll-lcard-desc-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-style: normal;
+  font-size: 13px;
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ll-lcard-desc-btn:hover {
+  color: var(--gold-bright);
+}
+.ll-lcard-desc-btn:focus-visible {
+  outline: 1px solid var(--gold-border);
+  outline-offset: 2px;
+}
+.ll-lcard-desc-field {
+  flex-basis: 100%;
+  /* `width: 100%` on a textarea is not enough on its own — the element's `cols` attribute
+     sets an intrinsic min-content width that would otherwise widen the card past its track. */
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  background: var(--input-bg);
+  color: var(--text-bright);
+  border: 1px solid var(--gold-border);
+  padding: 4px 8px;
+}
+.ll-lcard-desc-controls {
+  display: flex;
+  gap: 8px;
+}
+
 /* The categorised preview.
 
    Governing: SPEC-0003 REQ "Filed Loadouts Preview Their Contents".
