@@ -207,6 +207,52 @@ is the one that would trust clients that aren't one. Name the proxy instead.
 > catch it being missing. On Render, Fly or anything else that terminates TLS in
 > front of you, add `TRUST_PROXY=1` to the service environment **first**, then
 > ship.
+>
+> **This has happened.** The first deploy after the setting was introduced went
+> out without it, and behaved exactly as described above — the app loaded, and
+> nothing saved. The paragraph above is a post-mortem, not a precaution.
+
+### Checking a deployment
+
+The trust boundary is the one setting no test can confirm, because the value
+lives in the platform rather than the repository. Check it against a running
+instance instead — a write that reaches validation proves the origin comparison
+succeeded, which proves the forwarded protocol was believed:
+
+```
+curl -si https://<host>/api/loadouts -X POST \
+  -H 'Origin: https://<host>' -H 'Content-Type: application/json' \
+  -d '{}' | head -1
+```
+
+| Response | Meaning |
+|---|---|
+| `400` | Correct. The request reached validation and the empty body was refused on the merits |
+| `403` | `TRUST_PROXY` is missing or wrong. Check the body is `{"error":"origin not allowed"}` to confirm it is this server's rejection and not the platform's |
+| `429` | Neither — the write limiters mount ahead of validation, so the check answers this before it can tell you anything. Wait out the one-minute window and retry |
+
+The `429` is likeliest against exactly the deployment you are checking: with
+`TRUST_PROXY` wrong, `req.ip` resolves to the proxy for everyone, so the per-IP
+budget is one bucket shared by all traffic rather than a per-caller floor.
+
+**Do not fix a 403 here by adding the app's own origin to `CORS_ORIGIN`.** It
+works, and it is the wrong repair: writes start succeeding while `req.ip` stays
+resolved to the proxy's address, so both rate limiters remain collapsed into one
+bucket shared by every user. That masks the defect this variable exists to fix.
+
+### Render
+
+`render.yaml` in the repository root is a Blueprint carrying these settings —
+`TRUST_PROXY`, the single-instance constraint, and the persistent disk — so they
+arrive through review rather than living only in a dashboard. It is a source of
+truth, not an enforcement mechanism: Render remains the authority on what is
+actually running, and the two can still drift.
+
+Applying it to a service that already exists needs care. Three fields must match
+the running service before you apply, and the disk is the one that loses data if
+it does not: Render identifies a disk by name, so a blueprint naming a different
+one requests a **new, empty** disk, and the app comes up with an empty
+`db.json`. The file comments each of the three at the line that carries it.
 
 ### Separate origins (optional)
 

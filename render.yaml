@@ -1,0 +1,91 @@
+# Render Blueprint — the deployment settings that must not live only in a dashboard.
+#
+# Governing: ADR-0011 (Configure the Deployment Trust Boundary Rather Than Hardcoding It),
+# SPEC-0003 § "Rate Limiting" and § "CSRF Protection" — both rest on req.ip and req.protocol,
+# which this setting determines. SPEC-0003 has no requirement about the trust boundary itself;
+# ADR-0011 § "Known spec gap" records that omission as deliberate, so this cites the sections
+# that depend on the setting rather than naming a requirement that was never written.
+#
+# This file exists because of a specific failure. ADR-0011 moved the trust boundary out of
+# the source and into deployment configuration, correctly — it is a property of the topology,
+# not of the application. What it could not do was put that configuration anywhere a reviewer
+# would see it. The first deploy after the change went out without TRUST_PROXY set, and the
+# API answered 403 to every write from its own client while continuing to serve reads: the
+# exact symptom ADR-0011 describes under Consequences, reproduced within a day of the ADR
+# predicting it.
+#
+# ADR-0011's Confirmation section says the deployment level is "not confirmable by CI, by
+# construction". That remains true — Render is the authority on what is actually running, and
+# nothing here can force agreement. What this file changes is narrower and still worth having:
+# the intended value is now in the repository, arrives through review, and is diffable. It is
+# a source of truth, not an enforcement mechanism.
+#
+# Two constraints below are load-bearing for correctness, not preferences. Read them before
+# editing:
+#   - `numInstances: 1` — lowdb is a single-writer JSON file. Two instances get two
+#     independent db.json files and silently diverge (README "Deployment", issue #16).
+#   - the `disk` block — without it the filesystem is ephemeral and every redeploy wipes
+#     every saved loadout. The Dockerfile declares the same path as a VOLUME.
+
+services:
+  - type: web
+
+    # VERIFY BEFORE APPLYING. This must match the existing service's name exactly. A name
+    # that does not match makes Render create a SECOND service from this blueprint rather
+    # than adopting the one already running.
+    name: the-outfitter
+
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+
+    # VERIFY BEFORE APPLYING — both fields. A region cannot be changed after creation, and
+    # the plan must be one that supports disks (the free tier does not).
+    region: oregon
+    plan: starter
+
+    # Not a scaling choice. See the header: lowdb has no multi-writer story, so a second
+    # instance does not share load, it forks the data file.
+    numInstances: 1
+
+    healthCheckPath: /healthz
+
+    # ⚠️  THE DESTRUCTIVE FIELD. `name` must match the disk the running service already has.
+    # Render identifies a disk by name; a blueprint naming a different one is a request for a
+    # NEW empty disk, and the app would come up with an empty db.json — every saved loadout
+    # apparently gone. Check the existing name under Render → the service → Disks, and change
+    # the line below to match before applying. Do not accept this default on faith.
+    disk:
+      name: outfitter-data
+      mountPath: /app/server/data
+      sizeGB: 1
+
+    envVars:
+      # The reason this file exists. Render terminates TLS in front of the process and
+      # appends the real client IP to X-Forwarded-For, so a hop count of 1 resolves req.ip
+      # to the actual caller.
+      #
+      # Unset, this defaults to false and the deployment breaks in a quiet way: req.protocol
+      # resolves to "http" while the browser sends an https Origin, isSameOrigin() fails, and
+      # every POST/PATCH/DELETE returns 403. Reads keep working, because a same-origin GET
+      # carries no Origin header — so the app loads normally and nothing saves.
+      #
+      # Do not "improve" this to `true`. Express's boolean true trusts every peer at every
+      # hop, which is more permissive than the hardcoded value ADR-0011 removed; the server
+      # refuses it at boot on purpose (server/src/lib/trustProxy.js).
+      - key: TRUST_PROXY
+        value: "1"
+
+      # Also set by the Dockerfile. Declared here too so the blueprint states the runtime
+      # mode rather than inheriting it from an image someone may later rebuild differently.
+      - key: NODE_ENV
+        value: production
+
+      # PORT is deliberately absent. Render injects it and the server binds whatever it is
+      # given (`process.env.PORT || 4100`). Pinning it here invites a mismatch with the port
+      # Render actually routes to.
+      #
+      # CORS_ORIGIN is deliberately absent too. The app is same-origin by design — the client
+      # is served from this service and calls the relative /api path — so the allow-list is
+      # for genuinely cross-origin callers only. Adding the app's own origin here would mask
+      # a broken TRUST_PROXY rather than fix it: the write path would start working again
+      # while req.ip stayed wrong and both rate limiters collapsed to one shared bucket.
