@@ -48,7 +48,7 @@ For descriptions:
 
 ## Decision Outcome
 
-Chosen option: **one `scripts/scrape-hunters.mjs` writing `client/src/data/hunters.json` and two portrait sizes per hunter, covering the full wiki roster, with descriptions carried in the same dataset file**, because it captures everything the page has in a single visit, and spends its complexity budget where the actual cost is — the images — rather than on splitting payloads that have no reason to diverge.
+Chosen option: **one `scripts/scrape-hunters.mjs` writing `client/src/data/hunters.json` and two portrait sizes per hunter, covering the full wiki roster, with descriptions carried in the same dataset file** *(both the path and the two sizes are superseded — see Amendments; today it is `data/hunters.json` and one trimmed portrait)*, because it captures everything the page has in a single visit, and spends its complexity budget where the actual cost is — the images — rather than on splitting payloads that have no reason to diverge.
 
 Six sub-decisions follow.
 
@@ -60,7 +60,7 @@ Hunters do not work that way. A hunter's portrait and description are two facts 
 
 **Size selection falls back across sizes before falling back to a placeholder.** *(Superseded 2026-08-10 — with one asset the ladder is portrait, then placeholder. See Amendments.)* Two assets per hunter means three new failure states — thumb missing, full missing, both missing — and the naive implementation renders nothing when only one is absent. The rule is: request the size appropriate to the context; if it is absent, use the other size; only if both are absent fall through to SPEC-0003's neutral placeholder. A too-large image is a performance problem, a blank grid cell is a broken one, and this ordering prefers the former.
 
-**The dataset is `client/src/data/hunters.json`, generated and committed.** Per hunter: a stable id, display name, description, portrait slug, and the source revision plus ingestion timestamp ADR-0005 requires. Generated, committed, imported at build time, never hand-edited — the same discipline `itemStats.json` is held to. Ids follow the existing slug derivation so they stay stable across scrapes.
+**The dataset is `client/src/data/hunters.json`, generated and committed.** *(Path superseded 2026-08-10 — it is `data/hunters.json` at the repo root. See Amendments.)* Per hunter: a stable id, display name, description, portrait slug, and the source revision plus ingestion timestamp ADR-0005 requires. Generated, committed, imported at build time, never hand-edited — the same discipline `itemStats.json` is held to. Ids follow the existing slug derivation so they stay stable across scrapes.
 
 **Descriptions ride in the same file.** They are short prose, small next to the portraits, and carrying them now costs one field on a page already being parsed. The alternative — adding them later — means re-visiting every hunter page for data that was in the response the first time. This is the same reasoning ADR-0005 used to justify capturing revision provenance before anything consumed it.
 
@@ -86,7 +86,7 @@ Hunters do not work that way. A hunter's portrait and description are two facts 
 * `scripts/scrape-hunters.mjs` imports slug derivation, robots handling, rate limiting, the user agent, and the sentinel error classes from `scripts/lib/wiki.mjs` — a grep under `scripts/` finds exactly one definition of each
 * The script is not referenced by `npm run build`, `npm run dev`, `npm start`, or any future CI config — the ADR-0002 invariant is re-verified, not assumed
 * A grep for `huntshowdown.wiki.gg` in `client/src/` returns only attribution text and comments, never a fetch or an `<img src>`
-* `client/src/data/hunters.json` exists, is generated, carries per-entry source revision and ingestion timestamp, and is not hand-edited
+* `data/hunters.json` *(amended 2026-08-10 — was `client/src/data/hunters.json`)* exists, is generated, carries per-entry source revision and ingestion timestamp, and is not hand-edited
 * Exactly one portrait asset per hunter with imagery exists on disk, trimmed to the subject, and no `-thumb` variant remains *(amended 2026-08-10 — this criterion previously required both sizes and asserted the thumbnail was materially smaller)*
 * No committed asset is materially wider than its visible subject: decoding the set and comparing each frame against the box of pixels at alpha ≥ 32 shows no frame more than ~8% wider or taller than its subject *(added 2026-08-10 with the trim-threshold amendment — this is the check that caught 21 no-op trims, and it is a property of the committed artifact rather than of the code, so no unit test can stand in for it)*
 * A test covers both degradation paths: the portrait renders when present, and falls through to SPEC-0003's neutral placeholder when absent *(amended 2026-08-10 — there were three paths while there were two sizes)*
@@ -168,7 +168,7 @@ flowchart TD
     end
 
     subgraph committed["Generated, committed"]
-        JSON["client/src/data/hunters.json"]
+        JSON["data/hunters.json<br/>(repo root — shared by client and server)"]
         ART["images/hunters/{slug}<br/>one trimmed asset"]
     end
 
@@ -249,3 +249,19 @@ So the amendment is not a trade of weight against quality. It is smaller *and* s
 * **The committed assets do not conform** until `node scripts/scrape-hunters.mjs --force` is run. That run needs wiki access and is human-invoked by ADR-0002, so code, spec and disk are deliberately out of step until it happens, and SPEC-0004 marks the affected figures as projections rather than restating them as measured.
 * **The surface table's width figures move**: 176–333 wide becomes a projected 176–270, and the count falling short of a tile's 192px rises 51 → 61. The 1.09× worst case is unchanged, since the 176px floor belongs to hunters whose trim was always correct.
 * **No consumer change.** Assets already vary in dimension and aspect, and `object-fit: cover` already does the fitting; this makes the variation smaller and more honest, not different in kind.
+
+### 2026-08-10 — the dataset lives at the repo root, not inside the client workspace
+
+**Superseded:** "The dataset is `client/src/data/hunters.json`."
+
+**Amended to:** the dataset is **`data/hunters.json` at the repository root**. `client/src/data/hunters.js` remains the client's seam and imports it from there; Vite bundles it exactly as it did when it was a sibling.
+
+**Why:** the original path assumed a single consumer. It has two. SPEC-0003's "Favorite Hunters" makes the **server** read the roster as well, to validate that a favorited hunter id names a real hunter — and a file inside the client workspace is invisible to the server's production image, because the Dockerfile's multi-stage build discards the build stage and copies only what it is told to. That gap shipped: a favorites endpoint that returned `400` on every write in the packaged image while 275 client and 63 server tests stayed green and `/healthz` stayed `200`. Every suite ran against the repo tree; nothing ran against the packaged layout. Corrected in `5058699` following the PR #133 review.
+
+**What did not change:** generated, committed, never hand-edited, imported at build time, ids from the shared slug derivation. Only the directory moved.
+
+**Blast radius:**
+
+* **SPEC-0004's** "Generated, Committed Dataset File" carries the root path and states that it is normative — the location is a consequence of having two consumers, not a filing preference, so it is written to resist a well-meaning move back.
+* **CI gained the `image` job** rather than a test: the failure is only observable against the packaged layout, so the guard builds the image, boots it, and drives one real favorite end to end.
+* **No consumer change.** Both readers resolve the file by path; neither cares where it sits.

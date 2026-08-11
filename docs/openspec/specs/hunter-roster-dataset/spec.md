@@ -8,7 +8,7 @@ implements: [ADR-0007]
 
 ## Overview
 
-Produces the hunter dataset and portrait assets that SPEC-0003's loadout lists consume. A single offline, human-invoked scrape visits each hunter page on huntshowdown.wiki.gg once and emits both payloads: a generated `client/src/data/hunters.json` and one self-hosted portrait per hunter.
+Produces the hunter dataset and portrait assets that SPEC-0003's loadout lists consume. A single offline, human-invoked scrape visits each hunter page on huntshowdown.wiki.gg once and emits both payloads: a generated `data/hunters.json` at the repository root and one self-hosted portrait per hunter.
 
 This spec covers **production**. SPEC-0003 specifies **consumption** — the fallback chain, the tolerance for missing assets, and the placeholder behaviour — and this spec SHALL satisfy that contract as amended on 2026-08-10. Where the amendment changes what consumers do, SPEC-0003 is amended in the same commit rather than overridden from here.
 
@@ -54,7 +54,9 @@ The scrape SHALL fetch each hunter's page at most once per run and derive both t
 
 ### Requirement: Generated, Committed Dataset File
 
-The scrape SHALL write `client/src/data/hunters.json`, committed to the repository and imported at build time. It MUST NOT be hand-edited.
+The scrape SHALL write `data/hunters.json` at the repository root, committed to the repository and imported at build time. It MUST NOT be hand-edited.
+
+The location is normative, not incidental. The dataset is a **shared** artifact: the client bundles it through `client/src/data/hunters.js`, and the server reads the same file to validate a favorited hunter id (SPEC-0003 REQ "Favorite Hunters"). A copy inside the client workspace is invisible to the server's production image, which is how a favorites endpoint that returned `400` on every write shipped green — the repo-tree suites all passed because they never ran against the packaged layout *(corrected 2026-08-10 in `5058699`, following the PR #133 review; the regression is now guarded by the `image` job in CI)*. It SHALL NOT be relocated back inside either workspace.
 
 Each entry SHALL carry: a stable `id`, a `name` for display, a `description`, a `portrait` slug, the `sourceRevision` the entry was derived from, and an `ingestedAt` timestamp.
 

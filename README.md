@@ -60,8 +60,8 @@ node scripts/scrape-hunters.mjs --names-only   # roster only; no sharp required
 
 Both respect `robots.txt` (aborting if it can't be read), rate-limit every request, and report a
 structured per-run summary. `scrape-hunters.mjs` writes `data/hunters.json` (a repo-root artifact:
-the client bundles it and the server reads it to validate favorited hunter ids) plus two
-AVIF portrait sizes per hunter under `client/public/images/hunters/`, enforcing a per-asset and a
+the client bundles it and the server reads it to validate favorited hunter ids) plus one
+trimmed AVIF portrait per hunter under `client/public/images/hunters/`, enforcing a per-asset and a
 total byte budget — an over-budget asset fails its hunter rather than being written. Useful flags:
 `--force` (re-encode existing art), `--limit=N`, `--dry-run`, `--delay-ms=N`.
 
@@ -104,11 +104,20 @@ is a **single-process, single-writer** store. Deployment therefore requires:
   PaaS/container platforms the local filesystem is ephemeral and wiped on every
   redeploy — without a volume, saved loadouts disappear with each release.
 
-### Docker
+### Docker, and the production parity check
 
 ```
 docker compose up --build
 ```
+
+**Run this before deploying.** It is the repository's production-topology parity check:
+the only command that exercises what production actually does, which the day-to-day
+`npm run dev` loop deliberately does not. Use it to verify three things the dev loop
+cannot show you — that the API and the built client are served from a **single origin**,
+that the server behaves correctly under **`NODE_ENV=production`**, and that saved loadouts
+**persist across a container restart** on the mounted volume. Dev runs two processes on two
+ports with a Vite proxy in front, so a same-origin or production-only regression is
+invisible there and shows up first in deployment (SPEC-0002).
 
 `docker-compose.yml` builds the client, runs the server with
 `NODE_ENV=production`, and mounts a named volume at `/app/server/data` (the
