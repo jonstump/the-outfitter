@@ -100,10 +100,15 @@ describe("ActionsPanel status messaging", () => {
 // undiscoverable; putting the same fact on the control that performs the action answers the
 // confusion at the moment it arises instead of from the top of a panel.
 //
-// The assertions below deliberately pair the LABEL with the WRITE. A label that merely reads
-// the selected id would be right in every case a test bothers to set up and wrong in the one
-// that matters — a selection pointing at a list that no longer exists, where the save quietly
-// files into Unassigned. Both come from `resolveSaveListId`, and these tests are what says so.
+// The assertions below deliberately pair the LABEL with the WRITE — every one of them asserts
+// what the button says AND where the request then files the loadout, in the same test, so a
+// label that drifted away from the behaviour it advertises could not pass.
+//
+// What they do NOT prove is that the label goes through `resolveSaveListId`: reading
+// `ui.selectedListId` raw is indistinguishable here, because looking a name up by id performs
+// the same existence check. That was confirmed by making the edit and watching this file stay
+// green. The property the shared rule actually protects is pinned in store/selectors.test.js,
+// which explains why it needs a test of its own.
 // ---------------------------------------------------------------------------------------
 
 const withList = (lists, ui) => ({
@@ -160,10 +165,10 @@ describe("the save control names its destination", () => {
   });
 
   it("says Unassigned when the selection points at a list that has gone", async () => {
-    // The case a label derived straight from `ui.selectedListId` gets wrong: a list retired in
-    // another tab, or a selectedListId restored from localStorage before fetchLists resolved.
-    // The save resolves it to null; the button must promise the same thing, or it names a
-    // destination the write refuses to use.
+    // A list retired in another tab, or a selectedListId restored from localStorage before
+    // fetchLists resolved. The save resolves it to null; the button must promise the same
+    // thing rather than naming a destination the write refuses to use — and, since there is no
+    // name to render for a list that is not there, must not render an empty destination either.
     renderWith(withList([alpha], { ...createTestStore().getState().ui, selectedListId: "retired-yesterday" }));
 
     expect(saveButton()).toHaveAccessibleName("Save to Unassigned");

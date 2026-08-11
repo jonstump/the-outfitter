@@ -30,10 +30,10 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
  *
  * Exported, and a function of the whole state rather than a line inside the thunk, because
  * ActionsPanel's save button now NAMES this destination (issue #136, replacing the badge that
- * used to announce it from the top of the lists panel). A label derived from `selectedListId`
- * on its own would promise a list this function refuses to file into — precisely in the stale
- * case, which is the one a user cannot see coming. One rule, so the button and the write
- * cannot disagree.
+ * used to announce it from the top of the lists panel). One rule, so the button and the write
+ * cannot come to different answers — see `selectSaveDestinationName`, which is explicit that
+ * they agree by construction today and that the shared call is what keeps them agreeing if
+ * this rule ever grows a condition beyond "the list exists".
  */
 export function resolveSaveListId({ ui, loadoutLists }) {
   const selected = ui?.selectedListId;
