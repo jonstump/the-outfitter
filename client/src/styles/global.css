@@ -276,10 +276,6 @@ button {
   margin: 0 auto;
 }
 
-/* The left column now seats two panels side by side rather than one stack, and the actions
-   box needs roughly 380px to lay its four control groups out without wrapping. The picker
-   funds it: its rows were 85px tall with a 54px icon and it scrolls internally regardless, so
-   the width it gives up costs it nothing a compacted row does not give back. */
 .left-column {
   flex: 1 1 400px;
   min-width: 320px;
@@ -1124,12 +1120,20 @@ button {
   }
 }
 
-/* Compacted from 14px/18px padding and a 56px min-height, which put a row at 85px and fit
-   ten of thirty-two traits in the window. The list scrolls internally either way, so the
-   height a row spends is height the next item does not get. At 10px/14px and a 44px thumb a
-   row is ~62px, which shows fourteen — and the width freed goes to the left column, where
-   the actions box needs it. The thumb still draws under its 64px native size, so nothing
-   here softens the art. */
+/* Compacted from 14px/18px padding and a 56px min-height, which put a traits row at 85px.
+   At 10px/14px and a 44px thumb it is 65px — both measured, not derived, and both for a
+   square-thumb tab: the wide weapon thumb makes a weapons row 73px, so there is no single
+   row height here. The list scrolls internally either way, so the height a row spends is
+   height the next item does not get.
+
+   What this buys is smaller than it looks, and the honest number is worth keeping: the list
+   also gives the actions box its height, so visible rows go 8 -> 8 at 1280x1024 and 8 -> 9
+   at 1440x1600. The compaction PAYS FOR the move rather than profiting from it. An earlier
+   draft of this comment claimed ten rows becoming fourteen, and said the freed width went to
+   the left column — neither survived measurement, and no column's flex basis changed in this
+   branch at all.
+
+   The thumb still draws under its 64px native size, so nothing here softens the art. */
 .picker-row {
   display: flex;
   width: 100%;
