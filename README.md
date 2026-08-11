@@ -71,7 +71,9 @@ catalog id, carrying the wiki revision it came from. It is **additive**: it neve
 `catalog.js`, so it cannot change a number the app does budget math with. Reconciling a scraped
 value against a hand-authored one is a separate, opt-in step (SPEC-0007, not yet built). A partial
 run (`--limit` or `--only`) reports without writing, so it cannot truncate the dataset to whatever
-it happened to visit.
+it happened to visit. The same applies to coverage lost to failure rather than to a flag: a run
+that would drop items the committed dataset already covers writes nothing and names them, and
+`--allow-shrink` is how a genuine removal gets through.
 
 Generated files are committed and must not be hand-edited; re-running the scrape rewrites them.
 

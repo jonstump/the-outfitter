@@ -417,6 +417,9 @@ export class RateLimiter {
 // ---------------------------------------------------------------------------
 // HTML parsing helpers shared by every payload.
 //
+// Implements: SPEC-0007 REQ "Provenance Is Recorded and Ids Are Never Wiki-Derived" (readRlconf is
+// where the recorded revision comes from), SPEC-0007 REQ "Canonical Titles Are Read From the Page"
+//
 // These moved here from scrape-hunters.mjs when scrape-stats.mjs became the second consumer.
 // readRlconf in particular is the "must not diverge" class: it is where the canonical page title
 // and the current revision id live, and both scrapes record that revision as provenance. Two

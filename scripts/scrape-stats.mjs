@@ -21,6 +21,7 @@
 //       --delay-ms=1500                           Minimum delay between requests (default: 1500ms)
 //       --limit=N                                 Stop after N items (useful for a smoke run)
 //       --out=PATH                                Override the dataset path
+//       --allow-shrink                            Permit a write that drops already-covered items
 //       --dry-run                                 Resolve URLs and check robots.txt, but fetch
 //                                                  nothing and write nothing
 //
@@ -35,7 +36,15 @@
 //
 // A partial run (`--limit` or `--only`) reports but does not write. Otherwise the dataset would be
 // truncated to whatever that run happened to visit, and the deletion would look like a scrape
-// result rather than a flag.
+// result rather than a flag. "Partial" counts DISTINCT categories, so a repeated `--only` value
+// cannot pad the count back up to a full run.
+//
+// The same reasoning covers coverage lost to failure rather than to a flag: the write replaces the
+// file wholesale, so a run that failed most of its items would delete every record it could not
+// re-derive. A run that would drop already-covered ids writes nothing and names them; `--allow-shrink`
+// is how a genuine catalog removal gets through. That path is deliberately the loud one — ADR-0005's
+// worst realistic failure is a wiki markup change the parser stops matching, and its first symptom
+// is a run that succeeds for a handful of items and fails the rest.
 //
 // Error handling (SPEC-0007 REQ "Error Handling Standards"):
 //   - Every layer boundary (robots fetch, page fetch, infobox extraction, field read) wraps its
@@ -55,7 +64,7 @@
 // exact failure ADR-0005 extracted that module to prevent (and which issue #119 already caught
 // once, on the client end).
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -209,8 +218,14 @@ export function textContent(fragment) {
  * the leading category segment and flattening the rest gives "Nagant M1895" and "Sparks Pistol",
  * which is what the infobox heading says. Taking only the LAST segment would turn
  * "Weapons/Sparks/Pistol" into "Pistol" and match nothing.
+ *
+ * DELIBERATELY NOT named `pageTitleToDisplay`, which is what `scrape-hunters.mjs` exports for the
+ * same job with different rules — it drops only the "Hunters/" namespace and never flattens a
+ * second segment, because no hunter page has one. Two exported functions sharing a name and not a
+ * behaviour is the drift this project extracted `lib/wiki.mjs` to prevent; the names differ so a
+ * reader cannot import the wrong one by muscle memory.
  */
-export function pageTitleToDisplay(pageName) {
+export function canonicalTitleFromPageName(pageName) {
   const raw = String(pageName ?? "").trim();
   if (!raw) return null;
   const withoutNamespace = raw.replace(
@@ -404,7 +419,7 @@ export async function scrapeItemStats(target, deps) {
   // Provenance, per ADR-0005: the revision this record was derived from, and when. Read from
   // RLCONF rather than from the URL, so a redirect resolves to one identity rather than two.
   const revision = readRlconf(html, "wgCurRevisionId") ?? readRlconf(html, "wgRevisionId");
-  const canonicalTitle = pageTitleToDisplay(readRlconf(html, "wgPageName"));
+  const canonicalTitle = canonicalTitleFromPageName(readRlconf(html, "wgPageName"));
 
   const selection = selectBaseInfobox(infoboxes, { canonicalTitle, displayName: item });
   if (selection.index === -1) {
@@ -455,6 +470,37 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
 // Run orchestration: per-item try/catch, never lets one item's failure abort the run.
 // ---------------------------------------------------------------------------
 
+/**
+ * Was this run narrow enough that it cannot stand in for the whole catalog?
+ *
+ * Counted over DISTINCT categories, not the raw list. `--only=weapons,weapons,tools,traits` passes
+ * the unknown-category check and has length 4, so a length comparison called it a full run and let
+ * it rewrite the dataset without consumables — dropping ~30 committed records with no warning and
+ * no failures, which is exactly the silent truncation this guard exists to prevent.
+ *
+ * Exported and used by both the run loop and the CLI banner so the two cannot disagree about what
+ * "partial" means.
+ */
+export function isPartialRun({ categories = CATEGORIES, limit = null } = {}) {
+  return limit !== null || new Set(categories).size !== CATEGORIES.length;
+}
+
+/**
+ * The ids the committed dataset already covers.
+ *
+ * A missing file is not an error — the first run has nothing to compare against. A malformed one
+ * is also not fatal here: the shrink guard's job is to prevent silent deletion, and refusing to
+ * run because the file we are about to replace is unparseable would be the wrong failure.
+ */
+export async function readCoveredIds(datasetPath, fsReadFile = readFile) {
+  try {
+    const parsed = JSON.parse(await fsReadFile(datasetPath, "utf8"));
+    return new Set(Object.keys(parsed?.items ?? {}));
+  } catch {
+    return new Set();
+  }
+}
+
 export async function runStatsScrape(options, deps) {
   const {
     categories = CATEGORIES,
@@ -462,6 +508,7 @@ export async function runStatsScrape(options, deps) {
     dryRun = false,
     limit = null,
     datasetPath = STATS_DATA_PATH,
+    allowShrink = false,
   } = options;
   const {
     fetchFn,
@@ -470,6 +517,7 @@ export async function runStatsScrape(options, deps) {
     now = () => new Date().toISOString(),
     fsWriteFile = writeFile,
     fsMkdir = mkdir,
+    fsReadFile = readFile,
   } = deps;
 
   const unknown = categories.filter((c) => !CATEGORIES.includes(c));
@@ -496,7 +544,8 @@ export async function runStatsScrape(options, deps) {
   }
 
   const rateLimiter = new RateLimiter(delayMs);
-  let items = collectCatalogItems(categories);
+  // Deduplicated so a repeated `--only` value cannot fetch the same category's pages twice.
+  let items = collectCatalogItems([...new Set(categories)]);
   if (limit !== null && limit >= 0) items = items.slice(0, limit);
 
   const records = {};
@@ -545,11 +594,37 @@ export async function runStatsScrape(options, deps) {
   // The dataset is written only for a run that could have covered the whole catalog. A --limit or
   // --only run would otherwise silently truncate itemStats.json to whatever it happened to visit,
   // and the deletion would look like a scrape result rather than a flag.
-  const partial = limit !== null || categories.length !== CATEGORIES.length;
+  const partial = isPartialRun({ categories, limit });
+
+  // The same hazard reached by a path the operator did not choose. The write replaces the file
+  // wholesale, so a run where most items FAILED — the shape ADR-0005 names as its worst realistic
+  // risk, a wiki markup change the parser no longer matches — would delete every record it could
+  // not re-derive, including the revision baseline this story exists to capture. Losing coverage is
+  // therefore a decision, not a side effect: it needs --allow-shrink, which is also how a genuine
+  // catalog removal gets through.
+  const dropped = [];
+  if (!dryRun && !partial && !allowShrink) {
+    const covered = await readCoveredIds(datasetPath, fsReadFile);
+    for (const id of covered) if (!(id in records)) dropped.push(id);
+    dropped.sort();
+  }
+
+  const blockedByShrink = dropped.length > 0;
   let written = null;
-  if (!dryRun && !partial && Object.keys(records).length > 0) {
+  if (!dryRun && !partial && !blockedByShrink && Object.keys(records).length > 0) {
     written = await writeStatsFile(records, { datasetPath, fsWriteFile, fsMkdir });
   }
+
+  // One reason, in precedence order — a dry run is why nothing was written even if the run was also
+  // partial. Two spreads both keyed `datasetSkipped` silently dropped one of them.
+  const datasetSkipped = dryRun
+    ? "dry-run writes nothing"
+    : partial
+      ? "partial run (--limit or --only) never rewrites the dataset"
+      : blockedByShrink
+        ? `would drop ${dropped.length} already-covered item${dropped.length === 1 ? "" : "s"} — ` +
+          `re-run with --allow-shrink if the loss is intended`
+        : null;
 
   log({
     level: "info",
@@ -559,12 +634,13 @@ export async function runStatsScrape(options, deps) {
     skipped: summary.skipped.length,
     records: Object.keys(records).length,
     ...(written ? { wrote: written } : {}),
-    ...(partial ? { datasetSkipped: "partial run (--limit or --only) never rewrites the dataset" } : {}),
-    ...(dryRun ? { datasetSkipped: "dry-run writes nothing" } : {}),
+    ...(datasetSkipped ? { datasetSkipped } : {}),
+    ...(blockedByShrink ? { wouldDrop: dropped } : {}),
   });
 
   summary.records = records;
   summary.datasetPath = written;
+  summary.droppedIds = dropped;
   return summary;
 }
 
@@ -608,6 +684,15 @@ export function formatSummary(summary) {
   for (const s of summary.skipped) {
     lines.push(`  SKIPPED ${s.category}/${s.id} ("${s.item}"): ${s.reason}`);
   }
+  if (summary.droppedIds?.length > 0) {
+    // Loud, and last, because it means the run produced no write at all.
+    lines.push(
+      `  DATASET NOT WRITTEN: ${summary.droppedIds.length} item(s) the committed dataset covers ` +
+        `did not survive this run — writing would delete them.`
+    );
+    for (const id of summary.droppedIds) lines.push(`    would drop  ${id}`);
+    lines.push("  Re-run with --allow-shrink if the loss is intended (a removed catalog item).");
+  }
   return lines.join("\n");
 }
 
@@ -617,9 +702,16 @@ export function formatSummary(summary) {
 // ---------------------------------------------------------------------------
 
 export function parseArgs(argv) {
-  const options = { categories: CATEGORIES, delayMs: DEFAULT_DELAY_MS, dryRun: false, limit: null };
+  const options = {
+    categories: CATEGORIES,
+    delayMs: DEFAULT_DELAY_MS,
+    dryRun: false,
+    limit: null,
+    allowShrink: false,
+  };
   for (const arg of argv) {
     if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--allow-shrink") options.allowShrink = true;
     else if (arg.startsWith("--only=")) {
       options.categories = arg
         .slice("--only=".length)
@@ -642,7 +734,7 @@ export function parseArgs(argv) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const partial = options.limit !== null || options.categories.length !== CATEGORIES.length;
+  const partial = isPartialRun(options);
   console.log(
     `scrape-stats: starting (${options.categories.join(", ")}), delay=${options.delayMs}ms, ` +
       `dry-run=${options.dryRun}${options.limit === null ? "" : `, limit=${options.limit}`}`
@@ -654,6 +746,12 @@ async function main() {
       "scrape-stats: partial run (--limit/--only) — reports only. The dataset is rewritten by a full run,"
     );
     console.log("              so a partial one cannot truncate it to whatever it happened to visit.");
+  }
+  if (options.allowShrink && !options.dryRun) {
+    console.log(
+      "scrape-stats: --allow-shrink — items the committed dataset covers but this run does not will"
+    );
+    console.log("              be deleted from it. Read the diff.");
   }
 
   const summary = await runStatsScrape(options, { fetchFn: fetch });

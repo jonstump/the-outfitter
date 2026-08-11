@@ -28,12 +28,13 @@ import {
   RateLimiter,
   RobotsDisallowedError,
   buildStatsRecord,
+  canonicalTitleFromPageName,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
   extractInfoboxes,
   formatSummary,
-  pageTitleToDisplay,
+  isPartialRun,
   parseArgs,
   parseInfoboxFields,
   readInfoboxField,
@@ -623,20 +624,20 @@ const titled = (title, rows = "") =>
 const rlconf = (page, rev) =>
   `<script>RLCONF={"wgPageName":"${page}","wgCurRevisionId":${rev},"wgRevisionId":${rev}};</script>`;
 
-test("pageTitleToDisplay: drops the category namespace and flattens the rest", () => {
-  assert.equal(pageTitleToDisplay("Weapons/Nagant_M1895"), "Nagant M1895");
-  assert.equal(pageTitleToDisplay("Weapons/Ranger_73"), "Ranger 73");
-  assert.equal(pageTitleToDisplay("Tools/Alert_Trip_Mines"), "Alert Trip Mines");
+test("canonicalTitleFromPageName: drops the category namespace and flattens the rest", () => {
+  assert.equal(canonicalTitleFromPageName("Weapons/Nagant_M1895"), "Nagant M1895");
+  assert.equal(canonicalTitleFromPageName("Weapons/Ranger_73"), "Ranger 73");
+  assert.equal(canonicalTitleFromPageName("Tools/Alert_Trip_Mines"), "Alert Trip Mines");
 });
 
-test("pageTitleToDisplay: a variant subpage keeps both segments", () => {
+test("canonicalTitleFromPageName: a variant subpage keeps both segments", () => {
   // Taking only the last segment would yield "Pistol" and match no infobox title.
-  assert.equal(pageTitleToDisplay("Weapons/Sparks/Pistol"), "Sparks Pistol");
+  assert.equal(canonicalTitleFromPageName("Weapons/Sparks/Pistol"), "Sparks Pistol");
 });
 
-test("pageTitleToDisplay: empty input is null, not an empty string", () => {
-  assert.equal(pageTitleToDisplay(""), null);
-  assert.equal(pageTitleToDisplay(null), null);
+test("canonicalTitleFromPageName: empty input is null, not an empty string", () => {
+  assert.equal(canonicalTitleFromPageName(""), null);
+  assert.equal(canonicalTitleFromPageName(null), null);
 });
 
 test("extractInfoboxTitle: reads the infobox heading", () => {
@@ -792,4 +793,147 @@ test("no record was selected by falling back to position", async () => {
   const stats = JSON.parse(await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8"));
   const methods = new Set(Object.values(stats.items).map((r) => r.selectedBy));
   assert.equal(methods.has("unresolved"), false, "an unresolved selection must fail its item, not be written");
+});
+
+// ---------------------------------------------------------------------------
+// A renamed page keeps its id (SPEC-0007 REQ "Provenance Is Recorded and Ids Are Never
+// Wiki-Derived", scenario "A renamed page does not re-key an item")
+// ---------------------------------------------------------------------------
+
+test("a renamed page keeps the catalog id and gains the new display name", async () => {
+  // winfield-m1873 is "Winfield M1873" in the catalog and "Ranger 73" on the wiki — the exact
+  // rename the audit found. The id is the wire format for saved loadouts and share URLs, so what
+  // matters is that the wiki's new name reaches `name` and reaches NOTHING else.
+  const page = `<html>${rlconf("Weapons/Ranger_73", 15379)}<body>${titled("Ranger 73", PRICE_ROW)}</body></html>`;
+  const result = await scrapeItemStats(
+    { category: "weapons", id: "winfield-m1873", name: "Winfield M1873", wikiPath: "Weapons/Ranger_73" },
+    { fetchFn: fakeFetch(page), rateLimiter: noWait, robotsGroups: allowAll }
+  );
+
+  assert.equal(result.id, "winfield-m1873", "the scrape must not re-slug an existing id");
+  assert.equal(result.canonicalTitle, "Ranger 73");
+
+  const record = buildStatsRecord(result, { now: () => "2026-08-11T00:00:00.000Z" });
+  assert.equal(record.name, "Ranger 73", "the new display name is recorded");
+  assert.equal("id" in record, false);
+  assert.equal(
+    JSON.stringify(record).includes("winfield"),
+    false,
+    "nothing in the record is derived from the id, and nothing in it can re-key the item"
+  );
+});
+
+test("a rename reaches the dataset key as the catalog id, never the wiki title", async () => {
+  // End-to-end over the real catalog: every page answers with a title that is NOT the catalog's,
+  // so every record is a rename. The keys must still be catalog ids.
+  const { WEAPONS } = await import("../client/src/data/catalog.js");
+  const catalogIds = new Set(WEAPONS.map((row) => row[0]));
+
+  const renamedPage = (url) => {
+    const pageName = decodeURIComponent(new URL(url).pathname.replace(/^\/wiki\//, ""));
+    const namespace = pageName.split("/")[0];
+    return (
+      `<html>${rlconf(`${namespace}/Renamed_On_The_Wiki`, 42)}<body>` +
+      `${titled("Renamed On The Wiki", PRICE_ROW)}</body></html>`
+    );
+  };
+
+  const summary = await runStatsScrape(
+    { categories: ["weapons"], delayMs: 0, limit: 3 },
+    { fetchFn: fakeFetch(null, { onPage: (url) => okResponse(renamedPage(url)) }), log: () => {} }
+  );
+
+  const keys = Object.keys(summary.records);
+  assert.ok(keys.length > 0, "the fixture should resolve by canonical title");
+  for (const key of keys) {
+    assert.ok(catalogIds.has(key), `${key} must be a catalog id, not a wiki-derived slug`);
+    assert.equal(summary.records[key].name, "Renamed On The Wiki");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The dataset is never truncated silently
+// ---------------------------------------------------------------------------
+
+test("isPartialRun: a repeated --only value does not pad a partial run into a full one", () => {
+  assert.equal(isPartialRun({ categories: CATEGORIES, limit: null }), false);
+  assert.equal(isPartialRun({ categories: ["weapons", "tools", "traits"], limit: null }), true);
+  assert.equal(isPartialRun({ categories: CATEGORIES, limit: 5 }), true);
+  // Four entries, three distinct categories: a length comparison called this a full run.
+  assert.equal(isPartialRun({ categories: ["weapons", "weapons", "tools", "traits"], limit: null }), true);
+});
+
+test("a duplicated category never rewrites the dataset", async () => {
+  // The bug this replaces: --only=weapons,weapons,tools,traits passed the unknown-category check,
+  // measured 4 long, and rewrote itemStats.json with every consumable deleted and no warning.
+  let wrote = false;
+  const summary = await runStatsScrape(
+    { categories: ["weapons", "weapons", "tools", "traits"], delayMs: 0, limit: 2 },
+    { fetchFn: fakeFetch(), log: () => {}, fsWriteFile: async () => { wrote = true; }, fsMkdir: async () => {} }
+  );
+  assert.equal(wrote, false);
+  assert.equal(summary.datasetPath, null);
+});
+
+test("a run that would drop already-covered items writes nothing and names them", async () => {
+  // ADR-0005's worst realistic failure is a wiki markup change the parser stops matching. Its first
+  // symptom is a run that succeeds for a few items and fails the rest — and the write replaces the
+  // file wholesale, so the survivors would be the whole dataset.
+  let wrote = false;
+  const covered = { items: { "already-covered-a": {}, "already-covered-b": {} } };
+  const summary = await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0 },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsReadFile: async () => JSON.stringify(covered),
+      fsWriteFile: async () => { wrote = true; },
+      fsMkdir: async () => {},
+    }
+  );
+
+  assert.equal(wrote, false, "coverage loss must be a decision, not a side effect");
+  assert.equal(summary.datasetPath, null);
+  assert.deepEqual(summary.droppedIds, ["already-covered-a", "already-covered-b"]);
+  assert.match(formatSummary(summary), /DATASET NOT WRITTEN/);
+  assert.match(formatSummary(summary), /--allow-shrink/);
+});
+
+test("--allow-shrink lets a genuine removal through", async () => {
+  let wrote = null;
+  const covered = { items: { "retired-item": {} } };
+  const summary = await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0, allowShrink: true },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsReadFile: async () => JSON.stringify(covered),
+      fsWriteFile: async (_p, body) => { wrote = JSON.parse(body); },
+      fsMkdir: async () => {},
+    }
+  );
+
+  assert.ok(wrote, "the flag is the operator saying the loss is intended");
+  assert.equal("retired-item" in wrote.items, false);
+  assert.deepEqual(summary.droppedIds, []);
+});
+
+test("a first run with no dataset on disk is not treated as a shrink", async () => {
+  let wrote = false;
+  await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0 },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsReadFile: async () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); },
+      fsWriteFile: async () => { wrote = true; },
+      fsMkdir: async () => {},
+    }
+  );
+  assert.equal(wrote, true, "nothing is covered yet, so nothing can be dropped");
+});
+
+test("parseArgs: --allow-shrink is off unless asked for", () => {
+  assert.equal(parseArgs([]).allowShrink, false);
+  assert.equal(parseArgs(["--allow-shrink"]).allowShrink, true);
 });
