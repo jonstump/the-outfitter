@@ -1,4 +1,4 @@
-import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 
 export const LS_CUR = "hunt-outfitter-current";
 
@@ -20,6 +20,30 @@ function indexOfItem(list, id) {
 
 function inRange(value, n) {
   return Number.isInteger(value) && value >= 0 && value < n;
+}
+
+/**
+ * The ammo variant index a weapon actually has, or -1 for "no variant selected".
+ *
+ * Governing: issue #201.
+ *
+ * `a` is used as an index into `AMMO[pool]` at render time (WeaponsPanel/WeaponSlot) and at
+ * cost time (utils/calc.js). An index past the end of that weapon's variant list makes both
+ * read `[1]` off `undefined`, which throws — and because the store subscriber persists to
+ * localStorage during the same dispatch that decoded it, the poisoned value is written
+ * BEFORE the render that throws on it. Every later visit reads it back and blanks the app
+ * again, with no hash and no in-app way out. So a decoder is the right place to stop it:
+ * nothing downstream can persist what never decodes.
+ *
+ * It cannot be bounded by a constant. The pools have different lengths and `special`
+ * (Dolch 96, Nitro Express) is empty, so the legacy decoder's fixed `5` still admitted a
+ * crashing value for those two weapons — the same bug, one weapon class narrower. Bound it
+ * against the pool the weapon in that slot actually draws from, and both decoders are
+ * correct for every weapon.
+ */
+function boundedAmmo(weaponIndex, value) {
+  const variants = AMMO[WEAPONS[weaponIndex][4]] || [];
+  return inRange(value, variants.length) ? value : -1;
 }
 
 export function emptyLoadout() {
@@ -47,7 +71,8 @@ function fromV1(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
     if (!w || !WEAPON_BY_ID.has(w[0])) return null;
-    return { i: indexOfItem(WEAPONS, w[0]), a: Number.isInteger(w[1]) ? w[1] : -1 };
+    const i = indexOfItem(WEAPONS, w[0]);
+    return { i, a: boundedAmmo(i, w[1]) };
   };
   const equip = (d.e || [])
     .filter((e) => e && (e[0] === "T" || e[0] === "C") && (e[0] === "T" ? TOOL_BY_ID : CONS_BY_ID).has(e[1]))
@@ -170,7 +195,8 @@ function fromLegacy(d) {
     if (!w) return null;
     const id = legacyId(LEGACY_WEAPON_IDS, w[0]);
     if (!id || !WEAPON_BY_ID.has(id)) return null;
-    return { i: indexOfItem(WEAPONS, id), a: inRange(w[1], 5) ? w[1] : -1 };
+    const i = indexOfItem(WEAPONS, id);
+    return { i, a: boundedAmmo(i, w[1]) };
   };
   const equip = (d.e || [])
     .filter((e) => e && (e[0] === "T" || e[0] === "C"))
@@ -223,6 +249,27 @@ export function writeStoredLoadout(loadout) {
     localStorage.setItem(LS_CUR, JSON.stringify(toData(loadout)));
   } catch {
     // localStorage unavailable (private mode, quota) — silently skip persistence
+  }
+}
+
+/**
+ * Discard the persisted in-progress build and any share fragment addressing it.
+ *
+ * Governing: issue #201. The recovery path for a build the app cannot render — the state
+ * and the link that seeded it are both dropped, so the reload that follows starts empty
+ * rather than re-reading the same bad record. Only the current build is touched: saved
+ * loadouts live server-side and are none of this function's business.
+ */
+export function clearStoredLoadout() {
+  try {
+    localStorage.removeItem(LS_CUR);
+  } catch {
+    // localStorage unavailable — nothing persisted, so nothing to clear
+  }
+  try {
+    history.replaceState(null, "", location.pathname + location.search);
+  } catch {
+    // history API unavailable — the reload will still drop the state above
   }
 }
 

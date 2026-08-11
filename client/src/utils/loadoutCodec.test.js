@@ -17,9 +17,13 @@ import {
 // (immune to array reorders), and the legacy pre-versioning index-based encoding still decodes
 // against the catalog's current order. Both must round-trip to the same in-memory loadout.
 
+// Weapon 16 is the Winfield M1873C, which draws from the five-variant `medium` pool, so
+// `a: 2` names a variant it really has. The sample used to pair `a: 2` with the Dolch 96 —
+// a `special`-pool weapon whose purchasable variant list is EMPTY — which is the exact
+// unrenderable shape issue #201 is about, asserted as if it round-tripped.
 function sampleLoadout() {
   const lo = emptyLoadout();
-  lo.weapons = [{ i: 0, a: -1 }, { i: 14, a: 2 }]; // Nagant M1895, Dolch 96 + ammo variant
+  lo.weapons = [{ i: 0, a: -1 }, { i: 16, a: 2 }]; // Nagant M1895, Winfield M1873C + ammo variant
   lo.equip = [{ t: "T", i: 0 }, { t: "C", i: 3 }]; // First Aid Kit, Antidote Shot
   lo.traits = ["quartermaster"];
   lo.name = "Test build";
@@ -38,7 +42,7 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     const dec = fromData(toData(lo));
     expect(dec.name).toBe("Test build");
     expect(dec.blocked).toBe(1);
-    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 14, a: 2 }]);
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 16, a: 2 }]);
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
     expect(dec.traits).toEqual(["quartermaster"]);
   });
@@ -65,21 +69,66 @@ describe("toData / fromData (v1 id-based wire format)", () => {
   });
 });
 
+// Governing: issue #201 (a crafted share link permanently blanks the app)
+//
+// `a` is an index into the weapon's AMMO pool, and two consumers — WeaponSlot and
+// totalCost — read it. An out-of-range value made both read a property off `undefined`,
+// which throws during render; because the store persists the decoded loadout BEFORE React
+// draws it, the poisoned value reached localStorage and blanked every later visit, hash or
+// no hash. Bounding it at decode is what stops it being persisted at all.
+//
+// Asserted against BOTH decoders. The v1 decoder had no bound whatsoever; the legacy one
+// had a fixed `inRange(w[1], 5)`, which is not the same rule — `special` (Dolch 96, Nitro
+// Express) has no purchasable variants at all, so 5 still admitted a crashing value there.
+describe("out-of-range ammo indices decode to no variant selected", () => {
+  const DOLCH = WEAPONS.findIndex((t) => t[0] === "dolch-96"); // `special` pool: zero variants
+  const WINFIELD = WEAPONS.findIndex((t) => t[0] === "winfield-m1873c"); // `compact`: five
+
+  const v1 = (weaponIndex, a) =>
+    fromData({ v: FORMAT_VERSION, w: [[WEAPONS[weaponIndex][0], a], null], e: [], tr: [], n: "", b: 0 });
+
+  it.each([9999, 5, 2.5, -2, "2", null])("v1 rejects the ammo index %p", (a) => {
+    expect(v1(WINFIELD, a)).toMatchObject({ weapons: [{ i: WINFIELD, a: -1 }, null] });
+  });
+
+  it("v1 keeps an index the weapon's pool actually has", () => {
+    expect(v1(WINFIELD, 4).weapons[0]).toEqual({ i: WINFIELD, a: 4 });
+  });
+
+  it("v1 rejects any variant on a weapon whose pool is empty", () => {
+    // The case a fixed bound of 5 would have let through.
+    expect(v1(DOLCH, 2).weapons[0]).toEqual({ i: DOLCH, a: -1 });
+  });
+
+  it("legacy rejects a variant on a weapon whose pool is empty", () => {
+    const dec = fromData({ w: [[LEGACY_WEAPON_IDS.indexOf("dolch-96"), 2], null], e: [], tr: [] });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1 });
+  });
+
+  it("never persists a decoded loadout that a re-encode would reintroduce the fault through", () => {
+    // The round trip is the mechanism that made this permanent: whatever fromData returns is
+    // what toData writes to localStorage. If the bound held on decode but not through the
+    // re-encode, the next read would poison the store again.
+    const decoded = v1(DOLCH, 9999);
+    expect(fromData(toData(decoded)).weapons[0]).toEqual({ i: DOLCH, a: -1 });
+  });
+});
+
 describe("fromData (legacy index-based wire format)", () => {
   it("decodes a legacy record against the current catalog order, preserving item identity", () => {
     const legacy = {
-      w: [[0, -1], [14, 2]],
+      w: [[0, -1], [16, 2]],
       e: [["T", 0], ["C", 3]],
       tr: [0],
       n: "Old build",
       b: 0,
     };
     const dec = fromData(legacy);
-    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 14, a: 2 }]);
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 16, a: 2 }]);
     // Resolved identity, not just raw index pass-through: appends to the catalog
     // must never shift what a legacy position refers to (data-accuracy update).
     expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nagant M1895");
-    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Dolch 96");
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Winfield M1873C");
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
     expect(TOOLS[dec.equip[0].i][1]).toBe("First Aid Kit");
     expect(CONS[dec.equip[1].i][1]).toBe("Antidote Shot");

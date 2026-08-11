@@ -27,8 +27,15 @@ export default function WeaponSlot({ slot }) {
   }
 
   const def = WEAPONS[w.i];
-  const variants = AMMO[def[4]];
-  const ammoCost = w.a >= 0 ? variants[w.a][1] : 0;
+  const variants = AMMO[def[4]] || [];
+  // Governing: issue #201. `w.a` arrives from a decoded share link or from localStorage, and
+  // an index past the end of this weapon's variant list used to be read unguarded — one
+  // `undefined[1]` here throws during render, and React unmounts the whole tree, so the
+  // symptom is a blank page rather than a wrong price. The decoder bounds the value now;
+  // this resolves it to an object instead of asserting one, so a future decode bug degrades
+  // to "Standard" rather than back to a white screen.
+  const variant = w.a >= 0 ? variants[w.a] : null;
+  const ammoCost = variant ? variant[1] : 0;
 
   return (
     <div className="weapon-slot filled-slot">
@@ -39,7 +46,7 @@ export default function WeaponSlot({ slot }) {
             <div className="weapon-name">{def[1]}</div>
             <div className="weapon-meta">
               Size {def[2]} · {AMMO_LABEL[def[4]]}
-              {w.a >= 0 ? ` · ${variants[w.a][0]}` : ""}
+              {variant ? ` · ${variant[0]}` : ""}
             </div>
           </div>
         </div>
@@ -59,7 +66,9 @@ export default function WeaponSlot({ slot }) {
               the WIDTH stays inline, because it is this slot's layout and nobody else's. */}
           <select
             className="select-sm"
-            value={String(w.a)}
+            // An unresolved index has no <option> to match, which renders the control blank
+            // and offers no way back; show what the loadout actually costs — Standard.
+            value={String(variant ? w.a : -1)}
             onChange={(e) =>
               dispatch(loadoutActions.setAmmo({ slot, ammoIndex: parseInt(e.target.value, 10) }))
             }
