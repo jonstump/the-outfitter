@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catCount, slotMax, totalCost, upTotal } from "./calc.js";
+import { consCount, slotMax, totalCost, upTotal } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -40,23 +40,23 @@ describe("totalCost", () => {
   });
 });
 
-describe("catCount", () => {
-  it("counts consumables sharing a category string", () => {
+describe("consCount", () => {
+  it("counts copies of one specific consumable, not its type", () => {
     const lo = loadoutWith({
       equip: [
-        { t: "C", i: 0 }, // Vitality Shot (Shot)
-        { t: "C", i: 3 }, // Antidote Shot (Shot)
         { t: "C", i: 4 }, // Dynamite Stick (Throwable)
+        { t: "C", i: 4 }, // Dynamite Stick (Throwable)
+        { t: "C", i: 5 }, // Dynamite Bundle (Throwable)
       ],
     });
-    expect(catCount(lo, "Shot")).toBe(2);
-    expect(catCount(lo, "Throwable")).toBe(1);
+    expect(consCount(lo, 4)).toBe(2);
+    expect(consCount(lo, 5)).toBe(1);
   });
 
-  it("ignores tools and unknown categories", () => {
-    const lo = loadoutWith({ equip: [{ t: "T", i: 0 }, { t: "C", i: 4 }] });
-    expect(catCount(lo, "Shot")).toBe(0);
-    expect(catCount(lo, "Nope")).toBe(0);
+  it("ignores tools sharing the consumable's index", () => {
+    const lo = loadoutWith({ equip: [{ t: "T", i: 4 }, { t: "C", i: 0 }] });
+    expect(consCount(lo, 4)).toBe(0);
+    expect(consCount(lo, 0)).toBe(1);
   });
 });
 

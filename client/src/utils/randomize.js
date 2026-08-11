@@ -47,8 +47,8 @@ function attempt({ slotMax, upBudgetOn, upBudget }) {
       if (i !== equip[0].i && !equip.some((e) => e.t === "T" && e.i === i)) equip.push({ t: "T", i });
     } else {
       const i = Math.floor(Math.random() * CONS.length);
-      const cat = CONS[i][3];
-      if (equip.filter((e) => e.t === "C" && CONS[e.i][3] === cat).length < 4) equip.push({ t: "C", i });
+      // Cap is four copies of the same consumable, not four of the same type.
+      if (equip.filter((e) => e.t === "C" && e.i === i).length < 4) equip.push({ t: "C", i });
     }
   }
 

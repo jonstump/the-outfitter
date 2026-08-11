@@ -134,11 +134,13 @@ Any change that inserts into, removes from, or reorders an `AMMO` pool SHALL be 
 
 ### Requirement: Rules Inputs Are Assigned Only From Mechanical Categories
 
-A catalog field read by `calc.js` or `loadoutSlice.js` to decide what a loadout may contain is a **rules input**, not a descriptive field. `CONS[i][3]` (`type`) is one: `catCount()` counts by it and the reducer enforces the game's 4-per-category cap on the result.
+A catalog field read by `calc.js` or `loadoutSlice.js` to decide what a loadout may contain is a **rules input**, not a descriptive field.
+
+The consumable cap is keyed on item identity, not on `type`: `consCount()` counts copies of one specific `CONS` entry and the reducer rejects the fifth, so four Dynamite Sticks and a Dynamite Bundle is a legal loadout. `CONS[i][3]` (`type`) is descriptive — it labels picker rows — and MUST NOT be re-introduced as a cap key.
 
 `type` SHALL be assigned only from the game's mechanical cap categories — Throwable, Placeable, Shot, Tarot Card. It MUST NOT be assigned from a thematic effect category (Healing, Rending, Fire, Poison, Noise, Vision, Light); those are `group` signals at most.
 
-This is the failure mode that distinguishes a rules input: deriving `type` from "the item's wiki subcategory" produces a well-formed value that is right about half the time, and the error surfaces as permitted-loadout drift rather than as a parse failure. It will never appear in a run summary.
+The failure mode that distinguishes a field like this: deriving `type` from "the item's wiki subcategory" produces a well-formed value that is right about half the time, and the error surfaces as a mislabelled item rather than as a parse failure. It will never appear in a run summary.
 
 `Placeable` SHALL exist as a `CONS` type. Any field newly identified as a rules input SHALL be checked for positional or persisted coupling before it is corrected, and the result of that check recorded — `type` has been checked and has none, so it carries no `FORMAT_VERSION` gate.
 
@@ -147,10 +149,10 @@ This is the failure mode that distinguishes a rules input: deriving `type` from 
 - **WHEN** the Medical Pack is scraped, which the wiki files under both `Category:Healing_Consumables` and `Category:Placeable_Consumables`
 - **THEN** its `type` SHALL be `Placeable`, and its `group` MAY remain `Shots`
 
-#### Scenario: The cap is enforced per mechanical category, in both directions
+#### Scenario: The cap is enforced per item, not per category
 
-- **WHEN** a loadout holds four Placeables and a fifth Placeable is added
-- **THEN** it SHALL be rejected; and **WHEN** a loadout holds four Placeables and a Throwable is added, it SHALL be accepted
+- **WHEN** a loadout holds four Dynamite Sticks and a fifth Dynamite Stick is added
+- **THEN** it SHALL be rejected; and **WHEN** a loadout holds four Dynamite Sticks and a Dynamite Bundle is added — same `type`, different item — it SHALL be accepted
 
 ### Requirement: Budget-Affecting Attributes Are Stored, Never Inferred
 

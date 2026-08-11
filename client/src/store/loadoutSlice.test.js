@@ -15,20 +15,25 @@ function makeStore(initial) {
 }
 
 describe("addEquip", () => {
-  it("enforces the max-4-per-consumable-category cap", () => {
+  it("enforces the max-4-copies-of-one-consumable cap", () => {
     const store = makeStore();
-    // Equip 4 Shots, then a 5th must be rejected.
-    [0, 1, 2, 3].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
+    // Equip 4 Vitality Shots, then a 5th must be rejected.
+    [0, 0, 0, 0].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
     expect(store.getState().loadout.equip).toHaveLength(4);
     store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 })); // 5th Vitality Shot
     expect(store.getState().loadout.equip).toHaveLength(4);
   });
 
-  it("keeps different categories independent", () => {
+  it("counts each consumable separately, not by type", () => {
     const store = makeStore();
-    [0, 4, 12, 13].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
-    // 4 different categories all fit.
-    expect(store.getState().loadout.equip).toHaveLength(4);
+    // 4 Dynamite Sticks fill their own budget; a Dynamite Bundle shares the
+    // "Throwable" type but has its own budget of four, so it still fits.
+    const stick = CONS.findIndex((c) => c[0] === "dynamite-stick");
+    const bundle = CONS.findIndex((c) => c[0] === "dynamite-bundle");
+    expect(CONS[stick][3]).toBe(CONS[bundle][3]);
+    [stick, stick, stick, stick, bundle].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
+    expect(store.getState().loadout.equip).toHaveLength(5);
+    expect(store.getState().loadout.equip.filter((e) => e.i === bundle)).toHaveLength(1);
   });
 
   it("rejects a duplicate tool (one per loadout)", () => {

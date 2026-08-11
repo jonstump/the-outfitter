@@ -14,8 +14,11 @@ export function slotMax(loadout) {
   return 8 - loadout.blocked;
 }
 
-export function catCount(loadout, category) {
-  return loadout.equip.filter((e) => e.t === "C" && CONS[e.i][3] === category).length;
+// The 4-consumable cap is per specific consumable, not per type: four Dynamite Sticks
+// plus a Dynamite Bundle is a legal build. This used to count by CONS[i][3] (the type,
+// "Shot"/"Throwable"), which pooled every throwable in the game into one budget of four.
+export function consCount(loadout, consIndex) {
+  return loadout.equip.filter((e) => e.t === "C" && e.i === consIndex).length;
 }
 
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));

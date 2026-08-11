@@ -51,7 +51,7 @@ export default function App() {
         {/* Governing: ADR-0002; Implements: SPEC-0001 REQ "Attribution" */}
         <p>
           Fan-made planner. Sizes, prices and rules are community-compiled approximations of the Update 2.8 loadout
-          system (5-point weapon capacity, 6 with Quartermaster; 8 mixed equipment slots, max 4 per consumable type).
+          system (5-point weapon capacity, 6 with Quartermaster; 8 mixed equipment slots, max 4 of each consumable).
           Not affiliated with Crytek.
         </p>
         <p>

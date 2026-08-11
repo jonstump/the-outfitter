@@ -29,7 +29,7 @@ Fifteen open issues sit downstream of this work. Five of them — #156, #157, #1
 
 ### Non-Goals
 
-- **The loadout rules engine.** This spec constrains what data feeds it and identifies which fields are rules inputs; it does not define the caps themselves. The missing 15-trait maximum, the dual-wield slot arithmetic, and the 4-per-category enforcement are rules-engine changes with tests, and ADR-0005 is explicit that its write-through machinery must not be extended to cover them.
+- **The loadout rules engine.** This spec constrains what data feeds it and identifies which fields are rules inputs; it does not define the caps themselves. The missing 15-trait maximum, the dual-wield slot arithmetic, and the 4-per-consumable enforcement are rules-engine changes with tests, and ADR-0005 is explicit that its write-through machinery must not be extended to cover them.
 - **Restructuring the `AMMO` pool model.** ADR-0005 already flags that per-weapon ammo compatibility may not cleanly replace the shared-pool model and that revisiting it "deserves its own decision". This spec forbids scraping the table and gates edits to it; it does not redesign it.
 - **Wire-format version 2.** SPEC-0006 already schedules a `FORMAT_VERSION` bump for the sparse equip grid, and the dual-wield flag needs the same bump. Both belong to that spec's migration, not this one. This spec only states which catalog changes require the gate.
 - **List 2 weapon variants.** Bornheim Extended, Scottfield Swift, Pax Claw, Dolch Bullseye and their siblings need a `variantOf` schema change that is sequenced ahead of bulk import.
