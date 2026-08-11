@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { Provider } from "react-redux";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import ActionsPanel from "../components/ActionsPanel/ActionsPanel.jsx";
-import RandomizerPanel from "../components/RandomizerPanel/RandomizerPanel.jsx";
 import LoadoutListsPanel from "../components/LoadoutListsPanel/LoadoutListsPanel.jsx";
 import Picker from "../components/Picker/Picker.jsx";
 import WeaponsPanel from "../components/WeaponsPanel/WeaponsPanel.jsx";
@@ -623,16 +622,13 @@ describe("every rendered select carries the contract", () => {
 });
 
 describe("the controls that share a row share a step", () => {
-  it("puts the randomizer's row and the save row on the default step", () => {
-    // Random loadout and Clear moved to RandomizerPanel when it was split out to sit beside
-    // the traits grid. The rule they were pinning is unchanged — controls sharing a row share
-    // a sizing step — so the assertion followed them rather than being dropped.
-    withStore(baseState({ ui: createTestStore().getState().ui }), <RandomizerPanel />);
-    const randomizerRow = document.querySelector(".randomizer-actions");
-    expect(within(randomizerRow).getByRole("button", { name: "Random loadout" })).toHaveClass("btn-primary");
-    expect(within(randomizerRow).getByRole("button", { name: "Clear" })).toHaveClass("btn");
-
+  it("puts the actions row and the save row on the default step", () => {
     withStore(baseState({ ui: createTestStore().getState().ui }), <ActionsPanel />);
+
+    const actionsRow = document.querySelector(".actions-row");
+    expect(within(actionsRow).getByRole("button", { name: "Random loadout" })).toHaveClass("btn-primary");
+    expect(within(actionsRow).getByRole("button", { name: "Clear" })).toHaveClass("btn");
+
     const saveRow = document.querySelector(".save-row");
     expect(saveRow.querySelector("input")).toHaveClass("text-input");
     expect(within(saveRow).getByRole("button", { name: /^Save to / })).toHaveClass("btn-gold");

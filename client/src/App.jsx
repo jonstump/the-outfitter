@@ -10,7 +10,6 @@ import WeaponsPanel from "./components/WeaponsPanel/WeaponsPanel.jsx";
 import EquipmentPanel from "./components/EquipmentPanel/EquipmentPanel.jsx";
 import TraitsPanel from "./components/TraitsPanel/TraitsPanel.jsx";
 import ActionsPanel from "./components/ActionsPanel/ActionsPanel.jsx";
-import RandomizerPanel from "./components/RandomizerPanel/RandomizerPanel.jsx";
 import LoadoutListsPanel from "./components/LoadoutListsPanel/LoadoutListsPanel.jsx";
 import Picker from "./components/Picker/Picker.jsx";
 
@@ -41,13 +40,13 @@ export default function App() {
               narrows the traits grid — whose art is 64px native and was being upscaled at
               full column width.
 
-              Only the randomizer moved. Budget, save and share stayed in ActionsPanel below,
-              at full width: four control groups in a 280px column wrapped every one of them. */}
+              The whole actions box moves, not just the randomizer — it needs roughly 380px to
+              lay its four control groups out without wrapping, which is why the picker gives
+              up width below. */}
           <div className="build-row">
             <TraitsPanel />
-            <RandomizerPanel />
+            <ActionsPanel />
           </div>
-          <ActionsPanel />
         </section>
         <section className="right-column">
           <Picker />

@@ -276,8 +276,12 @@ button {
   margin: 0 auto;
 }
 
+/* The left column now seats two panels side by side rather than one stack, and the actions
+   box needs roughly 380px to lay its four control groups out without wrapping. The picker
+   funds it: its rows were 85px tall with a 54px icon and it scrolls internally regardless, so
+   the width it gives up costs it nothing a compacted row does not give back. */
 .left-column {
-  flex: 1 1 400px;
+  flex: 2.2 1 400px;
   min-width: 320px;
   display: flex;
   flex-direction: column;
@@ -285,7 +289,7 @@ button {
 }
 
 .right-column {
-  flex: 1.25 1 440px;
+  flex: 1 1 360px;
   min-width: 320px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -771,30 +775,18 @@ button {
    load-bearing — it has to seat five cells plus gaps, and anything under ~300px drops them
    below the 48px floor the preview's cells already use. Both wrap to full width below the
    flex-basis. */
-/* Not an even split. The traits panel's width is load-bearing — it seats five cells plus
-   gaps, and an even split left them at 40px, under the 48px floor the preview's cells use.
-   1.3:1 lands traits near 300px (48px cells) and the randomizer near 233px, which still fits
-   "Random loadout" on one line. Both wrap to full width below the flex-basis. */
+/* The traits panel is sized by its contents rather than by a share of the row: five cells at
+   the 48px floor plus four 6px gaps plus the panel's 20px padding is 306px, and below that
+   the cells drop under a floor the preview's own cells already respect. So it does not grow,
+   and the actions box — which has no such intrinsic width, it just wraps a row later — takes
+   whatever is left. */
 .build-row > .panel:first-child {
-  flex: 1.3 1 300px;
+  flex: 0 1 306px;
   min-width: 0;
 }
 .build-row > .panel:last-child {
-  flex: 1 1 220px;
+  flex: 1 1 320px;
   min-width: 0;
-}
-
-/* The randomizer's two buttons sit on one line and the panel is left taller than they need.
-   That headroom is the point — see the component comment. */
-.randomizer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
-}
-.randomizer-go {
-  flex: 1 1 auto;
-  white-space: nowrap;
 }
 
 .trait-grid {
@@ -1117,17 +1109,23 @@ button {
   min-height: 680px;
 }
 
+/* Compacted from 14px/18px padding and a 56px min-height, which put a row at 85px and fit
+   ten of thirty-two traits in the window. The list scrolls internally either way, so the
+   height a row spends is height the next item does not get. At 10px/14px and a 44px thumb a
+   row is ~62px, which shows fourteen — and the width freed goes to the left column, where
+   the actions box needs it. The thumb still draws under its 64px native size, so nothing
+   here softens the art. */
 .picker-row {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
   background: none;
   border: none;
   border-bottom: 1px solid var(--divider);
-  padding: 14px 18px;
-  min-height: 56px;
+  padding: 10px 14px;
+  min-height: 44px;
 }
 .picker-row:hover {
   background: var(--row-hover);
@@ -1143,13 +1141,13 @@ button {
 /* Weapons read as wide silhouettes; everything else is roughly square, so the picker
    asks for the shape that suits the active tab (see thumbVariant in Picker.jsx). */
 .picker-row-thumb.wide {
-  width: 176px;
-  height: 44px;
+  width: 140px;
+  height: 38px;
 }
 
 .picker-row-thumb.square {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
 }
 
 /* Once the two columns stack, the picker is only as wide as the viewport, and the 176px
