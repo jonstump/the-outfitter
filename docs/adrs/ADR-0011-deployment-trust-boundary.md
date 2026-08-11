@@ -170,7 +170,9 @@ graph TD
 
 **Relationship to SPEC-0003.** SPEC-0003 REQ "Rate Limiting" requires a per-IP floor "so that rotating a client-controlled token cannot bypass limiting entirely". That requirement is only satisfiable if `req.ip` is trustworthy, which is what this decision determines — hence the `governs` edge. SPEC-0003's "CSRF Protection" section rests on the same-origin allow-list, which depends on `req.protocol` from the same setting.
 
-**Known spec gap.** SPEC-0003's Security Requirements do not currently record a read budget, the per-owner record cap, or the `409` response added in PR #205, and say nothing about the deployment trust boundary. Recording those is a separate governance change, noted here so the omission is deliberate rather than lost.
+**Known spec gap — closed 2026-08-11 in PR #215.** When this ADR was written, SPEC-0003's Security Requirements recorded neither a read budget, the per-owner record cap, nor the `409` added in PR #205, and said nothing about the deployment trust boundary. That was noted here as a deliberate omission rather than a lost one, and it is now closed: SPEC-0003 carries **"Forwarded Request Origin Is Believed Only From a Configured Peer"** as the testable form of this decision — which is why that spec `implements` this ADR — alongside "Reads Carry a Budget of Their Own", "One Owner Cannot Accumulate Records Without Bound", and "A Write Stores Only What the Wire Format Defines".
+
+The paragraph is kept rather than deleted because the gap is part of how this decision arrived: the code shipped first and the spec caught up, which is the sequence SPEC-0003's own Overview now records.
 
 **Force multiplier.** Issue #198 (unbounded loadout writes, PR #205) was made materially worse by this bug: an attacker who could mint a fresh rate-limit bucket per request faced no ceiling on accumulation at all. The two fixes are independent but were reviewed together, and #205's new read limiter keys on the same `req.ip` this decision makes trustworthy.
 

@@ -1,10 +1,10 @@
 # Render Blueprint — the deployment settings that must not live only in a dashboard.
 #
 # Governing: ADR-0011 (Configure the Deployment Trust Boundary Rather Than Hardcoding It),
-# SPEC-0003 § "Rate Limiting" and § "CSRF Protection" — both rest on req.ip and req.protocol,
-# which this setting determines. SPEC-0003 has no requirement about the trust boundary itself;
-# ADR-0011 § "Known spec gap" records that omission as deliberate, so this cites the sections
-# that depend on the setting rather than naming a requirement that was never written.
+# SPEC-0003 REQ "Forwarded Request Origin Is Believed Only From a Configured Peer" — the
+# normative form of this setting, whose scenarios are what a deployment either satisfies or
+# does not. SPEC-0003 § "Rate Limiting" and § "CSRF Protection" both rest on req.ip and
+# req.protocol, which this setting determines.
 #
 # This file exists because of a specific failure. ADR-0011 moved the trust boundary out of
 # the source and into deployment configuration, correctly — it is a property of the topology,
