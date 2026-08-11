@@ -77,9 +77,13 @@ ones for cost, size and UP. It prints every intended overwrite before applying a
 values outside the ranges the game actually uses, and edits tuples in place so the result is a
 reviewable `git diff` against a hand-authored file. It deliberately never touches a weapon's
 `ammoClass` (a saved ammo selection is a bare index into that pool), an item's display name (it
-feeds the on-disk image path), or `group`, `type` and the `AMMO` table at all. The same applies to coverage lost to failure rather than to a flag: a run
-that would drop items the committed dataset already covers writes nothing and names them, and
-`--allow-shrink` is how a genuine removal gets through.
+feeds the on-disk image path), or `group`, `type` and the `AMMO` table at all.
+
+The same applies to coverage lost to failure rather than to a flag: a run that would drop items the
+committed dataset already covers writes nothing and names them, and `--allow-shrink` is how a
+genuine removal gets through. That guard covers the catalog too — a run whose parses shrank the
+dataset is a run whose surviving parses cannot be trusted against a hand-authored file, so
+`--write-catalog` is refused on it and the refusal is printed rather than passed over in silence.
 
 Generated files are committed and must not be hand-edited; re-running the scrape rewrites them.
 

@@ -832,6 +832,11 @@ export async function runStatsScrape(options, deps) {
     fsWriteFile = writeFile,
     fsMkdir = mkdir,
     fsReadFile = readFile,
+    // The human-readable half of "printed before applied". `log` carries the same facts as JSON
+    // events for machines; this prints the diff table for the operator, and it is injected rather
+    // than called at the end of main() so it lands BEFORE the file is read, not after it is
+    // rewritten. (Review of #194: the banner promised before, the call site delivered after.)
+    printPlan = () => {},
   } = deps;
 
   const unknown = categories.filter((c) => !CATEGORIES.includes(c));
@@ -940,12 +945,33 @@ export async function runStatsScrape(options, deps) {
           `re-run with --allow-shrink if the loss is intended`
         : null;
 
+  // Why the write-through did not happen, in the same precedence order and only when it was asked
+  // for. A silent no-op on the run the shrink guard just tripped would read as "nothing to correct".
+  const catalogSkipped = !writeCatalog
+    ? null
+    : dryRun
+      ? "dry-run writes nothing"
+      : partial
+        ? "partial run never writes catalog.js"
+        : blockedByShrink
+          ? `shrink guard tripped — ${dropped.length} already-covered item${dropped.length === 1 ? "" : "s"} ` +
+            `would be dropped, so this run's surviving parses are not trusted against catalog.js`
+          : null;
+
   // Catalog write-through. Opt-in, and refused on exactly the runs that cannot stand in for the
   // whole catalog — a partial run's records say nothing about the items it never visited, and
   // reconciling against a subset is how a "correction" turns into a selective one.
+  //
+  // `blockedByShrink` gates this too, and that is the more important half. A mass-failure run is
+  // ADR-0005's worst realistic risk (a wiki markup change the parser no longer matches), and the
+  // items that FAILED are harmless here — they are absent from `records`, so nothing is planned for
+  // them. The hazard is the items that SUCCEEDED against changed markup and produced a
+  // wrong-but-in-range number. A shrink signal is the best evidence available that the surviving
+  // parses should be distrusted, so spending it only on the regenerable dataset while catalog.js —
+  // which carries the app's budget math — writes on unguarded is exactly backwards. (Review of #194.)
   let catalogPlan = null;
   let catalogWritten = null;
-  if (writeCatalog && !dryRun && !partial) {
+  if (writeCatalog && !dryRun && !partial && !blockedByShrink) {
     catalogPlan = planCatalogWrites(records, {
       weapons: WEAPONS,
       tools: TOOLS,
@@ -966,6 +992,7 @@ export async function runStatsScrape(options, deps) {
     for (const r of catalogPlan.rejected) {
       log({ level: "warn", event: "catalog-value-refused", id: r.id, field: r.label, raw: r.raw, reason: r.reason, url: r.url });
     }
+    printPlan(catalogPlan);
 
     if (catalogPlan.changes.length > 0) {
       const source = await fsReadFile(catalogPath, "utf8");
@@ -989,7 +1016,7 @@ export async function runStatsScrape(options, deps) {
     ...(datasetSkipped ? { datasetSkipped } : {}),
     ...(blockedByShrink ? { wouldDrop: dropped } : {}),
     ...(catalogWritten ? { catalogWritten } : {}),
-    ...(writeCatalog && partial ? { catalogSkipped: "partial run never writes catalog.js" } : {}),
+    ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
   summary.records = records;
@@ -997,6 +1024,7 @@ export async function runStatsScrape(options, deps) {
   summary.droppedIds = dropped;
   summary.catalogPlan = catalogPlan;
   summary.catalogWritten = catalogWritten;
+  summary.catalogSkipped = catalogSkipped;
   return summary;
 }
 
@@ -1116,12 +1144,15 @@ async function main() {
     console.log("scrape-stats: --write-catalog — the plan below is printed before anything is applied.");
   }
 
-  const summary = await runStatsScrape(options, { fetchFn: fetch });
+  const summary = await runStatsScrape(options, {
+    fetchFn: fetch,
+    // Printed from inside the run, before catalog.js is read — see the banner above.
+    printPlan: (plan) => console.log(formatCatalogPlan(plan)),
+  });
 
-  // The structured log carries the same facts as JSON events, which is the machine-readable half.
-  // This is the half a person reads: SPEC-0007 requires the operator to SEE every intended
-  // overwrite, and a wall of one-JSON-object-per-line is not seeing it. (Raised in review of #194.)
-  if (summary.catalogPlan) console.log(formatCatalogPlan(summary.catalogPlan));
+  if (summary.catalogSkipped) {
+    console.log(`scrape-stats: --write-catalog refused — ${summary.catalogSkipped}`);
+  }
   console.log(formatSummary(summary));
 
   process.exitCode = summary.failed.length > 0 ? 1 : 0;
