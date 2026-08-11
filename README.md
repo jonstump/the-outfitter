@@ -116,6 +116,14 @@ overwrite each other's saves. The write/delete endpoints are rate-limited per
 client (with a per-IP floor) and the server validates the loadout payload shape
 and name before persisting.
 
+The stored payload is an **allowlist** of the keys the wire format defines — a
+body carrying anything else is refused rather than persisted alongside the
+loadout. One token may hold at most 200 saved loadouts; a 201st create returns
+`409` while re-saving an existing name still updates it. The collection reads
+carry their own, much looser per-IP limiter: a read mutates nothing, but it
+re-parses the whole `db.json`, so the rate of that parse is worth bounding
+whatever the store has grown to.
+
 ## Deployment
 
 The app is designed to run as a **single process serving both the API and the

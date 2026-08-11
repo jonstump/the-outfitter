@@ -62,6 +62,37 @@ try {
     }
   }
 
+  // Governing: issue #198.
+  //
+  // Reclaim records owned by a per-request anonymous identity.
+  //
+  // `callerToken` mints `request-scoped:<uuid>` for a request that carries no token header
+  // (lib/ownership.js), and that identity is never disclosed to the caller — `publicRecord`
+  // strips `owner` — so nothing written under it can be read, updated or deleted through the
+  // API by anybody, ever. They are garbage from the moment the response is sent. Without a
+  // sweep they are also permanent, and lowdb re-serialises every one of them on every write.
+  //
+  // The TTL is a courtesy rather than a safety margin: since the records are unreachable by
+  // construction, dropping them immediately would lose nothing a user could still see. A day
+  // is kept so that an operator debugging "my curl POST returned 201, where did it go" has
+  // the evidence in front of them, and a record whose timestamp is missing or unparseable is
+  // treated as expired — it cannot be shown to be recent, and it is unreachable regardless.
+  const REQUEST_SCOPED_TTL_MS = 24 * 60 * 60 * 1000;
+  const expiredAt = Date.now() - REQUEST_SCOPED_TTL_MS;
+  const isExpiredAnonymous = (record) => {
+    if (!record.owner?.startsWith("request-scoped:")) return false;
+    const stamped = Date.parse(record.updatedAt ?? record.createdAt ?? "");
+    return !Number.isFinite(stamped) || stamped <= expiredAt;
+  };
+
+  let swept = 0;
+  for (const collection of ["loadouts", "loadoutLists", "hunterFavorites"]) {
+    const kept = db.data[collection].filter((record) => !isExpiredAnonymous(record));
+    swept += db.data[collection].length - kept.length;
+    db.data[collection] = kept;
+  }
+  if (swept > 0) console.info("swept unreachable request-scoped records", { swept });
+
   await db.write();
 } catch (err) {
   console.error("Unable to read/write JSON store; starting with empty data:", err);

@@ -315,15 +315,21 @@ describe("loadout descriptions", () => {
     expect(okInnerName.status).toBe(201);
   });
 
-  it("does not promote a description hidden inside data onto the envelope", async () => {
-    // `data` is stored verbatim, whatever unknown keys it carries; what must not happen is
-    // that one of them becomes the record's description, or that the envelope's description
-    // is read from there.
+  it("refuses a description smuggled inside data rather than storing it unread", async () => {
+    // This used to assert the weaker half of the guarantee: `data` was stored VERBATIM
+    // whatever unknown keys it carried, and the requirement was only that none of them
+    // became the record's description. Issue #198 closed the gap the first half left open —
+    // `data` is an allowlist now, so a key the wire format does not define is refused
+    // outright and never reaches the store to be misread later.
     const app = makeApp();
-    const saved = await save(app, {
+    const smuggled = await save(app, {
       name: "__test__d-smuggle", data: { ...validData, description: "smuggled" },
     });
+    expect(smuggled.status).toBe(400);
 
+    // And the envelope's description still comes from the envelope alone: the same save
+    // without the extra key is described as "never edited", not as "smuggled".
+    const saved = await save(app, { name: "__test__d-smuggle-ok", data: validData });
     expect(saved.status).toBe(201);
     expect(saved.body.description).toBeNull();
     expect(await stored(saved.body.id)).not.toHaveProperty("description");

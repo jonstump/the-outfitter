@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { loadoutsRouter } from "./loadouts.js";
-import { ipLimiter, tokenLimiter } from "../lib/ownership.js";
+import { ipLimiter, readLimiter, tokenLimiter } from "../lib/ownership.js";
 import { db } from "../db.js";
 
 // Governing: #17 (per-user ownership), #19 (payload shape validation), #21 (rate limiting)
@@ -228,7 +229,134 @@ describe("loadouts API", () => {
     expect(res.status).toBe(400);
   });
 
-  it("mounts BOTH shared limiters on EVERY write verb, and neither on the read", () => {
+  // --- Unbounded writes (issue #198) ------------------------------------------------
+  //
+  // isValidData() confirmed that the fields it NAMES were well-shaped and then returned
+  // true, so anything else on the object rode along — and the validated object is stored
+  // verbatim. Two of the named fields were bounded below and not above, which is the same
+  // hole wearing the shape of a field the format does define.
+
+  it("rejects a payload carrying a key the wire format does not define", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "unknown-keys")
+      .send({ name: "__test__unknown", data: { ...validData, padding: "x".repeat(10_000) } });
+    expect(res.status).toBe(400);
+
+    // Nothing was persisted under the attempted name, and the rejection is not partial —
+    // a stored record with the extra key stripped would still be a record nobody asked for.
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name === "__test__unknown")).toBe(false);
+  });
+
+  it("rejects the version key when it is the wrong type, and accepts the format's own envelope", async () => {
+    const app = makeApp();
+    // `v` is in the allowlist, so the key check must not be the only thing guarding it.
+    const bad = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "version-check")
+      .send({ name: "__test__ver", data: { ...validData, v: "1" } });
+    expect(bad.status).toBe(400);
+
+    const good = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "version-check")
+      .send({ name: `__test__ver${Date.now()}`, data: { ...validData, v: 1 } });
+    expect(good.status).toBe(201);
+  });
+
+  it("rejects tuples longer than the format defines, in either array", async () => {
+    const app = makeApp();
+    // `slot.length >= 2` and `entry.length >= 2` were floors with no ceiling: the reference
+    // and the ammo index validated, and everything after them was stored unexamined.
+    const weapon = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "tuple-w")
+      .send({ name: "__test__wtuple", data: { ...validData, w: [[0, -1, "x".repeat(1000)], null] } });
+    expect(weapon.status).toBe(400);
+
+    const equip = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "tuple-e")
+      .send({ name: "__test__etuple", data: { ...validData, e: [["T", 0, "x".repeat(1000)]] } });
+    expect(equip.status).toBe(400);
+  });
+
+  it("caps how many loadouts one owner can accumulate, without blocking updates", async () => {
+    const app = makeApp();
+    const token = `cap-${Date.now()}`;
+
+    // Seeded directly rather than through 200 requests: the write limiters are module-level
+    // singletons this suite shares, and spending 200 of the IP floor here would make the
+    // limiter tests below order-dependent on this one.
+    await db.read();
+    const now = new Date().toISOString();
+    for (let i = 0; i < 200; i++) {
+      db.data.loadouts.push({
+        id: `cap-${i}-${token}`,
+        owner: token,
+        name: `__test__cap${i}`,
+        data: validData,
+        updatedAt: now,
+      });
+    }
+    await db.write();
+
+    const created = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", token)
+      .send({ name: "__test__cap-one-more", data: validData });
+    expect(created.status).toBe(409);
+
+    // The cap bounds the COLLECTION, not the owner's ability to edit it: re-saving under a
+    // name they already hold is an update, and refusing that would strand them at the
+    // ceiling with no way to change anything they had.
+    const updated = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", token)
+      .send({ name: "__test__cap0", data: { ...validData, n: "edited" } });
+    expect(updated.status).toBe(200);
+
+    // And it is per owner, not global — a different token is unaffected.
+    const other = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", `${token}-other`)
+      .send({ name: `__test__cap-other${Date.now()}`, data: validData });
+    expect(other.status).toBe(201);
+  });
+
+  it("sweeps unreachable request-scoped records at boot", async () => {
+    // A no-token write is scoped to an identity the caller is never told, so nothing written
+    // under it can be read, updated or deleted through the API by anybody — it is garbage the
+    // moment the response is sent, and without a sweep it is permanent garbage that every
+    // later write re-serialises.
+    await db.read();
+    const stamp = Date.now();
+    const old = `__test__anon-old-${stamp}`;
+    const fresh = `__test__anon-fresh-${stamp}`;
+    const owned = `__test__anon-owned-${stamp}`;
+    db.data.loadouts.push(
+      { id: old, owner: `request-scoped:${randomUUID()}`, name: old, data: validData, updatedAt: "2020-01-01T00:00:00.000Z" },
+      { id: fresh, owner: `request-scoped:${randomUUID()}`, name: fresh, data: validData, updatedAt: new Date().toISOString() },
+      // A real token of the same vintage as the expired one: age alone must not sweep a
+      // record its owner can still see.
+      { id: owned, owner: "11111111-2222-4333-8444-555555555555", name: owned, data: validData, updatedAt: "2020-01-01T00:00:00.000Z" }
+    );
+    await db.write();
+
+    // Re-import to re-run the boot-time pass, mirroring the legacy-migration test above.
+    const rebooted = (await import("../db.js?sweep" + stamp)).db;
+    await rebooted.read();
+
+    const names = rebooted.data.loadouts.map((l) => l.name);
+    expect(names).not.toContain(old);
+    // Inside the TTL, so still there — an operator debugging a no-token POST can find it.
+    expect(names).toContain(fresh);
+    expect(names).toContain(owned);
+  });
+
+  it("mounts BOTH shared limiters on EVERY write verb, and the read limiter on the read", () => {
     // Governing: SPEC-0003 § Rate Limiting, which is normative for POST, PATCH and DELETE
     // alike. Only POST was pinned: deleting `ipLimiter, tokenLimiter` from the PATCH — the
     // verb this feature just widened from "move" to "move and/or write user prose" — left
@@ -252,11 +380,16 @@ describe("loadouts API", () => {
       expect(handlers, `${method.toUpperCase()} ${path} is missing tokenLimiter`).toContain(tokenLimiter);
     }
 
-    // The listing is a read and deliberately unlimited — a limiter there would throttle the
-    // app's own boot fetch.
+    // The listing was deliberately unlimited, on the reasoning that a limiter there would
+    // throttle the app's own boot fetch. Issue #198 is the other half of that: the handler
+    // calls db.read(), which re-parses the WHOLE file, so an unlimited read path is an
+    // unlimited parse rate — and it gets more expensive as the store grows. It carries the
+    // READ limiter, whose budget is far looser, and still neither write limiter.
     const get = layerFor("get", "/");
-    expect(get.route.stack.map((s) => s.handle)).not.toContain(ipLimiter);
-    expect(get.route.stack.map((s) => s.handle)).not.toContain(tokenLimiter);
+    const readHandlers = get.route.stack.map((s) => s.handle);
+    expect(readHandlers).toContain(readLimiter);
+    expect(readHandlers).not.toContain(ipLimiter);
+    expect(readHandlers).not.toContain(tokenLimiter);
   });
 
   it("hits the per-IP floor even when rotating the token on every write", async () => {

@@ -65,15 +65,26 @@ export class UnknownReferenceError extends OwnershipError {}
 
 // ---------------------------------------------------------------------------
 // Rate limiting (issue #21) — defense-in-depth independent of the ownership model.
-// Two stacked limiters:
+// Two stacked limiters on writes:
 //   - ipLimiter: a hard per-IP floor so rotating the client-controlled token can't
 //     bypass rate limiting entirely.
 //   - tokenLimiter: per-client-token fairness so users sharing a NAT don't collectively
 //     trip the IP floor; anonymous (no-token) requests key by IP.
+// And one on reads (issue #198):
+//   - readLimiter: a far looser per-IP ceiling on the collection GETs. Reads mutate
+//     nothing, but each one calls db.read(), which re-parses the WHOLE data file — so an
+//     unlimited read path is an unlimited amount of parsing per second, and it gets more
+//     expensive as the file grows. Bounding the parse cost is the point; bounding the
+//     user is not, which is why the budget is deliberately generous rather than reusing
+//     the write floor.
 // ---------------------------------------------------------------------------
 
 const WRITE_PER_IP = 240; // generous hard floor (4x the per-token budget)
 const WRITE_PER_TOKEN = 60;
+// 10/second sustained from one address. The app issues four collection reads on boot and
+// then reads on demand, so a person hammering reload never approaches this; it exists to
+// stop an unattended loop from spending the event loop on JSON.parse.
+const READ_PER_IP = 600;
 
 function ipKey(req) {
   const ip = ipKeyGenerator(req.ip || "unknown", 56);
@@ -101,4 +112,15 @@ export const tokenLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   keyGenerator: (req) => tokenLimiterKey(req),
+});
+
+// Per-IP only, and deliberately not stacked with a per-token limiter: a read costs the same
+// full-file parse whoever asks for it, so the thing worth bounding is requests per source,
+// not fairness between tokens sharing one.
+export const readLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: READ_PER_IP,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: ipKey,
 });

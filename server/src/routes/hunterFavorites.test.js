@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 import { hunterFavoritesRouter } from "./hunterFavorites.js";
 import { isKnownHunterId, rosterSize } from "../lib/hunterRoster.js";
-import { ipLimiter, tokenLimiter } from "../lib/ownership.js";
+import { ipLimiter, readLimiter, tokenLimiter } from "../lib/ownership.js";
 import { db } from "../db.js";
 
 // Governing: ADR-0006, ADR-0007, SPEC-0003 REQ "Favorite Hunters", REQ "Cross-Collection
@@ -213,7 +213,7 @@ describe("hunter favorites API", () => {
 
   // --- Rate limiting ----------------------------------------------------------------
 
-  it("mounts BOTH shared limiters on the two write verbs, and neither on the read", () => {
+  it("mounts BOTH shared limiters on the two write verbs, and the read limiter on the read", () => {
     // Governing: SPEC-0003 Security Requirements. Nothing pinned this before, so dropping
     // `ipLimiter` from the PUT would have left every test green while removing the floor
     // that stops a client rotating its token to buy unlimited writes (issue #17's shape).
@@ -233,14 +233,20 @@ describe("hunter favorites API", () => {
       expect(handlers, `${method.toUpperCase()} is missing tokenLimiter`).toContain(tokenLimiter);
     }
 
-    // The listing is a read and deliberately unlimited — a limiter there would throttle the
-    // picker's own boot fetch.
+    // The listing was deliberately unlimited, on the reasoning that a limiter there would
+    // throttle the picker's own boot fetch. Issue #198 is the other half of that: a read
+    // mutates nothing, but it calls db.read(), which re-parses the WHOLE data file, so an
+    // unlimited read path is an unlimited parse rate. It carries the READ limiter — the
+    // separate, far looser per-IP budget — and still neither of the write limiters, which
+    // is what keeps the boot fetch clear.
     const get = layerFor("get", "/");
-    expect(get.route.stack.map((s) => s.handle)).not.toContain(ipLimiter);
-    expect(get.route.stack.map((s) => s.handle)).not.toContain(tokenLimiter);
+    const readHandlers = get.route.stack.map((s) => s.handle);
+    expect(readHandlers).toContain(readLimiter);
+    expect(readHandlers).not.toContain(ipLimiter);
+    expect(readHandlers).not.toContain(tokenLimiter);
   });
 
-  it("advertises a rate-limit budget on a write, and none on the read", async () => {
+  it("advertises a rate-limit budget on a write, and a looser one on the read", async () => {
     // The identity check above proves the mount; this proves the mounted middleware is live
     // in a real request rather than a reference nothing calls.
     const app = makeApp();
@@ -248,6 +254,12 @@ describe("hunter favorites API", () => {
     expect(written.headers).toHaveProperty("ratelimit-policy");
 
     const read = await list(app, TOKEN_A);
-    expect(read.headers).not.toHaveProperty("ratelimit-policy");
+    expect(read.headers).toHaveProperty("ratelimit-policy");
+
+    // "Bounded" is the requirement; "far more generous than a write" is what keeps it from
+    // being felt by anyone using the app. Both are read off the advertised policy
+    // ("<limit>;w=<seconds>") rather than restating the constants.
+    const budget = (res) => Number.parseInt(res.headers["ratelimit-policy"], 10);
+    expect(budget(read)).toBeGreaterThan(budget(written));
   });
 });
