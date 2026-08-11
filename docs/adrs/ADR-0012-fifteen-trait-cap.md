@@ -1,7 +1,8 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-11
 decision-makers: Jon Stump
+governs: [SPEC-0003]
 related: [ADR-0009, ADR-0010]
 ---
 
@@ -135,7 +136,9 @@ The loop is the point. `db.json` feeds decode, decode feeds the store, and the s
 
 > Fifteen is a fact about the game, **not** an invariant this application enforces … so a loadout holding more than fifteen is an ordinary savable record today. Where a loadout holds more traits than the grid has cells, the preview SHALL fill the fifteen cells and SHALL state the remainder as a count.
 
-That was correct when written and this decision falsifies its premise. Implementing this ADR requires amending SPEC-0003 in the same change. Worth considering during that amendment: whether the overflow rendering stays as defensive behaviour — the fifteen-cell grid never growing or clipping is worth keeping regardless — or is retired with the premise. The former is closer to how PR #203 handled the equivalent question, where the read sites stayed defensive after the decode bound landed.
+That was correct when written and this decision falsifies its premise.
+
+**Amended in the same change, and the open question it left is now answered.** SPEC-0003 carries "A Loadout Holds At Most Fifteen Traits", the struck sentence is marked as such, and the overflow *rendering* is **kept as defence** rather than retired with its premise — enforcement bounds what the app writes, the preview renders what it reads, and those are not the same set. This is the answer PR #203 reached for the equivalent question when it left `WeaponSlot` defensive after bounding the value at decode. SPEC-0003 gained `implements: [ADR-0012]` and this ADR gained the matching `governs` edge.
 
 **Not in scope.** The upgrade-point budget stays opt-in and unchanged; it is a different ceiling for a different reason. The trait roster's contents are ADR-0005's concern, and #157's growth to 58 is the motivation here rather than a dependency.
 

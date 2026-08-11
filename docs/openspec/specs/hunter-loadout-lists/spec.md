@@ -1,7 +1,7 @@
 ---
 status: approved
 date: 2026-08-11
-implements: [ADR-0006, ADR-0011]
+implements: [ADR-0006, ADR-0011, ADR-0012]
 requires: [SPEC-0001, SPEC-0004]
 ---
 
@@ -32,6 +32,10 @@ Three changes were accepted on **2026-08-10**; **one has shipped and survived**.
 - **The deployment trust boundary** (#199, PR #204) — `X-Forwarded-*` was believed from any peer, which made the per-IP floor bypassable on the two topologies with nothing in front. Now "Deployment Trust Boundary", and the reason this spec gained `implements: [ADR-0011]`
 - **Allowlist validation and a per-owner ceiling** (#198, PR #205) — the `data` validator accepted unknown keys and nothing capped accumulation. Now "A Write Stores Only What the Wire Format Defines" and "One Owner Cannot Accumulate Records Without Bound"
 - **A read budget** (#198, PR #205) — the collection `GET`s carried no limiter while parsing the whole data file on every request. Now a clause of "Rate Limiting", and the reason the endpoint table gained the reads it always had
+
+**A rules change reached this spec on 2026-08-11, and this one arrives in the intended order** — decided first, specified here, not yet implemented. ADR-0012 caps a loadout at the game's fifteen-trait maximum, enforced at every path that writes a trait. It is specified as "A Loadout Holds At Most Fifteen Traits", and it is the reason this spec gained `implements: [ADR-0012]`.
+
+Worth flagging for anyone reading the preview requirement: this **reverses a position this spec previously took**. "Filed Loadouts Preview Their Contents" recorded fifteen as a fact about the game rather than an invariant the app enforces, and specified what a preview does when a loadout exceeds it. That premise is struck; the overflow *rendering* is kept as defence rather than as a specified ordinary case, for the reason given there. Implementation is tracked by #160.
 
 A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is **still outstanding — #148**. SPEC-0004 owns the production half, which shipped in #147; the consumption half is amended here rather than overridden from there, and is what #148 implements.
 
@@ -510,7 +514,9 @@ The preview SHALL be a **categorised panel**, not a single undifferentiated stri
 - **Tools and consumables** SHALL occupy an **eight-cell grid laid out as two rows of four**, matching the equipment grid's cell count
 - **Traits** SHALL be rendered as a grid of **fifteen cells** — the per-hunter maximum in *Hunt: Showdown*, and independent of the trait-point budget — so the grid's shape does not change as traits are added or removed.
 
-  Fifteen is a fact about the game, **not** an invariant this application enforces: the trait-point budget is off by default (`upBudgetOn: false`), the catalog holds 32 traits, and the server accepts up to 40, so a loadout holding more than fifteen is an ordinary savable record today. Where a loadout holds more traits than the grid has cells, the preview SHALL fill the fifteen cells and SHALL state the remainder as a count. The grid MUST NOT grow, scroll, or clip silently
+  ~~Fifteen is a fact about the game, **not** an invariant this application enforces: the trait-point budget is off by default (`upBudgetOn: false`), the catalog holds 32 traits, and the server accepts up to 40, so a loadout holding more than fifteen is an ordinary savable record today.~~ **Amended 2026-08-11 (ADR-0012): fifteen is now an invariant this application enforces**, at the interactive add, at the server, and in every decoder — see "A Loadout Holds At Most Fifteen Traits". The struck sentence was true when written and its premise no longer holds.
+
+  **The overflow behaviour survives the premise that motivated it, deliberately.** Where a loadout holds more traits than the grid has cells, the preview SHALL still fill the fifteen cells and SHALL state the remainder as a count, and the grid MUST NOT grow, scroll, or clip silently. That is now defence rather than a specified ordinary case: enforcement bounds what the app *writes*, and the preview renders what it *reads*. A record predating the cap, a decoder that regresses, or a payload arriving by some path not yet imagined all reach the preview, and a component that trusts an invariant it does not itself enforce is how a bad ammo index blanked the page in issue #201. The same reasoning kept `WeaponSlot` defensive after PR #203 bounded the value at decode
 
 Preview imagery SHALL be sized so an item is identifiable at a glance, and that SHALL be pinned rather than left to judgement: at the widest supported viewport a weapon SHALL be drawn at **no less than 50% of its intrinsic asset width**, and each equipment or trait cell SHALL be **no less than 48 CSS px on its shorter edge**.
 
@@ -901,6 +907,46 @@ Records belonging to an owner that is unreachable by construction — those mint
 
 - **WHEN** a reclamation pass runs over records older than the retention window
 - **THEN** it SHALL remove only records whose owner is unreachable by construction, and SHALL leave a token-owned record of the same age untouched
+
+### Requirement: A Loadout Holds At Most Fifteen Traits
+
+*(added 2026-08-11, per ADR-0012)*
+
+Fifteen traits is the per-hunter maximum in *Hunt: Showdown*, and this application SHALL enforce it. The bound SHALL hold at **every path that writes a trait**, because a value bounded at one writer is not bounded — traits reach a loadout interactively, by decode, and by generation, and the stored record feeds decode on the next load.
+
+- The interactive add SHALL refuse a sixteenth trait **unconditionally**. It MUST NOT be gated on the upgrade-point budget toggle: that toggle exists because the budget varies with hunter level, and fifteen varies with nothing
+- The server SHALL reject a write carrying more than fifteen traits with a `400`, tightening the previous bound of forty. Per "A Write Stores Only What the Wire Format Defines", the bound is exact rather than a floor
+- **Every** decoder SHALL bound a decoded trait list to the first fifteen surviving ids. A decoder that bounds and a decoder that does not are the same defect this spec already met once, in the ammo index (issue #201)
+- Generation SHALL draw within the bound
+
+**Decode SHALL clamp rather than refuse, and the reason is a property of this system rather than a preference.** A decoded loadout is persisted before it is rendered, so a decode path that throws on an over-cap list writes the unrenderable state and then fails on it — the shape of issue #201, where the damage outlived the link. Clamping keeps the record loadable and makes it self-correcting: an over-cap loadout decodes to fifteen and the next save writes fifteen back. Stored records are not re-validated on read, so the tightened server bound SHALL NOT strand a record written under the old one.
+
+Clamping loses the traits past the fifteenth, and this is accepted rather than overlooked: the alternative is refusing a share link that previously worked, which is louder and leaves the user nothing.
+
+#### Scenario: A sixteenth trait is refused with the budget toggle off
+
+- **WHEN** a loadout already holding fifteen traits is given another, with the upgrade-point budget disabled
+- **THEN** the trait SHALL NOT be added, and the refusal SHALL NOT depend on that toggle's state
+
+#### Scenario: Every decoder clamps, not just the current one
+
+- **WHEN** a payload carrying twenty valid trait ids is decoded by the current-format decoder, and separately by the legacy decoder
+- **THEN** both SHALL yield exactly fifteen traits
+
+#### Scenario: The server refuses a sixteenth
+
+- **WHEN** a write carries sixteen valid trait ids
+- **THEN** the response SHALL be a `400`, and a write carrying fifteen SHALL succeed
+
+#### Scenario: An over-cap stored record heals rather than trapping
+
+- **WHEN** a record written under the old bound and holding twenty traits is read, rendered, and re-saved
+- **THEN** the read SHALL succeed, the loadout SHALL hold fifteen traits, and the save SHALL NOT be refused
+
+#### Scenario: Generation stays within the bound
+
+- **WHEN** a loadout is generated
+- **THEN** it SHALL hold at most fifteen traits, asserted against the bound rather than against the generator's current draw count
 
 ### Requirement: Forwarded Request Origin Is Believed Only From a Configured Peer
 

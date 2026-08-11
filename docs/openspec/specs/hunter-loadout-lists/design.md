@@ -379,6 +379,20 @@ Unassigned is pinned because it is a permanent structural group rather than a pe
 **Alternatives considered**:
 - *Strip unknown keys instead of refusing* — rejected. Silently discarding part of a payload makes a client bug invisible and leaves the caller believing something was stored.
 
+### The trait cap is enforced at every writer, and enforcement does not retire the defence
+
+*(added 2026-08-11, per ADR-0012; specified in "A Loadout Holds At Most Fifteen Traits")*
+
+**Choice**: Fifteen is enforced at the interactive add, at the server, and in every decoder — and the preview keeps rendering an overflow it should now never see. The decision itself, with its four rejected alternatives, is ADR-0012; recorded here because it changes a position this spec previously took and because the second half is a design call this spec owns rather than the ADR.
+
+**Rationale**: The enforcement half follows from how a trait reaches a record. There are three writers — the interactive add, decode, and generation — and the store feeds the save, the save feeds `db.json`, and `db.json` feeds decode. A bound applied at one writer is removed on the next lap. That is the same argument the wire-format allowlist above rests on, applied to a count rather than to a key set.
+
+The defence half is the more interesting one, because the tempting move after enforcing an invariant is to delete the code that handled its violation. That is precisely backwards. Enforcement bounds what this application *writes*; the preview renders what it *reads*, and those are not the same set — a record predating the cap, a decoder that regresses, or a payload arriving by a path nobody has thought of yet all reach the preview. A component that trusts an invariant it does not itself enforce is how a bad ammo index blanked the page in issue #201, and it is why PR #203 left `WeaponSlot` defensive after bounding the value at decode. The overflow rendering costs nothing to keep and is the difference between a wrong count and a broken card.
+
+**Alternatives considered**:
+- *Retire the overflow rendering with its premise* — rejected for the reason above. Tidier, and it removes the only thing standing between a future decode regression and a visibly broken preview.
+- *Enforce in the reducer only, leave the wire bound at forty* — rejected in ADR-0012. It leaves two numbers in the codebase with neither being the answer to "what is the maximum", and the rule would be advisory in exactly the cases where a loadout came from somewhere untrusted.
+
 ## Architecture
 
 ### The request boundary
@@ -540,7 +554,13 @@ Note `.ll-empty` on `main` carries the same violation and is deliberately untouc
 - **The read budget is only as strong as the trust boundary** → It keys on the same resolved address as the write floor, so a deployment that mis-declares its topology loses both at once. Not separately mitigable — it is the reason the trust boundary is specified as a prerequisite of the rate-limiting requirement rather than beside it.
 - **The per-owner ceiling will be read as a security control** → It is named as a courtesy ceiling in both the spec and the decision above, precisely because the obvious misreading is that it bounds an adversary. It does not; token rotation is free. Recorded in three places so a future reader reaching for it as a defence finds the disclaimer first.
 - **Tightened validation now diverges further from SPEC-0006's wire v2** → The allowlist, the exact tuple bounds, and the `b` type check each reject the v2 shape that spec defines (nullable equipment entries, `b` as an array). Not a regression — v2 was already rejected and SPEC-0006 records itself as unimplemented — but the constraint now lives in three places in one validator with no cross-reference. Whoever implements SPEC-0006 must touch all three; a pointer beside the allowlist constant is the cheapest guard.
-- **The spec now documents shipped code rather than leading it** → All three security amendments were implemented before being specified, which inverts the intended order. Recorded in the Overview as a fact about how they arrived, so the sequence is visible rather than smoothed over. The mitigation is not retroactive: it is that the next security change to this capability starts here.
+- **The spec now documents shipped code rather than leading it** → All three security amendments were implemented before being specified, which inverts the intended order. Recorded in the Overview as a fact about how they arrived, so the sequence is visible rather than smoothed over. The mitigation is not retroactive: it is that the next security change to this capability starts here. *(2026-08-11: the trait cap is the first change to arrive in the intended order — decided in ADR-0012, specified here, not yet implemented.)*
+
+*(added 2026-08-11 with the trait cap:)*
+
+- **The overflow rendering will be deleted as dead code** → Once nothing can write a sixteenth trait, the preview's overflow branch looks unreachable, and a reasonable person cleaning up will remove it. It is not dead: it is what a record predating the cap, or a regressed decoder, renders through. Addressed by stating the reason in the requirement itself and in the decision above rather than only in a code comment, so the justification survives a reader who only has the spec.
+- **The clamp is silent, and silence is the part that ages badly** → An over-cap loadout loses traits past the fifteenth with no notice. Bounded today — the live store's largest holds five, and the encoder has never produced more than a user clicked — but the cost lands entirely on whoever hand-edited a share code, who is also the person least likely to be told. Accepted rather than solved: refusing outright was considered in ADR-0012 and rejected as louder and worse. If a surfacing affordance is ever wanted, the preview's remainder count is the natural place, which is a second reason not to delete it.
+- **Fifteen is a number in three files** → The reducer, the server validator, and both decoders all have to agree. Nothing in the build enforces that they do, and the server and client share no module. This is the same shape as the wire-format allowlist needing to match the client encoder, and it is watched the same way: a test on each side pinning the same figure, and the spec as the single place the figure is stated in prose.
 
 ## Migration Plan
 
