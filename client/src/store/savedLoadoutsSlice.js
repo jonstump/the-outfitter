@@ -88,19 +88,16 @@ export const moveSaved = createAsyncThunk(
   }
 );
 
-// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+// Governing: ADR-0006 (list filing model), SPEC-0003 REQ "Loadouts Carry a Description of
+// Their Own"
 //
-// `description` arrives here in one of exactly three states and leaves in the same one:
-// null (never edited — the card resolves the list hunter's text at render time), "" (the
-// user deliberately blanked it) and a non-empty string (their own words). Nothing in this
-// thunk coalesces, defaults or trims — `description ?? ""`, `description || null` and a
-// hopeful `.trim()` are each a way of turning three states into two, and the state that
-// disappears is always the one that lets a description be emptied.
+// A loadout's description is the user's own note about the build. It inherits NOTHING — that
+// is the list's description, which draws on the hunter the list depicts (#181) — so null and
+// "" both mean "no note" and the thunk says so with one message rather than two.
 //
-// Restoring inheritance is the SAME write with `null`, which is why there is no separate
-// "restore" thunk: the distinct action the spec requires is a distinct control on the card,
-// not a distinct request. The server stores null; it never stores the resolved text.
+// Nothing here coalesces, defaults or trims all the same. `description ?? ""` and a hopeful
+// `.trim()` would each rewrite what the user typed on its way to the server, and the cap the
+// server enforces governs exactly what it is sent. The value goes out as it came in.
 export const describeSaved = createAsyncThunk(
   "savedLoadouts/describe",
   async ({ id, description, loadoutName }, { dispatch }) => {
@@ -108,11 +105,9 @@ export const describeSaved = createAsyncThunk(
       const record = await describeLoadout(id, description);
       dispatch(
         uiActions.setMessage(
-          description === null
-            ? `“${loadoutName}” is showing its hunter's description again.`
-            : description === ""
-              ? `Cleared the description for “${loadoutName}”.`
-              : `Saved the description for “${loadoutName}”.`
+          description === null || description === ""
+            ? `Cleared the description for “${loadoutName}”.`
+            : `Saved the description for “${loadoutName}”.`
         )
       );
       return record;

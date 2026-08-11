@@ -1415,48 +1415,67 @@ button {
   border-color: var(--gold-border);
 }
 
-/* The loadout description.
+/* Descriptions — a list's in the expanded header, a loadout's on its card.
 
    Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-   SPEC-0003 REQ "Loadouts Carry an Editable Description".
+   SPEC-0003 REQ "Lists Carry an Editable Description", SPEC-0003 REQ "Loadouts Carry a
+   Description of Their Own".
 
-   The text is either the user's own or a hunter's lore resolved live from the dataset, and
-   the second runs to several hundred characters — 404 at the roster's longest. Unclamped, it
-   would dominate the card it exists to annotate and push the preview off the bottom of a
-   phone screen, so it is BOUNDED here and revealed by the control the card renders beside
-   it. The bound is on the paragraph alone: the preview below is a sibling, so no length of
-   prose can displace its category structure. */
-.ll-lcard-desc-wrap {
+   One block, two placements, because the hard part is the same in both: the text is either
+   the user's own or a hunter's lore resolved live from the dataset, and the second runs to
+   several hundred characters — 404 at the roster's longest. Unclamped on a card it would
+   dominate the thing it exists to annotate and push the preview off the bottom of a phone
+   screen, so it is BOUNDED here and revealed by the control rendered beside it. The bound is
+   on the paragraph alone: the preview below is a sibling, so no length of prose can displace
+   its category structure. */
+.ll-desc-wrap {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
   min-width: 0;
 }
-.ll-lcard-desc {
+.ll-desc {
   flex-basis: 100%;
   margin: 0;
   min-width: 0;
   font-size: 13px;
   line-height: 1.45;
-  /* --text-muted, not --text-dim: 6.01:1 on the card's --panel against --text-dim's 4.09:1,
-     and 13px/400 is body text, so WCAG 2.1 SC 1.4.3 asks for 4.5:1 rather than the 3:1
-     large-text allowance. SPEC-0003 makes AA mandatory. The same figure is recorded on
-     `.ll-lcard` above and on `.ll-lp-empty` below — this is the third rule to measure it. */
-  color: var(--text-muted);
+  /* --text, the ordinary body colour: THIS is a description someone wrote, and the muted
+     treatment below is what marks the other kind. 12.94:1 on --panel, comfortably past the
+     4.5:1 SC 1.4.3 asks of 13px/400 body text.
+
+     TWO backgrounds carry this block — --panel on a loadout card, --scroll-track in the
+     expanded list header — so every figure in this section is the LOWER of the two, which is
+     --panel throughout (--scroll-track is darker: 13.22:1 for this rule). Quoting the more
+     flattering surface would leave the other unmeasured. */
+  color: var(--text);
   /* Lore arrives as prose, but a user can type one unbroken 300-character token. Breaking it
      is what keeps "no card overflows horizontally at any supported width" true of the
      CONTENT and not merely of the boxes — the same rule `.ll-lcard-name` already follows. */
   overflow-wrap: anywhere;
 }
-.ll-lcard-desc[data-source="inherited"] {
+/* An INHERITED description: italic and de-emphasised, so lore the app supplied does not read
+   as something the user typed (SPEC-0003 Accessibility Requirements, as settled by #181).
+
+   Presentational ONLY. SC 1.4.1 forbids carrying a distinction by appearance alone, and the
+   component satisfies that separately with the "From {hunter}" line in text — both driven off
+   the one resolved flag, so they cannot disagree. Remove that line and this rule becomes a
+   violation rather than a nicety.
+
+   De-emphasised, NOT low-contrast: --text-muted is 6.01:1 on --panel against --text-dim's
+   4.09:1, and body text at this size needs 4.5:1. "Greyed" is licence to step down the
+   emphasis, never below the floor. The same figure is recorded on `.ll-lcard` above and on
+   `.ll-lp-empty` below. */
+.ll-desc[data-source="inherited"] {
   font-style: italic;
+  color: var(--text-muted);
 }
 /* Three lines, then it stops. `-webkit-line-clamp` is the only cross-browser way to bound by
    LINES rather than by pixels, and it is supported everywhere this app runs; the standard
    `line-clamp` is set alongside it so the rule survives the prefix being dropped. `overflow:
    hidden` is what actually bounds it, and is the declaration worth asserting. */
-.ll-lcard-desc-clamped {
+.ll-desc-clamped {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -1469,12 +1488,12 @@ button {
    The ceiling scales with nothing: the 1000-character cap could otherwise make that row ten
    screens tall. ~14 lines is comfortably more than the roster's longest lore needs at a
    normal card width, and the rest scrolls inside the paragraph rather than inside the page. */
-.ll-lcard-desc-open {
+.ll-desc-open {
   max-height: 20em;
   overflow-y: auto;
 }
 /* Announced as the source of the text, not decoration — see the note in the component. */
-.ll-lcard-desc-from {
+.ll-desc-from {
   flex-basis: 100%;
   font-size: 12px;
   letter-spacing: 0.5px;
@@ -1490,9 +1509,9 @@ button {
    italic, underlined, and --gold rather than a text colour.
 
    --gold on --panel is 7.37:1, past the 4.5:1 body-text requirement — measured, like the
-   6.01:1 on `.ll-lcard-desc` above. The underline is what carries the distinction where
+   12.94:1 and 6.01:1 on `.ll-desc` above. The underline is what carries the distinction where
    colour cannot (SC 1.4.1: colour is never the only cue). */
-.ll-lcard-desc-btn {
+.ll-desc-btn {
   background: none;
   border: 0;
   padding: 0;
@@ -1503,14 +1522,14 @@ button {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.ll-lcard-desc-btn:hover {
+.ll-desc-btn:hover {
   color: var(--gold-bright);
 }
-.ll-lcard-desc-btn:focus-visible {
+.ll-desc-btn:focus-visible {
   outline: 1px solid var(--gold-border);
   outline-offset: 2px;
 }
-.ll-lcard-desc-field {
+.ll-desc-field {
   flex-basis: 100%;
   /* `width: 100%` on a textarea is not enough on its own — the element's `cols` attribute
      sets an intrinsic min-content width that would otherwise widen the card past its track. */
@@ -1525,9 +1544,19 @@ button {
   border: 1px solid var(--gold-border);
   padding: 4px 8px;
 }
-.ll-lcard-desc-controls {
+.ll-desc-controls {
   display: flex;
   gap: 8px;
+}
+/* The list's description, in the expanded header (SPEC-0003 REQ "Lists Carry an Editable
+   Description"). Below the control row rather than inside it — a paragraph in a
+   baseline-aligned flex row of buttons either stretches the row or wraps into a column the
+   width of a button — and above the card grid, inside the accented panel, so it still reads
+   as the header's own. It borrows the head's horizontal padding so the prose lines up with
+   the list name above it rather than with the panel edge. */
+.ll-expanded-desc {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--divider);
 }
 
 /* The categorised preview.

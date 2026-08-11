@@ -12,6 +12,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { charCount, validateDescription } from "../lib/descriptions.js";
 import {
   callerToken,
   ipLimiter,
@@ -70,6 +71,32 @@ const isName = (v) => typeof v === "string" && v.trim().length > 0 && v.trim().l
 const isHunterId = (v) =>
   v === null || v === undefined || (typeof v === "string" && v.length > 0 && v.length <= HUNTER_ID_MAX);
 const isAccent = (v) => v === undefined || ACCENT_PALETTE.includes(v);
+
+// Governing: ADR-0007 (dataset carries descriptions), SPEC-0003 REQ "Lists Carry an Editable
+// Description"
+//
+// A list's `description` has THREE states, and the whole point of the code below is that they
+// never become two:
+//
+//   absent or null    never edited        -> the list hunter's description, resolved LIVE by
+//                                            the client and never written here
+//   ""                deliberately blank  -> nothing
+//   non-empty string  the user's own text -> that text
+//
+// design.md's risk register names the failure directly: the obvious implementation is a truthy
+// check, which merges "never edited" with "deliberately blank" and makes the field impossible
+// to empty. So every read of the field on this route coalesces with `??` and never with `||`,
+// and every write turns on the KEY being present rather than on the value being useful.
+//
+// NOTE THE TWO MEANINGS OF NULL ON THIS ENDPOINT. `hunterId: null` says the list depicts no
+// hunter; `description: null` says the list inherits from whichever hunter it depicts. Same
+// literal, opposite directions — one is an absence, the other is a deferral. They are only
+// ever handled a few lines apart, so this is worth reading twice before editing either.
+//
+// Serialised explicitly so the API shape is uniform: every list carries a `description`, and
+// "never edited" is always `null` rather than sometimes an absent field. Without this, every
+// consumer has to coalesce for itself, which is one more place to do it with `||`.
+const publicList = (rec) => ({ ...publicRecord(rec), description: rec.description ?? null });
 
 /**
  * Resolve a list id to a record the caller owns.
@@ -132,7 +159,7 @@ loadoutListsRouter.get("/", async (req, res) => {
   try {
     await db.read();
     const token = callerToken(req);
-    res.json(ownedBy(db.data.loadoutLists, token).map(publicRecord));
+    res.json(ownedBy(db.data.loadoutLists, token).map(publicList));
   } catch (err) {
     console.error("GET /api/loadout-lists failed:", err);
     res.status(500).json({ error: "failed to read loadout lists" });
@@ -141,7 +168,8 @@ loadoutListsRouter.get("/", async (req, res) => {
 
 loadoutListsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
   try {
-    const { name, hunterId = null, accent } = req.body || {};
+    const body = req.body || {};
+    const { name, hunterId = null, accent } = body;
     if (!isName(name)) {
       return res.status(400).json({ error: `name must be a non-empty string of at most ${NAME_MAX} characters` });
     }
@@ -151,6 +179,13 @@ loadoutListsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     if (!isAccent(accent)) {
       return res.status(400).json({ error: "accent must be one of the palette values" });
     }
+    // PRESENCE, not truthiness: `"description" in body` distinguishes "said nothing" from
+    // "said null", and only the first may reach the default. A list created with a hunter is
+    // the overwhelmingly common case and it wants inheritance, so the create form sends no
+    // key at all — but the endpoint accepts one, so a list can be created already described.
+    const describes = "description" in body;
+    const desc = describes ? validateDescription(body.description, res) : { ok: true, value: null };
+    if (!desc.ok) return;
 
     const token = callerToken(req);
     await db.read();
@@ -165,10 +200,14 @@ loadoutListsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       accent: accent ?? nextAccent(ownedBy(db.data.loadoutLists, token)),
       createdAt: new Date().toISOString(),
     };
+    // The key is written only when the caller supplied one. A list nobody has described
+    // carries NO `description` field at all — that is the "never edited" state, and it is the
+    // same shape every list record written before this field existed already has.
+    if (describes) record.description = desc.value;
     db.data.loadoutLists.push(record);
     await db.write();
 
-    res.status(201).json(publicRecord(record));
+    res.status(201).json(publicList(record));
   } catch (err) {
     console.error("POST /api/loadout-lists failed:", err);
     res.status(500).json({ error: "failed to create loadout list" });
@@ -177,7 +216,8 @@ loadoutListsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 
 loadoutListsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
   try {
-    const { name, hunterId, accent } = req.body || {};
+    const body = req.body || {};
+    const { name, hunterId, accent } = body;
     if (name !== undefined && !isName(name)) {
       return res.status(400).json({ error: `name must be a non-empty string of at most ${NAME_MAX} characters` });
     }
@@ -187,6 +227,14 @@ loadoutListsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     if (accent !== undefined && !isAccent(accent)) {
       return res.status(400).json({ error: "accent must be one of the palette values" });
     }
+    // The description is the one field on this endpoint whose ABSENT and NULL differ, so it is
+    // the one field read off the body by key rather than by destructuring: `description:
+    // undefined` from a destructure would be indistinguishable from a key that was never sent,
+    // which is precisely the collapse the field exists to avoid. Validated before anything is
+    // applied, so a rejected description cannot leave a half-applied rename behind it.
+    const describes = "description" in body;
+    const desc = describes ? validateDescription(body.description, res) : { ok: true };
+    if (!desc.ok) return;
 
     const token = callerToken(req);
     await db.read();
@@ -204,9 +252,23 @@ loadoutListsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     if (name !== undefined) record.name = name.trim();
     if (hunterId !== undefined) record.hunterId = hunterId ?? null;
     if (accent !== undefined) record.accent = accent;
+    // Assigning null rather than deleting the key: both read back as "inherit" through
+    // `?? null`, and a record that says null out loud is easier to recognise in the data file
+    // than one that says nothing. Changing the hunter and restoring inheritance in the same
+    // request is coherent and is applied in that order — the new hunter is what gets inherited.
+    if (describes) record.description = desc.value;
     await db.write();
 
-    res.json(publicRecord(record));
+    if (describes) {
+      // The TEXT is never logged. It is user prose, and the state it landed in is what a log
+      // needs to say — including which of the two nulls on this endpoint was meant.
+      console.info("loadout list described", {
+        listId: record.id,
+        description: desc.value === null ? "inherited" : `${charCount(desc.value)} chars`,
+      });
+    }
+
+    res.json(publicList(record));
   } catch (err) {
     console.error("PATCH /api/loadout-lists/:id failed:", err);
     res.status(500).json({ error: "failed to update loadout list" });

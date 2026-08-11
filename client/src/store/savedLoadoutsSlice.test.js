@@ -83,13 +83,18 @@ describe("savedLoadouts error feedback (issue #20)", () => {
   });
 });
 
-// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+// Governing: ADR-0006 (list filing model), SPEC-0003 REQ "Loadouts Carry a Description of
+// Their Own"
 //
-// The write path, at the seam where the three states are most easily lost: a store that
+// The write path, at the seam where a value is most easily rewritten in transit: a store that
 // "helpfully" normalises null to "" — or an API wrapper that lets `undefined` delete its own
 // key on the way through JSON.stringify — produces a request that looks fine, succeeds, and
 // silently means something else.
+//
+// A loadout's description inherits nothing (#181), so null and "" say the same thing here.
+// They are still sent as themselves rather than folded together: the endpoint distinguishes
+// them, records already carry both, and a client that quietly rewrote one into the other
+// would be the first place the two fields' rules started to drift.
 describe("editing a loadout description", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -103,7 +108,7 @@ describe("editing a loadout description", () => {
     id: "l1", name: "My build", data: {}, listId: null, description,
   });
 
-  it("sends each of the three states on the wire exactly as given", async () => {
+  it("sends each state on the wire exactly as given", async () => {
     for (const description of [null, "", "my own words"]) {
       global.fetch.mockResolvedValueOnce(respond(withDescription(description)));
       const store = makeStore();
@@ -159,7 +164,7 @@ describe("editing a loadout description", () => {
   });
 
   it("sends no description key when SAVING — a re-save must not rewrite the note", async () => {
-    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description" — an omitted key
+    // Governing: SPEC-0003 REQ "Loadouts Carry a Description of Their Own" — an omitted key
     // leaves the field alone, and that is the only correct thing for this path to say. The
     // server accepts a description on POST (spec-normative), so nothing but this assertion
     // stands between "the save path grew a description key" and shipping: the nearest string
@@ -189,12 +194,18 @@ describe("editing a loadout description", () => {
     expect(store.getState().ui.message).toContain("too long");
   });
 
-  it("announces a restore as a restore, not as a save", async () => {
-    global.fetch.mockResolvedValueOnce(respond(withDescription(null)));
-    const store = makeStore();
-    await store.dispatch(describeSaved({ id: "l1", description: null, loadoutName: "My build" }));
+  it("announces a clear as a clear, and never as a restored inheritance", async () => {
+    // There is nothing for a loadout to inherit, so a message promising the hunter's text is
+    // back would describe something the user is about to not see. Both empty states say the
+    // same thing, because they mean the same thing.
+    for (const description of [null, ""]) {
+      global.fetch.mockResolvedValueOnce(respond(withDescription(description)));
+      const store = makeStore();
+      await store.dispatch(describeSaved({ id: "l1", description, loadoutName: "My build" }));
 
-    expect(store.getState().ui.message.startsWith("!")).toBe(false);
-    expect(store.getState().ui.message).toContain("hunter's description again");
+      expect(store.getState().ui.message.startsWith("!")).toBe(false);
+      expect(store.getState().ui.message).toContain("Cleared the description");
+      expect(store.getState().ui.message).not.toContain("hunter");
+    }
   });
 });

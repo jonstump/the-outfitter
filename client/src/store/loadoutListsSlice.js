@@ -3,7 +3,7 @@
 // and Sorting"
 
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { createList, getLists, retireList, updateList } from "../api/loadouts.js";
+import { createList, describeList, getLists, retireList, updateList } from "../api/loadouts.js";
 import { uiActions } from "./uiSlice.js";
 
 // Failed list operations surface through the same ui.message banner that save/delete
@@ -98,6 +98,32 @@ export const setListAccentThunk = createAsyncThunk(
   }
 );
 
+/**
+ * Describe a list, or restore it to inheriting its hunter's description.
+ *
+ * Governing: ADR-0007 (dataset carries descriptions), SPEC-0003 REQ "Lists Carry an Editable
+ * Description".
+ *
+ * `description` is passed STRAIGHT THROUGH, null included, because null is a value here and
+ * not a missing argument: it is the restore. A default parameter or a `|| ""` anywhere on this
+ * path would turn "go back to inheriting" into "store the blank state" — the two states the
+ * spec's risk register is about, collapsed by a convenience.
+ *
+ * The list's name is taken as an argument rather than read from the store so the failure
+ * banner can name the list even when the write is what failed.
+ */
+export const describeListThunk = createAsyncThunk(
+  "loadoutLists/describe",
+  async ({ id, description, listName }, { dispatch }) => {
+    try {
+      return await describeList(id, description);
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't update the description for “${listName}”: ${err.message}`));
+      throw err;
+    }
+  }
+);
+
 export const retireListThunk = createAsyncThunk(
   "loadoutLists/retire",
   async ({ id, name }, { dispatch }) => {
@@ -135,13 +161,20 @@ const loadoutListsSlice = createSlice({
       .addCase(createListThunk.fulfilled, (state, action) => {
         state.items.push(action.payload);
       })
-      // Rename and accent both PATCH the record and get the whole updated record back, so
-      // they reconcile identically — replace in place, keep position, never re-sort here.
+      // Rename, accent and describe all PATCH the record and get the whole updated record
+      // back, so they reconcile identically — replace in place, keep position, never re-sort
+      // here. Replacing the WHOLE record is what keeps a restored description correct: the
+      // server's answer carries `description: null`, and merging fields instead would leave
+      // the old text sitting under a null that never overwrote it.
       .addCase(renameListThunk.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
       })
       .addCase(setListAccentThunk.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
+      })
+      .addCase(describeListThunk.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
       })
