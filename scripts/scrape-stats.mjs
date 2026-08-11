@@ -22,17 +22,37 @@
 //       --limit=N                                 Stop after N items (useful for a smoke run)
 //       --out=PATH                                Override the dataset path
 //       --allow-shrink                            Permit a write that drops already-covered items
+//       --write-catalog                           Apply scraped values over hand-authored ones
 //       --dry-run                                 Resolve URLs and check robots.txt, but fetch
 //                                                  nothing and write nothing
 //
-// WHAT THIS SCRIPT WRITES, AND WHAT IT STILL DOES NOT
+// WHAT THIS SCRIPT WRITES
 //
-// It writes `client/src/data/itemStats.json` — generated, committed, keyed by catalog id, and
-// never hand-edited (#184). It does NOT write `catalog.js`. Reconciling a scraped value against a
-// hand-authored one is the guarded, opt-in write-through in #185, and until that lands a run here
-// cannot change a single number the app does budget math with. That ordering is deliberate:
-// ADR-0005 names its worst realistic failure as a parser regression silently overwriting a correct
-// cost, and an additive scrape cannot produce it.
+// By default, exactly one file: `client/src/data/itemStats.json` — generated, committed, keyed by
+// catalog id, never hand-edited (#184). A default run cannot change a single number the app does
+// budget math with.
+//
+// Under `--write-catalog` it also reconciles `catalog.js`, which is the dangerous half of ADR-0005
+// and the reason everything else here is additive (#185). The wiki is authoritative for values the
+// catalog also carries — cost, size, UP — and automating that reconciliation is the whole point of
+// the decision. It is also the one place a parser bug becomes a correctness bug: a wiki markup
+// change that yields a wrong-but-well-formed number corrupts budget math invisibly, because a
+// Winfield that costs $3 instead of $76 just looks like a bargain.
+//
+// Four things stand between a bad parse and a corrupted catalog:
+//
+//   1. It is opt-in. The flag is the operator saying "reconcile", not a default.
+//   2. Every intended overwrite is printed BEFORE anything is applied, item by item, old -> new.
+//   3. Values are range-asserted against what the game actually uses. A value outside the range
+//      fails that field and is reported; it never lands, and it never aborts the other items.
+//   4. The edit is surgical and lands as a reviewable `git diff` hunk against a hand-authored file,
+//      not a regenerated one — so a wrong value is visible in review rather than buried in churn.
+//
+// Some fields the wiki describes are still never written, because a CORRECT value would break
+// something downstream: `ammoClass` (a saved ammo selection is a bare index into that pool) and the
+// display `name` (it feeds slugify() and therefore the on-disk image path). See
+// GATED_CATALOG_FIELDS. And `group`, `type` and the whole `AMMO` table are never derived at all —
+// see NEVER_DERIVED.
 //
 // A partial run (`--limit` or `--only`) reports but does not write. Otherwise the dataset would be
 // truncated to whatever that run happened to visit, and the deletion would look like a scrape
@@ -67,6 +87,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { CONS, TOOLS, TRAITS, WEAPONS } from "../client/src/data/catalog.js";
 
 import {
   CATEGORIES,
@@ -125,6 +147,13 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * annotates. If a server consumer ever appears, this moves and SPEC-0007 says so first.
  */
 export const STATS_DATA_PATH = path.join(REPO_ROOT, "client", "src", "data", "itemStats.json");
+
+/**
+ * The hand-authored catalog, and the ONLY file outside the dataset this script may write —
+ * exclusively under --write-catalog. ADR-0005: scrape-stats.mjs is the only script that ever
+ * writes it; scrape-images.mjs stays write-only to client/public/images/.
+ */
+export const CATALOG_PATH = path.join(REPO_ROOT, "client", "src", "data", "catalog.js");
 
 // ---------------------------------------------------------------------------
 // Infobox extraction — the payload-specific half, and the seam #184 builds the dataset on.
@@ -467,6 +496,289 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
 }
 
 // ---------------------------------------------------------------------------
+// Catalog write-through (SPEC-0007 REQ "Catalog Write-Through Is Bounded, Reviewable, and Opt-In").
+//
+// The dangerous half of ADR-0005, and the reason every other part of this script is additive. The
+// wiki is authoritative for values the catalog also carries, and automating that reconciliation is
+// the point of the decision — but a wiki markup change that makes the parser extract a
+// wrong-but-well-formed number corrupts budget math invisibly. A Winfield that costs $3 instead of
+// $76 just looks like a bargain.
+//
+// So the write-through is opt-in (`--write-catalog`), prints every intended overwrite before
+// applying it, and refuses values that fall outside the ranges the game actually uses.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which scraped field maps onto which catalog tuple position.
+ *
+ * Tuple shapes, from catalog.js:
+ *   WEAPONS [id, name, size, cost, ammoClass, group]
+ *   TOOLS   [id, name, cost, group]
+ *   CONS    [id, name, cost, type, group]
+ *   TRAITS  [id, name, up, group]
+ *
+ * Traits say `Cost` where every other category says `Price` — the wiki labels Upgrade Points
+ * differently, and mapping it to `Price` would silently write nothing for all 32 traits.
+ */
+export const CATALOG_FIELD_MAP = {
+  weapons: [
+    { field: "Price", index: 3, label: "cost", rule: "cost" },
+    { field: "Size", index: 2, label: "size", rule: "size" },
+  ],
+  tools: [{ field: "Price", index: 2, label: "cost", rule: "cost" }],
+  consumables: [{ field: "Price", index: 2, label: "cost", rule: "cost" }],
+  traits: [{ field: "Cost", index: 2, label: "up", rule: "up" }],
+};
+
+/**
+ * Catalog fields the wiki can describe but this script still must not write, and why.
+ *
+ * Both are write-through hazards ADR-0005's amendments found the hard way — a scraped value that is
+ * CORRECT and still breaks something downstream, because another part of the app reads the field
+ * positionally or derives a path from it.
+ */
+export const GATED_CATALOG_FIELDS = {
+  ammoClass:
+    "an ammo selection persists as a bare index into AMMO[ammoClass] (loadoutCodec.js), so changing " +
+    "a weapon's class silently re-points every saved selection on it. Needs a FORMAT_VERSION bump " +
+    "and a saved-selection migration first.",
+  name:
+    "the display name feeds slugify() and therefore the on-disk image path " +
+    "(client/public/images/{category}/{slug}). Renaming without re-running scrape-images.mjs loses " +
+    "the art with no error anywhere.",
+};
+
+/** Fields no scrape may ever derive, in any category. */
+export const NEVER_DERIVED = {
+  group:
+    "an app-side UI taxonomy with no wiki equivalent. The wiki's Tools/Consumables subcategories " +
+    "are multi-valued and its trait schemes are two orthogonal ones (Regular/Burn/Scarce/Event by " +
+    "acquisition, Offensive/Defensive/… by function). Traits even carry a literal `Category` field, " +
+    "which is precisely the trap: it looks like `group` and is not.",
+  type:
+    "a rules input — calc.js counts consumables by it and loadoutSlice.js enforces the 4-per-category " +
+    "cap on the result. It may only come from a mechanical cap category, never from an infobox field.",
+  AMMO: "has no wiki source page at all; /wiki/Ammo is prose. Prices are per-weapon, not per-pool.",
+};
+
+/**
+ * Plausible ranges, measured against the catalog and the wiki rather than assumed.
+ *
+ * NOTE: ADR-0005's confirmation criteria and SPEC-0007 as first written both said "size ∈ 1..3".
+ * That is wrong, and implementing it literally would fail 17 of 38 weapons on a correct parse —
+ * the wiki and the catalog agree that sizes run 1..5, and 5 is the entire weapon budget `capMax`
+ * grants. SPEC-0007 has been corrected; this constant is the measured range.
+ */
+export const RANGE_RULES = {
+  cost: { min: 1, max: 5000, why: "Hunt Dollars; the catalog's real spread is 10..1015" },
+  size: { min: 1, max: 5, why: "slot sizes run 1..5; 5 fills the whole weapon budget (calc.js capMax)" },
+  up: { min: 1, max: 12, why: "Upgrade Points; the catalog's real spread is 1..9" },
+};
+
+/**
+ * Parse a scraped value into an integer, or return null.
+ *
+ * Deliberately strict. A lenient parse — stripping non-digits and taking what is left — is exactly
+ * how "wrong but well-formed" gets written: `"1.5"` would become `15`, and `"75 Hunt Dollars"`
+ * would become `75` on one page and `75000` on another that spells the currency differently.
+ * Anything that is not a whole number, optionally comma-grouped, is a parse failure.
+ */
+export function parseNumeric(raw) {
+  const match = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*$/.exec(String(raw ?? ""));
+  if (!match) return null;
+  const value = Number(match[1].replace(/,/g, ""));
+  return Number.isInteger(value) ? value : null;
+}
+
+/** Check a parsed value against its rule. Returns null when acceptable, else the reason it is not. */
+export function rangeViolation(value, rule) {
+  const spec = RANGE_RULES[rule];
+  if (!spec) return `no range rule named "${rule}"`;
+  if (value < spec.min || value > spec.max) {
+    return `${value} is outside the plausible ${rule} range ${spec.min}..${spec.max} (${spec.why})`;
+  }
+  return null;
+}
+
+/**
+ * Work out every catalog value this run would overwrite, without touching anything.
+ *
+ * Returns `{ changes, rejected }`. A value that cannot be parsed, or that parses outside its range,
+ * lands in `rejected` and is reported — it never silently becomes a change, and it never aborts the
+ * other items.
+ */
+export function planCatalogWrites(records, catalogRows) {
+  const changes = [];
+  const rejected = [];
+
+  for (const [category, rows] of Object.entries(catalogRows)) {
+    const maps = CATALOG_FIELD_MAP[category];
+    if (!maps) continue;
+    for (const row of rows) {
+      const id = row[0];
+      const record = records[id];
+      if (!record?.fields) continue;
+
+      for (const { field, index, label, rule } of maps) {
+        const raw = record.fields[field];
+        if (raw === undefined) continue;
+
+        const value = parseNumeric(raw);
+        if (value === null) {
+          rejected.push({ id, category, label, raw, url: record.wikiUrl, reason: `not a whole number` });
+          continue;
+        }
+        const violation = rangeViolation(value, rule);
+        if (violation) {
+          rejected.push({ id, category, label, raw, url: record.wikiUrl, reason: violation });
+          continue;
+        }
+        if (value !== row[index]) {
+          changes.push({ id, category, label, index, from: row[index], to: value, url: record.wikiUrl });
+        }
+      }
+    }
+  }
+  return { changes, rejected };
+}
+
+/**
+ * Replace one element of a single-line catalog tuple, preserving everything else on the line.
+ *
+ * Surgical rather than parse-and-regenerate: SPEC-0007 requires catalog.js to stay hand-authored
+ * and human-readable, and regenerating it would flatten every comment in the file — including the
+ * ones recording why rows were retired and why taxonomies are what they are. Splitting on
+ * top-level commas keeps quoted values containing commas intact.
+ */
+export function replaceTupleField(line, index, nextValue) {
+  const open = line.indexOf("[");
+  const close = line.lastIndexOf("]");
+  if (open === -1 || close === -1 || close < open) return null;
+
+  const inner = line.slice(open + 1, close);
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let current = "";
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote && inner[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === "[" || ch === "{") depth += 1;
+    if (ch === "]" || ch === "}") depth -= 1;
+    if (ch === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  if (index >= parts.length) return null;
+
+  // Preserve the original spacing around the value being replaced.
+  const leading = parts[index].match(/^\s*/)[0];
+  const trailing = parts[index].match(/\s*$/)[0];
+  parts[index] = `${leading}${nextValue}${trailing}`;
+  return `${line.slice(0, open + 1)}${parts.join(",")}${line.slice(close)}`;
+}
+
+/** The `export const NAME = [` each catalog category lives under. */
+const CATEGORY_EXPORT = { weapons: "WEAPONS", tools: "TOOLS", traits: "TRAITS", consumables: "CONS" };
+
+/**
+ * The line range of one category's array, so a row search cannot wander into another category.
+ *
+ * Returns `[startLine, endLine)` or null when the export is not found.
+ */
+export function categoryLineRange(lines, category) {
+  const exportName = CATEGORY_EXPORT[category];
+  if (!exportName) return null;
+  const start = lines.findIndex((line) => line.startsWith(`export const ${exportName} = [`));
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < lines.length && !/^\];?\s*$/.test(lines[end])) end += 1;
+  return [start + 1, end];
+}
+
+/**
+ * Apply planned changes to catalog.js source text.
+ *
+ * Rows are located by their id literal at the start of the tuple, so a reordered catalog still
+ * lands its edits correctly, and a row that cannot be located is reported rather than guessed at.
+ *
+ * The search is SCOPED to the change's own category array. catalog.js's header states that an id is
+ * "unique within its category" — which permits the same id string in two different categories. A
+ * whole-file search would then find whichever line came first and apply the write at that index,
+ * and the indices mean different things per category: 3 is `cost` in WEAPONS but `group` in TOOLS.
+ * That would write a number into a group slot — precisely the wrong-but-well-formed corruption the
+ * rest of this machinery exists to prevent. No collision exists in the catalog today; this makes it
+ * unable to matter if one ever does. (Raised in review of #194.)
+ */
+export function applyCatalogWrites(source, changes) {
+  const lines = source.split("\n");
+  const applied = [];
+  const unlocated = [];
+
+  for (const change of changes) {
+    const needle = `["${change.id}",`;
+    const range = categoryLineRange(lines, change.category);
+    if (!range) {
+      unlocated.push(change);
+      continue;
+    }
+    const [from, to] = range;
+    let lineNo = -1;
+    for (let i = from; i < to; i++) {
+      if (lines[i].trimStart().startsWith(needle)) {
+        lineNo = i;
+        break;
+      }
+    }
+    if (lineNo === -1) {
+      unlocated.push(change);
+      continue;
+    }
+    const next = replaceTupleField(lines[lineNo], change.index, change.to);
+    if (next === null) {
+      unlocated.push(change);
+      continue;
+    }
+    lines[lineNo] = next;
+    applied.push({ ...change, line: lineNo + 1 });
+  }
+
+  return { source: lines.join("\n"), applied, unlocated };
+}
+
+/** The per-field diff SPEC-0007 requires a write-through run to print BEFORE it applies anything. */
+export function formatCatalogPlan({ changes, rejected }) {
+  const lines = [];
+  if (changes.length === 0) lines.push("catalog write-through: no hand-authored value differs from the wiki.");
+  else {
+    lines.push(`catalog write-through: ${changes.length} field(s) would change`);
+    for (const c of changes) {
+      lines.push(`  ${c.category}/${c.id}  ${c.label}: ${c.from} -> ${c.to}   ${c.url}`);
+    }
+  }
+  if (rejected.length > 0) {
+    lines.push(`  ${rejected.length} value(s) refused (item unchanged):`);
+    for (const r of rejected) {
+      lines.push(`    ${r.category}/${r.id}  ${r.label}: "${r.raw}" — ${r.reason}   ${r.url}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Run orchestration: per-item try/catch, never lets one item's failure abort the run.
 // ---------------------------------------------------------------------------
 
@@ -509,6 +821,8 @@ export async function runStatsScrape(options, deps) {
     limit = null,
     datasetPath = STATS_DATA_PATH,
     allowShrink = false,
+    writeCatalog = false,
+    catalogPath = CATALOG_PATH,
   } = options;
   const {
     fetchFn,
@@ -518,6 +832,11 @@ export async function runStatsScrape(options, deps) {
     fsWriteFile = writeFile,
     fsMkdir = mkdir,
     fsReadFile = readFile,
+    // The human-readable half of "printed before applied". `log` carries the same facts as JSON
+    // events for machines; this prints the diff table for the operator, and it is injected rather
+    // than called at the end of main() so it lands BEFORE the file is read, not after it is
+    // rewritten. (Review of #194: the banner promised before, the call site delivered after.)
+    printPlan = () => {},
   } = deps;
 
   const unknown = categories.filter((c) => !CATEGORIES.includes(c));
@@ -626,6 +945,66 @@ export async function runStatsScrape(options, deps) {
           `re-run with --allow-shrink if the loss is intended`
         : null;
 
+  // Why the write-through did not happen, in the same precedence order and only when it was asked
+  // for. A silent no-op on the run the shrink guard just tripped would read as "nothing to correct".
+  const catalogSkipped = !writeCatalog
+    ? null
+    : dryRun
+      ? "dry-run writes nothing"
+      : partial
+        ? "partial run never writes catalog.js"
+        : blockedByShrink
+          ? `shrink guard tripped — ${dropped.length} already-covered item${dropped.length === 1 ? "" : "s"} ` +
+            `would be dropped, so this run's surviving parses are not trusted against catalog.js`
+          : null;
+
+  // Catalog write-through. Opt-in, and refused on exactly the runs that cannot stand in for the
+  // whole catalog — a partial run's records say nothing about the items it never visited, and
+  // reconciling against a subset is how a "correction" turns into a selective one.
+  //
+  // `blockedByShrink` gates this too, and that is the more important half. A mass-failure run is
+  // ADR-0005's worst realistic risk (a wiki markup change the parser no longer matches), and the
+  // items that FAILED are harmless here — they are absent from `records`, so nothing is planned for
+  // them. The hazard is the items that SUCCEEDED against changed markup and produced a
+  // wrong-but-in-range number. A shrink signal is the best evidence available that the surviving
+  // parses should be distrusted, so spending it only on the regenerable dataset while catalog.js —
+  // which carries the app's budget math — writes on unguarded is exactly backwards. (Review of #194.)
+  let catalogPlan = null;
+  let catalogWritten = null;
+  if (writeCatalog && !dryRun && !partial && !blockedByShrink) {
+    catalogPlan = planCatalogWrites(records, {
+      weapons: WEAPONS,
+      tools: TOOLS,
+      traits: TRAITS,
+      consumables: CONS,
+    });
+    // Printed BEFORE anything is applied — SPEC-0007 requires the operator to see every intended
+    // overwrite while it is still an intention.
+    log({
+      level: "info",
+      event: "catalog-plan",
+      changes: catalogPlan.changes.length,
+      rejected: catalogPlan.rejected.length,
+    });
+    for (const c of catalogPlan.changes) {
+      log({ level: "info", event: "catalog-change", id: c.id, field: c.label, from: c.from, to: c.to, url: c.url });
+    }
+    for (const r of catalogPlan.rejected) {
+      log({ level: "warn", event: "catalog-value-refused", id: r.id, field: r.label, raw: r.raw, reason: r.reason, url: r.url });
+    }
+    printPlan(catalogPlan);
+
+    if (catalogPlan.changes.length > 0) {
+      const source = await fsReadFile(catalogPath, "utf8");
+      const result = applyCatalogWrites(source, catalogPlan.changes);
+      for (const u of result.unlocated) {
+        log({ level: "error", event: "catalog-row-not-located", id: u.id, field: u.label });
+      }
+      await fsWriteFile(catalogPath, result.source, "utf8");
+      catalogWritten = { path: catalogPath, applied: result.applied.length, unlocated: result.unlocated.length };
+    }
+  }
+
   log({
     level: "info",
     event: "run-summary",
@@ -636,11 +1015,16 @@ export async function runStatsScrape(options, deps) {
     ...(written ? { wrote: written } : {}),
     ...(datasetSkipped ? { datasetSkipped } : {}),
     ...(blockedByShrink ? { wouldDrop: dropped } : {}),
+    ...(catalogWritten ? { catalogWritten } : {}),
+    ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
   summary.records = records;
   summary.datasetPath = written;
   summary.droppedIds = dropped;
+  summary.catalogPlan = catalogPlan;
+  summary.catalogWritten = catalogWritten;
+  summary.catalogSkipped = catalogSkipped;
   return summary;
 }
 
@@ -708,10 +1092,12 @@ export function parseArgs(argv) {
     dryRun: false,
     limit: null,
     allowShrink: false,
+    writeCatalog: false,
   };
   for (const arg of argv) {
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--allow-shrink") options.allowShrink = true;
+    else if (arg === "--write-catalog") options.writeCatalog = true;
     else if (arg.startsWith("--only=")) {
       options.categories = arg
         .slice("--only=".length)
@@ -754,7 +1140,19 @@ async function main() {
     console.log("              be deleted from it. Read the diff.");
   }
 
-  const summary = await runStatsScrape(options, { fetchFn: fetch });
+  if (options.writeCatalog && !options.dryRun && !partial) {
+    console.log("scrape-stats: --write-catalog — the plan below is printed before anything is applied.");
+  }
+
+  const summary = await runStatsScrape(options, {
+    fetchFn: fetch,
+    // Printed from inside the run, before catalog.js is read — see the banner above.
+    printPlan: (plan) => console.log(formatCatalogPlan(plan)),
+  });
+
+  if (summary.catalogSkipped) {
+    console.log(`scrape-stats: --write-catalog refused — ${summary.catalogSkipped}`);
+  }
   console.log(formatSummary(summary));
 
   process.exitCode = summary.failed.length > 0 ? 1 : 0;

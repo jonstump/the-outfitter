@@ -571,3 +571,28 @@ and must not be extended to cover:
   title is read from the page, since MediaWiki serves renamed pages through redirects and this
   wiki's redirect coverage is inconsistent (`Tools/Alert_Trip_Mine` does *not* redirect to
   `Tools/Alert_Trip_Mines`, which is why that override exists)
+
+## Amendment (2026-08-11): the size range in the confirmation criteria is wrong
+
+**Superseded:** "Range assertions on parsed numerics (cost > 0, **size ∈ 1..3**, UP within the game's range) fail the item rather than writing an implausible value."
+
+**Amended to:** weapon slot sizes run **1 to 5**.
+
+**Why:** measured, not argued. Both sources reach 5, counted separately because they do not currently agree on this column:
+
+* **`client/src/data/catalog.js`** (hand-authored, 39 weapons): sizes distribute `{1:6, 2:10, 3:12, 4:9, 5:2}` — **11 at size 4 or 5**.
+* **`client/src/data/itemStats.json`** (scraped, 38 weapon rows carrying a `Size` — `winfield-m1873c` is a known duplicate with no page of its own): `{1:9, 2:5, 3:7, 4:14, 5:3}` — **17 at size 4 or 5**.
+
+5 is the entire weapon budget `calc.js`'s `capMax()` grants (a size-5 weapon fills it), so a range assertion written to `1..3` would have refused more than a quarter of the hand-authored arsenal — and nearly half the scraped one — on a *correct* parse, turning the guardrail into the defect it exists to prevent.
+
+The gap between 11 and 17 is neither noise nor an argument against the correction: it is the size half of the 74-field wiki-vs-catalog delta that issue #195 exists to apply, and applying it moves the catalog's own count to 17. Either count refutes `1..3` on its own.
+
+The error is this ADR's, not the implementation's: SPEC-0007 inherited `1..3` verbatim from the criterion above and has been corrected in the same pass.
+
+**What did not change:** the assertion's purpose or its posture. A value outside the measured range still fails its field and is reported rather than written, and the failure is per-field — one refused value does not discard the item's other fields.
+
+**Blast radius:**
+
+* **SPEC-0007's** "Catalog Write-Through Is Bounded, Reviewable, and Opt-In" carries the corrected range plus the measurement behind it, so the next reader does not re-derive `1..3` from this ADR.
+* **`scripts/scrape-stats.mjs`** implements the measured range in `RANGE_RULES`, with the same note.
+* **No data is affected.** The wrong range was never implemented — this amendment corrects the specification ahead of the code rather than behind it.
