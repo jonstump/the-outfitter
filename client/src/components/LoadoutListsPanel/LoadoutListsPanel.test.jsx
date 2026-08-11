@@ -2429,7 +2429,17 @@ describe("list descriptions", () => {
     // The token these rules must NOT be using, asserted so the threshold below is not vacuous.
     expect(contrast(colors["--text-dim"], colors["--panel"])).toBeLessThan(4.5);
 
-    for (const selector of [".ll-desc", '.ll-desc[data-source="inherited"]', ".ll-desc-btn"]) {
+    // `.ll-desc-from` is in the loop, not exempt from it. It is 12px — still body text under
+    // SC 1.4.3, which grants the 3:1 allowance only from 18.66px bold or 24px — and it is part of
+    // the same de-emphasised inherited treatment, on both of the surfaces above. Covering three of
+    // the four rules in this block left the requirement's "every surface" clause proven for the
+    // prose but not for the label naming its source. (Review of #181.)
+    for (const selector of [
+      ".ll-desc",
+      '.ll-desc[data-source="inherited"]',
+      ".ll-desc-btn",
+      ".ll-desc-from",
+    ]) {
       const token = resting(selector, "color").replace(/var\(|\)/g, "").trim();
       expect(colors[token], `${selector} uses an unmeasured token ${token}`).toBeTruthy();
       for (const surface of ["--panel", "--scroll-track"]) {
@@ -2454,6 +2464,17 @@ describe("list descriptions", () => {
     expect(resting(".ll-desc-btn:focus-visible", "outline")).toBeTruthy();
   });
 
+  // WHAT THIS FILE CANNOT PROVE, stated so a green suite is not mistaken for evidence of it.
+  //
+  // jsdom lays nothing out: every element reports clientHeight === 0. The reveal control is gated
+  // on a measured `scrollHeight > clientHeight`, and the effect deliberately bails when
+  // clientHeight is 0 — so in EVERY test here the `clamped` state is its initial `true`, and the
+  // control is present because it was never measured, not because measurement found hidden text.
+  // The assertions below check CSS declarations, not rendered geometry.
+  //
+  // So SPEC-0003's "bounded in height ... MUST NOT cause its container to overflow at any width"
+  // rests on the manual browser pass recorded in the PR body, not on CI. A future change to the
+  // header's flex context would not be caught here. (Review of #181.)
   it("cannot overflow, whatever prose it is given", () => {
     renderPanel(base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [], { selectedListId: "a" }));
 
@@ -2770,6 +2791,32 @@ describe("loadout notes", () => {
     expect(Object.keys(encoded)).not.toContain("description");
     expect(Object.keys(encoded)).not.toContain("listId");
     expect(JSON.stringify(encoded)).not.toContain("note");
+  });
+
+  it("keeps the LIST's description out of the share URL too", () => {
+    // REQ "The Saved-Loadout Wire Format Is Unchanged", scenario "Neither description reaches a
+    // share URL". Since #181 split the requirement there are two descriptions, and the case the
+    // split newly creates is a loadout filed into a DESCRIBED list: the list's text is filing
+    // state one level further out, so it must not travel either — including the inherited case,
+    // where the text the user sees was never written to any record they own.
+    const inDescribedList = filed("1", "long ammo", LOADED, "described-list");
+    const bare = filed("1", "long ammo", LOADED, null);
+
+    // Byte-identical to the same build with no description anywhere, list or loadout.
+    expect(encodeShareUrl(fromData(inDescribedList.data))).toBe(encodeShareUrl(fromData(bare.data)));
+
+    // And the list record's own text cannot reach the encoder: it is not on the loadout model at
+    // all, so even handing the encoder a loadout carrying every filing field drops all of them.
+    const carrying = {
+      ...fromData(inDescribedList.data),
+      listId: "described-list",
+      description: "the loadout's note",
+      listDescription: "the shelf's own words",
+    };
+    const url = encodeShareUrl(carrying);
+    expect(url).toBe(encodeShareUrl(fromData(bare.data)));
+    expect(atob(url.split("#L=")[1])).not.toMatch(/description|listId|shelf/);
+    expect(JSON.stringify(toData(carrying))).not.toMatch(/shelf|note|described-list/);
   });
 
   // --- Bounded height, and the preview it must not displace -------------------------------

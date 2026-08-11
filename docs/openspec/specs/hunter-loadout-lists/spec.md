@@ -750,10 +750,17 @@ This capability MUST NOT change the loadout wire format. **Nothing in this spec*
 
 `description` is subject to this requirement for exactly the reason `listId` is: it is a property of the user's filing, not of the loadout itself. A recipient opening a share URL receives the build, not the sender's notes about it *(clause added 2026-08-10)*.
 
+**Both descriptions are filing state** *(amended 2026-08-11, when the single description requirement was split in two)*. Since the split there are two of them — the list's own description and the saved loadout's note — and neither reaches an encoded payload, a share URL, or a local draft. The reason is the same for both and is the reason it was for `listId`: a list description belongs to the shelf rather than to anything on it, and a loadout note is the filer's annotation rather than a property of the build. Neither is something a recipient asked for. Where this requirement says `description` unqualified, it binds **both** fields.
+
 #### Scenario: Share URLs are unaffected
 
 - **WHEN** a user shares a loadout that is filed into a list
 - **THEN** the resulting share URL SHALL be byte-identical to the URL the same loadout would produce with no `listId`, at the same format version
+
+#### Scenario: Neither description reaches a share URL
+
+- **WHEN** a user shares a loadout that carries its own note and is filed into a list that itself has a description
+- **THEN** the share URL SHALL be byte-identical to the one the same loadout produces with no description anywhere, and neither description SHALL appear in the encoded payload or the local draft
 
 #### Scenario: Loading a shared loadout produces no list assignment
 
