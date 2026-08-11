@@ -17,10 +17,10 @@ const app = express();
 app.set("trust proxy", 1);
 
 // The app is designed as a single origin serving both the API and the built
-// client (see README), so same-origin requests never need CORS. In dev, Vite's
-// proxy forwards /api to this server with a browser-like Origin header; allowing
-// only localhost dev origins keeps a third-party site from scripting the API on
-// a visitor's behalf (issue #30). Set CORS_ORIGIN to open it up deliberately.
+// client (see README). In dev, Vite's proxy forwards /api to this server with a
+// browser-like Origin header; allowing only localhost dev origins keeps a
+// third-party site from scripting the API on a visitor's behalf (issue #30).
+// Set CORS_ORIGIN to name ADDITIONAL, genuinely cross-origin callers.
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
@@ -28,15 +28,51 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
 if (process.env.NODE_ENV !== "production") {
   allowedOrigins.push("http://127.0.0.1:5173", "http://localhost:5173");
 }
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // No Origin header (curl, same-origin fetch, same-server static) is always fine.
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("CORS origin not allowed"));
-    },
-  })
-);
+
+/**
+ * Is `origin` this very server, as the client addressed it?
+ *
+ * THE ASSUMPTION THIS REPLACES WAS WRONG, and it took the deployed site down. The
+ * previous code read "no Origin header (curl, same-origin fetch, same-server static)
+ * is always fine" — true as far as it goes, but it treated the ABSENCE of the header
+ * as the test for same-origin. A browser attaches `Origin` to plenty of same-origin
+ * requests:
+ *
+ *   - any request whose method is not GET/HEAD — so every save, every list write and
+ *     every favorite carries `Origin: <this site>`; and
+ *   - any request made in CORS mode, whatever the method. Vite stamps `crossorigin`
+ *     on the entry bundle it writes into index.html, so the app's OWN `/assets/*.js`
+ *     and `/assets/*.css` are fetched in CORS mode and carry the header too.
+ *
+ * On a deployment whose host is not in `allowedOrigins` (the default list is localhost
+ * only), that made the server answer 403 to its own JavaScript. The page then rendered
+ * as an empty `<div id="root">` — a blank screen whose only symptom is a 403 in the
+ * console. `Vary: Origin` splits the 200 and the 403 into separate cache entries, which
+ * is why it looked intermittent rather than simply broken.
+ *
+ * Same-origin is therefore matched HERE, against the request, rather than by hoping the
+ * deployment host was configured into an env var. It needs no configuration and cannot
+ * drift when the app moves hosts. `req.protocol` and the Host header are the client-facing
+ * scheme and authority — behind Render/nginx those come from X-Forwarded-Proto and the
+ * forwarded Host, which is what `trust proxy` above is set for.
+ */
+function isSameOrigin(req, origin) {
+  const host = req.get("host");
+  return Boolean(host) && origin === `${req.protocol}://${host}`;
+}
+
+// Scoped to /api, not the whole app. Access control on the JSON API is the only thing
+// this policy was ever meant to express; leaving it mounted app-wide is what allowed an
+// API rule to refuse a static asset and blank the page. Static delivery below is now out
+// of its reach entirely, so no future CORS change can take the client down again.
+const corsPolicy = cors((req, callback) => {
+  const origin = req.get("origin");
+  if (!origin || isSameOrigin(req, origin) || allowedOrigins.includes(origin)) {
+    return callback(null, { origin: true });
+  }
+  return callback(new Error("CORS origin not allowed"));
+});
+app.use("/api", corsPolicy);
 
 // Explicit body-size cap (SPEC-0003 Security Requirements). express.json() defaults to
 // 100kb implicitly; stating it means the limit is a decision on the record rather than a

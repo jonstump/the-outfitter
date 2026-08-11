@@ -301,6 +301,46 @@ button {
   min-width: 0;
 }
 
+/* Narrow phones. `.left-column` and `.right-column` each hold a 320px floor, and
+   `.app-main` adds 28px of padding either side — so the layout demands 376px before it
+   will fit without scrolling sideways. A 320px-wide phone (SE-class, and plenty of
+   Androids) therefore overflowed by 39px: the capacity pips ran off the right edge of the
+   Weapons header and the whole page scrolled horizontally.
+
+   The floors exist to stop the columns collapsing while they sit SIDE BY SIDE. Below this
+   breakpoint they have already wrapped into one column each, so a floor wider than the
+   viewport is no longer holding anything up — it only overflows. Dropping it to 0 and
+   trimming the gutters costs nothing at these sizes; above the breakpoint both are
+   untouched. */
+@media (max-width: 420px) {
+  .app-header,
+  .app-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .app-main {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .left-column,
+  .right-column {
+    min-width: 0;
+  }
+
+  /* The picker's tab strip is a flex row of `flex: 1` buttons, and a flex item's default
+     `min-width: auto` refuses to shrink it below its own label. Four tabs at 17.5px with
+     8px of padding either side therefore held the strip wider than a 320px screen and
+     pushed the last tab off the edge — the one element still overflowing after the
+     columns were freed. `min-width: 0` lets the labels shrink into the space available. */
+  .picker-tab {
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
 .app-footer {
   padding: 0 24px 28px;
   max-width: 1440px;
