@@ -32,7 +32,13 @@ export function totalCost(loadout) {
   loadout.weapons.forEach((w) => {
     if (!w) return;
     t += WEAPONS[w.i][3];
-    if (w.a >= 0) t += AMMO[WEAPONS[w.i][4]][w.a][1];
+    // Governing: issue #201. The decoder bounds `a` against the weapon's own variant list,
+    // so a selection that resolves to nothing should be unreachable — but this used to
+    // index straight into the pool, and an unresolved variant threw here rather than
+    // costing nothing. Cost is a pure function of a loadout the user can also have built
+    // in-session; it should not be the thing that decides a build is unrenderable.
+    const variant = w.a >= 0 ? (AMMO[WEAPONS[w.i][4]] || [])[w.a] : null;
+    if (variant) t += variant[1];
   });
   loadout.equip.forEach((e) => {
     t += e.t === "T" ? TOOLS[e.i][2] : CONS[e.i][2];

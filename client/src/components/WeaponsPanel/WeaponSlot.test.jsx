@@ -74,6 +74,39 @@ describe("WeaponSlot", () => {
   });
 });
 
+// Governing: issue #201 (a crafted share link permanently blanks the app)
+//
+// The decoder is what stops an out-of-range ammo index reaching the store, and it is tested
+// where it lives (utils/loadoutCodec.test.js). These assert the second half of that fix: the
+// slot resolves the variant rather than asserting one exists, so a future decode bug — or a
+// state built some way nobody has thought of yet — costs a wrong label, not a white page.
+describe("WeaponSlot — an unresolvable ammo variant", () => {
+  const compact = WEAPONS.findIndex((w) => w[4] === "compact");
+  const special = WEAPONS.findIndex((w) => w[4] === "special"); // no purchasable variants
+
+  it("renders a weapon whose ammo index is past the end of its variant list", () => {
+    const { container } = renderSlot({
+      loadout: loadoutState({ weapons: [{ i: compact, a: 9999 }, null] }),
+    });
+    // Before the fix this threw a TypeError out of render and unmounted the tree.
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[compact][1]);
+    // Priced as no variant selected, and the select offers a way back rather than sitting blank.
+    expect(container.querySelector(".weapon-cost")).toHaveTextContent(`$${WEAPONS[compact][3]}`);
+    expect(container.querySelector("select").value).toBe("-1");
+  });
+
+  it("renders a weapon that has no purchasable variants at all", () => {
+    const { container } = renderSlot({
+      loadout: loadoutState({ weapons: [{ i: special, a: 0 }, null] }),
+    });
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[special][1]);
+    expect(container.querySelector(".weapon-cost")).toHaveTextContent(`$${WEAPONS[special][3]}`);
+    // An empty pool renders no ammo row, so there is no control to fall back to — the
+    // assertion that matters is simply that the slot drew at all.
+    expect(container.querySelector("select")).not.toBeInTheDocument();
+  });
+});
+
 describe("WeaponSlot — memoized selector", () => {
   it("reflects a loadout change after dispatch (selector instance stays stable)", () => {
     const store = createTestStore({ loadout: loadoutState() });

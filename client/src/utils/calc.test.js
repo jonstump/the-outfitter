@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WEAPONS } from "../data/catalog.js";
 import { consCount, slotMax, totalCost, upTotal } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
@@ -37,6 +38,18 @@ describe("totalCost", () => {
 
   it("returns 0 for an empty loadout", () => {
     expect(totalCost(loadoutWith({}))).toBe(0);
+  });
+
+  // Governing: issue #201. This used to index the ammo pool unguarded, so a loadout whose
+  // ammo index does not name a variant threw here instead of costing nothing — and totalCost
+  // runs on every render, which is what turned a bad share link into a blank page.
+  it("charges no ammo for an index its weapon's pool does not have", () => {
+    const compact = WEAPONS.findIndex((w) => w[4] === "compact");
+    expect(totalCost(loadoutWith({ weapons: [{ i: compact, a: 9999 }] }))).toBe(WEAPONS[compact][3]);
+
+    // `special` weapons have no purchasable variants at all — an empty pool, not a short one.
+    const special = WEAPONS.findIndex((w) => w[4] === "special");
+    expect(totalCost(loadoutWith({ weapons: [{ i: special, a: 0 }] }))).toBe(WEAPONS[special][3]);
   });
 });
 
