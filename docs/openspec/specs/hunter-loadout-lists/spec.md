@@ -1,7 +1,7 @@
 ---
 status: approved
-date: 2026-08-10
-implements: [ADR-0006]
+date: 2026-08-11
+implements: [ADR-0006, ADR-0011]
 requires: [SPEC-0001, SPEC-0004]
 ---
 
@@ -26,6 +26,12 @@ Three changes were accepted on **2026-08-10**; **one has shipped and survived**.
 - ~~**Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold~~ — **implemented in #138.** Amended "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
 - ~~**Loadout rows preview what they hold**~~ — shipped in #139 as a compact strip, then **superseded the same day**: the requirement licensed something smaller than intended, and is now "Filed Loadouts Preview Their Contents" as a categorised panel plus "Saved Loadouts Render as a Card Grid". Both are **not yet implemented**
 - ~~**Loadouts carry an editable description**~~ — shipped in #177, then **corrected in #181**: the field was put on the loadout, which is not the record that references a hunter. It is now two requirements — "Lists Carry an Editable Description" (the inherited one) and "Loadouts Carry a Description of Their Own" (the user's note) — plus the same clause on "The Saved-Loadout Wire Format Is Unchanged"
+
+**Three security changes reached this spec from outside it on 2026-08-11**, all shipped before being specified — recorded here because the sequence was backwards and the spec should say so rather than read as though it led. They arrived as issues #198 and #199 from a security review of `796ca9e` and are now specified above:
+
+- **The deployment trust boundary** (#199, PR #204) — `X-Forwarded-*` was believed from any peer, which made the per-IP floor bypassable on the two topologies with nothing in front. Now "Deployment Trust Boundary", and the reason this spec gained `implements: [ADR-0011]`
+- **Allowlist validation and a per-owner ceiling** (#198, PR #205) — the `data` validator accepted unknown keys and nothing capped accumulation. Now "A Write Stores Only What the Wire Format Defines" and "One Owner Cannot Accumulate Records Without Bound"
+- **A read budget** (#198, PR #205) — the collection `GET`s carried no limiter while parsing the whole data file on every request. Now a clause of "Rate Limiting", and the reason the endpoint table gained the reads it always had
 
 A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is **still outstanding — #148**. SPEC-0004 owns the production half, which shipped in #147; the consumption half is amended here rather than overridden from there, and is what #148 implements.
 
@@ -772,6 +778,8 @@ This capability MUST NOT change the loadout wire format. **Nothing in this spec*
 - **WHEN** the server validates an incoming loadout payload
 - **THEN** the validation applied to the `data` object SHALL be unchanged **by this capability**, and no `listId` or `description` field SHALL be accepted inside `data`
 
+*(clarified 2026-08-11.* That scenario says "by this capability" and still holds, but read alone it now misleads: the `data` validator **has** changed since, tightened from a required-fields check into an allowlist by issue #198. That change came from outside this capability and is specified in "A Write Stores Only What the Wire Format Defines" above. The two agree — an allowlist is the strongest possible form of "no `listId` or `description` inside `data`" — and this note exists so a future reader does not take the scenario as a freeze on the validator.*)
+
 #### Scenario: A description never reaches the wire format
 
 - **WHEN** a user shares a loadout that carries a description
@@ -836,21 +844,132 @@ All data-file operations in this capability MUST follow structured data access p
 - **WHEN** two requests from the same token mutate lists concurrently
 - **THEN** both mutations SHALL be reflected in the persisted state, or the losing request SHALL fail visibly — one mutation MUST NOT be silently discarded
 
+### Requirement: A Write Stores Only What the Wire Format Defines
+
+*(added 2026-08-11, recording behaviour shipped for issue #198)*
+
+Payload validation SHALL be an **allowlist**, not a required-fields check. The server SHALL reject any `data` object carrying a key the wire format does not define, and SHALL bound the named fields on both sides rather than only below.
+
+- The set of accepted `data` keys SHALL be declared as a named constant and SHALL be exactly the keys the client encoder emits
+- A tuple inside a known field SHALL be required to have its **exact** length — a floor alone (`>= 2`) is the same hole wearing the shape of a defined field
+- A rejected payload SHALL be a `400`, and **nothing SHALL be persisted** under the attempted name
+- Type checks on individual fields SHALL survive allowlisting — a key being permitted SHALL NOT be taken as evidence its value is well-shaped
+
+This requirement governs the **stored** shape. It does not constrain what a future format version may define; a wire format that adds a key adds it to the allowlist in the same change. What it forbids is a caller inventing one.
+
+#### Scenario: An undefined key is refused and nothing is written
+
+- **WHEN** a write carries a `data` object containing a key outside the declared set
+- **THEN** the response SHALL be a `400`, and no record SHALL exist under the attempted name afterwards
+
+#### Scenario: A permitted key is still type-checked
+
+- **WHEN** a write carries an allowlisted key whose value is of the wrong type
+- **THEN** the response SHALL be a `400` — allowlisting the key SHALL NOT bypass its type check
+
+#### Scenario: An over-long tuple inside a known field is refused
+
+- **WHEN** a write carries a weapon slot or an equipment entry with more elements than the format defines
+- **THEN** the response SHALL be a `400`
+
+### Requirement: One Owner Cannot Accumulate Records Without Bound
+
+*(added 2026-08-11, recording behaviour shipped for issue #198)*
+
+The store SHALL cap the number of saved loadouts held under a single owner token, declared as a named constant. The cap SHALL apply to **creation only**: an owner at the ceiling SHALL still be able to edit, move, describe, and delete everything they already hold.
+
+**The cap is a courtesy ceiling and SHALL be specified as one.** Owner tokens are caller-chosen and unlimited, so a caller willing to rotate one is bounded by the rate limits below rather than by this. What the cap addresses is a single client — or a loop with a bug in it — making the store expensive to re-serialise, given that the data file is parsed and rewritten whole on every operation.
+
+Records belonging to an owner that is unreachable by construction — those minted per-request for a caller that sent no token, which are never disclosed to that caller — SHALL be reclaimable. A reclamation pass MAY apply a short retention window so that an operator debugging a write still finds the evidence, and SHALL treat a record whose timestamp is missing or unparseable as expired. It MUST NOT remove a record whose owner could still reach it.
+
+#### Scenario: A create past the ceiling is refused
+
+- **WHEN** an owner already holding the maximum number of saved loadouts creates another under a new name
+- **THEN** the response SHALL be a `409` whose body names the limit
+
+#### Scenario: An owner at the ceiling can still edit what they hold
+
+- **WHEN** an owner at the maximum re-saves an existing loadout under its existing name
+- **THEN** the write SHALL succeed — the ceiling SHALL NOT convert an update into a refused create
+
+#### Scenario: The ceiling is per owner, not global
+
+- **WHEN** one owner is at the maximum and a different token creates a loadout
+- **THEN** that create SHALL succeed
+
+#### Scenario: Reclamation spares anything an owner can still see
+
+- **WHEN** a reclamation pass runs over records older than the retention window
+- **THEN** it SHALL remove only records whose owner is unreachable by construction, and SHALL leave a token-owned record of the same age untouched
+
+### Requirement: Forwarded Request Origin Is Believed Only From a Configured Peer
+
+*(added 2026-08-11, per ADR-0011)*
+
+The set of peers whose forwarding headers the system believes SHALL be deployment configuration defaulting to **none**, and every control that keys on a caller's address SHALL resolve it through that single decision. The rationale, the operator-facing consequences, and the reason this cannot be confirmed in CI are in "Deployment Trust Boundary" below.
+
+#### Scenario: An undeclared deployment believes nothing
+
+- **WHEN** a request arrives carrying forwarding headers at a deployment with no trusted peer configured
+- **THEN** the headers SHALL NOT influence the address the rate limiters key on, nor the origin comparison
+
+#### Scenario: Rotating a forwarded address buys no additional budget
+
+- **WHEN** a client at a directly-exposed deployment issues writes varying the forwarded-address header on every request
+- **THEN** all of them SHALL count against a single bucket keyed on the connecting socket
+
+#### Scenario: A declared proxy still separates the clients behind it
+
+- **WHEN** a deployment declares its front-facing proxy and two distinct clients arrive through it
+- **THEN** each SHALL receive its own budget — the trust boundary MUST NOT collapse everyone behind a real proxy into one bucket
+
+#### Scenario: An unresolvable value stops the process
+
+- **WHEN** the deployment is configured with a value that cannot be resolved to a peer test, including one meaning "trust everything"
+- **THEN** the process SHALL fail to start, and SHALL NOT run with either extreme substituted
+
+### Requirement: Reads Carry a Budget of Their Own
+
+*(added 2026-08-11, recording behaviour shipped for issue #198)*
+
+Every collection `GET` in this capability SHALL be rate limited. The budget SHALL be per-IP only, SHALL be substantially more generous than the write floor, and SHALL NOT reuse it. The reasoning is in "Rate Limiting" below.
+
+#### Scenario: A read budget exists and exceeds a write budget
+
+- **WHEN** the advertised rate-limit policy on a collection read is compared with the policy on a write
+- **THEN** the read budget SHALL be strictly the larger of the two
+
+#### Scenario: A read carries neither write limiter
+
+- **WHEN** the middleware stack on a collection read is inspected
+- **THEN** it SHALL carry the read limiter and neither of the two write limiters
+
+#### Scenario: The application's own startup reads are unaffected
+
+- **WHEN** the client performs its normal complement of collection reads on load, repeatedly
+- **THEN** no read SHALL be refused
+
 ## Security Requirements
 
 This capability adds HTTP endpoints and is therefore subject to the following. Note the model honestly: **this API has no authentication.** The `x-loadout-token` header is a pseudonymous scope key, not a credential — it establishes *which* data a caller sees, not *who* the caller is.
 
 ### Endpoints
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /api/loadout-lists | Token-scoped | List the caller's lists |
-| POST | /api/loadout-lists | Token-scoped | Create a list |
-| PATCH | /api/loadout-lists/:id | Token-scoped | Rename a list, change its portrait or accent, or edit its `description` |
-| DELETE | /api/loadout-lists/:id | Token-scoped | Retire a list |
-| POST | /api/loadouts | Token-scoped | Save a loadout, optionally with a `listId` and a `description` |
-| PATCH | /api/loadouts/:id | Token-scoped | Move a loadout between lists, and/or edit its `description` |
-| DELETE | /api/loadouts/:id | Token-scoped | Delete a loadout |
+| Method | Path | Auth | Budget | Description |
+|--------|------|------|--------|-------------|
+| GET | /api/loadout-lists | Token-scoped | Read | List the caller's lists |
+| POST | /api/loadout-lists | Token-scoped | Write | Create a list |
+| PATCH | /api/loadout-lists/:id | Token-scoped | Write | Rename a list, change its portrait or accent, or edit its `description` |
+| DELETE | /api/loadout-lists/:id | Token-scoped | Write | Retire a list |
+| GET | /api/loadouts | Token-scoped | Read | List the caller's saved loadouts |
+| POST | /api/loadouts | Token-scoped | Write | Save a loadout, optionally with a `listId` and a `description`. `409` past the per-owner ceiling on **create** |
+| PATCH | /api/loadouts/:id | Token-scoped | Write | Move a loadout between lists, and/or edit its `description` |
+| DELETE | /api/loadouts/:id | Token-scoped | Write | Delete a loadout |
+| GET | /api/hunter-favorites | Token-scoped | Read | List the caller's favorite hunters |
+
+*(table amended 2026-08-11: the collection reads this capability always had were previously unlisted, which is how they came to carry no budget at all — see "Rate Limiting". The `Budget` column names which limiter set applies, and `409` is recorded because a create can now be refused for a reason other than a malformed payload.)*
+
+**No endpoint in this capability is public.** The one public endpoint in the application — the liveness probe at `/healthz` — is outside this capability's scope and is public because orchestrator health checks require unauthenticated access.
 
 *(added 2026-08-10)* `POST /api/loadouts` SHALL accept an optional `description`, so that saving a loadout with one written up front is a single write rather than a save followed by a patch. `PATCH /api/loadouts/:id` SHALL accept `listId` and `description` independently rather than requiring `listId`. The length cap and the null-versus-omitted semantics apply identically on both verbs.
 
@@ -866,9 +985,38 @@ The system SHALL generate tokens with sufficient entropy that they are not guess
 
 Authorization for this capability SHALL include the cross-collection check defined in "Cross-Collection Ownership Enforcement": possession of a token SHALL NOT permit filing into a list owned by a different token.
 
+### Deployment Trust Boundary
+
+*(added 2026-08-11, per ADR-0011)*
+
+Every requirement in this section that speaks of a caller's IP address depends on a prior question the application cannot answer from its own source: **which peers is this server willing to believe when they tell it who a request came from?** That is a property of the deployment topology, and this spec records it because the rate limits below are not satisfiable without it.
+
+The system SHALL treat the set of trusted forwarding peers as **deployment configuration**, and SHALL default to trusting none. A deploy that says nothing about its topology SHALL believe no `X-Forwarded-*` header, because the topology most likely to omit the setting is the directly-exposed one, where believing the header is precisely the defect.
+
+- Configuration SHALL accept a form that identifies the proxy by **address** — a named range, an address, a CIDR, or a list — because that compiles to a check on the peer that actually connected
+- A value that cannot be resolved SHALL stop the process at startup with a named error. The system MUST NOT downgrade an unresolvable value to either extreme
+- The system MUST NOT provide a value meaning "trust every peer". The most guessable affirmative input SHALL be refused at startup rather than resolved to the most permissive setting
+- The trust decision SHALL be made **once** and consumed by every dependent control. There MUST NOT be a second, independently maintained notion of which peers to believe
+
+**This setting also governs the protocol half of the same-origin check** and is therefore load-bearing in two directions at once. A deployment behind a proxy that terminates TLS and does not declare it will fail the origin comparison on every state-changing request while continuing to serve reads. Operator documentation SHALL state this consequence and the ordering it implies.
+
+**Confirmation is out of CI's reach, by construction** — the value lives in the platform's environment rather than the repository. This is stated as a known limit rather than a gap to close: the check is a manual one against a deployed instance.
+
+The testable form of this rule is the requirement **"Forwarded Request Origin Is Believed Only From a Configured Peer"** above, which carries its scenarios.
+
 ### Rate Limiting
 
 All write endpoints (`POST`, `PATCH`, `DELETE`) SHALL be rate limited by the same stacked per-IP and per-token limiters already applied to loadout writes. The per-IP limiter SHALL remain a hard floor so that rotating a client-controlled token cannot bypass limiting entirely.
+
+**Reads SHALL carry a budget of their own** *(added 2026-08-11, recording behaviour shipped for issue #198)*. Every collection `GET` parses the whole data file, so an unbounded read path is an unbounded amount of parsing per second, and it grows more expensive as the file does. The read budget:
+
+- SHALL be **per-IP only**. A read costs the same parse whoever asks for it, so the thing worth bounding is requests per source, not fairness between tokens sharing one
+- SHALL be **substantially more generous than the write floor**, and SHALL NOT reuse it. The intent is to bound parse cost, not to bound the user — the application issues several collection reads on load, and a person reloading repeatedly SHALL NOT approach the limit
+- SHALL NOT apply either write limiter to a read
+
+Both budgets are keyed on the caller's address as resolved through the trust boundary above, and are only as strong as that boundary is correctly configured.
+
+The testable form of the read budget is the requirement **"Reads Carry a Budget of Their Own"** above, which carries its scenarios.
 
 ### Security Headers
 
