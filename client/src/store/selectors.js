@@ -1,5 +1,6 @@
 import { createSelector } from "@reduxjs/toolkit";
 import { capMax, capUsed, slotMax, totalCost, upTotal } from "../utils/calc.js";
+import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
 //
@@ -29,3 +30,21 @@ export const selectEquipEntry = (index) =>
 
 export const selectWeaponSlot = (slot) =>
   createSelector([selectLoadout], (l) => l.weapons[slot]);
+
+/**
+ * The NAME of the list a save would file into, or null when it would go to Unassigned.
+ *
+ * Governing: SPEC-0003 REQ "The Selected List Is Client State".
+ *
+ * Reads `resolveSaveListId` rather than `ui.selectedListId`, so the name on the save control
+ * is derived from the same answer the save itself uses — see the note on that function. A
+ * selection that no longer resolves to a live list yields null here and files into Unassigned
+ * there, together, rather than promising a list that has gone.
+ *
+ * Returns a name and not a record: the caller is a label, and handing it the whole list would
+ * re-render the button whenever anything on that record changed.
+ */
+export const selectSaveDestinationName = (state) => {
+  const id = resolveSaveListId(state);
+  return id ? (state.loadoutLists.items.find((l) => l.id === id)?.name ?? null) : null;
+};

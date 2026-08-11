@@ -26,13 +26,24 @@ export const fetchLists = createAsyncThunk("loadoutLists/fetch", async (_arg, { 
  * defaults to that hunter's display name. The defaulted name is an ordinary mutable
  * value — indistinguishable in storage from one the user typed — so renaming later is
  * just a rename. With neither a name nor a hunter, a generic default applies.
+ *
+ * Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+ * Name" — "the creating user MAY supply an accent, which SHALL be validated against the
+ * palette and used as given. When the user supplies none, assignment on creation SHALL
+ * select the least-used palette value among the owner's existing lists."
+ *
+ * `accent` defaults to null and is OMITTED from the request when absent, rather than sent as
+ * null (#135). That is the difference between the two branches of the requirement: the server
+ * reads `accent ?? nextAccent(...)`, so an omitted key reaches least-used assignment and a
+ * present one is used as given. A caller with no accent to offer must therefore be able to
+ * say nothing at all, which is what `createList` does with it.
  */
 export const createListThunk = createAsyncThunk(
   "loadoutLists/create",
-  async ({ name, hunterId = null, hunterName = null }, { dispatch }) => {
+  async ({ name, hunterId = null, hunterName = null, accent = null }, { dispatch }) => {
     const resolved = (name || "").trim() || hunterName || "New list";
     try {
-      const record = await createList({ name: resolved, hunterId });
+      const record = await createList({ name: resolved, hunterId, accent });
       dispatch(uiActions.setMessage(`Created “${record.name}”.`));
       return record;
     } catch (err) {

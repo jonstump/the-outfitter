@@ -15,20 +15,36 @@ export const fetchSaved = createAsyncThunk("savedLoadouts/fetch", async (_arg, {
   }
 });
 
-export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
-  const { loadout, ui, loadoutLists } = getState();
-  const name = loadout.name.trim() || "Unnamed loadout";
+/**
+ * Where a save issued right now would file the loadout: a list id, or null for Unassigned.
+ *
+ * Governing: SPEC-0003 REQ "The Selected List Is Client State" — "while a list is selected, a
+ * new save SHALL default to filing into that list", and "the user SHALL be able to save to
+ * Unassigned without first deselecting". Unassigned is `ui.unassignedOpen`, never a listId, so
+ * no sentinel can travel through here.
+ *
+ * Resolve rather than trust, symmetrically with the panel's render path: a stale
+ * selectedListId — retired in another tab, or restored from localStorage before fetchLists has
+ * resolved — would otherwise be sent as a real list id and 404 the save. uiSlice reconciles on
+ * fetchLists.fulfilled; this closes the window before that lands.
+ *
+ * Exported, and a function of the whole state rather than a line inside the thunk, because
+ * ActionsPanel's save button now NAMES this destination (issue #136, replacing the badge that
+ * used to announce it from the top of the lists panel). A label derived from `selectedListId`
+ * on its own would promise a list this function refuses to file into — precisely in the stale
+ * case, which is the one a user cannot see coming. One rule, so the button and the write
+ * cannot disagree.
+ */
+export function resolveSaveListId({ ui, loadoutLists }) {
+  const selected = ui?.selectedListId;
+  return selected && (loadoutLists?.items || []).some((l) => l.id === selected) ? selected : null;
+}
 
-  // SPEC-0003 line 318: the user SHALL be able to save to Unassigned without first
-  // deselecting. Unassigned is ui.unassignedOpen, never a listId, so no sentinel can
-  // travel here.
-  //
-  // Resolve rather than trust, symmetrically with the panel's render path: a stale
-  // selectedListId — retired in another tab, or restored from localStorage before
-  // fetchLists has resolved — would otherwise be sent as a real list id and 404 the save.
-  // uiSlice reconciles on fetchLists.fulfilled; this closes the window before that lands.
-  const selected = ui.selectedListId;
-  const listId = selected && (loadoutLists?.items || []).some((l) => l.id === selected) ? selected : null;
+export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, { getState, dispatch }) => {
+  const state = getState();
+  const name = state.loadout.name.trim() || "Unnamed loadout";
+  const loadout = state.loadout;
+  const listId = resolveSaveListId(state);
 
   try {
     const record = await upsertLoadout(name, toData({ ...loadout, name }), listId);

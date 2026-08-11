@@ -53,12 +53,17 @@ export default function WeaponSlot({ slot }) {
       {variants.length > 0 && (
         <div className="ammo-row">
           <span className="panel-meta">AMMO</span>
+          {/* `.select-sm` — the dense step of the control scale (issue #134). The inline
+              `fontSize: 15.5` this replaces was a local patch over the bare element rule, and
+              is exactly the kind of per-site size override the scale exists to retire; only
+              the WIDTH stays inline, because it is this slot's layout and nobody else's. */}
           <select
+            className="select-sm"
             value={String(w.a)}
             onChange={(e) =>
               dispatch(loadoutActions.setAmmo({ slot, ammoIndex: parseInt(e.target.value, 10) }))
             }
-            style={{ flex: 1, maxWidth: 260, fontSize: 15.5 }}
+            style={{ flex: 1, maxWidth: 260 }}
           >
             <option value="-1">Standard</option>
             {variants.map((v, idx) => (

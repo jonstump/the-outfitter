@@ -132,11 +132,21 @@ export function getLists() {
   return fetch(LISTS_BASE, { headers: headers() }).then(asJson);
 }
 
-export function createList({ name, hunterId = null }) {
+// Governing: ADR-0006, SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of
+// Portrait and Name"
+//
+// `accent` is OMITTED from the body when the caller has none, never sent as null. The server
+// resolves `accent ?? nextAccent(ownedBy(...))`, so absence is the instruction that means
+// "assign least-used" — and a literal null would take the same branch today only by accident
+// of `??`, while being rejected outright the day the validator tightens to `isAccent(null)`.
+// The two branches of the requirement are an absent key and a present palette value; this
+// function speaks in exactly those terms (#135).
+export function createList({ name, hunterId = null, accent = null }) {
+  const body = accent === null ? { name, hunterId } : { name, hunterId, accent };
   return fetch(LISTS_BASE, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ name, hunterId }),
+    body: JSON.stringify(body),
   }).then(asJson);
 }
 

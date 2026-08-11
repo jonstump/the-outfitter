@@ -40,7 +40,7 @@ Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped lo
 
 ### 1. Panel header
 - Extends the existing `.panel` (`--panel` #1a1510 bg, 1px `--border` #3a2f1e, 20px padding).
-- Row (flex, baseline, wrap, 12px gap): panel title "Saved loadouts" (`.panel-title`: IM Fell English SC, 19px, letter-spacing 1.5px, `--gold` #c4a05e) · meta "N lists · M loadouts" (`.panel-meta`, flex:1) · sort `<select>` (app default select styling) · "+ New list" button (`.btn-outline` pattern).
+- Row (flex, baseline, wrap, 12px gap): panel title "Saved loadouts" (`.panel-title`: IM Fell English SC, 19px, letter-spacing 1.5px, `--gold` #c4a05e) · meta "N lists · M loadouts" (`.panel-meta`, flex:1) · sort `<select>` (`.select` — the default step of the control scale, so it matches the button beside it; issue #134 retired the bare-element select styling this line used to call the "app default") · "+ New list" button (`.btn-outline` pattern).
 - Below: message banner, `aria-live="polite"`, min-height 20px, olive #9aa06b italic 15px. Failures use `aria-live="assertive"` per spec.
 - Note: no "Save current loadout" button here — saving stays in ActionsPanel; a save files into the currently open (selected) list.
 
@@ -59,7 +59,7 @@ Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped lo
 - Header row (flex, 14px gap, padding 12px 14px, bottom border 1px `--divider` #241d12): 52×68 portrait thumb · name block · badge · Retire · Close.
   - Name: IM Fell 20px #f0e6c8, with an italic "rename" text button (13.5px #857659, hover `--gold-bright`). Renaming swaps in a text input (IM Fell 18px, gold border) — Enter/blur commits, Escape cancels.
   - Sub-line: "N loadouts · {hunter name}" (13.5px `--text-muted`); "no portrait" or "hunter missing from roster" when applicable.
-  - Badge: "DEFAULT LIST FOR SAVED LOADOUTS" — 12.5px, ls 1px, 1px `--gold-border` #8a6f42 border, `--gold-bright` #e5c78b text, 4px 10px padding. Also shown on expanded Unassigned (with "not filed into any list" sub-copy).
+  - ~~Badge: "DEFAULT LIST FOR SAVED LOADOUTS"~~ — **dropped 2026-08-10 (issue #136).** The pill specified here used `--gold-border` and `--gold-bright`, the theme's interactive colours and the same vocabulary as `.chip` and `.toggle-btn`, so it read as a button and was not one. There is no badge in the expanded header, on a list or on Unassigned. The fact it carried — that opening a list changes where the next save goes — moved to the save control in `ActionsPanel`, which reads "Save to *{list}*" or "Save to *Unassigned*", stating the destination at the moment of action rather than from the top of this panel.
   - Retire button: outline button, hover shifts to `--red-bright`/`--red-border`. Accessible name must be "Retire list: {name}" per spec.
 - Body: column of loadout rows, 6px gap, 12px padding. Empty list: italic `--text-dim` note "No loadouts filed yet. Save one while this list is open."
 
@@ -75,8 +75,9 @@ Replaces the flat `SavedLoadoutsPanel` in jonstump/the-outfitter with grouped lo
 - "+ New list" opens an inline section between header and grid: 1px `--gold-border` frame, #17130c bg, 16px padding.
 - Title "New list — choose a portrait" (IM Fell 17px `--gold-bright`).
 - Hunter grid: `repeat(auto-fill,minmax(96px,1fr))`, 10px gap. Tile = button: 96px-tall portrait over name (13.5px), 2px border — #3a2f1e default, `--gold` #c4a05e when picked. Last tile is "No portrait" ("?" monogram, italic label). **No in-use marker** (product decision; reuse is unlimited and unmarked).
-- Footer row: "NAME" label (13px ls 1px muted) · text input (placeholder "defaults to the hunter's name"; picking a hunter fills the input with the hunter's name unless the user already typed) · accent preview swatch (18×18, auto-assigned = least-used palette color) · "Create list" (`.btn-primary` red) · Cancel.
-- On create: list gets UUID (server-side), chosen `hunterId` (nullable), defaulted name, assigned accent; it expands/selects immediately. Empty name + no hunter → "New list".
+- Footer row: "NAME" label (13px ls 1px muted) · text input (placeholder "defaults to the hunter's name"; picking a hunter fills the input with the hunter's name unless the user already typed) · **accent picker** · "Create list" (`.btn-primary` red) · Cancel.
+  - **Changed 2026-08-10 (issue #135):** this was an 18×18 read-only *preview* swatch of the value the server was about to auto-assign. A colour beside a name field reads as choosable, and it was not. It is now the same `AccentPicker` the expanded header uses — one `role="radiogroup"` of six 18×18 swatches, each labelled with its colour name, arrow-key navigable — pre-selected to the least-used palette value, so a user who ignores it still gets exactly the old behaviour. The chosen value rides on `POST /api/loadout-lists`; there is no post-create PATCH. Its accessible name is "Accent colour for the new list", since there is no list to name yet.
+- On create: list gets UUID (server-side), chosen `hunterId` (nullable), defaulted name, and the accent chosen in the footer picker — or, if none is sent, the least-used one assigned server-side; it expands/selects immediately. Empty name + no hunter → "New list".
 
 ### 6. Retire confirmation (modal)
 - Overlay `rgba(10,8,4,.7)`, centered dialog: `--panel` bg, 1px `--gold-border`, 22px padding, max-width 400px, `role="dialog" aria-modal="true"`.

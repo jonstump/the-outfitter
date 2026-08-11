@@ -34,13 +34,83 @@
      never the sole differentiator and the list name stays the primary identity.
 
      --gold (#c4a05e) is deliberately NOT among them: it is the theme's interactive colour,
-     so a gold-framed card would read as selected. #5a6e96 slate replaced it. */
+     so a gold-framed card would read as selected. #5a6e96 slate replaced it.
+
+     SELECTION AND IDENTITY GET SEPARATE CHANNELS (issue #132). Reserving --gold for
+     "selected" only settles which COLOUR says selected; it does not settle where that colour
+     goes, and the first implementation put it on the card's border — the same channel the
+     accent uses. So the open card overwrote its own accent, and the one list the user was
+     concentrating on was the one list showing no identity at all.
+
+     Identity keeps the border. Selection moved to an inset ring inside it (`.ll-card-open`),
+     which is a channel nothing else in the selector uses, so both are legible at once and
+     neither had to give up --gold or borrow an accent value. The accent palette still does
+     not compete with --gold: no palette entry paints a ring and --gold never paints a frame.
+
+     The ring is also why the open card is distinguishable WITHOUT RELYING ON COLOUR (SC
+     1.4.1): it does not recolour anything, it ADDS 3px of drawn edge, so the open card's
+     frame is visibly twice the weight of a closed one whether or not the two hues can be
+     told apart. `aria-pressed` on the card carries the same fact non-visually. */
   --list-accent-1: #b04a3e; /* clay  */
   --list-accent-2: #7a8a4e; /* olive */
   --list-accent-3: #5a6e96; /* slate */
   --list-accent-4: #5e8a8a; /* teal  */
   --list-accent-5: #8a5e86; /* plum  */
   --list-accent-6: #a3703e; /* amber */
+
+  /* -------------------------------------------------------------------------------------
+     Control size scale (issue #134)
+
+     ONE scale, in ONE place, consumed by every button, text input and select in the app.
+     Before this there were seven button geometries and a bare `select { padding: 6px 8px }`
+     that agreed with none of them, so a dropdown was visibly shorter than the button beside
+     it and each call site patched the difference locally. The next control added has an
+     obvious size to reach for; there is no longer a defensible reason to invent an eighth.
+
+     TWO STEPS, chosen by DENSITY rather than by importance:
+
+       default — controls that sit on a panel row and are the row's reason for existing:
+                 .btn, .btn-primary, .btn-gold, .btn-outline, .text-input, .select.
+       -sm     — controls packed inline beside something else, where the default step would
+                 dominate what it annotates: .toggle-btn, .chip, .number-input, .select-sm.
+
+     A row must never mix the two. Every row in the app is one step throughout — the actions
+     row and the save row are default, the budget row and the picker's filter row are -sm —
+     which is what makes "the button and the dropdown next to it are the same height" true by
+     construction rather than by inspection.
+
+     FIELDS TAKE A TIGHTER HORIZONTAL INSET than buttons at the same step (--field-pad-x
+     against --control-pad-x). That is a real distinction and not a leftover: a button's label
+     is centred and wants generous shoulders, while a field's text starts at its left edge and
+     every pixel of inset is a pixel the value cannot use. `.number-input` is 60–80px wide by
+     the time ActionsPanel is done with it; giving it a button's 18px inset would clip a
+     four-digit budget.
+
+     EVERY NUMBER HERE IS THE LARGEST THAT ALREADY EXISTED at its step. Consistency is reached
+     by growing the small controls, never by shrinking the large ones — see the note on
+     `.hp-fav` further down, which already records that 28px sits under WCAG 2.5.5's 44px
+     target. Nothing in this scale may go below what it replaced:
+
+       default  12px/18px/17.5px  <- .btn-primary's padding-y and font, .btn-gold's padding-x
+       -sm       9px/14px/16.5px  <- .toggle-btn's padding, .number-input's font
+
+     The default step comes out at ~47px tall, which clears the 44px target outright; the -sm
+     step at ~40px clears SC 2.5.8's 24px AA minimum with room to spare.
+
+     DELIBERATELY OUT OF SCOPE: `.size-chip` (34px) and `.icon-btn` (28px) are square hit
+     targets whose size is their shape, not a typographic step, and folding them in would
+     stretch them into lozenges. `.ll-rename-input` is likewise excluded — it stands in for a
+     20px display-font heading, so it is sized to the text it replaces rather than to the
+     controls around it. */
+  --control-pad-y: 12px;
+  --control-pad-x: 18px;
+  --field-pad-x: 12px;
+  --control-font: 17.5px;
+
+  --control-pad-y-sm: 9px;
+  --control-pad-x-sm: 14px;
+  --field-pad-x-sm: 10px;
+  --control-font-sm: 16.5px;
 }
 
 * {
@@ -67,12 +137,12 @@ button {
   font-family: "Alegreya", Georgia, serif;
 }
 
-select {
-  background: var(--input-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 6px 8px;
-}
+/* No bare `select` size rule any more (issue #134). Dropdowns used to be the one control with
+   no styling contract at all: they fell through to an element rule at 6px/8px that matched
+   none of the button geometries, and every call site then patched the difference locally. The
+   contract is now `.select` / `.select-sm` below, and it is explicit — a `<select>` written
+   without one renders as an unstyled browser control, which is a visible mistake rather than
+   a silently-wrong-by-two-pixels one. */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -263,14 +333,16 @@ button {
   font-size: 15.5px;
 }
 
-/* Buttons */
+/* Buttons, inputs and selects — all sized from the one scale declared in :root (issue #134).
+   Nothing below writes a padding or a font-size of its own; a literal here is how the seven
+   geometries this replaced came about in the first place. */
 
 .btn {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 10px 16px;
-  font-size: 16.5px;
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font-size: var(--control-font);
   cursor: pointer;
 }
 .btn:hover {
@@ -282,39 +354,48 @@ button {
   background: var(--red);
   border: 1px solid var(--red-border);
   color: #f0e2c4;
+  /* The display typeface is the whole of what makes this button primary, alongside the red.
+     Its SIZE is the shared one — IM Fell English SC at --control-font is what set that token's
+     value, so "Random loadout" and "Clear" sit on the actions row at the same height and the
+     same type size while still reading as different weights of control. */
   font-family: "IM Fell English SC", serif;
-  font-size: 17.5px;
+  font-size: var(--control-font);
   letter-spacing: 1px;
-  padding: 12px 16px;
+  padding: var(--control-pad-y) var(--control-pad-x);
 }
 .btn-primary:hover {
   background: #96352d;
 }
 
-.btn-gold {
+/* ONE geometry, stated once (issue #134). `.btn-gold` and `.btn-outline` were two rules with
+   byte-identical padding, font-size and letter-spacing that differed only in border and text
+   colour — a distinction without a difference, and two places for the geometry to drift
+   apart. The shared rule is the geometry; each modifier below is only its colour. */
+.btn-gold,
+.btn-outline {
   background: var(--input-bg);
-  border: 1px solid var(--gold-border);
-  color: var(--gold-bright);
-  padding: 10px 18px;
-  font-size: 16.5px;
+  border: 1px solid var(--border);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font-size: var(--control-font);
   letter-spacing: 1px;
+}
+.btn-gold {
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
 }
 .btn-gold:hover {
   background: var(--input-bg-active);
 }
-
 .btn-outline {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
   color: var(--text);
-  padding: 10px 18px;
-  font-size: 16.5px;
-  letter-spacing: 1px;
 }
 .btn-outline:hover {
   border-color: var(--gold-border);
 }
 
+/* Square by intent, and deliberately outside the text-control scale — see the note on the
+   scale in :root. 28px clears SC 2.5.8's 24px AA minimum; it is under WCAG 2.5.5's 44px
+   AAA target, which is recorded here as it is on `.hp-fav`. */
 .icon-btn {
   background: none;
   border: 1px solid var(--border);
@@ -329,26 +410,22 @@ button {
   border-color: var(--red-border);
 }
 
-.toggle-btn {
-  border: 1px solid var(--border);
-  padding: 9px 14px;
-  font-size: 15.5px;
-  letter-spacing: 1px;
-  background: transparent;
-  color: var(--text-muted);
-}
-.toggle-btn.on {
-  background: var(--input-bg-active);
-  color: var(--gold-bright);
-}
-
+/* The other pair that was two rules for one shape: `.toggle-btn` and `.chip` shared a padding
+   and differed by half a pixel of font size, which is not a difference anyone chose. Same
+   treatment as the button pair above — one geometry, then colour per state. The -sm step,
+   because both sit inline beside the thing they filter or toggle. */
+.toggle-btn,
 .chip {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 9px 14px;
-  font-size: 15px;
-  font-family: "Alegreya", Georgia, serif;
+  padding: var(--control-pad-y-sm) var(--control-pad-x-sm);
+  font-size: var(--control-font-sm);
+  letter-spacing: 1px;
+}
+.toggle-btn.on {
+  background: var(--input-bg-active);
+  color: var(--gold-bright);
 }
 .chip.active {
   background: var(--input-bg);
@@ -356,6 +433,9 @@ button {
   color: var(--gold-bright);
 }
 
+/* Square, like `.icon-btn`, and out of the scale for the same reason: the size IS the shape.
+   These are single characters ("1", "2", "3") in the picker's size filter, and giving them a
+   text control's horizontal padding would stretch them into lozenges. */
 .size-chip {
   background: transparent;
   border: 1px solid var(--border);
@@ -374,8 +454,27 @@ button {
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text-bright);
-  padding: 10px 12px;
-  font-size: 16.5px;
+  padding: var(--control-pad-y) var(--field-pad-x);
+  font-size: var(--control-font);
+}
+
+/* The dropdown contract (issue #134). `.select` is the default step and belongs on any
+   dropdown sharing a row with a `.btn*` or a `.text-input`; `.select-sm` is the -sm step, for
+   one packed inline beside something else — the move control on a loadout card, the ammo
+   variant on a weapon slot. Call sites set WIDTH; they do not set padding or font-size. */
+.select,
+.select-sm {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.select {
+  padding: var(--control-pad-y) var(--field-pad-x);
+  font-size: var(--control-font);
+}
+.select-sm {
+  padding: var(--control-pad-y-sm) var(--field-pad-x-sm);
+  font-size: var(--control-font-sm);
 }
 
 /* Weapons panel */
@@ -610,12 +709,15 @@ button {
   gap: 4px;
 }
 
+/* The -sm step, matching the `.toggle-btn` it shares the budget row with (issue #134). It also
+   takes the field inset rather than the button one: ActionsPanel gives these an inline width of
+   60–80px, and a button's shoulders would leave a four-digit budget nowhere to render. */
 .number-input {
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 8px 10px;
-  font-size: 16.5px;
+  padding: var(--control-pad-y-sm) var(--field-pad-x-sm);
+  font-size: var(--control-font-sm);
 }
 
 .save-row {
@@ -624,6 +726,24 @@ button {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Governing: SPEC-0003 REQ "The Selected List Is Client State".
+   The list a save will file into, named on the save button (issue #136, replacing the badge
+   in the lists panel's expanded header). Italic marks it as the varying part of the sentence
+   rather than as a second control — this must NOT reach for --gold or a border, which is the
+   vocabulary that made the badge read as a button in the first place.
+   A list name is user-typed and unbounded, so it is clamped here rather than allowed to push
+   the save row into a second line at every width. The full name stays in the accessible name;
+   only the pixels are cut. */
+.save-dest {
+  font-style: italic;
+  display: inline-block;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .share-message {
@@ -904,8 +1024,20 @@ button {
   border-style: dashed;
   border-color: var(--border);
 }
+/* Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+   Name", SPEC-0003 REQ "The Selected List Is Client State"
+
+   Selection, on its own channel — see the full rationale beside the palette in :root. This
+   rule sets NO border-color, deliberately and load-bearingly: the moment it does, the accent
+   `.ll-card` paints from --ll-accent is gone again and the open card is the one card in the
+   grid with no identity on it (issue #132).
+
+   `box-shadow: inset`, not `outline`. An outline here would be painted over by the UA's own
+   focus ring — or, worse, would survive and replace it — and a keyboard user must still be
+   able to see where they are on a card that happens to be open. box-shadow leaves the outline
+   property entirely free for :focus-visible. */
 .ll-card-open {
-  border-color: var(--gold);
+  box-shadow: inset 0 0 0 3px var(--gold);
 }
 .ll-card-mono {
   font-family: "IM Fell English SC", serif;
@@ -1046,14 +1178,12 @@ button {
   border: 1px solid var(--gold-border);
   padding: 4px 8px;
 }
-.ll-badge {
-  font-size: 12.5px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  border: 1px solid var(--gold-border);
-  color: var(--gold-bright);
-  padding: 4px 10px;
-}
+/* `.ll-badge` was here and is GONE, not merely unused (issue #136): a gold-bordered uppercase
+   pill announcing "DEFAULT LIST FOR SAVED LOADOUTS" in the expanded header, wearing the
+   interactive vocabulary of `.chip` and `.toggle-btn` without being interactive. Left behind
+   as an orphan rule it is what the next non-interactive label in this panel reaches for. What
+   it told the user now lives on the save control itself — see the note in LoadoutListsPanel's
+   expanded header and `resolveSaveListId` in savedLoadoutsSlice.js. */
 .ll-retire:hover {
   color: var(--red-bright);
   border-color: var(--red-border);
@@ -1150,10 +1280,12 @@ button {
   flex: 1;
   min-width: 0;
 }
+/* WIDTH only. The padding and font-size that used to live here — 4px/8px at 13.5px, agreeing
+   with nothing else in the app — are gone rather than retuned: the control carries `.select-sm`
+   now, and a per-site size override is exactly the patch that made every dropdown a different
+   height (issue #134). */
 .ll-lcard-move select {
   width: 100%;
-  font-size: 13.5px;
-  padding: 4px 8px;
   text-overflow: ellipsis;
 }
 .ll-lcard-move select:hover,
@@ -1456,13 +1588,12 @@ button {
   width: 90%;
   height: auto;
 }
-/* Preview of the accent the server will assign. Decorative — the user did not choose it,
-   can change it after creation, and the name field beside it is the real identity. */
-.ll-create-accent {
-  width: 18px;
-  height: 18px;
+/* `.ll-create-accent` was here and is gone with the decorative swatch it painted (#135). The
+   create form runs the real `.ll-accent-picker` now; all it needs from this rule is the
+   vertical alignment, because `.ll-create` bottom-aligns its row against a text field taller
+   than a row of 18px swatches. */
+.ll-create .ll-accent-picker {
   align-self: center;
-  border: 1px solid var(--border-soft);
 }
 
 .ll-overlay {
