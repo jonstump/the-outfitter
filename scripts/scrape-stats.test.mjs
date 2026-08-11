@@ -27,24 +27,29 @@ import {
   NetworkFailureError,
   RateLimiter,
   RobotsDisallowedError,
+  acquisitionOf,
   applyCatalogWrites,
   buildStatsRecord,
   canonicalTitleFromPageName,
   categoryLineRange,
+  classifyPage,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
   extractInfoboxes,
   formatCatalogPlan,
+  formatCoverage,
   formatSummary,
   isPartialRun,
   parseArgs,
+  parseCategoryMembers,
   parseInfoboxFields,
   parseNumeric,
   planCatalogWrites,
   rangeViolation,
   replaceTupleField,
   readInfoboxField,
+  runDiscovery,
   runStatsScrape,
   scrapeItemStats,
   selectBaseInfobox,
@@ -1183,4 +1188,176 @@ test("the readable plan is actually printed, not just exported", async () => {
     })
     .join("\n");
   assert.match(code, /console\.log\(formatCatalogPlan\(/, "main() must print the human-readable plan");
+});
+
+// ---------------------------------------------------------------------------
+// #186 — discovery classification, canonical titles, acquisition class, coverage
+// ---------------------------------------------------------------------------
+
+const categoryPage = (pages) =>
+  `<html><body><div id="mw-pages">` +
+  pages.map((p) => `<a href="/wiki/${p.replace(/ /g, "_")}" title="${p}">${p}</a>`).join("") +
+  `</div></body></html>`;
+
+test("parseCategoryMembers: reads member pages and ignores namespace links", () => {
+  const html = categoryPage(["Tools/Bear Traps", "Tools/Decoys", "Category:Tools", "File:X.png"]);
+  assert.deepEqual(parseCategoryMembers(html), ["Tools/Bear Traps", "Tools/Decoys"]);
+});
+
+test("parseCategoryMembers: a page with no member list yields nothing", () => {
+  assert.deepEqual(parseCategoryMembers("<html><body>no members here</body></html>"), []);
+});
+
+test("classifyPage: removal language makes a page a tombstone, with the sentence as evidence", () => {
+  const c = classifyPage("<p>The Iron Repeater was removed from the game in Update 1.15.</p>");
+  assert.equal(c.state, "removed");
+  assert.match(c.evidence, /removed from the game/);
+});
+
+test("classifyPage: prototype language is its own class, not a synonym for removed", () => {
+  // Nothing was taken away, so there is no legacy id to preserve — the two states mean
+  // different things to whoever acts on the report.
+  const c = classifyPage("<p>The Multitool was a prototype piece of equipment.</p>");
+  assert.equal(c.state, "never-shipped");
+});
+
+test("classifyPage: an ordinary page is live, and says why", () => {
+  const c = classifyPage("<p>Bear Traps are a placeable tool that immobilises hunters.</p>");
+  assert.equal(c.state, "live");
+  assert.equal(c.evidence, null);
+});
+
+test("classifyPage: a recorded tombstone is classified without reading the page", () => {
+  const c = classifyPage("", { page: "Tools/Electric_Lamp" });
+  assert.equal(c.state, "removed");
+  assert.match(c.reason, /Update 2\.0/);
+  assert.match(c.reason, /LEGACY_TOOL_IDS\[9\]/, "the reason names the carve-out that still exists");
+});
+
+test("classifyPage: the never-shipped tombstone keeps its own state", () => {
+  assert.equal(classifyPage("", { page: "Tools/Multitool" }).state, "never-shipped");
+});
+
+test("acquisitionOf: a trait's Type is its acquisition class", () => {
+  assert.equal(acquisitionOf({ Cost: "4", Type: "Burn" }).acquisition, "Burn");
+  assert.equal(acquisitionOf({ Cost: "4", Type: "Regular" }).purchasable, true);
+});
+
+test("acquisitionOf: an unpurchasable item says so in words, and is not coerced", () => {
+  // A Tarot Card's Price is the literal string "Scarce". The strict parser refuses it rather than
+  // reading a number out of it, which is what makes purchasability fall out for free.
+  const a = acquisitionOf({ Price: "Scarce" });
+  assert.equal(a.purchasable, false);
+  assert.equal(a.priceStated, "Scarce");
+});
+
+test("acquisitionOf: never reads the wiki's functional Category as acquisition", () => {
+  // Traits carry Category = "Supportive"/"Offensive" — the taxonomy that looks like `group` and is
+  // forbidden from becoming it.
+  const a = acquisitionOf({ Cost: "4", Type: "Regular", Category: "Supportive" });
+  assert.equal(a.acquisition, "Regular");
+  assert.equal(JSON.stringify(a).includes("Supportive"), false);
+});
+
+test("buildStatsRecord: carries acquisition metadata and never a group", () => {
+  const record = buildStatsRecord(
+    {
+      item: "Necromancer", canonicalTitle: "Necromancer", url: "u", revision: "1", infoboxCount: 1,
+      selection: { index: 0, method: "canonical-title", title: "Necromancer" },
+      fields: { Cost: "4", Type: "Burn", Category: "Supportive" },
+    },
+    { now: () => "t" }
+  );
+  assert.equal(record.acquisition, "Burn");
+  assert.equal(record.purchasable, true);
+  assert.equal("group" in record, false);
+});
+
+test("scrapeItemStats: reports a rename candidate when the page title differs", async () => {
+  const page =
+    `<html><script>RLCONF={"wgPageName":"Tools/Alert_Trip_Mines","wgCurRevisionId":1};</script><body>` +
+    `<div class="druid-infobox druid-container"><div><div class="druid-title">Alert Trip Mines</div></div>` +
+    `${PRICE_ROW}</div></body></html>`;
+  const result = await scrapeItemStats(
+    { category: "tools", id: "alert-trip-mine", name: "Alert Trip Mine", wikiPath: "Tools/Alert_Trip_Mines" },
+    { fetchFn: fakeFetch(page), rateLimiter: noWait, robotsGroups: allowAll }
+  );
+  assert.deepEqual(result.renamed, { from: "Alert Trip Mine", to: "Alert Trip Mines" });
+  assert.equal(result.id, "alert-trip-mine", "a rename never re-keys the item");
+});
+
+test("scrapeItemStats: no rename is reported when the titles agree", async () => {
+  const result = await scrapeItemStats(target, { fetchFn: fakeFetch(), rateLimiter: noWait, robotsGroups: allowAll });
+  assert.equal(result.renamed, null);
+});
+
+test("runDiscovery: classifies unmatched members and never proposes a tombstone as missing", async () => {
+  const members = ["Tools/Bear Traps", "Tools/Electric Lamp", "Tools/Multitool", "Tools/Brand New Thing"];
+  const fetchFn = async (url) => {
+    // buildItemPageUrl percent-encodes each segment, so the colon arrives as %3A.
+    if (decodeURIComponent(url).includes("Category:Tools")) return okResponse(categoryPage(members));
+    return okResponse("<p>An ordinary tool page.</p>");
+  };
+  const report = await runDiscovery(
+    { categories: ["tools"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  const tools = report.tools;
+  assert.equal(tools.wikiMembers, 4);
+  assert.deepEqual(tools.tombstones.map((t) => [t.page, t.state]).sort(), [
+    ["Tools/Electric Lamp", "removed"],
+    ["Tools/Multitool", "never-shipped"],
+  ]);
+  assert.deepEqual(tools.missing.map((m) => m.page), ["Tools/Brand New Thing"]);
+});
+
+test("formatCoverage: reports missing and not-an-item as separate columns", () => {
+  // A single "delta" number is what let the trait gap read as 26 missing traits when at least one
+  // of them is a tombstone sitting in Category:Purchasable_Traits.
+  const out = formatCoverage({
+    traits: {
+      indexPage: "Category:Purchasable_Traits", wikiMembers: 58, catalogRows: 32, matched: 32,
+      missing: [{ page: "Traits/New One" }],
+      unpurchasable: [],
+      tombstones: [{ page: "Traits/Iron Repeater", state: "removed", reason: "merged into Iron Eye" }],
+    },
+  });
+  assert.match(out, /wiki\s+58\s+catalog\s+32/);
+  assert.match(out, /missing\s+1/);
+  assert.match(out, /not-an-item\s+1/);
+  assert.match(out, /removed\s+Traits\/Iron Repeater/);
+});
+
+test("runDiscovery: a live page the catalog excludes on purpose is not reported as missing", async () => {
+  // A Tarot Card is a live page whose price is the literal word "Scarce". Reporting it as missing
+  // is what made the consumables gap read as ~11 unknowns; separating it resolves them to zero.
+  const members = ["Consumables/Frag Bomb", "Consumables/The Chariot"];
+  const fetchFn = async (url) => {
+    if (decodeURIComponent(url).includes("Category:Consumables")) return okResponse(categoryPage(members));
+    return okResponse(
+      '<div class="druid-infobox druid-container"><div><div class="druid-title">The Chariot</div></div>' +
+        '<div class="druid-data druid-data-Price">Scarce</div></div>'
+    );
+  };
+  const report = await runDiscovery(
+    { categories: ["consumables"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  const cons = report.consumables;
+  assert.deepEqual(cons.missing.map((m) => m.page), [], "nothing purchasable is missing");
+  assert.deepEqual(cons.unpurchasable.map((u) => u.page), ["Consumables/The Chariot"]);
+  assert.equal(cons.unpurchasable[0].priceStated, "Scarce");
+});
+
+test("catalog.js states the roster boundary in terms of purchasability", async () => {
+  // SPEC-0007 REQ "Acquisition Class Is Captured": the boundary must be recorded where an editor
+  // sees it, and phrased on purchasability rather than on any event's duration — the earlier
+  // "limited-time event item" framing carried a revisit trigger that Update 2.8.1 has already fired.
+  const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
+  const boundary = src.slice(Math.max(0, src.indexOf("export const CONS") - 1600), src.indexOf("export const CONS"));
+  assert.match(boundary, /hunt dollars/i);
+  assert.match(boundary, /Scarce/);
+  assert.match(boundary, /purchasab/i);
+  // And phrased on purchasability rather than on an event's duration.
+  assert.match(boundary, /permanence was never the criterion|not "limited-time|NOT "limited-time/i);
 });

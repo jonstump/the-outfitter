@@ -167,6 +167,27 @@ export const TOOLS = [
 
 export const TOOL_GROUPS = ["Medical", "Melee", "Throwing", "Traps", "Utility"];
 
+// ROSTER BOUNDARY — why this table is 30 rows against the wiki's 54.
+//
+// The catalog carries what a player can BUY WITH HUNT DOLLARS, because that is what a dollar-cost
+// planner can price. Everything excluded is excluded on that ground and no other. A discovery crawl
+// (`node scripts/scrape-stats.mjs --discover`) resolves the 24-page difference exactly:
+//
+//   14  Tarot Cards       — live pages, but each states its price as the literal word "Scarce".
+//                           Found in-world at Bileweaver compounds, Postal Supply, Clockmaker's
+//                           Supply and Sealed Hoards; they have no Hunt Dollar price to plan with.
+//   10  removed items     — Proof Vapours, Wormseed Shots, Reliquaries. Pages still exist; the
+//                           items do not.
+//    0  actually missing  — the purchasable consumable roster is COMPLETE.
+//
+// Note the reason is purchasability, NOT "limited-time event item". That earlier framing (077e747)
+// carried its own revisit trigger and Update 2.8.1 fired it: Tarot Cards are permanent now. They
+// stay out anyway, because permanence was never the criterion. This is the same judgment already
+// recorded for AMMO.special, where Dolch and Nitro custom ammo is excluded for being Scarce.
+//
+// The accepted limit: Tarot Cards occupy equipment slots and have their own 4-per-loadout cap
+// category, so a loadout built here can never be quite the loadout a player fields. That is a
+// stated limit of a dollar-cost planner rather than a defect to fix.
 export const CONS = [
   ["vitality-shot", "Vitality Shot", 60, "Shot", "Shots"],
   ["regeneration-shot", "Regeneration Shot", 185, "Shot", "Shots"],
