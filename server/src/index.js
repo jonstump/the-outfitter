@@ -52,13 +52,44 @@ if (process.env.NODE_ENV !== "production") {
  *
  * Same-origin is therefore matched HERE, against the request, rather than by hoping the
  * deployment host was configured into an env var. It needs no configuration and cannot
- * drift when the app moves hosts. `req.protocol` and the Host header are the client-facing
- * scheme and authority — behind Render/nginx those come from X-Forwarded-Proto and the
- * forwarded Host, which is what `trust proxy` above is set for.
+ * drift when the app moves hosts.
  */
 function isSameOrigin(req, origin) {
-  const host = req.get("host");
+  const host = clientFacingHost(req);
   return Boolean(host) && origin === `${req.protocol}://${host}`;
+}
+
+/**
+ * The authority the CLIENT addressed, which is not always the one this process received.
+ *
+ * `req.protocol` already resolves through express's trust-proxy gate (X-Forwarded-Proto).
+ * The host half has to be done by hand, and neither obvious shortcut is correct:
+ *
+ *   - `req.get("host")` alone is a raw header passthrough. It ignores X-Forwarded-Host and
+ *     is unaffected by `trust proxy`. It happens to work on Render, which forwards the
+ *     original Host unchanged — but an nginx hop added in front without an explicit
+ *     `proxy_set_header Host $host;` rewrites Host to the upstream address by default, and
+ *     the same-origin check would start refusing all legitimate traffic. That is this
+ *     file's original outage, re-entered through a different door (PR #189 review).
+ *   - `req.hostname` consults X-Forwarded-Host under the trust gate, which is the half the
+ *     first option misses — but it STRIPS THE PORT, and a port is part of an origin. A
+ *     browser on http://localhost:4100 (the single-process run the README documents) sends
+ *     `Origin: http://localhost:4100`; comparing that against a portless `http://localhost`
+ *     never matches, so swapping one shortcut for the other trades a hypothetical outage
+ *     for a guaranteed one.
+ *
+ * So: X-Forwarded-Host when a trusted proxy set it, raw Host otherwise, port preserved
+ * either way. The trust gate is express's own — the identical predicate behind
+ * `req.protocol` — rather than a second, hand-rolled notion of which peers to believe.
+ */
+function clientFacingHost(req) {
+  const forwarded = req.get("x-forwarded-host");
+  const trust = req.app.get("trust proxy fn");
+  if (forwarded && trust && trust(req.socket.remoteAddress, 0)) {
+    // A chain of proxies appends to this header; the client addressed the first entry.
+    return forwarded.split(",")[0].trim();
+  }
+  return req.get("host");
 }
 
 // Scoped to /api, not the whole app. Access control on the JSON API is the only thing

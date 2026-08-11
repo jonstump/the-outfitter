@@ -139,6 +139,42 @@ describe("same-origin requests are never refused by the CORS policy", () => {
     expect(res.status).toBe(200);
   });
 
+  // PR #189 review. A proxy hop that rewrites Host to the upstream address — nginx does
+  // this by default, without an explicit `proxy_set_header Host $host;` — leaves the
+  // client-facing authority in X-Forwarded-Host and nowhere else. Reading the raw Host
+  // header would compare the browser's Origin against "127.0.0.1:4399" and refuse every
+  // legitimate request, which is this file's original outage arriving by another route.
+  it("honours X-Forwarded-Host when a proxy rewrote the Host header", async () => {
+    const res = await req("GET", "/api/hunter-favorites", {
+      Host: "127.0.0.1:4399",
+      "X-Forwarded-Proto": "https",
+      "X-Forwarded-Host": SITE,
+      Origin: `https://${SITE}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("reads the client's own entry from a chain of forwarded hosts", async () => {
+    const res = await req("GET", "/api/hunter-favorites", {
+      Host: "10.0.0.7",
+      "X-Forwarded-Proto": "https",
+      "X-Forwarded-Host": `${SITE}, inner-lb.internal`,
+      Origin: `https://${SITE}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  // The port is part of an origin, and `req.hostname` — the tempting one-liner for the
+  // check above — drops it. This is the single-process run the README documents: no proxy,
+  // a non-default port, and a browser that puts that port in the Origin header.
+  it("keeps the port, so a deployment on a non-default port is still same-origin", async () => {
+    const res = await req("GET", "/api/hunter-favorites", {
+      Host: "localhost:4100",
+      Origin: "http://localhost:4100",
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("accepts a same-origin POST without CORS_ORIGIN naming the deployment host", async () => {
     const body = JSON.stringify({ name: "__cors_test__", data: {} });
     const res = await req(
@@ -195,6 +231,22 @@ describe("cross-origin requests are still refused", () => {
 
   it("treats a different port on the same host as a different origin", async () => {
     const res = await write(`https://${SITE}:8443`);
+    expect(res.status).toBe(403);
+  });
+
+  // The forwarded-host lookup must not become a way to assert your own origin. A browser
+  // cannot mount this attack — X-Forwarded-Host is not a CORS-safelisted header, so setting
+  // it forces a preflight, and the preflight carries the header's NAME without its value,
+  // leaving the check to fall back to the real Host and refuse. Asserted here so the
+  // fallback stays deliberate rather than incidental.
+  it("refuses a preflight that merely asks to send X-Forwarded-Host", async () => {
+    const res = await req("OPTIONS", "/api/loadouts", {
+      Host: SITE,
+      "X-Forwarded-Proto": "https",
+      Origin: "https://evil.example",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "x-forwarded-host, content-type",
+    });
     expect(res.status).toBe(403);
   });
 });
