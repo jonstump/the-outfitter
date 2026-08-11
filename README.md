@@ -229,6 +229,11 @@ curl -si https://<host>/api/loadouts -X POST \
 |---|---|
 | `400` | Correct. The request reached validation and the empty body was refused on the merits |
 | `403` | `TRUST_PROXY` is missing or wrong. Check the body is `{"error":"origin not allowed"}` to confirm it is this server's rejection and not the platform's |
+| `429` | Neither — the write limiters mount ahead of validation, so the check answers this before it can tell you anything. Wait out the one-minute window and retry |
+
+The `429` is likeliest against exactly the deployment you are checking: with
+`TRUST_PROXY` wrong, `req.ip` resolves to the proxy for everyone, so the per-IP
+budget is one bucket shared by all traffic rather than a per-caller floor.
 
 **Do not fix a 403 here by adding the app's own origin to `CORS_ORIGIN`.** It
 works, and it is the wrong repair: writes start succeeding while `req.ip` stays
