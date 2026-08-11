@@ -75,6 +75,20 @@ export const AMMO_LABEL = {
 // Stable IDs for existing weapons, derived from the item name (see the buildSlug helper at the
 // bottom of this file). IDs are preserved across reorders — the symbolic id below (QM) is
 // resolved against these IDs, not against array positions.
+//
+// MACHINE-MAINTAINED COLUMNS (SPEC-0007 REQ "Catalog Write-Through Is Bounded, Reviewable, and
+// Opt-In"). `size` and `cost` here — and `cost` in TOOLS and CONS, `up` in TRAITS — are reconciled
+// from client/src/data/itemStats.json by `scrape-stats.mjs --write-catalog`. The wiki is
+// authoritative for them per ADR-0005, so a hand-edit to one of those numbers is reverted by the
+// next write-through run without anyone noticing. Correct the wiki, or re-run the scrape.
+//
+// Everything else in these tuples IS hand-authored and is never written by a scrape: `id`, the
+// display `name` (it feeds slugify() and therefore the on-disk image path), `ammoClass` (a saved
+// ammo selection is a bare index into that pool), and `group`. The AMMO table below is likewise
+// never scraped — see the note beside it.
+//
+// The two are pinned against each other by itemStats.test.js, which fails if any machine-maintained
+// column drifts from the dataset. Rows the dataset does not cover are skipped, not failed.
 export const WEAPONS = [
   ["nagant-m1895", "Nagant M1895", 1, 24, "compact", "Pistols"],
   ["caldwell-conversion-pistol", "Caldwell Conversion Pistol", 1, 55, "medium", "Pistols"],

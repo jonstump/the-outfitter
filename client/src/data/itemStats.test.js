@@ -28,6 +28,53 @@ describe("the generated dataset", () => {
       expect(record.ingestedAt, `${id} has no ingestedAt`).toBeTruthy();
     }
   });
+
+  // Governing: SPEC-0007 REQ "Catalog Write-Through Is Bounded, Reviewable, and Opt-In"
+  //
+  // The reverse direction of the id check above, on VALUES rather than keys. #195 reconciled the
+  // catalog's cost/size/UP columns against this dataset — 74 fields, verified to zero mismatches —
+  // and nothing pinned it, so the next hand-edit to a cost would silently reintroduce exactly the
+  // drift those corrections removed and CI would stay green. Turning a one-time manual review into
+  // a standing invariant is the whole point of having written the values down.
+  //
+  // Items with no record are skipped rather than failed: the catalog and the dataset refresh
+  // independently, so a newly added row is the uncovered case `statsFor` already documents. Today
+  // that skip covers exactly one id, `winfield-m1873c`, a KNOWN_CATALOG_DUPLICATES entry with no
+  // wiki page of its own.
+  describe("stays consistent with the hand-authored catalog", () => {
+    const asNumber = (raw) => {
+      if (raw === null) return null;
+      // The same strict parse the write-through uses. Stripping non-digits and keeping the
+      // remainder is how "1.5" becomes 15, so a non-whole value is refused, not coerced.
+      const cleaned = String(raw).replace(/,/g, "").trim();
+      return /^\d+$/.test(cleaned) ? Number(cleaned) : null;
+    };
+
+    const cases = [
+      { label: "weapon cost", rows: WEAPONS, field: "Price", index: 3 },
+      { label: "weapon size", rows: WEAPONS, field: "Size", index: 2 },
+      { label: "tool cost", rows: TOOLS, field: "Price", index: 2 },
+      { label: "consumable cost", rows: CONS, field: "Price", index: 2 },
+      { label: "trait UP", rows: TRAITS, field: "Cost", index: 2 },
+    ];
+
+    for (const { label, rows, field, index } of cases) {
+      it(`agrees with the dataset on every ${label}`, () => {
+        const mismatches = [];
+        let compared = 0;
+        for (const row of rows) {
+          const scraped = asNumber(statFieldFor(row[0], field));
+          if (scraped === null) continue;
+          compared += 1;
+          if (scraped !== row[index]) {
+            mismatches.push(`${row[0]}: catalog ${row[index]}, dataset ${scraped}`);
+          }
+        }
+        expect(compared, `no ${label} was actually compared`).toBeGreaterThan(0);
+        expect(mismatches).toEqual([]);
+      });
+    }
+  });
 });
 
 describe("statsFor", () => {
