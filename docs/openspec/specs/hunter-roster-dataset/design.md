@@ -247,7 +247,7 @@ flowchart TD
     PROC -->|"over budget?"| REJECT["fail this hunter,<br/>record reason,<br/>write nothing"]
 
     subgraph committed["Generated, committed"]
-        JSON["client/src/data/hunters.json"]
+        JSON["data/hunters.json<br/>(repo root — shared by client and server)"]
         ASSETS["client/public/images/hunters/<br/>one asset per hunter"]
     end
 
