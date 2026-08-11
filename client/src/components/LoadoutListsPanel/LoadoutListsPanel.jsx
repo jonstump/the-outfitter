@@ -126,13 +126,25 @@ export const TRAIT_COLUMNS = 5;
  * 48px cell floor plus four 4px gaps is 256px, which is exactly half the weapon asset's
  * intrinsic width. So a single minimum width satisfies both, and no card can ever be wide
  * enough to draw one at full size and not the other.
+ *
+ * They are floors at the WIDEST supported viewport, which is where SPEC-0003 pins them. Every
+ * rule in global.css that reads one caps it at the space available (`min(floor, 100%)`), so a
+ * viewport too narrow to honour a floor scales below it rather than overflowing — the spec's
+ * own degradation, and the one outcome "no card SHALL overflow horizontally" forbids.
  */
 export const WEAPON_ASSET_WIDTH = 512; // client/public/images/weapons/*.png are 512×128
 export const WEAPON_MIN_DRAWN_PX = WEAPON_ASSET_WIDTH / 2;
 export const CELL_MIN_PX = 48;
 export const PREVIEW_GAP_PX = 4;
-/** Card padding (12) + border (1) on each side, around a preview at its floor. */
-export const CARD_MIN_PX = WEAPON_MIN_DRAWN_PX + 2 * 12 + 2 * 1;
+/** `.item-thumb` frames every cell, and under `box-sizing: border-box` its border comes out of
+ *  the image's content box — so the weapon needs its two pixels back, or a card at exactly the
+ *  minimum track draws the art at 254px: 49.6% of 512, not the 50% required. */
+const THUMB_BORDER_PX = 1;
+const CARD_PADDING_PX = 12;
+const CARD_BORDER_PX = 1;
+/** The narrowest card that still draws a preview at its floors: `.ll-cards` sets this as the
+ *  minimum grid track, capped there at the width available. */
+export const CARD_MIN_PX = WEAPON_MIN_DRAWN_PX + 2 * (THUMB_BORDER_PX + CARD_PADDING_PX + CARD_BORDER_PX);
 
 const TRAIT_BY_ID = new Map(TRAITS.map((t) => [t[0], t]));
 
@@ -493,7 +505,9 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
           `auto-fill` + `1fr` against a minimum track IS the whole responsive rule: cards
           reflow BY COUNT, never by shedding anything out of the preview inside them. The
           minimum track comes from CARD_MIN_PX so the layout and the size floors it exists
-          to protect cannot drift — see the note on those constants. */}
+          to protect cannot drift — see the note on those constants. global.css caps that
+          track at `min(..., 100%)`, so once the grid is down to one column the column is
+          never wider than the panel holding it. */}
       {loadouts.length === 0 ? (
         <p className="ll-empty ll-empty-list">No loadouts filed yet. Save one while this list is open.</p>
       ) : (
@@ -694,7 +708,11 @@ function LoadoutCard({ item, lists }) {
   const cost = totalCost(loadout);
 
   return (
-    <article className="ll-lcard" data-testid={`loadout-card-${item.id}`}>
+    // Named, not bare. SPEC-0003 makes the loadout's name the accessible identity of its
+    // card; without a label an `<article>` is announced as an unnamed region boundary, and a
+    // grid of them is a run of identical "article" stops. The name is the label rather than
+    // merely the first focusable thing inside it.
+    <article className="ll-lcard" aria-label={item.name} data-testid={`loadout-card-${item.id}`}>
       <div className="ll-lcard-head">
         <button className="ll-lcard-name" onClick={() => dispatch(loadSavedThunk(item))}>
           {item.name}

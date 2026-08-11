@@ -624,29 +624,153 @@ const filledIn = (testid) => cellsIn(testid).filter((c) => !c.classList.contains
 const emptyIn = (testid) => cellsIn(testid).filter((c) => c.classList.contains("ll-lp-cell-empty"));
 const drawn = (id) => [...previewOf(id).querySelectorAll("img")].map((img) => img.getAttribute("src"));
 
-// The stylesheet is read as data because jsdom performs no layout. The size floors this
-// requirement pins are numbers in the component and are handed to global.css as custom
-// properties; asserting the constants alone would prove nothing about what is drawn, and
-// asserting a computed pixel width is not something jsdom can answer. What IS assertable —
-// and what the strip's failure argues for — is that the rules enforcing the floors read
-// those properties rather than literals of their own.
+// ---------------------------------------------------------------------------------------
+// Reading the size floors out of the stylesheet.
+//
+// WHAT THIS DOES AND DOES NOT COVER, stated plainly, because the previous version of this
+// helper claimed the opposite of what it did:
+//
+//   * It DOES resolve the declaration the cascade would actually apply, among the rules in
+//     global.css that can match an element carrying the given class: highest specificity
+//     wins, and among equal specificity the last in source order wins. A later
+//     `.ll-lp { min-width: 0 }`, or a higher-specificity `.panel .ll-lp { min-width: 12px }`,
+//     therefore CHANGES the answer instead of being absorbed into it.
+//   * It DOES refuse to answer at all when a conditional at-rule (`@media`, `@supports`,
+//     `@container`) declares the same property for the same class — that is a cascade this
+//     helper does not model, and silently merging it into the unconditional bucket is what
+//     the old parse did. `effective()` throws, loudly, rather than guessing.
+//   * It does NOT measure anything. jsdom performs no layout, so no assertion here is
+//     evidence of a rendered pixel width. What it proves is that the rule enforcing a floor
+//     reads the custom property the component sets, and caps it at the space available. The
+//     rendered widths are verified outside the suite, in a browser.
+//   * It does NOT model `!important`, inline style, `@layer`, or `:where()`/`:is()`
+//     specificity. global.css uses none of them for these selectors; `effective()` throws if
+//     it meets `!important` so that stays true.
 //
 // Located from the working directory rather than from `import.meta.url`, which under the
 // jsdom environment resolves against the dev server's origin rather than the filesystem.
 // Either candidate is right depending on whether the runner was started in the workspace or
 // at the repo root; neither existing is a broken test, not a skipped one.
 const CSS_PATH = ["src/styles/global.css", "client/src/styles/global.css"].find(existsSync);
-// Comments are stripped before parsing so prose about widths and floors can never satisfy —
-// or break — an assertion about declarations. Every rule naming the selector contributes,
-// rather than the first one found, so a later override cannot hide from the assertion.
-const CSS_RULES = [
-  ...readFileSync(CSS_PATH, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g),
-].map(([, selectors, body]) => ({ selectors: selectors.split(",").map((s) => s.trim()), body }));
 
-const ruleFor = (selector) => {
-  const bodies = CSS_RULES.filter((r) => r.selectors.includes(selector)).map((r) => r.body);
-  if (!bodies.length) throw new Error(`no CSS rule for ${selector}`);
-  return bodies.join("\n");
+// Comments are stripped before parsing so prose about widths and floors can never satisfy —
+// or break — an assertion about declarations.
+function parseStylesheet(css) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [];
+  const conditions = [];
+  let prelude = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    // A statement at-rule (`@import`, `@charset`) ends at its semicolon and opens nothing.
+    if (ch === ";" && !prelude.includes("{")) {
+      prelude = "";
+      continue;
+    }
+    if (ch === "{") {
+      const head = prelude.trim();
+      prelude = "";
+      if (head.startsWith("@")) {
+        // A nested at-rule. Keyframes and font-face hold no selectors worth matching; the
+        // conditional group rules are remembered so a rule inside one is never mistaken for
+        // an unconditional declaration.
+        conditions.push(head);
+        continue;
+      }
+      let depth = 1;
+      let body = "";
+      i++;
+      for (; i < text.length; i++) {
+        if (text[i] === "{") depth++;
+        else if (text[i] === "}" && --depth === 0) break;
+        body += text[i];
+      }
+      rules.push({
+        selectors: head.split(",").map((s) => s.trim()).filter(Boolean),
+        body,
+        order: rules.length,
+        conditions: [...conditions],
+      });
+      continue;
+    }
+    if (ch === "}") {
+      conditions.pop();
+      prelude = "";
+      continue;
+    }
+    prelude += ch;
+  }
+  return rules;
+}
+
+const CSS_RULES = parseStylesheet(readFileSync(CSS_PATH, "utf8"));
+
+// a-b-c specificity, counted the way selectors level 4 counts it. Enough for this
+// stylesheet, which uses no ids, no `:where()` and no `:is()`.
+const specificity = (selector) => {
+  const ids = (selector.match(/#[\w-]+/g) || []).length;
+  const classes = (selector.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) || []).length;
+  const types = (selector.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+  return ids * 10000 + classes * 100 + types;
+};
+
+// Does this selector match an element carrying `className`? Only the rightmost compound
+// selects, so `.ll-lcard-name` and `.ll-lcard-move select` do not answer for `.ll-lcard` —
+// and the word boundary is what keeps `.ll-lp` from matching `.ll-lp-slot`.
+const targets = (selector, className) => {
+  const rightmost = selector.split(/[\s>+~]+/).filter(Boolean).pop() || "";
+  return new RegExp(`\\.${className}(?![\\w-])`).test(rightmost);
+};
+
+const declarationsIn = (body, property) =>
+  [...body.matchAll(new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`, "g"))].map(([, v]) => v.trim());
+
+/**
+ * The value of `property` that the cascade applies to an element carrying `classSelector`.
+ *
+ * Returns null when nothing declares it — which is itself assertable, and is how "no bare
+ * `width` anywhere" is checked.
+ */
+function effectiveDeclaration(rules, classSelector, property) {
+  const className = classSelector.replace(/^\./, "");
+  const candidates = rules
+    .map((rule) => {
+      const matching = rule.selectors.filter((sel) => targets(sel, className));
+      if (!matching.length) return null;
+      const values = declarationsIn(rule.body, property);
+      if (!values.length) return null;
+      return {
+        rule,
+        value: values[values.length - 1],
+        weight: Math.max(...matching.map(specificity)),
+      };
+    })
+    .filter(Boolean);
+
+  const conditional = candidates.filter((c) => c.rule.conditions.length);
+  if (conditional.length) {
+    throw new Error(
+      `${property} for ${classSelector} is also declared inside ${conditional
+        .map((c) => c.rule.conditions.join(" "))
+        .join(", ")}; this helper resolves unconditional rules only, so the assertion would ` +
+        "be reading a value the cascade may not apply. Model the at-rule or move the floor."
+    );
+  }
+  if (candidates.some((c) => /!\s*important/.test(c.value))) {
+    throw new Error(`${property} for ${classSelector} uses !important, which this helper does not order`);
+  }
+  if (!candidates.length) return null;
+
+  // Highest specificity wins; among equals, the last in source order.
+  candidates.sort((a, b) => a.weight - b.weight || a.rule.order - b.rule.order);
+  return candidates[candidates.length - 1].value;
+}
+
+/** As above, against global.css, and a missing declaration is a failure rather than a null. */
+const effective = (classSelector, property) => {
+  const value = effectiveDeclaration(CSS_RULES, classSelector, property);
+  if (value === null) throw new Error(`no rule in global.css declares ${property} for ${classSelector}`);
+  return value;
 };
 
 // Spelled out per category, not `expect.any(String)`: the /images/{category}/ segment is the
@@ -734,8 +858,11 @@ describe("the categorised loadout preview", () => {
     // Two rows of four, matching the builder's own equipment grid. The column count is fixed
     // rather than auto-filled, which is what makes "8 cells" mean a shape and not a total.
     expect(EQUIP_CELLS / EQUIP_COLUMNS).toBe(2);
+    // Spelled out rather than compared against the constants that set them: `toBe(
+    // String(TRAIT_COLUMNS))` holds whatever TRAIT_COLUMNS becomes, and 4 and 5 are the
+    // shapes the requirement names.
     expect(previewOf("1").style.getPropertyValue("--ll-equip-cols")).toBe("4");
-    expect(previewOf("1").style.getPropertyValue("--ll-trait-cols")).toBe(String(TRAIT_COLUMNS));
+    expect(previewOf("1").style.getPropertyValue("--ll-trait-cols")).toBe("5");
 
     // The cells the loadout does not fill are drawn, not collapsed away — a filled cell is
     // information and so is an empty one.
@@ -895,20 +1022,70 @@ describe("the categorised loadout preview", () => {
     expect(TRAIT_COLUMNS * CELL_MIN_PX + (TRAIT_COLUMNS - 1) * PREVIEW_GAP_PX).toBe(WEAPON_MIN_DRAWN_PX);
     expect(CARD_MIN_PX).toBeGreaterThanOrEqual(WEAPON_MIN_DRAWN_PX);
 
-    expect(previewOf("1").style.getPropertyValue("--ll-weapon-min")).toBe(`${WEAPON_MIN_DRAWN_PX}px`);
-    expect(previewOf("1").style.getPropertyValue("--ll-cell-min")).toBe(`${CELL_MIN_PX}px`);
-    expect(screen.getByTestId("loadout-card-grid").style.getPropertyValue("--ll-card-min")).toBe(
-      `${CARD_MIN_PX}px`
-    );
+    // The card's minimum track carries the preview's floor plus every border and padding
+    // between the two — including `.item-thumb`'s own 1px, which under `box-sizing:
+    // border-box` comes out of the image's content box. Asserted as the arithmetic rather
+    // than as 284, because the number is only ever right relative to those parts.
+    expect(CARD_MIN_PX).toBe(WEAPON_MIN_DRAWN_PX + 2 * (1 + 12 + 1));
+
+    // The properties reach the DOM carrying the NORMATIVE numbers, spelled out. Comparing
+    // them against the constants that set them would be a tautology — it would survive
+    // WEAPON_MIN_DRAWN_PX becoming 34, which is the failure this whole requirement exists to
+    // prevent. 256px and 48px are what SPEC-0003 pins, so 256px and 48px is what is asserted.
+    expect(previewOf("1").style.getPropertyValue("--ll-weapon-min")).toBe("256px");
+    expect(previewOf("1").style.getPropertyValue("--ll-cell-min")).toBe("48px");
+    expect(previewOf("1").style.getPropertyValue("--ll-preview-gap")).toBe("4px");
+    expect(screen.getByTestId("loadout-card-grid").style.getPropertyValue("--ll-card-min")).toBe("284px");
 
     // …and the stylesheet enforces them by READING those properties. A floor that lives only
     // in a stylesheet is a floor nothing can check, which is exactly how 34x24 shipped.
-    expect(ruleFor(".ll-lp")).toMatch(/min-width:\s*var\(--ll-weapon-min/);
-    expect(ruleFor(".ll-lp-weapon")).toMatch(/width:\s*100%/);
-    expect(ruleFor(".ll-lp-slot")).toMatch(/min-width:\s*var\(--ll-cell-min/);
-    expect(ruleFor(".ll-lp-slot")).toMatch(/min-height:\s*var\(--ll-cell-min/);
-    expect(ruleFor(".ll-lp-equip")).toMatch(/repeat\(var\(--ll-equip-cols[^)]*\), minmax\(var\(--ll-cell-min/);
-    expect(ruleFor(".ll-lp-traits")).toMatch(/repeat\(var\(--ll-trait-cols[^)]*\), minmax\(var\(--ll-cell-min/);
+    //
+    // `effective()` resolves what the cascade would apply — see the note above it for what
+    // that does and does not prove. It is not a pixel measurement: jsdom does no layout.
+    expect(effective(".ll-lp", "min-width")).toMatch(/^min\(var\(--ll-weapon-min[^)]*\),\s*100%\)$/);
+    expect(effective(".ll-lp-weapon", "width")).toBe("100%");
+    expect(effective(".ll-lp-slot", "min-width")).toMatch(/^min\(var\(--ll-cell-min[^)]*\),\s*100%\)$/);
+    // Not capped, deliberately: past the floor a cell grows taller rather than clipping.
+    expect(effective(".ll-lp-slot", "min-height")).toMatch(/^var\(--ll-cell-min[^)]*\)$/);
+    for (const [selector, cols] of [
+      [".ll-lp-equip", "--ll-equip-cols"],
+      [".ll-lp-traits", "--ll-trait-cols"],
+    ]) {
+      const tracks = effective(selector, "grid-template-columns").replace(/\s+/g, " ");
+      // A fixed column count, each track floored at the cell minimum…
+      expect(tracks).toMatch(new RegExp(`^repeat\\( ?var\\(${cols}[^)]*\\), minmax\\( ?min\\( ?var\\(--ll-cell-min`));
+      // …capped at the share of the row a column can have, so five of them come to 100% of a
+      // narrow card rather than to 256px inside a 168px one.
+      expect(tracks).toMatch(
+        new RegExp(
+          `calc\\( ?\\(100% - \\(var\\(${cols}[^)]*\\) - 1\\) \\* var\\(--ll-preview-gap[^)]*\\)\\) / var\\(${cols}`
+        )
+      );
+    }
+  });
+
+  it("resolves the cascade, so an override of a size floor fails these assertions", () => {
+    // The assertion above is the one this PR rests on for the floors, so its ability to FAIL
+    // is itself asserted. Each stylesheet below is global.css plus one override of the kind
+    // that would silently lower a floor in production; the previous helper — which joined
+    // every matching rule body and matched against the lot — stayed green through all three.
+    const SHEET = readFileSync(CSS_PATH, "utf8");
+    const floorOf = (css) => effectiveDeclaration(parseStylesheet(css), ".ll-lp", "min-width");
+
+    expect(floorOf(SHEET)).toMatch(/^min\(var\(--ll-weapon-min/);
+    // A later rule of equal specificity wins on source order.
+    expect(floorOf(`${SHEET}\n.ll-lp { min-width: 0 }`)).toBe("0");
+    // A more specific rule wins wherever it sits.
+    expect(floorOf(`${SHEET}\n.panel .ll-lp { min-width: 12px }`)).toBe("12px");
+    // A rule inside a conditional at-rule is NOT merged into the unconditional bucket, which
+    // is what the old `([^{}]+)\{([^{}]*)\}` parse did; it is refused, by name.
+    expect(() => floorOf(`${SHEET}\n@media (max-width: 900px) { .ll-lp { min-width: 0 } }`)).toThrow(
+      /@media \(max-width: 900px\)/
+    );
+    // And a rule that cannot match the element does not answer for it.
+    expect(floorOf(`${SHEET}\n.ll-lp-slot { min-width: 0 }\n.ll-lp .thing { min-width: 0 }`)).toMatch(
+      /^min\(var\(--ll-weapon-min/
+    );
   });
 
   it("has no shed-by-width machinery left anywhere", async () => {
@@ -1027,30 +1204,69 @@ describe("saved loadouts as a card grid", () => {
     expect(card.tagName).toBe("ARTICLE");
   });
 
-  it("reflows by count at a phone width, shedding no cell", () => {
-    // The grid's only responsive rule is auto-fill against a minimum track, so cards go
-    // fewer per row and nothing inside them is dropped. jsdom performs no layout, so what is
-    // assertable is that rule plus the invariant it exists to protect — identical cell counts
-    // to the wide render above, at a width where the old strip was down to two tiles.
-    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 360 });
+  it("reflows by count and sheds no cell, and caps every width floor at the room available", () => {
+    // NO VIEWPORT WIDTH IS SET, and none is read. jsdom performs no layout, so this test
+    // does not — and cannot — measure a card against a 360px viewport; the version of it
+    // that assigned `window.innerWidth = 360` was measuring nothing, since `useViewportWidth`
+    // was withdrawn with the shed rule, and it passed while the grid overflowed by ~50px at
+    // exactly that width. The pixel widths are verified in a browser instead: at 320/360/375/
+    // 390/412 CSS px, against the real containment chain, every element's scrollWidth equals
+    // its clientWidth and the document does not scroll horizontally.
+    //
+    // What IS assertable from here is the SHAPE of the rules that produce that result, and
+    // the invariant they exist to protect. Each of the three below fails if the cap is
+    // dropped, and each is resolved through the cascade rather than matched anywhere in the
+    // file — see `effective()`.
     renderPanel(base([], [filed("1", "long ammo", LOADED)], { unassignedOpen: true }));
 
+    // 1. The grid can reach a single column no wider than the space there is. Without the
+    //    `min(..., 100%)` the min sizing function is a fixed 284px, which is a 284px track in
+    //    a 194px panel — the overflow this replaced.
+    expect(effective(".ll-cards", "grid-template-columns").replace(/\s+/g, " ")).toMatch(
+      /^repeat\( ?auto-fill, minmax\( ?min\(var\(--ll-card-min[^)]*\), 100%\), 1fr\)\)$/
+    );
+    // 2. The preview inside the card is capped the same way, so the card box shrinking is not
+    //    all that happens — `.ll-lcard { min-width: 0 }` alone let the contents spill out of it.
+    expect(effective(".ll-lcard", "min-width")).toBe("0");
+    expect(effective(".ll-lp", "min-width")).toMatch(/100%\)$/);
+    // 3. …and so are the cells, which is what makes the spec's degradation reachable: they
+    //    scale toward the 48px floor and past it on a phone, rather than pinning the grid at
+    //    256px inside a card that is 168px wide.
+    expect(effective(".ll-lp-slot", "min-width")).toMatch(/100%\)$/);
+    for (const selector of [".ll-lp-equip", ".ll-lp-traits"]) {
+      expect(effective(selector, "grid-template-columns")).toMatch(/100%/);
+    }
+    // A bare `width` is how a grid stops reflowing and starts overflowing; `min-width` is
+    // fine. `effective()` returning null is the assertion that nothing declares it at all.
+    expect(effectiveDeclaration(CSS_RULES, ".ll-cards", "width")).toBeNull();
+    expect(effectiveDeclaration(CSS_RULES, ".ll-lcard", "width")).toBeNull();
+
+    // The invariant the whole responsive rule exists to protect: reflow is BY COUNT. No
+    // width, however narrow, drops a cell — the grids keep their shape and the card grows
+    // taller, which is why `.ll-lp-slot`'s min-HEIGHT is the one floor left uncapped.
     expect(cellsIn("preview-weapons-1")).toHaveLength(WEAPON_CELLS);
     expect(cellsIn("preview-equipment-1")).toHaveLength(EQUIP_CELLS);
     expect(cellsIn("preview-traits-1")).toHaveLength(TRAIT_CELLS);
     expect(drawn("1")).toHaveLength(8);
+    expect(effective(".ll-lp-slot", "min-height")).toMatch(/^var\(--ll-cell-min[^)]*\)$/);
 
-    expect(ruleFor(".ll-cards")).toMatch(/repeat\(auto-fill, minmax\(var\(--ll-card-min[^)]*\), 1fr\)\)/);
-    // Nothing in the card is laid out at a fixed width, so no card overflows horizontally.
-    expect(ruleFor(".ll-lcard")).toMatch(/min-width:\s*0/);
-    // `min-width` is allowed; a bare `width` is not — a fixed width is how a grid stops
-    // reflowing and starts overflowing.
-    expect(ruleFor(".ll-cards")).not.toMatch(/(?<![-\w])width:/);
-    expect(ruleFor(".ll-lcard")).not.toMatch(/(?<![-\w])width:/);
-
-    // The controls that identify and file a loadout survive the narrowest width.
+    // And every control that identifies and files a loadout is still there.
     expect(screen.getByRole("button", { name: "long ammo" })).toBeInTheDocument();
     expect(screen.getByText("$354")).toBeInTheDocument();
     expect(screen.getByLabelText("List for long ammo")).toBeEnabled();
+  });
+
+  it("gives each loadout card its name as an accessible name", () => {
+    // SPEC-0003 makes the loadout's name the accessible identity of its card. An unlabelled
+    // <article> is announced as a bare region boundary, so a grid of them is a run of
+    // identical stops with the name merely the first focusable thing inside.
+    renderPanel(
+      base([], [filed("1", "long ammo", LOADED), filed("2", "shotgun rush", LOADED)], {
+        unassignedOpen: true,
+      })
+    );
+
+    expect(screen.getByRole("article", { name: "long ammo" })).toBe(cardOf("1"));
+    expect(screen.getByRole("article", { name: "shotgun rush" })).toBe(cardOf("2"));
   });
 });

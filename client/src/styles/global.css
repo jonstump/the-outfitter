@@ -1073,13 +1073,16 @@ button {
    size floors it exists to protect cannot drift apart. */
 .ll-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--ll-card-min, 282px), 1fr));
+  /* `min(floor, 100%)`, NOT the floor on its own. The min sizing function of `minmax()` is a
+     base size, not a wish: `minmax(284px, 1fr)` produces a 284px track in a 194px container
+     and the card spills out of the panel — which is what it did, by 88px at a 320px viewport.
+     Capping the floor at 100% of the container makes the last step of the degradation
+     reachable: fewer columns, then a single column no wider than the space there is. The
+     floors are normative at the WIDEST supported viewport (SPEC-0003), and the cap only ever
+     lowers them below the width at which one card already fills the row. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--ll-card-min, 284px), 100%), 1fr));
   gap: 12px;
   padding: 12px;
-  /* The track floor is a MINIMUM, and one column of it must still fit: below that width the
-     single column is allowed to be narrower than the floor, which is what stops the grid
-     itself from overflowing the panel on a phone. The preview inside then scales its cells
-     toward the 48px floor and the card grows taller — it never clips and never sheds. */
   min-width: 0;
 }
 .ll-empty,
@@ -1098,7 +1101,11 @@ button {
   gap: 10px;
   min-width: 0;
   padding: 12px;
-  background: var(--scroll-track);
+  /* --panel, not --scroll-track: the expanded list behind it is --scroll-track, and a card
+     the same colour as the surface it sits on reads as a table with rules rather than as a
+     card. It also puts the cells back in relief, since .item-thumb is --scroll-track too. The
+     captions keep their margin on AA — --text-muted is 6.01:1 here against 6.13:1 before. */
+  background: var(--panel);
   /* NOT the list card's identity. `.ll-card` above is a 220px portrait tile inside a 3px
      accent frame with a name plate and a loadout count; SPEC-0003 forbids a loadout card
      reusing that combination, and forbids resting the distinction on size, since both grids
@@ -1170,8 +1177,13 @@ button {
   gap: 10px;
   /* 50% of the weapon asset's 512px intrinsic width — and, by construction, also the trait
      grid's own floor (5 columns x 48px + 4 x 4px gap = 256px). One number governs both, so
-     no card can be wide enough to draw one at full size and not the other. */
-  min-width: var(--ll-weapon-min, 256px);
+     no card can be wide enough to draw one at full size and not the other.
+
+     Capped at 100% for the same reason as `.ll-cards` above: held unconditionally it made the
+     preview wider than the card that contains it, and `.ll-lcard { min-width: 0 }` let only
+     the box shrink while the contents spilled. Below the card's own minimum track the floor
+     yields — which the requirement allows, since it binds at the widest supported viewport. */
+  min-width: min(var(--ll-weapon-min, 256px), 100%);
 }
 .ll-lp-group {
   display: flex;
@@ -1180,8 +1192,8 @@ button {
   min-width: 0;
 }
 /* Labels the group for the eye only — aria-hidden in the markup, because the preview's one
-   aria-label is its whole announcement. --text-muted, not --text-dim: 6.13:1 on
-   --scroll-track against --text-dim's 4.17:1, and SPEC-0003 makes WCAG 2.1 AA mandatory. */
+   aria-label is its whole announcement. --text-muted, not --text-dim: 6.01:1 on the card's
+   --panel against --text-dim's 4.08:1, and SPEC-0003 makes WCAG 2.1 AA mandatory. */
 .ll-lp-cap {
   font-size: 11.5px;
   letter-spacing: 1px;
@@ -1205,19 +1217,49 @@ button {
    rather than auto-filled: a grid that reflowed its own shape would defeat the point, which
    is that two loadouts are compared as two identically-shaped grids. */
 .ll-lp-equip {
-  grid-template-columns: repeat(var(--ll-equip-cols, 4), minmax(var(--ll-cell-min, 48px), 1fr));
+  grid-template-columns: repeat(
+    var(--ll-equip-cols, 4),
+    minmax(
+      min(
+        var(--ll-cell-min, 48px),
+        calc(
+          (100% - (var(--ll-equip-cols, 4) - 1) * var(--ll-preview-gap, 4px)) / var(--ll-equip-cols, 4)
+        )
+      ),
+      1fr
+    )
+  );
 }
 /* Fifteen cells, five across. Fifteen is Hunt: Showdown's per-hunter trait maximum, NOT the
    trait-point cap — the cap is user-settable, and deriving from it would reflow the grid
    when a setting changed. */
 .ll-lp-traits {
-  grid-template-columns: repeat(var(--ll-trait-cols, 5), minmax(var(--ll-cell-min, 48px), 1fr));
+  grid-template-columns: repeat(
+    var(--ll-trait-cols, 5),
+    minmax(
+      min(
+        var(--ll-cell-min, 48px),
+        calc(
+          (100% - (var(--ll-trait-cols, 5) - 1) * var(--ll-preview-gap, 4px)) / var(--ll-trait-cols, 5)
+        )
+      ),
+      1fr
+    )
+  );
 }
-/* The 48px floor on the shorter edge. minmax() above lets a cell scale DOWN to it as the
-   card narrows and no further; past that the card grows taller rather than clipping, and no
-   cell is ever shed. */
+/* The 48px floor on the shorter edge, capped at the share of the row a cell can actually
+   have: `(100% - gaps) / columns`. Above the preview's own floor that share exceeds 48px and
+   the floor is what binds, which is the case the requirement governs; below it — a phone, one
+   column, a card narrower than its minimum track — the share binds instead, and five columns
+   of it come to exactly 100% rather than to 256px in a 168px card. A FIXED minimum here is
+   what made the preview overflow the card it sits in; the column COUNT stays fixed, which is
+   the part that matters, since two loadouts are compared as two identically-shaped grids.
+
+   min-height is deliberately not capped: as a cell narrows past its floor the cell — and with
+   it the card — grows taller rather than clipping, which is the degradation SPEC-0003
+   prescribes. No cell is ever shed. */
 .ll-lp-slot {
-  min-width: var(--ll-cell-min, 48px);
+  min-width: min(var(--ll-cell-min, 48px), 100%);
   min-height: var(--ll-cell-min, 48px);
 }
 /* An empty cell is information and is drawn as one — dashed, like the builder's empty
