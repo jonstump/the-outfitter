@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
-import { CONS, TOOLS, WEAPONS } from "../data/catalog.js";
+import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { TRAIT_MAX } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
+import uiReducer from "./uiSlice.js";
 
 // Governing: issue #26/#27 (loadoutSlice resolves the new catalog tuple shapes;
 // setLoadout validates payload shape instead of blindly merging)
@@ -115,5 +117,58 @@ describe("catalog tuple references", () => {
     // numeric behavior end-to-end.
     expect(TOOLS[0][2]).toBeTypeOf("number");
     expect(CONS[0][2]).toBeTypeOf("number");
+  });
+});
+
+// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+describe("addTrait: the fifteen-trait cap", () => {
+  const traitIds = TRAITS.map((t) => t[0]);
+
+  it("has enough traits in the catalog for the cap to be reachable", () => {
+    // If this ever fails the cases below stop testing anything, because a loadout
+    // holding every trait in the game would sit under the cap by accident.
+    expect(traitIds.length).toBeGreaterThan(TRAIT_MAX);
+  });
+
+  it("refuses a sixteenth trait", () => {
+    const store = makeStore();
+    traitIds.slice(0, TRAIT_MAX).forEach((id) => store.dispatch(loadoutActions.addTrait(id)));
+    expect(store.getState().loadout.traits).toHaveLength(TRAIT_MAX);
+
+    const sixteenth = traitIds[TRAIT_MAX];
+    store.dispatch(loadoutActions.addTrait(sixteenth));
+    expect(store.getState().loadout.traits).toHaveLength(TRAIT_MAX);
+    expect(store.getState().loadout.traits).not.toContain(sixteenth);
+  });
+
+  it("refuses a sixteenth with the upgrade-point budget off, which is the default", () => {
+    // The configuration the rule has to hold in. Gating the cap on `upBudgetOn` would leave
+    // the shipped default — the one almost everyone runs — with no cap at all.
+    const store = configureStore({
+      reducer: { loadout: loadoutReducer, ui: uiReducer },
+      preloadedState: { loadout: emptyLoadout() },
+    });
+    expect(store.getState().ui.upBudgetOn).toBe(false);
+
+    traitIds.slice(0, TRAIT_MAX + 1).forEach((id) => store.dispatch(loadoutActions.addTrait(id)));
+    expect(store.getState().ui.upBudgetOn).toBe(false);
+    expect(store.getState().loadout.traits).toHaveLength(TRAIT_MAX);
+    expect(store.getState().loadout.traits).toEqual(traitIds.slice(0, TRAIT_MAX));
+  });
+
+  it("keeps rejecting duplicates below the cap", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addTrait(traitIds[0]));
+    store.dispatch(loadoutActions.addTrait(traitIds[0]));
+    expect(store.getState().loadout.traits).toEqual([traitIds[0]]);
+  });
+
+  it("admits a replacement once a trait is removed at the cap", () => {
+    const store = makeStore();
+    traitIds.slice(0, TRAIT_MAX).forEach((id) => store.dispatch(loadoutActions.addTrait(id)));
+    store.dispatch(loadoutActions.removeTrait(traitIds[0]));
+    store.dispatch(loadoutActions.addTrait(traitIds[TRAIT_MAX]));
+    expect(store.getState().loadout.traits).toHaveLength(TRAIT_MAX);
+    expect(store.getState().loadout.traits).toContain(traitIds[TRAIT_MAX]);
   });
 });

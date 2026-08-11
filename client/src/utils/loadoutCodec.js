@@ -1,4 +1,5 @@
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { TRAIT_MAX } from "./calc.js";
 
 export const LS_CUR = "hunt-outfitter-current";
 
@@ -46,6 +47,29 @@ function boundedAmmo(weaponIndex, value) {
   return inRange(value, variants.length) ? value : -1;
 }
 
+/**
+ * The traits a decoded loadout is allowed to keep: the first TRAIT_MAX that survive
+ * catalog resolution.
+ *
+ * Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+ *
+ * Decode clamps rather than throws, for the reason boundedAmmo above states: the store
+ * subscriber persists a decoded loadout BEFORE it is rendered, so a decoder that refused an
+ * over-cap list would write the record it rejects and then fail on it on every later visit
+ * (issue #201). Clamping keeps the record loadable and self-correcting — a stored twenty-trait
+ * loadout decodes to fifteen and the next save writes fifteen back.
+ *
+ * It takes the FIRST surviving ids so decoding is deterministic, and it is applied AFTER each
+ * decoder's own resolution step (id filter in v1, positional translation in legacy) so the cap
+ * counts traits the loadout actually holds rather than entries that were about to be dropped.
+ *
+ * Both decoders call this. A bound carried by one decoder and not the other is the defect PR
+ * #203 had to fix for the ammo index, and is the reason this lives in one function.
+ */
+function boundedTraits(ids) {
+  return ids.slice(0, TRAIT_MAX);
+}
+
 export function emptyLoadout() {
   return { weapons: [null, null], equip: [], traits: [], blocked: 0, name: "" };
 }
@@ -83,8 +107,9 @@ function fromV1(d) {
     weapons: [0, 1].map(slotWeapon),
     equip,
     // Traits are stored by stable catalog id (see catalog.js) — pass the ids
-    // straight through rather than re-mapping to current array positions.
-    traits: (d.tr || []).filter((id) => TRAIT_BY_ID.has(id)),
+    // straight through rather than re-mapping to current array positions, then
+    // clamp to the cap (see boundedTraits; fromLegacy clamps the same way).
+    traits: boundedTraits((d.tr || []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
     blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
   };
@@ -208,10 +233,13 @@ function fromLegacy(d) {
     weapons: [0, 1].map(slotWeapon),
     equip,
     // Legacy encodings reference traits by array position; translate to the stable
-    // catalog id the store now keys on (see catalog.js's trait tuple shape).
-    traits: (d.tr || [])
-      .map((i) => legacyId(LEGACY_TRAIT_IDS, i))
-      .filter((id) => id && TRAIT_BY_ID.has(id)),
+    // catalog id the store now keys on (see catalog.js's trait tuple shape), then clamp
+    // to the cap — AFTER the translation, so the fifteen counted are fifteen that survived.
+    traits: boundedTraits(
+      (d.tr || [])
+        .map((i) => legacyId(LEGACY_TRAIT_IDS, i))
+        .filter((id) => id && TRAIT_BY_ID.has(id))
+    ),
     name: d.n || "",
     blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
   };

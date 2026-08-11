@@ -1,5 +1,5 @@
 import { AMMO, CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { totalCost } from "./calc.js";
+import { TRAIT_MAX, totalCost } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
 const BUDGET_RETRY_ATTEMPTS = 80;
@@ -16,7 +16,13 @@ function attempt({ slotMax, upBudgetOn, upBudget }) {
     upSpent = 0;
   }
   const poolIds = TRAITS.map((t) => t[0]).filter((id) => id !== QM);
-  const nT = Math.min(RANDOM_TRAIT_COUNT, poolIds.length);
+  // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+  //
+  // The draw is bounded by the cap as well as by the pool. RANDOM_TRAIT_COUNT is three today,
+  // so this changes no generated build — it is here so raising the draw count cannot quietly
+  // start generating loadouts the game rejects. The remaining headroom, not the draw count,
+  // is what bounds the loop, because Quartermaster may already be in `traits`.
+  const nT = Math.min(RANDOM_TRAIT_COUNT, poolIds.length, Math.max(TRAIT_MAX - traits.length, 0));
   for (let k = 0; k < nT && poolIds.length; k++) {
     const p = poolIds.splice(Math.floor(Math.random() * poolIds.length), 1)[0];
     const up = TRAITS.find((t) => t[0] === p)[2];

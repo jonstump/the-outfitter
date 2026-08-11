@@ -1127,9 +1127,15 @@ const LOADED = v1({
   tr: ["quartermaster"],
 });
 
-// Eighteen traits — three past the grid. Reachable today and not a contrivance: the
-// trait-point budget is off by default (`upBudgetOn: false` in the fixture below, which is
-// also the app's default), the catalog holds 32 traits and the server accepts 40.
+// Eighteen traits — three past the grid. A record written before the cap: this used to be an
+// ordinary savable loadout, because the trait-point budget is off by default and the server
+// accepted forty.
+//
+// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+//
+// It is still a valid fixture, and what it now tests is the other half of the decision: an
+// over-cap record is not stranded. It loads, decodes to fifteen, and renders — so through the
+// panel this payload draws a FULL grid with no remainder, and the next save writes fifteen back.
 const EIGHTEEN_TRAIT_IDS = TRAITS.slice(0, 18).map((t) => t[0]);
 const OVERSTUFFED = v1({ w: [["sparks-lrr", -1]], tr: EIGHTEEN_TRAIT_IDS });
 
@@ -1220,15 +1226,22 @@ describe("the categorised loadout preview", () => {
     expect(filledIn("preview-traits-2")).toHaveLength(9);
   });
 
-  it("fills fifteen trait cells and states the remainder as a count", () => {
+  it("fills fifteen trait cells for an over-cap record, with no remainder left to state", () => {
+    // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+    //
+    // The eighteen-trait record loads rather than erroring — that is the clamp doing its job —
+    // and the card never sees the three past the cap, because decode dropped them. So the grid
+    // is full and there is no overflow count. The overflow RENDERING is kept as defence and is
+    // asserted against previewGroups below, where an over-cap loadout can still be constructed;
+    // it is unreachable through a stored record now, which is the point of the cap.
     renderPanel(base([], [filed("1", "everything", OVERSTUFFED)], { unassignedOpen: true }));
 
-    // The grid does not grow, does not scroll and does not clip silently: it holds fifteen,
-    // and the three it cannot hold are stated.
+    // The grid does not grow, does not scroll and does not clip silently.
     expect(cellsIn("preview-traits-1")).toHaveLength(15);
     expect(filledIn("preview-traits-1")).toHaveLength(15);
     expect(emptyIn("preview-traits-1")).toHaveLength(0);
-    expect(previewOf("1")).toHaveTextContent("+3 more");
+    expect(previewOf("1")).not.toHaveTextContent("more");
+    expect(previewOf("1").querySelector(".ll-lp-more")).toBeNull();
 
     // The other grids are unmoved by it.
     expect(cellsIn("preview-weapons-1")).toHaveLength(WEAPON_CELLS);
@@ -1313,15 +1326,14 @@ describe("the categorised loadout preview", () => {
     expect(previewOf("1")).toHaveAccessibleName("Holds 4 traits");
   });
 
-  it("describes what the loadout holds, not what it drew", () => {
+  it("describes what the loadout holds, counting what survived decode", () => {
     renderPanel(base([], [filed("1", "everything", OVERSTUFFED)], { unassignedOpen: true }));
 
-    // Eighteen held, fifteen drawn. The text equivalent describes the record, so a screen
-    // reader is not told the grid's capacity in place of the loadout's contents.
-    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks LRR, 18 traits");
+    // The label still states what the LOADOUT holds rather than the grid's capacity — the two
+    // simply coincide now, because the eighteen-trait record reaches the card as fifteen
+    // (ADR-0012). Announcing eighteen here would describe traits the app has dropped.
+    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks LRR, 15 traits");
     expect(filledIn("preview-traits-1")).toHaveLength(15);
-    // …and the count that reconciles the two is decorative, so it can never contradict it.
-    expect(previewOf("1").querySelector(".ll-lp-more")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("writes nothing and mutates nothing to render a preview", () => {
@@ -1446,7 +1458,14 @@ describe("the categorised loadout preview", () => {
     expect(groups.empty).toBe(false);
     expect(groups.traitOverflow).toBe(0);
 
-    const over = previewGroups(fromData(OVERSTUFFED));
+    // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "Filed Loadouts Preview Their Contents"
+    //
+    // Built directly rather than decoded, because no decoder produces this shape any more. The
+    // overflow arrangement is kept deliberately: enforcement bounds what the app WRITES and the
+    // preview renders what it READS, so a record predating the cap, a decoder that regresses, or
+    // a payload arriving by some path not yet imagined still reaches here — and a component that
+    // trusts an invariant it does not itself enforce is how a bad ammo index blanked the page.
+    const over = previewGroups({ ...fromData(OVERSTUFFED), traits: EIGHTEEN_TRAIT_IDS });
     expect(over.traitsHeld).toBe(18);
     expect(over.traitOverflow).toBe(3);
     expect(over.traits.filter(Boolean)).toHaveLength(TRAIT_CELLS);

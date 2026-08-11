@@ -2,6 +2,22 @@ import { AMMO, CONS, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 
 // All functions take a loadout-shaped object: { weapons: [w0, w1], equip: [{t,i}], traits: [id], blocked }
 
+/**
+ * The most traits a hunter can carry.
+ *
+ * Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+ *
+ * Fifteen is fixed for every hunter, which is what separates it from the upgrade-point
+ * budget: that ceiling is opt-in because it varies with a hunter level the app cannot
+ * know, and nothing about fifteen varies. So this cap is unconditional and is NOT gated
+ * on `ui.upBudgetOn`.
+ *
+ * It lives here, once, because a bound is only a bound if every writer states the same
+ * number — the interactive add (loadoutSlice), both decoders (loadoutCodec), and the
+ * generator (randomize) all import this rather than repeating the literal.
+ */
+export const TRAIT_MAX = 15;
+
 export function capMax(loadout) {
   return 5 + (loadout.traits.includes(QM) ? 1 : 0);
 }

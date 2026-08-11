@@ -10,6 +10,7 @@ import {
   fromData,
   toData,
 } from "./loadoutCodec.js";
+import { TRAIT_MAX } from "./calc.js";
 
 // Governing: issue #26 (stable catalog ids + schema versioning for saved/share encodings)
 //
@@ -243,5 +244,67 @@ describe("frozen legacy catalog tables", () => {
     // Growing or shrinking a table shifts every position after the edit — the exact
     // failure this whole mechanism exists to prevent. Append to catalog.js instead.
     expect(table).toHaveLength(length);
+  });
+});
+
+// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+//
+// Both decoders, deliberately. A bound carried by one decoder and not the other is exactly how
+// the ammo bound was lost (issue #201), and PR #203 had to fix it in both — so a case that
+// covers only the current format would leave the same hole open one migration later.
+describe("every decoder clamps a trait list to the cap", () => {
+  const OVER_CAP = 20;
+  const traitIds = TRAITS.map((t) => t[0]);
+
+  it("the catalog carries enough traits for an over-cap payload to be built from valid ids", () => {
+    expect(traitIds.length).toBeGreaterThanOrEqual(OVER_CAP);
+    expect(LEGACY_TRAIT_IDS.length).toBeGreaterThanOrEqual(OVER_CAP);
+  });
+
+  it("fromData (v1) keeps the first fifteen of twenty valid ids", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
+    expect(dec.traits).toHaveLength(TRAIT_MAX);
+    // The FIRST fifteen, in order — decoding the same record twice must give the same loadout.
+    expect(dec.traits).toEqual(traitIds.slice(0, TRAIT_MAX));
+  });
+
+  it("fromLegacy keeps the first fifteen of twenty valid ids", () => {
+    // No `v` field, so this routes to the legacy decoder; positions 0..19 are the legacy
+    // trait table's own indices, translated to stable ids before the clamp applies.
+    const dec = fromData({ w: [null, null], e: [], tr: [...Array(OVER_CAP).keys()] });
+    expect(dec.traits).toHaveLength(TRAIT_MAX);
+    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, TRAIT_MAX));
+  });
+
+  it("clamps the survivors, not the raw entries — v1", () => {
+    // Unknown ids are dropped first, so a payload padded with retired ids still yields a
+    // full fifteen rather than fifteen-minus-the-junk.
+    const padded = traitIds.slice(0, OVER_CAP).flatMap((id) => [id, "retired-trait-" + id]);
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: padded });
+    expect(dec.traits).toEqual(traitIds.slice(0, TRAIT_MAX));
+  });
+
+  it("clamps after the positional translation, not before — legacy", () => {
+    // Out-of-range positions resolve to nothing. If the legacy decoder clamped before
+    // translating, these would eat cells and the result would come back short.
+    const padded = [...Array(OVER_CAP).keys()].flatMap((i) => [i, 999]);
+    const dec = fromData({ w: [null, null], e: [], tr: padded });
+    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, TRAIT_MAX));
+  });
+
+  it("leaves an at-or-under-cap list alone in both decoders", () => {
+    const atCap = traitIds.slice(0, TRAIT_MAX);
+    expect(fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: atCap }).traits).toEqual(atCap);
+    const legacyAtCap = [...Array(TRAIT_MAX).keys()];
+    expect(fromData({ w: [null, null], e: [], tr: legacyAtCap }).traits).toEqual(
+      LEGACY_TRAIT_IDS.slice(0, TRAIT_MAX)
+    );
+  });
+
+  it("re-encodes the clamped loadout, so an over-cap record self-heals on next save", () => {
+    // The record stays loadable and the next write puts fifteen back — the reason decode
+    // clamps rather than throwing (a decoded loadout is persisted before it is rendered).
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
+    expect(toData(dec).tr).toHaveLength(TRAIT_MAX);
   });
 });

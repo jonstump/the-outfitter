@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { WEAPONS } from "../data/catalog.js";
-import { capMax, consCount, slotMax } from "../utils/calc.js";
+import { TRAIT_MAX, capMax, consCount, slotMax } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Shape of a valid loadout state object. setLoadout() rejects payloads that don't
@@ -57,6 +57,12 @@ const loadoutSlice = createSlice({
       state.blocked = isBlocked ? state.blocked - 1 : Math.min(state.blocked + 1, 8 - state.equip.length);
     },
     addTrait(state, action) {
+      // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+      //
+      // The refusal is unconditional — deliberately NOT gated on `ui.upBudgetOn`, which is
+      // off by default and would leave the shipped configuration with no cap at all. The UP
+      // budget is a toggle because it depends on hunter level; fifteen depends on nothing.
+      if (state.traits.length >= TRAIT_MAX) return;
       if (!state.traits.includes(action.payload)) state.traits.push(action.payload);
     },
     removeTrait(state, action) {

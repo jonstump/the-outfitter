@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIRST_AID_KIT, TOOLS } from "../data/catalog.js";
+import { TRAIT_MAX } from "./calc.js";
 import { randomizeLoadout } from "./randomize.js";
 
 // Governing: issue #26 (randomize.js's loadout shape must match what the store
@@ -54,5 +55,25 @@ describe("randomizeLoadout", () => {
     const result = randomizeLoadout({ slotMax: 8, budgetOn: true, budget: 150 });
     expect(result.weapons.length).toBe(2);
     expect(result.equip.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+describe("randomizeLoadout: the fifteen-trait cap", () => {
+  it("never generates more traits than the cap allows", () => {
+    // Asserted against TRAIT_MAX rather than against the generator's current draw of three:
+    // the point is that raising the draw count cannot start producing illegal loadouts, and
+    // a test pinned to 3 would pass right up until it mattered.
+    for (let k = 0; k < 50; k++) {
+      const r = randomizeLoadout({ slotMax: 8 });
+      expect(r.traits.length).toBeLessThanOrEqual(TRAIT_MAX);
+    }
+  });
+
+  it("stays within the cap with the upgrade-point budget on", () => {
+    for (let k = 0; k < 20; k++) {
+      const r = randomizeLoadout({ slotMax: 8, upBudgetOn: true, upBudget: 10 });
+      expect(r.traits.length).toBeLessThanOrEqual(TRAIT_MAX);
+    }
   });
 });
