@@ -820,10 +820,24 @@ button {
   border-color: var(--red-border);
 }
 
-/* Native size, centred — never scaled up to the tile. See the grid comment. */
+/* A share of the tile, not a fixed pixel size.
+
+   This DOES upscale — a deliberate trade, reversing the earlier "never above native" rule.
+   At native 64px in a 97px tile the icon sat in a third of empty box and read as lost, which
+   is worse than a little softness. 82% is 80px here, a 1.25x upscale; the version that was
+   called soft was 1.47x, so this keeps most of the size while staying well under it.
+
+   Expressed as a percentage rather than a pixel value so the margin around the icon stays
+   proportionate at any tile size — including the 112px ceiling, where a fixed 80px would
+   start looking lost again.
+
+   The real fix is a better source: all 32 trait assets are 64x64 because that is what the
+   wiki's infobox <img> serves, and scrape-images.mjs takes that src verbatim. wiki.gg
+   usually also exposes the unscaled original, so a scrape that reached for it would let this
+   go back to 1x. Tracked on #228. */
 .trait-cell-thumb {
-  width: min(100%, 64px);
-  height: min(100%, 64px);
+  width: var(--trait-art-scale, 82%);
+  height: var(--trait-art-scale, 82%);
   object-fit: contain;
   display: block;
 }
