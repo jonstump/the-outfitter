@@ -79,14 +79,19 @@ reviewable `git diff` against a hand-authored file. It deliberately never touche
 `ammoClass` (a saved ammo selection is a bare index into that pool), an item's display name (it
 feeds the on-disk image path), or `group`, `type` and the `AMMO` table at all.
 
+The same applies to coverage lost to failure rather than to a flag: a run that would drop items the
+committed dataset already covers writes nothing and names them, and `--allow-shrink` is how a
+genuine removal gets through. That guard covers the catalog too — a run whose parses shrank the
+dataset is a run whose surviving parses cannot be trusted against a hand-authored file, so
+`--write-catalog` is refused on it and the refusal is printed rather than passed over in silence.
+
 `--discover` crawls the wiki's own category indexes and reports what the catalog does not carry,
 **classifying every unmatched page before proposing it**: a page existing does not mean the item
-does. It separates four things a single "delta" number runs together — matched, genuinely missing,
-live-but-unpurchasable (a Tarot Card's price is the literal word `Scarce`), and not-an-item
-(removed, or a prototype that never shipped). It fetches every unmatched page to classify it, so it
-makes materially more requests than a stats run. The same applies to coverage lost to failure rather than to a flag: a run
-that would drop items the committed dataset already covers writes nothing and names them, and
-`--allow-shrink` is how a genuine removal gets through.
+does. It separates the things a single "delta" number runs together — matched, genuinely missing,
+live-but-unpurchasable (a Tarot Card's price is the literal word `Scarce`), not-an-item (removed, or
+a prototype that never shipped), and pages it could not read well enough to say. It fetches every
+unmatched page to classify it, so it makes materially more requests than a stats run — and it
+honours `--dry-run`, which reports the indexes it would crawl without fetching any of them.
 
 Generated files are committed and must not be hand-edited; re-running the scrape rewrites them.
 

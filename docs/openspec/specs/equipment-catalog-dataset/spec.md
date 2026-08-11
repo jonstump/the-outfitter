@@ -84,13 +84,15 @@ An item that is re-added after having been retired SHALL receive a fresh `id`. I
 
 Where a scraped field and a hand-authored catalog field describe the same fact — cost, ammo class, UP value, size — the scraped value is authoritative. Applying it SHALL require an explicit flag (`--write-catalog`); the default run SHALL be additive, writing `itemStats.json` only.
 
-A write-through run SHALL print a per-field diff of every hand-authored value it intends to overwrite, before applying it, so the change lands as a reviewable `git diff` hunk rather than a silent edit.
+A write-through run SHALL print a per-field diff of every hand-authored value it intends to overwrite, before applying it, so the change lands as a reviewable `git diff` hunk rather than a silent edit. "Print" means in a form an operator reads, not only as structured log events.
+
+A run that the shrink guard refuses — one that would drop items the committed dataset already covers — SHALL NOT write `catalog.js` either, and the refusal SHALL be reported. The guard's signal is a parser that no longer matches the source; the items that failed outright are harmless to the catalog, but the items that parsed *successfully* against changed markup are the ones that would write a wrong-but-in-range number over a hand-authored one.
 
 `scrape-stats.mjs` SHALL be the only script that ever writes `catalog.js`. `scrape-images.mjs` SHALL remain write-only to `client/public/images/`.
 
 Parsed numerics SHALL be range-asserted before they are written — cost greater than zero, weapon size within **1–5**, trait UP within the game's range. A value failing its assertion SHALL fail that field and be recorded, rather than being written. Failing one field MUST NOT discard the item's other fields.
 
-*(Corrected 2026-08-11. This requirement first said "size within 1–3", inherited from ADR-0005's confirmation criteria, which carries the same error. Measured against both the catalog and the wiki, weapon slot sizes run **1 to 5** — 17 of 38 weapons are size 4 or 5, and 5 is the entire weapon budget `calc.js`'s `capMax` grants. Implementing the stated range literally would have failed 45% of the arsenal on a correct parse, which is the opposite of what a range assertion is for.)*
+*(Corrected 2026-08-11. This requirement first said "size within 1–3", inherited from ADR-0005's confirmation criteria, which carries the same error. Weapon slot sizes run **1 to 5** in both sources, measured separately because they do not yet agree on the column: the hand-authored `catalog.js` has 11 of 39 weapons at size 4 or 5, and the scraped `itemStats.json` has 17 of 39. 5 is the entire weapon budget `calc.js`'s `capMax` grants. Implementing the stated range literally would have failed a correct parse on a quarter to a half of the arsenal depending on the source, which is the opposite of what a range assertion is for.)*
 
 Parsing SHALL be strict: a value that is not a whole number SHALL be refused rather than coerced. Stripping non-digits and keeping the remainder is how a wrong-but-well-formed number gets written — `"1.5"` becomes `15`, and a currency suffix becomes part of the value on one page and not another.
 
@@ -99,15 +101,20 @@ Parsing SHALL be strict: a value that is not a whole number SHALL be refused rat
 - **WHEN** `scrape-stats.mjs` runs without `--write-catalog`
 - **THEN** `catalog.js` SHALL be byte-identical afterwards, and `itemStats.json` SHALL be written
 
-#### Scenario: An implausible parsed value fails its item
+#### Scenario: An implausible parsed value fails its field
 
 - **WHEN** a parse yields a cost of `0` or a weapon size of `7`
-- **THEN** that item SHALL fail with the value and its source URL recorded in the run summary, and no write SHALL occur for it
+- **THEN** that field SHALL fail with the value and its source URL recorded in the run summary, and no write SHALL occur for that field, while the item's other fields still land
 
 #### Scenario: Overwrites are shown before they are applied
 
 - **WHEN** a `--write-catalog` run would change a hand-authored cost
-- **THEN** it SHALL print the item, the field, the old value, and the new value before applying the change
+- **THEN** it SHALL print the item, the field, the old value, and the new value — in operator-readable form — before reading or writing `catalog.js`
+
+#### Scenario: A run that trips the shrink guard writes neither file
+
+- **WHEN** a `--write-catalog` run resolves fewer items than the committed dataset covers, without `--allow-shrink`
+- **THEN** `catalog.js` SHALL be byte-identical afterwards, no write plan SHALL be computed, and the run summary SHALL state that the write-through was refused and why
 
 ### Requirement: Fields the Scraper Must Not Derive
 
@@ -208,10 +215,22 @@ Every scraped trait record SHALL carry its acquisition class (Regular, Burn, Sca
 
 The exclusion boundary SHALL be stated in `catalog.js` in terms of purchasability rather than in terms of any event's duration, since a limited-time item can become permanent while remaining unpurchasable.
 
+Purchasability SHALL be recorded three ways, not two: purchasable, stated-unpurchasable, and unresolved. "Stated-unpurchasable" requires that a price was actually read and refused — a Tarot Card's literal `Scarce`. An item whose page carries no price field at all SHALL be recorded as unresolved and reported in its own column, since defaulting it to either determination is the inference this spec's "Stored, Never Inferred" requirement forbids.
+
 #### Scenario: A Scarce item is identified as out of scope, not as missing
 
 - **WHEN** a discovery run encounters a Tarot Card page with no catalog row
 - **THEN** it SHALL be reported as out of scope on the recorded ground that it is not purchasable with Hunt Dollars, not as a missing item
+
+#### Scenario: An unreadable price is not an exclusion
+
+- **WHEN** a discovery run reaches an unmatched page carrying no `Price` or `Cost` field
+- **THEN** it SHALL be reported as unresolved, and MUST NOT be reported either as a missing catalog row or as a deliberate exclusion
+
+#### Scenario: A page the crawl could not read is not a catalog gap
+
+- **WHEN** a page fetch is refused by `robots.txt`, returns a non-OK status, or throws
+- **THEN** that page SHALL be reported as unreadable with its reason, MUST NOT be counted as missing, and the rest of the crawl SHALL continue
 
 ### Requirement: Roster Coverage Is Reported Against the Wiki's Own Categories
 
