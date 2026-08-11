@@ -866,7 +866,14 @@ button {
    the cost, so a screen reader never depends on this surface and a keyboard user gets it on
    focus rather than hover alone — hover-only content would fail SPEC-0003's WCAG 2.1 AA
    requirement. `pointer-events: none` keeps the tip from eating the click that removes the
-   trait. */
+   trait.
+
+   ONE line, and the CSS says so. It carries the trait name and nothing else — the cost is
+   badged on the icon, so repeating it here said the same thing twice in one hover. An earlier
+   draft stacked name over cost and left behind a flex column plus `.trait-cell-tip-name` /
+   `.trait-cell-tip-up` rules that no element ever carried; those are gone rather than kept
+   against a second line that may never come. Adding a description line (#228) means wrapping
+   the name in its own element and restoring the column here — a real edit, not a free slot. */
 .trait-cell-tip {
   position: absolute;
   left: 50%;
@@ -874,20 +881,18 @@ button {
   transform: translateX(-50%);
   z-index: 5;
   display: none;
-  flex-direction: column;
-  gap: 1px;
   width: max-content;
   max-width: 180px;
   padding: 5px 8px;
   font-size: 13.5px;
   color: var(--text);
-  background: var(--panel-bg, #14100c);
+  background: var(--panel);
   border: 1px solid var(--border);
   pointer-events: none;
 }
 .trait-cell-filled:hover .trait-cell-tip,
 .trait-cell-filled:focus-visible .trait-cell-tip {
-  display: flex;
+  display: block;
 }
 
 /* The top row's tip opens downward instead.
@@ -903,14 +908,6 @@ button {
 .trait-grid > .trait-cell:nth-child(-n + 5) .trait-cell-tip {
   top: calc(100% + 6px);
   bottom: auto;
-}
-.trait-cell-tip-name {
-  font-size: 13.5px;
-  color: var(--text);
-}
-.trait-cell-tip-up {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 /* Actions panel */
