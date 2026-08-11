@@ -18,21 +18,26 @@ function loadoutWith(overrides) {
 }
 
 describe("totalCost", () => {
+  // The literals below are catalog values, deliberately written out rather than derived from the
+  // catalog — deriving them would make the assertions tautological and hide exactly the
+  // string-concatenation bug the second test is named for. They were last reconciled against the
+  // wiki by `scrape-stats.mjs --write-catalog` (#195).
   it("counts weapon cost and optional ammo cost", () => {
-    const lo = loadoutWith({ weapons: [{ i: 0, a: -1 }] }); // Nagant M1895 = $30
-    expect(totalCost(lo)).toBe(30);
+    const lo = loadoutWith({ weapons: [{ i: 0, a: -1 }] }); // Nagant M1895 = $24
+    expect(totalCost(lo)).toBe(24);
     lo.weapons[0].a = 0; // FMJ tier-1 = $15
-    expect(totalCost(lo)).toBe(45);
+    expect(totalCost(lo)).toBe(39);
   });
 
   it("sums tool and consumable costs numerically, not by concatenation", () => {
     const lo = loadoutWith({
       equip: [
         { t: "T", i: 0 }, // First Aid Kit = $30
-        { t: "C", i: 0 }, // Vitality Shot = $60
+        { t: "C", i: 0 }, // Vitality Shot = $85
       ],
     });
-    expect(totalCost(lo)).toBe(90);
+    // 115, not "3085" — the whole point of this assertion.
+    expect(totalCost(lo)).toBe(115);
   });
 
   it("returns 0 for an empty loadout", () => {
