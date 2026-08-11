@@ -56,6 +56,26 @@ const DATA_KEYS = new Set(["v", "w", "e", "tr", "n", "b"]);
 // every write. 200 is far past any plausible collection of saved builds.
 const MAX_LOADOUTS_PER_OWNER = 200;
 
+// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+//
+// A rule of the game, not a courtesy ceiling: a hunter carries at most fifteen traits, so a
+// write carrying sixteen describes a loadout that cannot exist. Tightened from 40, and exact
+// rather than a floor per REQ "A Write Stores Only What the Wire Format Defines".
+//
+// This is one of three bounded write paths — the reducer's `addTrait` and both decoders carry
+// the same number on the client, which cannot share a module with this one. The duplication is
+// accepted and watched by a test on each side pinning the same figure.
+//
+// It REJECTS rather than truncating. Storing fifteen of a caller's sixteen would hide a client
+// bug behind a 201; the decoders clamp instead, which is what keeps records written under the
+// old bound loadable. Nothing re-validates on read (`isValidData` is called from POST alone —
+// GET, PATCH and DELETE never call it), so tightening this does not strand a stored record: it
+// decodes to fifteen client-side and the next save writes fifteen back.
+//
+// Distinct from WIRE_CATEGORIES.tr above, which bounds each trait REFERENCE's numeric value
+// against the catalog's size. That one is validation slack on an index; this one is the count.
+const MAX_TRAITS = 15;
+
 function isValidData(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return false;
   if (Object.keys(data).some((k) => !DATA_KEYS.has(k))) return false;
@@ -67,7 +87,7 @@ function isValidData(data) {
   if (!data.w.every((slot) => slot === null || (Array.isArray(slot) && slot.length === 2 && isRef(slot[0], WIRE_CATEGORIES.w) && Number.isInteger(slot[1])))) return false;
   if (!Array.isArray(data.e) || data.e.length > 8) return false;
   if (!data.e.every((entry) => Array.isArray(entry) && entry.length === 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC))) return false;
-  if (!Array.isArray(data.tr) || data.tr.length > 40) return false;
+  if (!Array.isArray(data.tr) || data.tr.length > MAX_TRAITS) return false;
   if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return false;
   if (typeof data.n !== "string" || data.n.length > 200) return false;
   if (data.b !== undefined && (typeof data.b !== "number" || data.b < 0 || data.b > 8)) return false;
