@@ -13,12 +13,18 @@ const PORT = process.env.PORT || 4100;
 
 const app = express();
 
-// Governing: issue #199.
+// Governing: issue #199, SPEC-0003 REQ "Rate Limiting" (this setting decides what `req.ip`
+// resolves to, and `req.ip` is the key the spec'd budgets are counted against).
 //
 // Which peers this server believes `X-Forwarded-*` from — a property of the DEPLOYMENT,
 // so it is configured rather than hardcoded. `TRUST_PROXY` names the front-facing proxy
 // ("loopback", an address, a CIDR, a comma-separated list, or a hop count); unset means
 // nothing is in front and no forwarded header is believed.
+//
+// Deployment note, because it cuts the other way and no test can catch it: this also
+// governs `req.protocol`, which isSameOrigin() below compares against the browser's Origin.
+// Behind a proxy that terminates TLS, leaving this unset makes the API answer 403 to every
+// write from its own client. See README "Reverse proxies and TRUST_PROXY".
 //
 // This was `1`, which reads as "one proxy hop" but compiles to a predicate that ignores
 // the peer address entirely — so on the two documented topologies with no proxy

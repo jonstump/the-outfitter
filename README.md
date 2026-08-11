@@ -165,7 +165,22 @@ connected, so a direct client is refused whatever it claims. A bare number is a
 hop count, which Express applies without looking at who connected — correct
 behind a platform that always terminates in front of you, meaningless if the
 process is also reachable directly. An unparseable value stops the server at
-boot rather than downgrading to trusting everything or nothing.
+boot rather than downgrading to trusting everything or nothing — including
+`TRUST_PROXY=true`, which is refused on purpose: Express's boolean `true` trusts
+every peer at every hop, so the one input that looks like "yes, I have a proxy"
+is the one that would trust clients that aren't one. Name the proxy instead.
+
+> **Set this before you deploy behind a TLS-terminating proxy, not after.**
+> Unset, Express ignores `X-Forwarded-Proto`, so `req.protocol` is `http` while
+> the browser sends `Origin: https://your-site`. The same-origin check compares
+> the two, they don't match, and the API answers **403 to every write** —
+> `POST`, `PATCH`, `DELETE` — from its own client. Reads keep working, because
+> same-origin `GET`s carry no `Origin` header, so this presents as "the app
+> loads fine but nothing saves" rather than as an outage. This setting lives in
+> the platform's own environment config, not in this repo, so nothing in CI can
+> catch it being missing. On Render, Fly or anything else that terminates TLS in
+> front of you, add `TRUST_PROXY=1` to the service environment **first**, then
+> ship.
 
 ### Separate origins (optional)
 

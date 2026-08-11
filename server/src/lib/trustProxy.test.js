@@ -42,10 +42,28 @@ describe("trustProxySetting", () => {
     expect(trustProxySetting({ TRUST_PROXY: "   " })).toBe(false);
   });
 
-  it("reads the booleans as booleans, not as truthy strings", () => {
+  it("reads a disabling boolean as a boolean, not as a truthy string", () => {
     expect(trustProxySetting({ TRUST_PROXY: "false" })).toBe(false);
     expect(trustProxySetting({ TRUST_PROXY: "FALSE" })).toBe(false);
-    expect(trustProxySetting({ TRUST_PROXY: "true" })).toBe(true);
+  });
+
+  // The asymmetry with "false" above is the point, so it is pinned rather than left to the
+  // docblock. Boolean `true` is express's most permissive setting — it trusts every peer at
+  // every hop, which is strictly worse than the hardcoded `1` this module replaced — and for
+  // a variable named TRUST_PROXY it is the most guessable thing an operator could type. It
+  // must fail loudly instead of silently disarming the limiters.
+  it("refuses to turn the most guessable input into the most permissive setting", () => {
+    expect(() => compiled(trustProxySetting({ TRUST_PROXY: "true" }))).toThrow(
+      /invalid IP address: true/i
+    );
+
+    // What that would have meant, had it been accepted: a direct client believed at hop 0.
+    expect(compiled(true)("203.0.113.9", 0)).toBe(true);
+
+    // Saying yes is done by naming the proxy, which is checked against the peer.
+    const trust = compiled(trustProxySetting({ TRUST_PROXY: "loopback" }));
+    expect(trust("127.0.0.1", 0)).toBe(true);
+    expect(trust("203.0.113.9", 0)).toBe(false);
   });
 
   it("reads a hop count as a number, which express compiles rather than rejecting", () => {

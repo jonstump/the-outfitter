@@ -1,4 +1,5 @@
-// Governing: issue #199 (`trust proxy 1` believes `X-Forwarded-*` from any peer)
+// Governing: issue #199 (`trust proxy 1` believes `X-Forwarded-*` from any peer),
+// SPEC-0003 REQ "Rate Limiting" (the budgets this setting decides the key for)
 //
 // What the server is willing to believe about who a request came from, as a deployment
 // decision rather than a constant in the source.
@@ -35,6 +36,18 @@
  * and `"false"` is a non-empty string, which would be truthy. Both are values an operator
  * will reasonably write, so both are converted here rather than at the call site.
  *
+ * `"true"` is deliberately NOT converted, and it is the one asymmetry here worth stating.
+ * Boolean `true` is express's most permissive setting: it compiles to a predicate that
+ * returns true for every peer at every hop, so it would trust `X-Forwarded-*` from a direct
+ * client — strictly worse than the hardcoded `1` this module replaced, and the exact
+ * property issue #199 is about. `express-rate-limit` classifies it as
+ * ERR_ERL_PERMISSIVE_TRUST_PROXY ("allows anyone to trivially bypass IP-based rate
+ * limiting") but only logs, so nothing downstream would stop it. Left unconverted it falls
+ * through to `proxy-addr` and throws `invalid IP address: true` at boot, which is the
+ * outcome an operator who typed it deserves: for a variable named TRUST_PROXY, `true` is
+ * the most guessable input there is, and guessing it should not silently disarm the
+ * limiters. Naming the proxy is how you say yes.
+ *
  * Anything else is passed through verbatim: `"loopback"`, `"uniquelocal"`, an address, a
  * CIDR, or a comma-separated list of those. Express hands them to `proxy-addr`, which
  * THROWS at boot on something it cannot parse. That is deliberate and left alone — a
@@ -48,7 +61,6 @@ export function trustProxySetting(env = process.env) {
   const raw = (env.TRUST_PROXY ?? "").trim();
   if (raw === "") return false;
   if (raw.toLowerCase() === "false") return false;
-  if (raw.toLowerCase() === "true") return true;
   if (/^\d+$/.test(raw)) return Number(raw);
   return raw;
 }
