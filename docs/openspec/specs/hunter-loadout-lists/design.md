@@ -344,7 +344,62 @@ Unassigned is pinned because it is a permanent structural group rather than a pe
 
 **Rationale**: This is the one genuinely new security surface. Until now, ownership checks in this codebase compare a record's `owner` against the caller — a single-collection check. Here a loadout write references a *different collection's* record, and if that reference isn't ownership-checked, a user can file into a stranger's list by guessing a UUID. Rejecting loudly rather than downgrading to Unassigned matters too: a silent downgrade would mask an attack and confuse a legitimate client bug.
 
+### The trust boundary is configuration, and its default is disbelief
+
+*(added 2026-08-11, per ADR-0011; specified in "Deployment Trust Boundary")*
+
+**Choice**: Which peers the server believes about request origin is a deployment variable defaulting to trusting none, rather than a constant in the source. Full reasoning and the rejected alternatives are in ADR-0011; recorded here because it is a load-bearing input to two requirements in this spec.
+
+**Rationale**: The claim "the per-IP limiter is a hard floor that rotating a token cannot bypass" is not a property of the limiter — it is a property of whether `req.ip` can be forged. The limiter was always written correctly; it was being handed an address the client controlled. That makes this a design decision of this spec's security model rather than a deployment detail sitting underneath it, which is why it is stated here rather than left to the ADR alone.
+
+**Alternatives considered**:
+- *Infer the topology at runtime* — circular. The forwarding headers are exactly what an untrusted client controls, so deciding whether to trust them by reading them is the original defect restated.
+- *A second, hand-rolled trust gate* — rejected because the framework computes the address and protocol from **its** setting. A parallel gate would cover one call site while the framework kept its own answer, leaving the limiters keyed on the forged value regardless.
+
+### The per-owner ceiling is a courtesy, and is specified as one
+
+*(added 2026-08-11; specified in "One Owner Cannot Accumulate Records Without Bound")*
+
+**Choice**: A cap on saved loadouts per owner token, applied to creates only, described in the spec as a bound on cost rather than as a security control.
+
+**Rationale**: Honesty about what it buys. Owner tokens are caller-chosen and unlimited, so anyone willing to rotate one is bounded by the rate limits and not by this. Specifying it as a security boundary would be a claim the model cannot support, and would invite a future reader to rely on it. What it genuinely stops is one client — or a loop with a bug — making the store expensive to re-serialise, given that the file is parsed and rewritten whole on every operation. Applying it to creates only follows from the same framing: an owner at the ceiling has not done anything wrong, so taking away their ability to edit what they already hold would be a punishment rather than a bound.
+
+**Alternatives considered**:
+- *A global store-size cap* — rejected: it makes one heavy user able to deny service to everyone else, which is worse than what it prevents.
+- *Refusing updates at the ceiling too* — rejected as above; the cost being bounded is growth, and an update does not grow the store.
+
+### Validation is an allowlist, because a required-fields check is not a boundary
+
+*(added 2026-08-11; specified in "A Write Stores Only What the Wire Format Defines")*
+
+**Choice**: The `data` validator enumerates the keys it accepts and refuses everything else, and bounds known tuples on both sides rather than only below.
+
+**Rationale**: The prior validator confirmed the fields it named were present and well-shaped, then returned true — so any extra property a caller invented was stored verbatim, bounded only by the body cap. The two `>= 2` length floors were the same hole wearing the shape of a field the format does define. An allowlist is also the strongest available form of a rule this spec already had: "no `listId` or `description` inside `data`" stops being a check against two known names and becomes a consequence of the shape.
+
+**Alternatives considered**:
+- *Strip unknown keys instead of refusing* — rejected. Silently discarding part of a payload makes a client bug invisible and leaves the caller believing something was stored.
+
 ## Architecture
+
+### The request boundary
+
+Every access control in this spec resolves through one setting, which is why the trust boundary is drawn before anything else in the chain.
+
+```mermaid
+flowchart LR
+    C["client"] -->|"may forge X-Forwarded-*"| T{"trusted peer?<br/>(deployment config,<br/>default: no)"}
+    T -->|"no — use socket address"| K["caller address"]
+    T -->|"yes — use forwarded"| K
+    K --> RL["rate limiters<br/>read budget / write floor"]
+    K --> SO["same-origin check<br/>(protocol half)"]
+    RL --> V["allowlist validation<br/>exact tuple bounds"]
+    V --> CAP{"at per-owner<br/>ceiling?"}
+    CAP -->|"yes, and a create"| R409["409"]
+    CAP -->|"no, or an update"| OWN["ownership +<br/>cross-collection check"]
+    OWN --> W["write"]
+```
+
+
 
 ### Data model
 
@@ -478,6 +533,14 @@ Note `.ll-empty` on `main` carries the same violation and is deliberately untouc
 - **Auto-enabling "favorites only" reads as a gate to a future reviewer** → It is a default, not a state the user cannot leave, but the two look alike in a screenshot. Addressed by stating the distinction in both the requirement and the decision, and by the scenario asserting every hunter stays one control away.
 - **Previews multiply image requests per expanded list** → A list of twenty loadouts could reference well over a hundred item icons. Mitigated by lazy loading — the shed-at-narrow-widths half of this mitigation was withdrawn on 2026-08-10 with the strip, and the DOM cost is now carried by the card-grid risk above; the icons are also the same small assets already cached from the equipment panel, so a returning user mostly re-renders from cache rather than refetching.
 - **Live-resolved descriptions change under the user on a re-scrape** → Intended, and the reason the field is resolved rather than copied, but it does mean text a user read yesterday may differ today. Bounded by the fact that it only ever affects loadouts the user has never edited; anything they typed is theirs and is never overwritten.
+
+*(added 2026-08-11 with the security amendments:)*
+
+- **The trust boundary cannot be confirmed by CI, by construction** → The value lives in the platform's environment rather than the repository, so no test can observe it. Mitigated as far as it can be: an unresolvable value stops the process at startup, the integration tests pin both configured states against live instances, and the consequence of omitting it is documented at the call site, in `.env.example`, and in the README. The residual risk is the *absent* case specifically, which is indistinguishable from a deliberate direct-exposure deploy. This is stated in the spec as a known limit rather than left implicit.
+- **The read budget is only as strong as the trust boundary** → It keys on the same resolved address as the write floor, so a deployment that mis-declares its topology loses both at once. Not separately mitigable — it is the reason the trust boundary is specified as a prerequisite of the rate-limiting requirement rather than beside it.
+- **The per-owner ceiling will be read as a security control** → It is named as a courtesy ceiling in both the spec and the decision above, precisely because the obvious misreading is that it bounds an adversary. It does not; token rotation is free. Recorded in three places so a future reader reaching for it as a defence finds the disclaimer first.
+- **Tightened validation now diverges further from SPEC-0006's wire v2** → The allowlist, the exact tuple bounds, and the `b` type check each reject the v2 shape that spec defines (nullable equipment entries, `b` as an array). Not a regression — v2 was already rejected and SPEC-0006 records itself as unimplemented — but the constraint now lives in three places in one validator with no cross-reference. Whoever implements SPEC-0006 must touch all three; a pointer beside the allowlist constant is the cheapest guard.
+- **The spec now documents shipped code rather than leading it** → All three security amendments were implemented before being specified, which inverts the intended order. Recorded in the Overview as a fact about how they arrived, so the sequence is visible rather than smoothed over. The mitigation is not retroactive: it is that the next security change to this capability starts here.
 
 ## Migration Plan
 
