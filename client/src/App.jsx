@@ -34,22 +34,20 @@ export default function App() {
         <section className="left-column">
           <WeaponsPanel />
           <EquipmentPanel />
-          {/* Traits and the randomizer share a row rather than stacking. Three reasons: it
-              takes a panel's worth of height out of the page, it gives the randomizer room to
-              grow into (SPEC-0008 replaces it with archetype-driven generation), and it
-              narrows the traits grid — whose art is 64px native and was being upscaled at
-              full column width.
-
-              The whole actions box moves, not just the randomizer — it needs roughly 380px to
-              lay its four control groups out without wrapping, which is why the picker gives
-              up width below. */}
-          <div className="build-row">
-            <TraitsPanel />
-            <ActionsPanel />
-          </div>
+          <TraitsPanel />
         </section>
+        {/* The actions box lives at the BOTTOM OF THE PICKER'S COLUMN, not in the loadout
+            column. Traits is the last panel on the left, so putting actions last on the right
+            lands the two side by side across the columns — each at full column width, which is
+            the size both of them want. The picker list absorbs whatever height is left, so the
+            actions box takes its height out of the list rather than out of the page: the list
+            is the tallest thing here and it scrolls internally, so height is the one thing it
+            can afford to give. */}
         <section className="right-column">
-          <Picker />
+          <div className="picker-panel">
+            <Picker />
+          </div>
+          <ActionsPanel />
         </section>
         {/* Full-width row beneath both columns: the roster is a grid of cards, so it wants
             the whole page rather than a 400px column. .app-main already wraps, so a

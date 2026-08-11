@@ -281,20 +281,32 @@ button {
    funds it: its rows were 85px tall with a 54px icon and it scrolls internally regardless, so
    the width it gives up costs it nothing a compacted row does not give back. */
 .left-column {
-  flex: 2.2 1 400px;
+  flex: 1 1 400px;
   min-width: 320px;
   display: flex;
   flex-direction: column;
   gap: 22px;
 }
 
+/* A stack, not a panel. It used to BE the picker's chrome; now it holds the actions box and
+   the picker as two panels, so the background and border moved to .picker-panel. */
 .right-column {
-  flex: 1 1 360px;
+  flex: 1.25 1 440px;
   min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.picker-panel {
   background: var(--panel);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  /* Claims the height the actions box above it does not use. min-height 0 lets it actually
+     shrink — without it the list's own floor would push the column taller instead. */
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 /* Saved loadouts span the full page beneath both columns. The roster is a card grid
@@ -762,33 +774,6 @@ button {
    by default, so deriving the column count from it would reflow the grid when a setting
    changed — the same reason recorded on `.ll-lp-traits`. */
 
-/* Traits and actions side by side. The randomizer is deliberately given comparable width
-   rather than the leftovers — SPEC-0008 replaces it with archetype-driven generation, so the
-   space is provisioned for what is coming rather than for what it holds today. */
-.build-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 22px;
-  align-items: flex-start;
-}
-/* An even split, which the widened left column now affords. The traits panel's width is
-   load-bearing — it has to seat five cells plus gaps, and anything under ~300px drops them
-   below the 48px floor the preview's cells already use. Both wrap to full width below the
-   flex-basis. */
-/* The traits panel is sized by its contents rather than by a share of the row: five cells at
-   the 48px floor plus four 6px gaps plus the panel's 20px padding is 306px, and below that
-   the cells drop under a floor the preview's own cells already respect. So it does not grow,
-   and the actions box — which has no such intrinsic width, it just wraps a row later — takes
-   whatever is left. */
-.build-row > .panel:first-child {
-  flex: 0 1 306px;
-  min-width: 0;
-}
-.build-row > .panel:last-child {
-  flex: 1 1 320px;
-  min-width: 0;
-}
-
 .trait-grid {
   display: grid;
   /* Capped at the art's own resolution, not stretched to the column.
@@ -1106,7 +1091,20 @@ button {
      on narrow viewports — where there is no leftover space to claim — the list is exactly
      as tall as it was before. */
   flex: 1 1 0;
-  min-height: 680px;
+  /* The 680px floor is now scoped to the stacked case only.
+
+     It existed so that when the columns stack on a narrow viewport — where there is no
+     leftover height to claim — the list stays as tall as it always was. Side by side it did
+     something else: it made the list unshrinkable, so the actions box moving into this column
+     would have pushed the column taller rather than taking height out of the list. 360px is
+     the floor here, roughly five rows, below which the list stops being a list. */
+  min-height: 360px;
+}
+
+@media (max-width: 760px) {
+  .picker-list {
+    min-height: 680px;
+  }
 }
 
 /* Compacted from 14px/18px padding and a 56px min-height, which put a row at 85px and fit
