@@ -691,11 +691,37 @@ export function replaceTupleField(line, index, nextValue) {
   return `${line.slice(0, open + 1)}${parts.join(",")}${line.slice(close)}`;
 }
 
+/** The `export const NAME = [` each catalog category lives under. */
+const CATEGORY_EXPORT = { weapons: "WEAPONS", tools: "TOOLS", traits: "TRAITS", consumables: "CONS" };
+
+/**
+ * The line range of one category's array, so a row search cannot wander into another category.
+ *
+ * Returns `[startLine, endLine)` or null when the export is not found.
+ */
+export function categoryLineRange(lines, category) {
+  const exportName = CATEGORY_EXPORT[category];
+  if (!exportName) return null;
+  const start = lines.findIndex((line) => line.startsWith(`export const ${exportName} = [`));
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < lines.length && !/^\];?\s*$/.test(lines[end])) end += 1;
+  return [start + 1, end];
+}
+
 /**
  * Apply planned changes to catalog.js source text.
  *
  * Rows are located by their id literal at the start of the tuple, so a reordered catalog still
  * lands its edits correctly, and a row that cannot be located is reported rather than guessed at.
+ *
+ * The search is SCOPED to the change's own category array. catalog.js's header states that an id is
+ * "unique within its category" — which permits the same id string in two different categories. A
+ * whole-file search would then find whichever line came first and apply the write at that index,
+ * and the indices mean different things per category: 3 is `cost` in WEAPONS but `group` in TOOLS.
+ * That would write a number into a group slot — precisely the wrong-but-well-formed corruption the
+ * rest of this machinery exists to prevent. No collision exists in the catalog today; this makes it
+ * unable to matter if one ever does. (Raised in review of #194.)
  */
 export function applyCatalogWrites(source, changes) {
   const lines = source.split("\n");
@@ -704,7 +730,19 @@ export function applyCatalogWrites(source, changes) {
 
   for (const change of changes) {
     const needle = `["${change.id}",`;
-    const lineNo = lines.findIndex((line) => line.trimStart().startsWith(needle));
+    const range = categoryLineRange(lines, change.category);
+    if (!range) {
+      unlocated.push(change);
+      continue;
+    }
+    const [from, to] = range;
+    let lineNo = -1;
+    for (let i = from; i < to; i++) {
+      if (lines[i].trimStart().startsWith(needle)) {
+        lineNo = i;
+        break;
+      }
+    }
     if (lineNo === -1) {
       unlocated.push(change);
       continue;
@@ -1074,7 +1112,16 @@ async function main() {
     console.log("              be deleted from it. Read the diff.");
   }
 
+  if (options.writeCatalog && !options.dryRun && !partial) {
+    console.log("scrape-stats: --write-catalog — the plan below is printed before anything is applied.");
+  }
+
   const summary = await runStatsScrape(options, { fetchFn: fetch });
+
+  // The structured log carries the same facts as JSON events, which is the machine-readable half.
+  // This is the half a person reads: SPEC-0007 requires the operator to SEE every intended
+  // overwrite, and a wall of one-JSON-object-per-line is not seeing it. (Raised in review of #194.)
+  if (summary.catalogPlan) console.log(formatCatalogPlan(summary.catalogPlan));
   console.log(formatSummary(summary));
 
   process.exitCode = summary.failed.length > 0 ? 1 : 0;

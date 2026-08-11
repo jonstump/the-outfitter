@@ -30,6 +30,7 @@ import {
   applyCatalogWrites,
   buildStatsRecord,
   canonicalTitleFromPageName,
+  categoryLineRange,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
@@ -1029,8 +1030,10 @@ test("replaceTupleField: refuses rather than mangling when the index is out of r
 test("applyCatalogWrites: locates rows by id and reports any it cannot find", () => {
   const source = [
     "// a comment that must survive",
+    "export const WEAPONS = [",
     '  ["a", "A", 1, 10, "compact", "Pistols"],',
     '  ["b", "B", 2, 20, "medium", "Rifles"],',
+    "];",
   ].join("\n");
   const { source: next, applied, unlocated } = applyCatalogWrites(source, [
     { id: "b", index: 3, to: 25, label: "cost", category: "weapons" },
@@ -1120,4 +1123,64 @@ test("catalog.js states the wire-format gate beside the AMMO table", async () =>
   assert.match(gate, /FORMAT_VERSION/);
   assert.match(gate, /bare index/i);
   assert.match(gate, /migration/i);
+});
+
+test("categoryLineRange: bounds each category's array", () => {
+  const lines = [
+    "export const WEAPONS = [",
+    '  ["a", "A", 1, 10, "compact", "Pistols"],',
+    "];",
+    "export const TOOLS = [",
+    '  ["a", "A tool", 20, "Melee"],',
+    "];",
+  ];
+  assert.deepEqual(categoryLineRange(lines, "weapons"), [1, 2]);
+  assert.deepEqual(categoryLineRange(lines, "tools"), [4, 5]);
+  assert.equal(categoryLineRange(lines, "nonsense"), null);
+});
+
+test("applyCatalogWrites: a colliding id in another category is not written to", () => {
+  // catalog.js's header says an id is unique WITHIN its category, so the same string is permitted
+  // in two. Index 3 is `cost` in WEAPONS and `group` in TOOLS — an unscoped search would find the
+  // tools row first here and write a number into its group slot.
+  const source = [
+    "export const TOOLS = [",
+    '  ["shared-id", "A Tool", 20, "Melee"],',
+    "];",
+    "export const WEAPONS = [",
+    '  ["shared-id", "A Weapon", 1, 10, "compact", "Pistols"],',
+    "];",
+  ].join("\n");
+
+  const { source: next, applied, unlocated } = applyCatalogWrites(source, [
+    { id: "shared-id", category: "weapons", index: 3, to: 99, label: "cost" },
+  ]);
+
+  assert.equal(unlocated.length, 0);
+  assert.equal(applied.length, 1);
+  assert.match(next, /\["shared-id", "A Weapon", 1, 99, "compact", "Pistols"\]/);
+  assert.match(next, /\["shared-id", "A Tool", 20, "Melee"\]/, "the tools row keeps its group");
+});
+
+test("applyCatalogWrites: a row missing from its own category is unlocated, not found elsewhere", () => {
+  const source = ['export const TOOLS = [', '  ["only-a-tool", "T", 20, "Melee"],', "];"].join("\n");
+  const { applied, unlocated } = applyCatalogWrites(source, [
+    { id: "only-a-tool", category: "weapons", index: 3, to: 5, label: "cost" },
+  ]);
+  assert.equal(applied.length, 0);
+  assert.deepEqual(unlocated.map((u) => u.id), ["only-a-tool"]);
+});
+
+test("the readable plan is actually printed, not just exported", async () => {
+  // formatCatalogPlan was built and tested but never wired into the run path, so an operator
+  // running --write-catalog saw a wall of JSON events instead of the diff table. (Review of #194.)
+  const src = await readFile(path.join(__dirname, "scrape-stats.mjs"), "utf8");
+  const code = src
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    })
+    .join("\n");
+  assert.match(code, /console\.log\(formatCatalogPlan\(/, "main() must print the human-readable plan");
 });
