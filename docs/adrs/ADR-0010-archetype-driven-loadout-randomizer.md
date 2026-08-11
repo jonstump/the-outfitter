@@ -1,7 +1,8 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-11
 decision-makers: Jon Stump
+governs: [SPEC-0008]
 related: [ADR-0005, ADR-0009]
 ---
 
