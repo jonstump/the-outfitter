@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { deleteLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
+import { deleteLoadout, describeLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
 import { uiActions } from "./uiSlice.js";
 
@@ -72,6 +72,41 @@ export const moveSaved = createAsyncThunk(
   }
 );
 
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+//
+// `description` arrives here in one of exactly three states and leaves in the same one:
+// null (never edited — the card resolves the list hunter's text at render time), "" (the
+// user deliberately blanked it) and a non-empty string (their own words). Nothing in this
+// thunk coalesces, defaults or trims — `description ?? ""`, `description || null` and a
+// hopeful `.trim()` are each a way of turning three states into two, and the state that
+// disappears is always the one that lets a description be emptied.
+//
+// Restoring inheritance is the SAME write with `null`, which is why there is no separate
+// "restore" thunk: the distinct action the spec requires is a distinct control on the card,
+// not a distinct request. The server stores null; it never stores the resolved text.
+export const describeSaved = createAsyncThunk(
+  "savedLoadouts/describe",
+  async ({ id, description, loadoutName }, { dispatch }) => {
+    try {
+      const record = await describeLoadout(id, description);
+      dispatch(
+        uiActions.setMessage(
+          description === null
+            ? `“${loadoutName}” is showing its hunter's description again.`
+            : description === ""
+              ? `Cleared the description for “${loadoutName}”.`
+              : `Saved the description for “${loadoutName}”.`
+        )
+      );
+      return record;
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't save the description for “${loadoutName}”: ${err.message}`));
+      throw err;
+    }
+  }
+);
+
 const savedLoadoutsSlice = createSlice({
   name: "savedLoadouts",
   initialState: { items: [], status: "idle", error: null },
@@ -98,6 +133,13 @@ const savedLoadoutsSlice = createSlice({
         state.items = state.items.filter((l) => l.id !== action.payload);
       })
       .addCase(moveSaved.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
+      })
+      // The server's record replaces the local one wholesale, exactly as a move does. It is
+      // the authority on which of the three description states the loadout is now in, and
+      // merging fields here would be a second place for them to be decided.
+      .addCase(describeSaved.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
       });

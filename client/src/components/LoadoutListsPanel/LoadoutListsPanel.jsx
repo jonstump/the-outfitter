@@ -36,11 +36,11 @@ import {
 import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
-import { HUNTERS, hunterNameFor } from "../../data/hunters.js";
+import { HUNTERS, hunterFor, hunterNameFor } from "../../data/hunters.js";
 import { LIST_ACCENTS, accentName, accentVar, previewNextAccent } from "../../utils/listAccent.js";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import { loadSavedThunk } from "../../store/thunks.js";
-import { deleteSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
+import { deleteSaved, describeSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
 import {
   createListThunk,
   renameListThunk,
@@ -686,6 +686,226 @@ function LoadoutPreview({ item, loadout }) {
   );
 }
 
+// ---------------------------------------------------------------------------------------
+// The loadout description
+//
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+//
+// THREE states, and the whole point of the code below is that they never become two:
+//
+//   null / absent    never edited      -> the list hunter's description, resolved LIVE
+//   ""               deliberately blank -> nothing
+//   non-empty string the user's words   -> that text
+//
+// design.md's risk register names the failure directly: "the obvious implementation is a
+// truthy check, which silently merges 'never edited' with 'deliberately blank' and makes the
+// field impossible to empty". So the resolution is a named function returning a discriminated
+// answer, rather than an expression like `item.description || inherited` sprinkled through the
+// card — one place to read, one place to test, and `??` where it matters instead of `||`.
+//
+// The inheritance path is loadout -> list -> hunter -> description, and it is a read-time
+// join: the hunters dataset is already indexed by id, so this costs one map access per card
+// and writes nothing. A re-scrape that improves a hunter's prose therefore reaches every
+// unedited loadout without touching a single stored record, and a loadout moved to another
+// list picks up that list's hunter instead — both of those are the intended consequences,
+// not side effects.
+// ---------------------------------------------------------------------------------------
+
+/**
+ * The description a hunter dataset entry offers, or null when it offers none.
+ *
+ * SPEC-0003 REQ "Hunter Dataset Consumption Contract" requires consumers to tolerate an
+ * entry whose description is absent or empty by "rendering no description rather than an
+ * empty element". Null from `hunterFor` (a hunterId no longer in the dataset) is the same
+ * answer as an entry with no prose in it — there is nothing to inherit either way.
+ *
+ * This is the ONE place a description may be collapsed to two states, and it is sound here
+ * because it is a DEFAULT rather than a stored value: "" and absent both mean the dataset
+ * has nothing to offer. The stored field's three states are resolved separately, below.
+ */
+export function descriptionOf(hunter) {
+  const text = hunter?.description;
+  return typeof text === "string" && text.length > 0 ? text : null;
+}
+
+/**
+ * What a loadout card should render for its description, and where that text came from.
+ *
+ * Returns `{ text, inherited, hunterName }`, where `text` is null when nothing at all is to
+ * be rendered — which is BOTH "deliberately blank" (stored "") and "nothing to inherit". The
+ * two are indistinguishable on screen by design; they differ in what a subsequent write
+ * means, and that difference lives in the stored value, not here.
+ *
+ * `item.description ?? null` is load-bearing twice over. `||` would send a stored `""` down
+ * the inheritance path and make the field impossible to empty, and a strict `=== null` would
+ * miss every record written before the field existed — design.md calls out that second one
+ * as the same collapse "arriving through a comparison operator rather than through a truthy
+ * check". Absent and null are one state; `""` is not part of it.
+ */
+export function resolveDescription(item, list) {
+  const stored = item?.description ?? null;
+  if (stored !== null) return { text: stored === "" ? null : stored, inherited: false, hunterName: null };
+
+  const hunter = hunterFor(list?.hunterId);
+  const text = descriptionOf(hunter);
+  // A loadout in Unassigned, in a list with no portrait, or in one whose hunter has left the
+  // roster has nothing to inherit. That is an ordinary state, not an error, and the card
+  // stays fully usable.
+  return { text, inherited: text !== null, hunterName: text === null ? null : hunter.name };
+}
+
+/**
+ * The description block on a loadout card: render, edit, clear, restore.
+ *
+ * Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+ * SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 Accessibility
+ * Requirements ("Keyboard Navigation").
+ *
+ * Both texts it can render are UNTRUSTED — the user's own, and the dataset's, which was
+ * scraped off-origin and is the less trustworthy of the two. Each is rendered as a JSX text
+ * child and never as markup; there is no `dangerouslySetInnerHTML` here and there must not
+ * be one added.
+ *
+ * The editor is a `<textarea>` with explicit save and cancel controls rather than a
+ * commit-on-blur field like the list rename above it. A description can be a paragraph, so
+ * Tab has to be able to LEAVE the field (SPEC-0003 says so outright) — and with
+ * commit-on-blur, tabbing to "cancel" would save on the way there. Escape abandons the edit
+ * without writing.
+ *
+ * "Restore" is offered whenever anything is stored, including the deliberately-blank state,
+ * because clearing the field is explicitly NOT the path back to inheriting: it is a distinct
+ * action that writes null. It is offered even when the list has no hunter to inherit from —
+ * the state it restores is "inherit whatever this list offers", which is meaningful whether
+ * or not the list offers anything today.
+ *
+ * No length cap is enforced here. The cap is the server's (DESCRIPTION_MAX_CHARS), and
+ * restating it in the client would put the number in two places; an over-long write is
+ * refused and surfaces through the same message banner every other failure uses.
+ */
+function LoadoutDescription({ item, list }) {
+  const dispatch = useDispatch();
+  const { text, inherited, hunterName } = resolveDescription(item, list);
+  const stored = item.description ?? null;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // The reveal. Bounded height is the stylesheet's job (`.ll-lcard-desc-clamped`); this is
+  // only the state that lifts the bound. It is offered whenever there is any text at all
+  // rather than past some character threshold, because the card's width is not knowable from
+  // here — a description short enough to fit at 400px is four clamped lines at 168px, and a
+  // threshold would leave that one clipped with no way to read the rest.
+  const [revealed, setRevealed] = useState(false);
+  const fieldRef = useRef(null);
+
+  useEffect(() => {
+    if (editing) fieldRef.current?.focus();
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    // Saving the text that is already stored is not a write. Note that saving the INHERITED
+    // text unchanged very much is one: the user has adopted it as their own, and from then
+    // on a better scrape must not overwrite what they kept.
+    if (draft !== stored) {
+      dispatch(describeSaved({ id: item.id, description: draft, loadoutName: item.name }));
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="ll-lcard-desc-wrap" data-testid={`loadout-desc-wrap-${item.id}`}>
+        <textarea
+          ref={fieldRef}
+          className="ll-lcard-desc-field"
+          aria-label={`Description for ${item.name}`}
+          value={draft}
+          rows={4}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              // Abandon, writing nothing. Stopped from propagating so the panel's other
+              // Escape handlers cannot also act on a key that was meant for this field.
+              e.stopPropagation();
+              setEditing(false);
+            }
+          }}
+        />
+        <div className="ll-lcard-desc-controls">
+          <button
+            className="ll-lcard-desc-btn"
+            aria-label={`Save description: ${item.name}`}
+            onClick={commit}
+          >
+            save
+          </button>
+          <button
+            className="ll-lcard-desc-btn"
+            aria-label={`Cancel editing description: ${item.name}`}
+            onClick={() => setEditing(false)}
+          >
+            cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ll-lcard-desc-wrap" data-testid={`loadout-desc-wrap-${item.id}`}>
+      {text !== null && (
+        <>
+          {/* Visible AND announced. SPEC-0003: an inherited description must not be announced
+              as though the user wrote it, and where the distinction is surfaced visually it
+              must be available non-visually — so this is one plain element rather than a
+              styled cue plus a separate screen-reader-only string that could drift from it. */}
+          {inherited && (
+            <span className="ll-lcard-desc-from" data-testid={`loadout-desc-from-${item.id}`}>
+              From {hunterName}
+            </span>
+          )}
+          <p
+            className={`ll-lcard-desc${revealed ? "" : " ll-lcard-desc-clamped"}`}
+            data-source={inherited ? "inherited" : "own"}
+            data-testid={`loadout-desc-${item.id}`}
+          >
+            {text}
+          </p>
+          <button
+            className="ll-lcard-desc-btn"
+            aria-expanded={revealed}
+            aria-label={`${revealed ? "Collapse" : "Reveal the whole"} description: ${item.name}`}
+            onClick={() => setRevealed(!revealed)}
+          >
+            {revealed ? "less" : "more"}
+          </button>
+        </>
+      )}
+      <button
+        className="ll-lcard-desc-btn"
+        // Names the action AND the loadout, per SPEC-0003's icon/control naming rule: a grid
+        // of cards otherwise presents a column of identically named "edit" stops.
+        aria-label={`${text === null ? "Add" : "Edit"} description: ${item.name}`}
+        onClick={() => {
+          setDraft(stored ?? text ?? "");
+          setEditing(true);
+        }}
+      >
+        {text === null ? "add description" : "edit"}
+      </button>
+      {stored !== null && (
+        <button
+          className="ll-lcard-desc-btn"
+          aria-label={`Restore inherited description: ${item.name}`}
+          onClick={() => dispatch(describeSaved({ id: item.id, description: null, loadoutName: item.name }))}
+        >
+          use hunter's
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * A saved loadout, as a card.
  *
@@ -727,9 +947,16 @@ function LoadoutCard({ item, lists }) {
         <span className="ll-lcard-cost">${cost}</span>
       </div>
 
-      {/* A description belongs here, between the head and the preview, when #140 lands
-          (SPEC-0003 REQ "Loadouts Carry an Editable Description"). Nothing is rendered for
-          it today — the position is reserved in the layout, not occupied by an empty node. */}
+      {/* Between the head and the preview, which is the position the card reserved for it.
+          The description annotates the loadout, so it reads before the contents it describes
+          — and it sits OUTSIDE the preview, which is what keeps it from displacing the
+          preview's category structure however long the prose is (SPEC-0003 REQ "Loadouts
+          Carry an Editable Description").
+
+          `lists` is passed rather than the resolved list: a dangling `listId` resolves to
+          undefined here exactly as it does in the move control above, so a loadout filed
+          into a retired list inherits nothing instead of throwing. */}
+      <LoadoutDescription item={item} list={lists.find((l) => l.id === item.listId) || null} />
 
       <LoadoutPreview item={item} loadout={loadout} />
 

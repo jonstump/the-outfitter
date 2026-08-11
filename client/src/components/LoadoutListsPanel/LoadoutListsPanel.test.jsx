@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import LoadoutListsPanel, {
   CARD_MIN_PX,
@@ -14,14 +14,16 @@ import LoadoutListsPanel, {
   WEAPON_ASSET_WIDTH,
   WEAPON_CELLS,
   WEAPON_MIN_DRAWN_PX,
+  descriptionOf,
   previewGroups,
   previewSummary,
+  resolveDescription,
 } from "./LoadoutListsPanel.jsx";
 import * as panelModule from "./LoadoutListsPanel.jsx";
 import { createTestStore } from "../../test/testStore.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { slugify } from "../../utils/slugify.js";
-import { emptyLoadout, fromData, toData } from "../../utils/loadoutCodec.js";
+import { emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
 import { HUNTERS } from "../../data/hunters.js";
@@ -1272,5 +1274,511 @@ describe("saved loadouts as a card grid", () => {
 
     expect(screen.getByRole("article", { name: "long ammo" })).toBe(cardOf("1"));
     expect(screen.getByRole("article", { name: "shotgun rush" })).toBe(cardOf("2"));
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description", REQ "Hunter Dataset Consumption
+// Contract", REQ "The Saved-Loadout Wire Format Is Unchanged"
+//
+// Every test below exists to keep THREE states distinguishable — null/absent means "never
+// edited, inherit live", "" means "deliberately blank", non-empty means the user's words.
+// design.md's risk register names the way they get collapsed: a truthy check. So the pair
+// that matters most is "a cleared description stays blank" and "an unedited loadout inherits":
+// `item.description || inherited` passes the second and fails the first, and `=== null`
+// instead of `?? null` fails the first while passing the second.
+// ---------------------------------------------------------------------------------------
+
+// The two hunters SPEC-0003's scenarios name by hand. Found by name rather than by index so
+// the fixtures say what the spec says; both are ordinary committed roster entries.
+const TURNCOAT = HUNTERS.find((h) => h.name === "The Turncoat");
+const RAT = HUNTERS.find((h) => h.name === "The Rat");
+
+// A record whose `description` key is PRESENT. `filed()` above produces one with the key
+// absent, which is the other half of the "never edited" state and must behave identically.
+const describedAs = (item, description) => ({ ...item, description });
+
+const descOf = (id) => screen.queryByTestId(`loadout-desc-${id}`);
+const editControl = (id, name, action = "Edit") =>
+  within(cardOf(id)).getByRole("button", { name: `${action} description: ${name}` });
+
+describe("loadout descriptions", () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(async () => {
+      throw new Error("no request may be issued to RENDER a description");
+    });
+  });
+
+  it("has both hunters the spec's scenarios name", () => {
+    // The fixtures below are worthless if these silently resolve to undefined.
+    expect(TURNCOAT?.description?.length).toBeGreaterThan(0);
+    expect(RAT?.description?.length).toBeGreaterThan(0);
+    expect(TURNCOAT.description).not.toBe(RAT.description);
+  });
+
+  // --- Inheritance -------------------------------------------------------------------
+
+  it("renders the list hunter's description for a loadout that has never been described", () => {
+    const store = renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    expect(descOf("1")).toHaveTextContent(TURNCOAT.description);
+    // …and NOTHING was written to get it there. The default is resolved at render time, so
+    // the stored record still carries no description at all and no request was issued.
+    expect(store.getState().savedLoadouts.items[0]).not.toHaveProperty("description");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("treats an explicit null exactly as it treats an absent key", () => {
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), null)], { selectedListId: "a" })
+    );
+    expect(descOf("1")).toHaveTextContent(TURNCOAT.description);
+  });
+
+  it("says whose description it is, visibly and to assistive tech alike", () => {
+    // SPEC-0003 Accessibility: an inherited description MUST NOT be announced as though the
+    // user wrote it, and where the distinction is surfaced visually it must be available
+    // non-visually. One plain element does both — not `aria-hidden` styling plus a separate
+    // sr-only string that could drift from it.
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    const from = screen.getByTestId("loadout-desc-from-1");
+    expect(from).toHaveTextContent(`From ${TURNCOAT.name}`);
+    expect(from).not.toHaveAttribute("aria-hidden");
+    expect(descOf("1")).toHaveAttribute("data-source", "inherited");
+  });
+
+  it("renders a user's own description without attributing it to a hunter", () => {
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), "my own words")], { selectedListId: "a" })
+    );
+
+    expect(descOf("1")).toHaveTextContent("my own words");
+    expect(descOf("1")).toHaveAttribute("data-source", "own");
+    expect(screen.queryByTestId("loadout-desc-from-1")).not.toBeInTheDocument();
+    expect(screen.queryByText(TURNCOAT.description)).not.toBeInTheDocument();
+  });
+
+  it("renders nothing at all for a deliberately blank description", () => {
+    // The state a truthy check destroys. "" is not "never edited": the hunter's lore must not
+    // come back, and no empty element may be rendered in its place either.
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), "")], { selectedListId: "a" })
+    );
+
+    expect(descOf("1")).not.toBeInTheDocument();
+    expect(screen.queryByText(TURNCOAT.description)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("loadout-desc-from-1")).not.toBeInTheDocument();
+    // The card stays fully usable, and both actions are still offered: add one, or go back
+    // to inheriting — clearing is explicitly NOT the path back.
+    expect(editControl("1", "long ammo", "Add")).toBeInTheDocument();
+    expect(within(cardOf("1")).getByLabelText("Restore inherited description: long ammo")).toBeInTheDocument();
+  });
+
+  // --- Nothing to inherit from -------------------------------------------------------
+
+  it("renders no description for a loadout with no hunter to inherit from", () => {
+    renderPanel(
+      base([list("a", "No portrait"), list("b", "Gone", { hunterId: "left-the-roster" })],
+        [filed("1", "unassigned build", LOADED), filed("2", "portraitless", LOADED, "a"), filed("3", "orphan", LOADED, "b")],
+        { unassignedOpen: true })
+    );
+
+    // Unassigned: nothing to inherit, and the card is fully usable.
+    expect(descOf("1")).not.toBeInTheDocument();
+    expect(within(cardOf("1")).getByRole("button", { name: "unassigned build" })).toBeInTheDocument();
+    expect(within(cardOf("1")).getByLabelText("List for unassigned build")).toBeEnabled();
+    expect(editControl("1", "unassigned build", "Add")).toBeInTheDocument();
+    // …and no restore control, because there is nothing stored to restore FROM.
+    expect(within(cardOf("1")).queryByLabelText(/^Restore inherited description/)).not.toBeInTheDocument();
+  });
+
+  it("survives a list whose hunterId is no longer in the dataset", () => {
+    renderPanel(
+      base([list("b", "Gone", { hunterId: "left-the-roster" })], [filed("3", "orphan", LOADED, "b")], {
+        selectedListId: "b",
+      })
+    );
+
+    expect(descOf("3")).not.toBeInTheDocument();
+    // Neither the loadout nor the list fails: both still render everything else.
+    expect(within(cardOf("3")).getByRole("button", { name: "orphan" })).toBeInTheDocument();
+    expect(screen.getByTestId("list-expanded")).toBeInTheDocument();
+  });
+
+  it("survives a dangling listId, inheriting nothing rather than throwing", () => {
+    renderPanel(base([list("a", "Alpha")], [filed("1", "stray", LOADED, "deleted-list")], { unassignedOpen: true }));
+    expect(descOf("1")).not.toBeInTheDocument();
+    expect(within(cardOf("1")).getByRole("button", { name: "stray" })).toBeInTheDocument();
+  });
+
+  it("tolerates a dataset entry with an absent or empty description", () => {
+    // The roster currently has none, so this is asserted where it is decided rather than
+    // through a fixture the dataset would have to be corrupted to produce. All four inputs
+    // are states SPEC-0003 requires a consumer to survive.
+    expect(descriptionOf({ id: "x", name: "X", description: "lore" })).toBe("lore");
+    expect(descriptionOf({ id: "x", name: "X", description: "" })).toBeNull();
+    expect(descriptionOf({ id: "x", name: "X" })).toBeNull();
+    expect(descriptionOf(null)).toBeNull(); // what hunterFor returns for an unknown id
+    expect(descriptionOf(undefined)).toBeNull();
+  });
+
+  it("resolves the three stored states without collapsing any pair", () => {
+    // The rule itself, asserted directly: the DOM tests above can only show two outcomes
+    // (text or no text), and "deliberately blank" and "nothing to inherit" look identical
+    // from there while differing in what the next write means.
+    const inList = { id: "a", name: "Turncoat builds", hunterId: TURNCOAT.id };
+
+    expect(resolveDescription({ id: "1" }, inList)).toEqual({
+      text: TURNCOAT.description, inherited: true, hunterName: TURNCOAT.name,
+    });
+    expect(resolveDescription({ id: "1", description: null }, inList)).toEqual({
+      text: TURNCOAT.description, inherited: true, hunterName: TURNCOAT.name,
+    });
+    expect(resolveDescription({ id: "1", description: "" }, inList)).toEqual({
+      text: null, inherited: false, hunterName: null,
+    });
+    expect(resolveDescription({ id: "1", description: "mine" }, inList)).toEqual({
+      text: "mine", inherited: false, hunterName: null,
+    });
+    // Nothing to inherit, which is NOT the same stored state as "" even though it renders
+    // the same: one offers a restore control and the other does not.
+    expect(resolveDescription({ id: "1" }, null)).toEqual({ text: null, inherited: false, hunterName: null });
+  });
+
+  // --- Editing ------------------------------------------------------------------------
+
+  it("edits an inherited description into the user's own, and stops inheriting", async () => {
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      sent.push({ url: String(url), method: opts.method, raw: opts.body, body: JSON.parse(opts.body) });
+      return { ok: true, status: 200, json: async () => describedAs(filed("1", "long ammo", LOADED, "a"), "my own words") };
+    });
+
+    const store = renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    await act(async () => fireEvent.click(editControl("1", "long ammo")));
+    const field = screen.getByLabelText("Description for long ammo");
+    // Seeded with the text the user is looking at — the spec's own cap rationale calls the
+    // inherited text "the text a user most often starts from when they edit".
+    expect(field.value).toBe(TURNCOAT.description);
+
+    fireEvent.change(field, { target: { value: "my own words" } });
+    await act(async () => fireEvent.click(within(cardOf("1")).getByLabelText("Save description: long ammo")));
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].method).toBe("PATCH");
+    expect(sent[0].url).toMatch(/\/api\/loadouts\/1$/);
+    expect(sent[0].body.description).toBe("my own words");
+    // A description write is not a move: the key is absent, so filing is left alone.
+    expect("listId" in sent[0].body).toBe(false);
+
+    expect(store.getState().savedLoadouts.items[0].description).toBe("my own words");
+    expect(descOf("1")).toHaveTextContent("my own words");
+    expect(screen.queryByText(TURNCOAT.description)).not.toBeInTheDocument();
+  });
+
+  it("clears a description to empty and does not re-inherit", async () => {
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      sent.push({ raw: opts.body, body: JSON.parse(opts.body) });
+      return { ok: true, status: 200, json: async () => describedAs(filed("1", "long ammo", LOADED, "a"), "") };
+    });
+
+    const store = renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), "mine")], { selectedListId: "a" })
+    );
+
+    await act(async () => fireEvent.click(editControl("1", "long ammo")));
+    fireEvent.change(screen.getByLabelText("Description for long ammo"), { target: { value: "" } });
+    await act(async () => fireEvent.click(within(cardOf("1")).getByLabelText("Save description: long ammo")));
+
+    // The empty string reaches the wire AS an empty string. Asserted on the raw body too: a
+    // helpful `description || null` between here and fetch would still produce a 200 and a
+    // plausible-looking store, and only the bytes show it.
+    expect(sent[0].raw).toBe(JSON.stringify({ description: "" }));
+    expect(sent[0].body.description).toBe("");
+
+    expect(store.getState().savedLoadouts.items[0].description).toBe("");
+    expect(descOf("1")).not.toBeInTheDocument();
+    expect(screen.queryByText(TURNCOAT.description)).not.toBeInTheDocument();
+  });
+
+  it("restores inheritance with an explicit null, and shows the hunter's text again", async () => {
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      sent.push({ raw: opts.body, body: JSON.parse(opts.body) });
+      return { ok: true, status: 200, json: async () => describedAs(filed("1", "long ammo", LOADED, "a"), null) };
+    });
+
+    const store = renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), "mine")], { selectedListId: "a" })
+    );
+
+    await act(async () =>
+      fireEvent.click(within(cardOf("1")).getByLabelText("Restore inherited description: long ammo"))
+    );
+
+    // The KEY must survive JSON.stringify — `{ description: undefined }` serialises to `{}`,
+    // which the server rejects for carrying no instruction at all. Byte-for-byte, therefore.
+    expect(sent[0].raw).toBe(JSON.stringify({ description: null }));
+    expect(store.getState().savedLoadouts.items[0].description).toBeNull();
+    expect(descOf("1")).toHaveTextContent(TURNCOAT.description);
+    expect(descOf("1")).toHaveAttribute("data-source", "inherited");
+  });
+
+  it("abandons an in-progress edit on Escape, writing nothing", async () => {
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), "mine")], { selectedListId: "a" })
+    );
+
+    await act(async () => fireEvent.click(editControl("1", "long ammo")));
+    const field = screen.getByLabelText("Description for long ammo");
+    fireEvent.change(field, { target: { value: "half-written" } });
+    await act(async () => fireEvent.keyDown(field, { key: "Escape" }));
+
+    expect(screen.queryByLabelText("Description for long ammo")).not.toBeInTheDocument();
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(descOf("1")).toHaveTextContent("mine");
+  });
+
+  it("is fully keyboard-operable, and does not trap Tab in the field", async () => {
+    // SPEC-0003 Accessibility: editing MUST be achievable without a pointer, the control must
+    // name both the action and the loadout, and "because a description may be long, the editor
+    // MUST NOT trap Tab as a text-insertion key".
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    const trigger = editControl("1", "long ammo");
+    expect(trigger.tagName).toBe("BUTTON");
+    expect(trigger).not.toHaveAttribute("tabindex", "-1");
+
+    await act(async () => fireEvent.click(trigger));
+    const field = screen.getByLabelText("Description for long ammo");
+    expect(field.tagName).toBe("TEXTAREA");
+    expect(document.activeElement).toBe(field);
+    // fireEvent returns false when a handler called preventDefault, which is how a field
+    // swallows Tab. Nothing here does, so focus leaves for the buttons beside it.
+    expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
+    for (const label of ["Save description: long ammo", "Cancel editing description: long ammo"]) {
+      expect(within(cardOf("1")).getByLabelText(label).tagName).toBe("BUTTON");
+    }
+  });
+
+  it("cancels without writing, leaving the stored text as it was", async () => {
+    renderPanel(
+      base([], [describedAs(filed("1", "long ammo", LOADED), "mine")], { unassignedOpen: true })
+    );
+
+    await act(async () => fireEvent.click(editControl("1", "long ammo")));
+    fireEvent.change(screen.getByLabelText("Description for long ammo"), { target: { value: "discarded" } });
+    await act(async () =>
+      fireEvent.click(within(cardOf("1")).getByLabelText("Cancel editing description: long ammo"))
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(descOf("1")).toHaveTextContent("mine");
+  });
+
+  it("does not write when the text was not changed", async () => {
+    renderPanel(
+      base([], [describedAs(filed("1", "long ammo", LOADED), "mine")], { unassignedOpen: true })
+    );
+
+    await act(async () => fireEvent.click(editControl("1", "long ammo")));
+    await act(async () => fireEvent.click(within(cardOf("1")).getByLabelText("Save description: long ammo")));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // --- Moving --------------------------------------------------------------------------
+
+  it("re-inherits from the destination list when an unedited loadout is moved", async () => {
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      sent.push({ raw: opts.body, body: JSON.parse(opts.body) });
+      return { ok: true, status: 200, json: async () => ({ ...filed("1", "long ammo", LOADED, "b"), description: null }) };
+    });
+
+    const lists = [list("a", "Turncoat builds", { hunterId: TURNCOAT.id }), list("b", "Rat builds", { hunterId: RAT.id })];
+    const store = renderPanel(base(lists, [filed("1", "long ammo", LOADED, "a")], { selectedListId: "a" }));
+    expect(descOf("1")).toHaveTextContent(TURNCOAT.description);
+
+    await act(async () =>
+      fireEvent.change(within(cardOf("1")).getByLabelText("List for long ammo"), { target: { value: "b" } })
+    );
+
+    // A move says nothing about the description, so the key is absent — an omitted key is not
+    // a reset, and this is the client half of that rule.
+    expect(sent[0].raw).toBe(JSON.stringify({ listId: "b" }));
+    expect("description" in sent[0].body).toBe(false);
+    expect(store.getState().savedLoadouts.items[0].description).toBeNull();
+
+    // The card left the open list with the move, so the re-inheritance is read on the next
+    // render — which is the point: the default is a function of where the loadout is filed
+    // NOW, computed at render time, with nothing stored to become stale.
+    cleanup();
+    renderPanel(base(lists, store.getState().savedLoadouts.items, { selectedListId: "b" }));
+    expect(descOf("1")).toHaveTextContent(RAT.description);
+    expect(screen.queryByText(TURNCOAT.description)).not.toBeInTheDocument();
+  });
+
+  it("preserves a user-written description across a move", async () => {
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      sent.push({ raw: opts.body, body: JSON.parse(opts.body) });
+      return { ok: true, status: 200, json: async () => describedAs(filed("1", "long ammo", LOADED, "b"), "my own words") };
+    });
+
+    const lists = [list("a", "Turncoat builds", { hunterId: TURNCOAT.id }), list("b", "Rat builds", { hunterId: RAT.id })];
+    const store = renderPanel(
+      base(lists, [describedAs(filed("1", "long ammo", LOADED, "a"), "my own words")], { selectedListId: "a" })
+    );
+
+    await act(async () =>
+      fireEvent.change(within(cardOf("1")).getByLabelText("List for long ammo"), { target: { value: "b" } })
+    );
+
+    expect("description" in sent[0].body).toBe(false);
+    expect(store.getState().savedLoadouts.items[0].description).toBe("my own words");
+
+    cleanup();
+    renderPanel(base(lists, store.getState().savedLoadouts.items, { selectedListId: "b" }));
+    expect(descOf("1")).toHaveTextContent("my own words");
+    expect(screen.queryByText(RAT.description)).not.toBeInTheDocument();
+  });
+
+  it("keeps a deliberately blank description blank across a move", async () => {
+    const lists = [list("a", "Turncoat builds", { hunterId: TURNCOAT.id }), list("b", "Rat builds", { hunterId: RAT.id })];
+    const blank = describedAs(filed("1", "long ammo", LOADED, "b"), "");
+
+    renderPanel(base(lists, [blank], { selectedListId: "b" }));
+    expect(descOf("1")).not.toBeInTheDocument();
+    expect(screen.queryByText(RAT.description)).not.toBeInTheDocument();
+  });
+
+  // --- The wire format is unchanged ------------------------------------------------------
+
+  it("keeps the description out of the share URL and the local draft", () => {
+    // REQ "The Saved-Loadout Wire Format Is Unchanged": `description` is a property of the
+    // user's filing, not of the loadout. A recipient opening a share URL receives the build,
+    // not the sender's notes about it.
+    const plain = filed("1", "long ammo", LOADED, "a");
+    const annotated = describedAs({ ...plain, listId: "b" }, "a note that must not travel");
+
+    const urlPlain = encodeShareUrl(fromData(plain.data));
+    const urlAnnotated = encodeShareUrl(fromData(annotated.data));
+
+    expect(urlAnnotated).toBe(urlPlain); // byte-identical
+    expect(urlAnnotated).not.toContain("note");
+    expect(atob(urlAnnotated.split("#L=")[1])).not.toMatch(/description|listId/);
+
+    // And the encoder drops both fields even when they are handed to it ON the loadout
+    // model, which is the shape a future "share what I'm looking at" path would produce.
+    // Without this the assertion above only proves that `fromData` never invented them.
+    const carrying = { ...fromData(annotated.data), description: annotated.description, listId: "b" };
+    expect(encodeShareUrl(carrying)).toBe(urlPlain);
+    expect(JSON.stringify(toData(carrying))).not.toContain("note");
+
+    // The same for the encoder every local draft goes through.
+    const encoded = toData(fromData(annotated.data));
+    expect(Object.keys(encoded)).not.toContain("description");
+    expect(Object.keys(encoded)).not.toContain("listId");
+    expect(JSON.stringify(encoded)).not.toContain("note");
+  });
+
+  // --- Bounded height, and the reveal ----------------------------------------------------
+
+  it("bounds the rendered description and offers a control that reveals the rest", async () => {
+    // SPEC-0003: bounded in height with an affordance to reveal the rest. Hunter lore runs to
+    // several hundred characters — 404 at the roster's longest — and shares a card with the
+    // preview, so unclamped it would dominate the card it exists to annotate.
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    expect(descOf("1")).toHaveClass("ll-lcard-desc-clamped");
+    const reveal = within(cardOf("1")).getByLabelText("Reveal the whole description: long ammo");
+    expect(reveal).toHaveAttribute("aria-expanded", "false");
+
+    await act(async () => fireEvent.click(reveal));
+    expect(descOf("1")).not.toHaveClass("ll-lcard-desc-clamped");
+    expect(within(cardOf("1")).getByLabelText("Collapse description: long ammo")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+
+    // The clamp is what bounds it, and it is a real rule in the stylesheet rather than a
+    // class name nothing acts on. `effective()` resolves it through the cascade.
+    expect(effective(".ll-lcard-desc-clamped", "overflow")).toBe("hidden");
+    expect(effective(".ll-lcard-desc-clamped", "-webkit-line-clamp")).toBe("3");
+  });
+
+  it("cannot overflow its card, and does not displace the preview", () => {
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })], [filed("1", "long ammo", LOADED, "a")], {
+        selectedListId: "a",
+      })
+    );
+
+    // Prose wraps, and so does a single unbroken 300-character token — the rule that keeps
+    // "no card overflows horizontally at any supported width" true of CONTENT, not just of
+    // boxes. And nothing here declares a fixed width, which is how a grid child stops
+    // reflowing and starts overflowing.
+    expect(effective(".ll-lcard-desc", "overflow-wrap")).toBe("anywhere");
+    expect(effective(".ll-lcard-desc", "min-width")).toBe("0");
+    for (const selector of [".ll-lcard-desc", ".ll-lcard-desc-wrap", ".ll-lcard-desc-clamped"]) {
+      expect(effectiveDeclaration(CSS_RULES, selector, "width")).toBeNull();
+    }
+
+    // The description is a SIBLING of the preview, before it — so however long it runs, the
+    // preview keeps its category structure and its cell counts (#171's guarantee).
+    const card = cardOf("1");
+    const order = [...card.children].map((el) => el.className);
+    expect(order.indexOf("ll-lcard-desc-wrap")).toBeLessThan(order.findIndex((c) => c.startsWith("ll-lp")));
+    expect(descOf("1").closest(".ll-lp")).toBeNull();
+    expect(cellsIn("preview-weapons-1")).toHaveLength(WEAPON_CELLS);
+    expect(cellsIn("preview-equipment-1")).toHaveLength(EQUIP_CELLS);
+    expect(cellsIn("preview-traits-1")).toHaveLength(TRAIT_CELLS);
+  });
+
+  it("renders both untrusted texts as text, never as markup", () => {
+    // Both a user-supplied description and one resolved from the dataset are untrusted on
+    // output; the scraped text is the LESS trustworthy of the two, since it originates
+    // off-origin. Neither may be inserted as markup.
+    const markup = "<img src=x onerror=alert(1)>bold</b>";
+    renderPanel(
+      base([list("a", "Turncoat builds", { hunterId: TURNCOAT.id })],
+        [describedAs(filed("1", "long ammo", LOADED, "a"), markup)], { selectedListId: "a" })
+    );
+
+    const rendered = descOf("1");
+    expect(rendered).toHaveTextContent(markup);
+    expect(rendered.querySelector("img")).toBeNull();
+    expect(rendered.innerHTML).not.toContain("<img");
+    expect(rendered.children).toHaveLength(0);
   });
 });

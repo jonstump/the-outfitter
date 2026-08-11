@@ -56,13 +56,46 @@ export function upsertLoadout(name, data, listId) {
   }).then(asJson);
 }
 
-/** Move a loadout between lists. `listId: null` moves it to Unassigned. */
-export function moveLoadout(id, listId) {
+// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
+// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+//
+// PATCH speaks in KEYS, not in values. The server reads `"listId" in body` and
+// `"description" in body`, so a key that is present and null is an instruction ("file into
+// Unassigned", "go back to inheriting") while an absent key means "leave that field alone".
+//
+// That makes `undefined` the one value that must never be handed to JSON.stringify here: it
+// deletes its own key on the way out, turning a reset into a body the server rejects for
+// carrying no instruction at all. Each wrapper below therefore builds its object with
+// exactly the keys it means, and `describeLoadout` refuses undefined outright rather than
+// letting it disappear silently between here and the wire.
+function patchLoadout(id, patch) {
   return fetch(`${BASE}/${id}`, {
     method: "PATCH",
     headers: headers(),
-    body: JSON.stringify({ listId }),
+    body: JSON.stringify(patch),
   }).then(asJson);
+}
+
+/** Move a loadout between lists. `listId: null` moves it to Unassigned. */
+export function moveLoadout(id, listId) {
+  // No `description` key: a move must not disturb what the user wrote about the loadout,
+  // and the omission is what says so.
+  return patchLoadout(id, { listId });
+}
+
+/**
+ * Set a loadout's description.
+ *
+ * `null` restores the inherited default — the description of the hunter on the list the
+ * loadout is filed into, resolved at render time and never written here. `""` stores the
+ * deliberately-blank state, which renders as nothing and does NOT re-inherit.
+ */
+export function describeLoadout(id, description) {
+  if (description !== null && typeof description !== "string") {
+    throw new TypeError("description must be a string or null");
+  }
+  // No `listId` key: describing a loadout never re-files it.
+  return patchLoadout(id, { description });
 }
 
 export function deleteLoadout(id) {
