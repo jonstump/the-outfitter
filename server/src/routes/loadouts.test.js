@@ -104,6 +104,78 @@ describe("loadouts API", () => {
     expect(res.status).toBe(400);
   });
 
+  // --- The fifteen-trait cap (ADR-0012) ----------------------------------------------
+  //
+  // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most
+  // Fifteen Traits". The wire bound was 40, which made an over-cap loadout a savable,
+  // shareable record. Fifteen is the game's own per-hunter maximum.
+  //
+  // The client cannot import this module, so fifteen exists independently on both sides.
+  // These tests are this side's pin on the figure — the client's reducer and decoder tests
+  // are the other, and a change to one that is not made to the other shows up as a failure
+  // here rather than as a 400 in front of a user.
+
+  const traitIds = (n) => Array.from({ length: n }, (_, i) => `trait-${i}`);
+
+  it("refuses a sixteenth trait and accepts exactly fifteen", async () => {
+    const app = makeApp();
+    const token = `traitcap-${Date.now()}`;
+
+    const over = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", token)
+      .send({ name: "__test__tr16", data: { ...validData, tr: traitIds(16) } });
+    expect(over.status).toBe(400);
+
+    // Refused, not trimmed. Truncating to fifteen and answering 201 would store something
+    // the caller did not send and hide the client bug that sent sixteen — so nothing at all
+    // may be persisted under the attempted name.
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name === "__test__tr16")).toBe(false);
+
+    // Fifteen is the boundary itself, not one short of it: an off-by-one that bounded at
+    // fourteen would still reject sixteen, so the accepting half is what pins the number.
+    const at = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", token)
+      .send({ name: `__test__tr15${Date.now()}`, data: { ...validData, tr: traitIds(15) } });
+    expect(at.status).toBe(201);
+    expect(at.body.data.tr).toHaveLength(15);
+  });
+
+  it("still serves a stored record written under the old forty-trait bound", async () => {
+    // This is the property that lets the bound tighten with no migration: isValidData is
+    // called from POST alone, so GET never re-validates what is already on disk. Were a
+    // read to re-run the validator, every twenty-trait record saved under the old bound
+    // would become unreachable through the API — data stranded by a rule that post-dates it.
+    //
+    // Seeded straight into the store rather than through the API, because the API is exactly
+    // what now refuses it. That is the point of the test.
+    const app = makeApp();
+    const token = `legacy-traits-${Date.now()}`;
+    const name = `__test__tr20-${Date.now()}`;
+
+    await db.read();
+    db.data.loadouts.push({
+      id: randomUUID(),
+      owner: token,
+      name,
+      data: { ...validData, tr: traitIds(20) },
+      updatedAt: new Date().toISOString(),
+    });
+    await db.write();
+
+    const res = await request(app).get("/api/loadouts").set("x-loadout-token", token);
+    expect(res.status).toBe(200);
+    const stored = res.body.find((l) => l.name === name);
+    // Served verbatim — the server does not clamp on the way out. Healing is the decoder's
+    // job (it keeps the first fifteen), and the next save then writes fifteen back through
+    // the tightened bound above. The server's part of that contract is only to hand the
+    // record over intact instead of hiding it.
+    expect(stored).toBeTruthy();
+    expect(stored.data.tr).toHaveLength(20);
+  });
+
   it("rate limits the write endpoint", async () => {
     const app = makeApp();
     // Burst past the limit (60/min) — 70 quick writes should trip it.
