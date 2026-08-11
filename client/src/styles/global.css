@@ -94,8 +94,11 @@
        default  12px/18px/17.5px  <- .btn-primary's padding-y and font, .btn-gold's padding-x
        -sm       9px/14px/16.5px  <- .toggle-btn's padding, .number-input's font
 
-     The default step comes out at ~47px tall, which clears the 44px target outright; the -sm
-     step at ~40px clears SC 2.5.8's 24px AA minimum with room to spare.
+     The default step measures **50px** tall and the -sm step **43px** — measured in Chrome, not
+     estimated; see the line-height note below for why the totals are arithmetic rather than a
+     UA default. Default clears WCAG 2.5.5's 44px target outright, and -sm clears SC 2.5.8's
+     24px AA minimum with room to spare. *(This read "~47px" and "~40px" while the scale was
+     still being derived on paper; both were low.)*
 
      DELIBERATELY OUT OF SCOPE: `.size-chip` (34px) and `.icon-btn` (28px) are square hit
      targets whose size is their shape, not a typographic step, and folding them in would
@@ -111,6 +114,35 @@
   --control-pad-x-sm: 14px;
   --field-pad-x-sm: 10px;
   --control-font-sm: 16.5px;
+
+  /* The scale needs a line-height, not just a font-size, or selects stay 2px taller than the
+     buttons beside them even with identical padding, border and box-sizing. `line-height:
+     normal` is resolved by the UA per element type, and a <select>'s intrinsic content box is
+     taller than a <button>'s text line box — which is how the loadout-lists header (#134's
+     named worst instance: a bare select against a .btn-outline) still measured 52px vs 50px
+     after the padding was unified. Pinning the ratio makes the content box the same height
+     everywhere, so the step's total height is arithmetic rather than a UA default.
+
+     Stated in px rather than as a ratio so each step lands on whole pixels and the total is
+     legible arithmetic: 24 + 12 + 12 + 2 = 50px default, 23 + 9 + 9 + 2 = 43px small. These
+     are the content-box heights `normal` was already producing for <button>, so this pins the
+     geometry rather than changing it: it stops a future font swap moving every control by
+     whatever the UA decides `normal` means for the new face.
+
+     It does NOT fix the select on its own — that was measured. A <select> with `appearance:
+     auto` sizes its content box from a UA intrinsic minimum and ignores line-height, so it
+     stayed 52px against the buttons' 50px even with identical padding, border, box-sizing and
+     line-height. That is why the step also carries an explicit height, which selects take and
+     everything else already lands on. Setting `appearance: none` would fix it too, at the cost
+     of hand-rolling the disclosure arrow on every platform; pinning the height is smaller.
+
+     Measured in Chrome after both rules: every control at the default step is 50px and every
+     control at -sm is 43px, selects included, in the loadout-lists header (#134's named worst
+     instance) and everywhere else. */
+  --control-line: 24px;
+  --control-line-sm: 23px;
+  --control-h: 50px;
+  --control-h-sm: 43px;
 }
 
 * {
@@ -338,6 +370,7 @@ button {
    geometries this replaced came about in the first place. */
 
 .btn {
+  line-height: var(--control-line);
   background: none;
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -351,6 +384,7 @@ button {
 }
 
 .btn-primary {
+  line-height: var(--control-line);
   background: var(--red);
   border: 1px solid var(--red-border);
   color: #f0e2c4;
@@ -373,6 +407,7 @@ button {
    apart. The shared rule is the geometry; each modifier below is only its colour. */
 .btn-gold,
 .btn-outline {
+  line-height: var(--control-line);
   background: var(--input-bg);
   border: 1px solid var(--border);
   padding: var(--control-pad-y) var(--control-pad-x);
@@ -416,6 +451,7 @@ button {
    because both sit inline beside the thing they filter or toggle. */
 .toggle-btn,
 .chip {
+  line-height: var(--control-line-sm);
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -451,6 +487,7 @@ button {
 }
 
 .text-input {
+  line-height: var(--control-line);
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text-bright);
@@ -464,11 +501,15 @@ button {
    variant on a weapon slot. Call sites set WIDTH; they do not set padding or font-size. */
 .select,
 .select-sm {
+  line-height: var(--control-line-sm);
+  height: var(--control-h-sm);
   background: var(--input-bg);
   color: var(--text);
   border: 1px solid var(--border);
 }
 .select {
+  line-height: var(--control-line);
+  height: var(--control-h);
   padding: var(--control-pad-y) var(--field-pad-x);
   font-size: var(--control-font);
 }
@@ -713,6 +754,7 @@ button {
    takes the field inset rather than the button one: ActionsPanel gives these an inline width of
    60–80px, and a button's shoulders would leave a four-digit budget nowhere to render. */
 .number-input {
+  line-height: var(--control-line);
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
