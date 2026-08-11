@@ -3,7 +3,7 @@ import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { randomizeThunk, clearBuildThunk, shareThunk } from "../../store/thunks.js";
-import { selectTotalCost, selectUpTotal } from "../../store/selectors.js";
+import { selectSaveDestinationName, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
   const dispatch = useDispatch();
@@ -11,6 +11,17 @@ export default function ActionsPanel() {
   const total = useSelector(selectTotalCost);
   const up = useSelector(selectUpTotal);
   const ui = useSelector((s) => s.ui);
+  // Governing: SPEC-0003 REQ "The Selected List Is Client State".
+  //
+  // Where the next save lands, named on the control that does it (issue #136). This used to
+  // be announced by a badge at the top of the loadout-lists panel, which was styled as a
+  // button, was not one, and stated the destination nowhere near the moment of action —
+  // a user could easily have scrolled it off screen before pressing Save.
+  //
+  // null means Unassigned, which is stated rather than left blank: "Save" alone is what made
+  // the filing behaviour undiscoverable in the first place, and Unassigned is a real
+  // destination the user can deliberately choose (by closing every list), not an absence.
+  const destination = useSelector(selectSaveDestinationName);
 
   const overBudget = ui.budgetOn && total > ui.budget;
   const overUp = ui.upBudgetOn && up > ui.upBudget;
@@ -98,8 +109,14 @@ export default function ActionsPanel() {
           placeholder="Name this loadout…"
           onChange={(e) => dispatch(loadoutActions.setName(e.target.value))}
         />
+        {/* The destination is part of the button's TEXT, not a title or an aria-label beside
+            a bare "Save". A sighted user and a screen-reader user get the same sentence, and
+            WCAG 2.5.3 (Label in Name) holds by construction because there is only one string.
+            `.save-dest` bounds a long list name with an ellipsis visually while the accessible
+            name stays whole — 2.5.3 asks the name to contain the visible label, and a truncated
+            label is contained in the full one. */}
         <button className="btn-gold" onClick={() => dispatch(saveCurrent())}>
-          Save
+          Save to <span className="save-dest">{destination ?? "Unassigned"}</span>
         </button>
         <button className="btn-outline" onClick={() => dispatch(shareThunk())}>
           Share link

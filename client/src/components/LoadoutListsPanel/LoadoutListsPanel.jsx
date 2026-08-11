@@ -37,7 +37,7 @@ import { totalCost } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
 import { HUNTERS, hunterFor, hunterNameFor } from "../../data/hunters.js";
-import { LIST_ACCENTS, accentName, accentVar, previewNextAccent } from "../../utils/listAccent.js";
+import { LIST_ACCENTS, accentVar, previewNextAccent } from "../../utils/listAccent.js";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import { loadSavedThunk } from "../../store/thunks.js";
 import { deleteSaved, describeSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
@@ -288,7 +288,15 @@ export default function LoadoutListsPanel() {
         </div>
         <label className="ll-sort">
           <span className="sr-only">Order lists by</span>
-          <select value={listSort} onChange={(e) => dispatch(uiActions.setListSort(e.target.value))}>
+          {/* `.select` — the default step of the control scale, which is what puts this
+              dropdown at the same height as the "+ New list" button beside it (issue #134).
+              It used to fall through to a bare element rule at 6px/8px and sat visibly short
+              of it. */}
+          <select
+            className="select"
+            value={listSort}
+            onChange={(e) => dispatch(uiActions.setListSort(e.target.value))}
+          >
             {sortKeys.map((k) => (
               <option key={k} value={k}>
                 Sort: {SORT_LABELS[k]}
@@ -488,11 +496,32 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
             </>
           )}
           {!unassigned && list && <span className="ll-expanded-hunter">{hunterLine(list.hunterId)}</span>}
-          <span className="ll-badge">
-            {unassigned ? "Not filed into any list" : "Default list for saved loadouts"}
-          </span>
+          {/* Governing: SPEC-0003 REQ "The Selected List Is Client State"
+              ("While a list is selected, a new save SHALL default to filing into that list").
+
+              NO BADGE HERE (issue #136). A gold-bordered uppercase pill reading "DEFAULT LIST
+              FOR SAVED LOADOUTS" — and "NOT FILED INTO ANY LIST" on Unassigned — used to sit
+              in this slot. It borrowed --gold-border and --gold-bright, the theme's
+              interactive colours, from the same vocabulary `.chip` and `.toggle-btn` use, so
+              it read as a button and was not one.
+
+              The FACT it carried is still surfaced, and is surfaced better: it moved to the
+              save control in ActionsPanel, which now reads "Save to “{list}”" / "Save to
+              Unassigned". A user learns where a save lands at the moment they are about to
+              save, on the control that does it, rather than from a banner at the top of a
+              panel they may have scrolled past. Both of the badge's two strings are answered
+              by that one control, so Unassigned is not left holding the last badge on screen.
+
+              The destination shown there is computed by the same `resolveSaveListId` the save
+              thunk itself uses, so the label and the write cannot disagree. */}
         </div>
-        {!unassigned && list && <AccentPicker list={list} />}
+        {!unassigned && list && (
+          <AccentPicker
+            value={list.accent}
+            label={`Accent colour for ${list.name}`}
+            onChange={(accent) => dispatch(setListAccentThunk({ id: list.id, accent }))}
+          />
+        )}
         {!unassigned && list && (
           <button
             className="btn-outline ll-retire"
@@ -533,36 +562,122 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
 }
 
 /**
- * Edit a list's accent.
+ * Choose an accent, from the fixed six.
  *
  * Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
- * Name".
+ * Name" — "an accent colour SHALL be assigned at creation and SHALL be user-editable", and
+ * (as widened for #135) "the creating user MAY supply an accent".
  *
- * A radiogroup rather than six independent buttons: exactly one value is in effect, arrow
- * keys move between the swatches for free, and assistive tech announces "3 of 6" instead of
- * six unrelated toggles. Each swatch is labelled with its colour NAME, because a swatch
- * announced only as a colour block is nothing to a screen-reader user and the palette
- * separates by hue rather than luminance.
+ * A radiogroup rather than six independent buttons: exactly one value is in effect, and
+ * assistive tech announces "3 of 6" instead of six unrelated toggles. Each swatch is labelled
+ * with its colour NAME, because a swatch announced only as a colour block is nothing to a
+ * screen-reader user and the palette separates by hue rather than luminance.
+ *
+ * THE KEYBOARD MODEL IS IMPLEMENTED HERE, not inherited. This comment used to say arrow keys
+ * moved between the swatches "for free"; that is true of `<input type="radio">` and of nothing
+ * else. These are `<button role="radio">`, and with no key handler and no tabIndex the widget
+ * told assistive tech it was a radiogroup while behaving as six independent tab stops — seven
+ * Tab presses between the name field and "Create list". So it does what it says now, following
+ * the roving-tabindex idiom `HunterPicker` already uses in this codebase (one tab stop for the
+ * composite, arrow keys inside it, Home/End to the ends) rather than a second idiom:
+ *
+ *   - ONE tab stop. The checked swatch is the tab stop; when nothing is checked it is the
+ *     first, which is what keeps an off-palette stored value reachable rather than stranding
+ *     the group (see below).
+ *   - Left/Up and Right/Down move AND select, wrapping at both ends. Selecting on move is the
+ *     radio pattern rather than the listbox one, and it is what makes the group operable with
+ *     no modifier keys; the accent is a live, undoable preference, not a submitted answer.
+ *   - Home/End go to the first and last swatch, selecting likewise.
+ *   - Space and Enter select the focused swatch, which for a radio is a no-op after a move and
+ *     matters only for the swatch focus arrived at by Tab.
+ *
+ * `activeIndex` is DERIVED rather than stored: every move selects, so the roving tab stop and
+ * the checked swatch are the same thing by construction and cannot drift apart. Focus is moved
+ * imperatively in the handler because all six buttons are already mounted — there is no render
+ * to wait for, and an effect would paint one frame with focus on the old element.
+ *
+ * AN OFF-PALETTE `value` — a record written before the palette was fixed, or by hand — leaves
+ * every `aria-checked` false, which is the truth: the stored colour is not one of the six, and
+ * `accentVar` degrades it to a neutral border rather than painting an unvetted value. What
+ * that must NOT do is make the group unusable, so the roving tab stop falls back to the first
+ * swatch and the arrows work from there; picking any swatch resolves the record onto the
+ * palette.
+ *
+ * CONTROLLED, and taking a value rather than a list (#135). It used to take the list it
+ * edited and dispatch the write itself, which meant it could only ever be used on a list that
+ * already existed — so the create form got a decorative `aria-hidden` swatch instead, showing
+ * a colour that looked choosable and was not. Lifting the state is what lets the SAME control
+ * serve both surfaces: one radiogroup, one set of colour names, one keyboard model. A second
+ * copy for the create form would be a second keyboard model to keep in step and a second
+ * place for the colour names to drift.
+ *
+ * `label` is the caller's because the two placements have genuinely different things to say:
+ * the expanded picker names the list it belongs to, and the create form has no list to name
+ * yet. A default of "Accent colour" would be a name that is correct nowhere in particular.
  *
  * Nothing here consults the other lists. Picking a colour a sibling already uses is a
  * permitted outcome, so there is no check to fail and no warning to render.
  */
-function AccentPicker({ list }) {
-  const dispatch = useDispatch();
+function AccentPicker({ value, onChange, label }) {
+  const swatchRefs = useRef([]);
+  const checkedIndex = LIST_ACCENTS.findIndex((a) => a.value === value);
+  const activeIndex = checkedIndex < 0 ? 0 : checkedIndex;
+  const last = LIST_ACCENTS.length - 1;
+
+  const moveTo = (index) => {
+    const i = ((index % LIST_ACCENTS.length) + LIST_ACCENTS.length) % LIST_ACCENTS.length;
+    onChange(LIST_ACCENTS[i].value);
+    swatchRefs.current[i]?.focus();
+  };
+
+  const onKeyDown = (e, index) => {
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        e.preventDefault();
+        moveTo(index + 1);
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        e.preventDefault();
+        moveTo(index - 1);
+        break;
+      case "Home":
+        e.preventDefault();
+        moveTo(0);
+        break;
+      case "End":
+        e.preventDefault();
+        moveTo(last);
+        break;
+      case " ":
+      case "Enter":
+        e.preventDefault();
+        moveTo(index);
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
-    <div className="ll-accent-picker" role="radiogroup" aria-label={`Accent colour for ${list.name}`}>
-      {LIST_ACCENTS.map((a) => (
+    <div className="ll-accent-picker" role="radiogroup" aria-label={label}>
+      {LIST_ACCENTS.map((a, i) => (
         <button
           key={a.value}
           type="button"
           role="radio"
-          aria-checked={list.accent === a.value}
+          ref={(el) => {
+            swatchRefs.current[i] = el;
+          }}
+          aria-checked={value === a.value}
           aria-label={a.name}
           title={a.name}
-          className={`ll-accent-swatch${list.accent === a.value ? " ll-accent-swatch-on" : ""}`}
+          tabIndex={i === activeIndex ? 0 : -1}
+          className={`ll-accent-swatch${value === a.value ? " ll-accent-swatch-on" : ""}`}
           style={{ background: `var(${a.cssVar})` }}
-          onClick={() => dispatch(setListAccentThunk({ id: list.id, accent: a.value }))}
+          onClick={() => onChange(a.value)}
+          onKeyDown={(e) => onKeyDown(e, i)}
         />
       ))}
     </div>
@@ -1098,6 +1213,10 @@ function LoadoutCard({ item, lists }) {
         <label className="ll-lcard-move">
           <span className="sr-only">List for {item.name}</span>
           <select
+            // `.select-sm` — the dense step of the control scale (issue #134). A loadout card
+            // packs this beside a 28px delete button inside a 284px track, so it takes the
+            // step that suits the row rather than the panel-level one.
+            className="select-sm"
             // Degrade exactly as groupByList does: a dangling listId matches no <option>, so
             // the card would sit under Unassigned with a blank control.
             value={item.listId && lists.some((l) => l.id === item.listId) ? item.listId : ""}
@@ -1154,9 +1273,20 @@ function CreateList({ onDone }) {
   // user has typed, changing portrait must never overwrite what they wrote.
   const [nameTouched, setNameTouched] = useState(false);
 
-  // Preview only. The server assigns the real accent least-used-first against the owner's
-  // persisted lists and returns it on the created record, which is what then renders.
-  const accentPreview = previewNextAccent(lists);
+  // Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+  // Name" — "the creating user MAY supply an accent […] when the user supplies none,
+  // assignment on creation SHALL select the least-used palette value".
+  //
+  // SEEDED from the preview, not merely previewing it (#135). `previewNextAccent` computes the
+  // same least-used-first answer the server would, so a user who ignores this control creates
+  // exactly the list they would have created before — today's behaviour is the default rather
+  // than a branch. What changed is that the value is now reachable: it is sent on the POST and
+  // is the accent the created list has, with no follow-up PATCH.
+  //
+  // Seeded ONCE, in the initializer. `lists` cannot change while this form is open — it is the
+  // create form, and creating is what closes it — and recomputing would be a promise to track
+  // a moving value that has nowhere to move.
+  const [accent, setAccent] = useState(() => previewNextAccent(lists));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1168,7 +1298,12 @@ function CreateList({ onDone }) {
     setSaving(true);
     try {
       const created = await dispatch(
-        createListThunk({ name, hunterId: hunter?.hunterId ?? null, hunterName: hunter?.hunterName ?? null })
+        createListThunk({
+          name,
+          hunterId: hunter?.hunterId ?? null,
+          hunterName: hunter?.hunterName ?? null,
+          accent,
+        })
       ).unwrap();
       setName("");
       setHunter(null);
@@ -1204,7 +1339,11 @@ function CreateList({ onDone }) {
 
         <label className="ll-create-label">
           <span>Name</span>
+          {/* `.text-input`, which it never carried: this field was the one control on the
+              create row with no class at all, so it rendered at browser defaults next to a
+              `.btn-outline` and a `.btn-primary` (issue #134). */}
           <input
+            className="text-input"
             autoFocus
             value={name}
             placeholder="defaults to the hunter's name"
@@ -1219,15 +1358,17 @@ function CreateList({ onDone }) {
           />
         </label>
 
-        {/* Decorative: the accent is a preview of a value the user did not choose and can
-            change afterwards, and it is never the sole differentiator. The name field
-            beside it is the identity that matters here. */}
-        <span
-          className="ll-create-accent"
-          style={{ background: accentVar(accentPreview) }}
-          title={`Accent: ${accentName(accentPreview)}`}
-          aria-hidden="true"
-          data-testid="create-accent-preview"
+        {/* The same AccentPicker the expanded header uses — not a copy, and no longer the
+            decorative `aria-hidden` swatch that used to sit here (#135). A colour beside a
+            name field is a colour a user expects to choose, and this one now is.
+
+            It carries a label that stands on its own, because there is no list to name yet:
+            "Accent colour for the new list" rather than the expanded picker's
+            "Accent colour for {list}". */}
+        <AccentPicker
+          value={accent}
+          label="Accent colour for the new list"
+          onChange={setAccent}
         />
 
         <button className="btn-primary" type="submit" disabled={saving}>

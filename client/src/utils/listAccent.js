@@ -54,10 +54,16 @@ export function accentName(accent) {
  * Preview the accent the server will assign to the next list.
  *
  * Least-used-first among the lists already held, ties broken by palette order — the same
- * rule server-side. This is a PREVIEW ONLY: the created record carries whatever the
- * server assigned, and the UI renders that, so a disagreement is cosmetic and transient
- * rather than a source of drift. Duplicates are permitted by design once every value is
- * in use, so this never runs out of answers.
+ * rule server-side. Duplicates are permitted by design once every value is in use, so this
+ * never runs out of answers.
+ *
+ * NO LONGER PREVIEW-ONLY, and that has a consequence worth stating (#135). The create form
+ * SEEDS its accent picker from this and always sends the result on the POST, so the server's
+ * own least-used branch (`nextAccent` in server/src/routes/loadoutLists.js) is no longer
+ * reachable from any client path. It stays, and stays tested, because the endpoint is public
+ * and documents `accent` as optional — and because the server reads the owner's persisted
+ * lists while this reads whatever the browser happens to hold, which is the weaker of the two
+ * answers. The note beside `nextAccent` records the same thing from the other end.
  */
 export function previewNextAccent(lists = []) {
   const counts = new Map(ACCENT_VALUES.map((c) => [c, 0]));

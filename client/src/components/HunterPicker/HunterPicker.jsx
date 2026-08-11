@@ -452,7 +452,11 @@ export default function HunterPicker({
           </label>
           <label className="hp-filter">
             <span className="sr-only">Filter by acquisition</span>
+            {/* `.select` — the default step of the control scale (issue #134), the same one
+                `.text-input` beside it takes, so the three filters are one band rather than a
+                tall search field flanked by two short dropdowns. */}
             <select
+              className="select"
               aria-label="Filter by acquisition"
               value={acquisition}
               onChange={(e) => {
@@ -474,6 +478,7 @@ export default function HunterPicker({
           <label className="hp-filter">
             <span className="sr-only">Filter by availability</span>
             <select
+              className="select"
               aria-label="Filter by availability"
               value={obtainable}
               onChange={(e) => {

@@ -36,6 +36,18 @@ const HUNTER_ID_MAX = 100;
 // (issue #88); the server owns assignment because the record owns the value.
 export const ACCENT_PALETTE = ["#b04a3e", "#7a8a4e", "#5a6e96", "#5e8a8a", "#8a5e86", "#a3703e"];
 
+// KNOWN CONSEQUENCE of issue #135, recorded here because this is where someone will next read
+// about assignment: NO CLIENT PATH REACHES THIS ANY MORE. The create form seeds its accent
+// picker from `previewNextAccent` (client/src/utils/listAccent.js), which computes the same
+// least-used-first answer, and always sends the result on the POST — so the request always
+// carries an accent and the branch below is only entered by an API client that omits the key.
+//
+// It stays, and it stays tested (`loadoutLists.test.js`, "assigns accents least-used-first and
+// permits duplicates"), for two reasons. The endpoint is public and `accent` is documented as
+// optional, so a caller that omits it must still get a usable record rather than a null. And
+// the client's preview is a preview: it reads the lists the browser happens to hold, while
+// this reads the owner's persisted lists, which is the authoritative set. Deleting this would
+// make the server's answer depend on the client having computed one.
 /** Least-used palette value among `lists`, ties broken by palette order. */
 export function nextAccent(lists) {
   const counts = new Map(ACCENT_PALETTE.map((c) => [c, 0]));

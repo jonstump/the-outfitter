@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Provider } from "react-redux";
@@ -21,11 +20,21 @@ import LoadoutListsPanel, {
 } from "./LoadoutListsPanel.jsx";
 import * as panelModule from "./LoadoutListsPanel.jsx";
 import { createTestStore } from "../../test/testStore.js";
+import {
+  CSS_RULES,
+  effective,
+  effectiveDeclaration,
+  parseStylesheet,
+  readGlobalCss,
+  resting,
+  restingDeclaration,
+} from "../../test/cssRules.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { slugify } from "../../utils/slugify.js";
 import { emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
+import { createList } from "../../api/loadouts.js";
 import { HUNTERS } from "../../data/hunters.js";
 import { TRAITS } from "../../data/catalog.js";
 
@@ -443,6 +452,328 @@ describe("list accents", () => {
     expect(checked).toHaveLength(1);
     expect(checked[0]).toHaveAccessibleName("Plum");
   });
+
+  // --- The radiogroup's keyboard model, which was announced and not implemented -----------
+  //
+  // `role="radiogroup"` over six `<button role="radio">` is a PROMISE: one tab stop, arrows
+  // inside it, and "3 of 6" announced instead of six unrelated toggles. Arrow keys come free
+  // with `<input type="radio">` and with nothing else, and this widget had no `onKeyDown` and
+  // no `tabIndex` at all — so AT announced a radiogroup and the user got six tab stops. Three
+  // places said otherwise, two of them written by #135 and one of them the design handoff.
+  //
+  // Driven with REAL KEY EVENTS rather than by asserting an attribute: the attribute is what
+  // was already there and true, and the behaviour is what was missing.
+
+  const swatches = (name) => within(screen.getByRole("radiogroup", { name })).getAllByRole("radio");
+  const CREATE_GROUP = "Accent colour for the new list";
+  const checkedName = (group) =>
+    swatches(group).find((r) => r.getAttribute("aria-checked") === "true")?.getAttribute("aria-label") ?? null;
+
+  it("has exactly one tab stop, and it is the checked swatch", () => {
+    renderPanel(base([list("a", "Alpha", { accent: "#8a5e86" })], [], { selectedListId: "a" }));
+    const group = swatches(/^Accent colour for/);
+    const tabbable = group.filter((r) => r.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAccessibleName("Plum");
+    // Every other swatch is reachable by arrow key and not by Tab. Six native tab stops is
+    // what six independent buttons look like, and it put "Create list" seven presses away.
+    expect(group.filter((r) => r.tabIndex === -1)).toHaveLength(5);
+  });
+
+  it("moves and selects with Left/Right and Up/Down, wrapping at both ends", () => {
+    // On the create form, where the value is local state and no request is involved. The
+    // palette order is Clay, Olive, Slate, Teal, Plum, Amber, and an empty list seeds Clay.
+    renderPanel(base([], [], { creatingList: true }));
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    const press = (key) => {
+      const from = swatches(CREATE_GROUP).find((r) => r.tabIndex === 0);
+      fireEvent.keyDown(from, { key });
+    };
+
+    press("ArrowRight");
+    expect(checkedName(CREATE_GROUP)).toBe("Olive");
+    // Focus follows the selection, which is what makes it one widget rather than a group with
+    // a cursor of its own.
+    expect(document.activeElement).toHaveAccessibleName("Olive");
+
+    press("ArrowDown");
+    expect(checkedName(CREATE_GROUP)).toBe("Slate");
+
+    press("ArrowLeft");
+    expect(checkedName(CREATE_GROUP)).toBe("Olive");
+    press("ArrowUp");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    // Wrapping, both directions — a radiogroup is a ring, not a line with two dead ends.
+    press("ArrowLeft");
+    expect(checkedName(CREATE_GROUP)).toBe("Amber");
+    press("ArrowRight");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+  });
+
+  it("jumps to the ends with Home and End, and selects with Space and Enter", () => {
+    renderPanel(base([], [], { creatingList: true }));
+    const press = (key) => fireEvent.keyDown(swatches(CREATE_GROUP).find((r) => r.tabIndex === 0), { key });
+
+    press("End");
+    expect(checkedName(CREATE_GROUP)).toBe("Amber");
+    expect(document.activeElement).toHaveAccessibleName("Amber");
+
+    press("Home");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    // Space and Enter select the focused swatch. After a move that is a no-op, which is the
+    // point — the one case they matter is the swatch Tab landed on.
+    press("Enter");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+    press(" ");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+  });
+
+  it("writes the arrow-key choice through the same path a click takes", async () => {
+    // The expanded header's picker, where selecting dispatches a PATCH. Arrow keys are not a
+    // second, read-only way to move a cursor: moving IS selecting, and it persists.
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    const store = renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], [], { selectedListId: "a" }));
+    const clay = screen.getByRole("radio", { name: "Clay" });
+    await act(async () => fireEvent.keyDown(clay, { key: "ArrowRight" }));
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ accent: "#7a8a4e" });
+    expect(store.getState().loadoutLists.items[0].accent).toBe("#7a8a4e");
+    expect(screen.getByTestId("list-card-a")).toHaveAttribute("data-accent", "#7a8a4e");
+  });
+
+  it("stays operable when the stored accent is not in the palette", () => {
+    // A record written before the palette was fixed, or by hand. Nothing is checked, which is
+    // the truth — `accentVar` degrades it to a neutral border rather than painting an unvetted
+    // colour — but the group must not become unreachable on the way. The roving tab stop falls
+    // back to the first swatch, and one arrow press resolves the record onto the palette.
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    renderPanel(base([list("a", "Alpha", { accent: "#123456" })], [], { selectedListId: "a" }));
+    const group = swatches(/^Accent colour for/);
+    expect(group.filter((r) => r.getAttribute("aria-checked") === "true")).toHaveLength(0);
+    expect(screen.getByTestId("list-card-a").style.getPropertyValue("--ll-accent")).toBe("var(--border)");
+
+    const tabbable = group.filter((r) => r.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAccessibleName("Clay");
+  });
+
+  // --- The swatches themselves: size, and three visible states -----------------------------
+
+  it("gives the swatches a 24px target, the minimum this project cites twice", () => {
+    // SC 2.5.8 (AA). `.icon-btn` and `.hp-fav` both record 24px as the floor, and these were
+    // 18×18 — with #135 taking the create form from zero targets (the old swatch was
+    // decorative and aria-hidden) to six. A swatch carries no content, so the "determined by
+    // content" exemption does not apply: its size is a free choice.
+    expect(resting(".ll-accent-swatch", "width")).toBe("24px");
+    expect(resting(".ll-accent-swatch", "height")).toBe("24px");
+    expect(Number.parseFloat(resting(".ll-accent-swatch", "width"))).toBeGreaterThanOrEqual(24);
+  });
+
+  it("gives focus its own channel, distinct from both checked and hover (WCAG 2.4.7)", () => {
+    // The defect: `-on` set an author `outline`, which REPLACES the UA's :focus-visible ring
+    // rather than adding to it, and `:focus-visible` only re-set the `border-color` that `-on`
+    // had already set. Focusing the checked swatch produced no pixel change whatsoever — and
+    // on first run `previewNextAccent([])` pre-checks Clay, the create form's FIRST swatch, so
+    // the very first Tab out of the name field landed on invisible focus.
+    const focus = resting(".ll-accent-swatch:focus-visible", "outline");
+    expect(focus).toContain("var(--gold-bright)");
+    expect(focus).toMatch(/2px/);
+
+    // Only focus owns the outline. Either of the other two states writing it is the bug.
+    expect(restingDeclaration(".ll-accent-swatch-on", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-accent-swatch:hover", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-accent-swatch", "outline")).toBeNull();
+
+    // And focus is not merely re-stating what checked already says: the property it changes
+    // must be one `-on` does not set, or the checked swatch shows nothing on focus again.
+    const onProperties = new Set(
+      CSS_RULES.filter((r) => r.selectors.includes(".ll-accent-swatch-on"))
+        .flatMap((r) => [...r.body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map(([, p]) => p))
+    );
+    const focusProperties = CSS_RULES.filter((r) => r.selectors.includes(".ll-accent-swatch:focus-visible"))
+      .flatMap((r) => [...r.body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map(([, p]) => p));
+    expect(focusProperties.length).toBeGreaterThan(0);
+    for (const property of focusProperties) expect(onProperties).not.toContain(property);
+  });
+
+  it("keeps checked and hover apart from each other too", () => {
+    // Three states, three readings. Checked is the one that persists, so it gets the ring the
+    // other two do not draw.
+    expect(resting(".ll-accent-swatch-on", "box-shadow")).toContain("inset");
+    expect(resting(".ll-accent-swatch-on", "border-color")).toBe("var(--gold-bright)");
+    expect(restingDeclaration(".ll-accent-swatch:hover", "box-shadow")).toBeNull();
+    expect(resting(".ll-accent-swatch:hover", "border-color")).toBe("var(--gold-bright)");
+  });
+
+  // --- Issue #132: the OPEN card keeps its accent ----------------------------------------
+
+  it("keeps the open card's accent — selection is drawn on its own channel", () => {
+    // `.ll-card-open { border-color: var(--gold) }` used to overwrite the accent, so the one
+    // card the user was concentrating on was the one card showing no identity. Selection moved
+    // to an inset ring; the border still paints the accent.
+    renderPanel(base([list("a", "Alpha", { accent: "#5e8a8a" })], [], { selectedListId: "a" }));
+    const card = screen.getByTestId("list-card-a");
+
+    expect(card.className).toContain("ll-card-open");
+    expect(card).toHaveAttribute("data-accent", "#5e8a8a");
+    expect(card.style.getPropertyValue("--ll-accent")).toBe("var(--list-accent-4)");
+
+    // The whole point is an ABSENCE — this rule must declare no border-color at all, because
+    // any value it names is a value that replaces the accent.
+    expect(restingDeclaration(".ll-card-open", "border-color")).toBeNull();
+    expect(restingDeclaration(".ll-card-open", "border")).toBeNull();
+    // …and the accent is still what the border reads, on the base rule.
+    expect(resting(".ll-card", "border")).toContain("var(--ll-accent");
+  });
+
+  it("keeps the accent through hover and focus too, which is a question about the CASCADE", () => {
+    // THE HALF THAT WAS MISSING. `.ll-card-open` declaring no border-color settles nothing on
+    // its own: `.ll-card:hover, .ll-card:focus-visible { border-color: var(--gold-border) }` is
+    // specificity (0,2,0) against `.ll-card`'s (0,1,0), so pointing at the open card — or
+    // tabbing to it — painted the accent out and restored #132's exact complaint. The previous
+    // test read `.ll-card-open` with `resting()` and could not see that.
+    //
+    // So this one asks the cascade: across EVERY rule in the sheet that can match a card, what
+    // border-color ends up in effect? The answer must be "none declared anywhere", leaving the
+    // base rule's `border: 3px solid var(--ll-accent, …)` as the only thing painting the frame.
+    expect(effectiveDeclaration(CSS_RULES, ".ll-card", "border-color")).toBeNull();
+    expect(effectiveDeclaration(CSS_RULES, ".ll-card", "border")).toContain("var(--ll-accent");
+
+    // And it bites: the rule that used to be there is exactly what it now reports.
+    const restored = parseStylesheet(`${readGlobalCss()}\n.ll-card:hover { border-color: var(--gold-border) }`);
+    expect(effectiveDeclaration(restored, ".ll-card", "border-color")).toBe("var(--gold-border)");
+  });
+
+  it("gives hover, focus and open three channels, none of them the border", () => {
+    // Three states that co-occur constantly — a keyboard user tabs onto the card that is open,
+    // a mouse user hovers it — so each needs a channel of its own, and none of them may be the
+    // channel the accent uses.
+    expect(resting(".ll-card:hover", "filter")).toMatch(/brightness/);
+    expect(restingDeclaration(".ll-card:hover", "border-color")).toBeNull();
+    expect(restingDeclaration(".ll-card:hover", "box-shadow")).toBeNull();
+
+    const focus = resting(".ll-card:focus-visible", "outline");
+    expect(focus).toContain("var(--gold)");
+    expect(focus).toMatch(/3px/);
+    // Outboard of the frame, so it reads as a ring around the card rather than as part of it —
+    // which is what keeps it distinct from the open ring drawn inboard.
+    expect(resting(".ll-card:focus-visible", "outline-offset")).toBe("2px");
+    expect(restingDeclaration(".ll-card:focus-visible", "border-color")).toBeNull();
+
+    // Selection owns neither of the other two properties.
+    expect(restingDeclaration(".ll-card-open::after", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-card-open::after", "filter")).toBeNull();
+  });
+
+  it("distinguishes the open card by drawn weight, not by hue alone — on all four edges", () => {
+    // SC 1.4.1. The ring ADDS 3px of edge rather than recolouring 3px of it, so an open card
+    // is distinguishable from a closed one whether or not gold and the accent can be told
+    // apart — and --gold stays reserved for interactive/selected state, never entering the
+    // accent palette or being painted as a frame.
+    //
+    // "ON ALL FOUR EDGES" is the correction. The ring was `box-shadow: inset`, and an inset
+    // shadow paints in its own box's background layer — BELOW every positioned descendant.
+    // `.ll-card-plate` is absolutely positioned, pinned to the bottom edge, and carries a
+    // 0.95-alpha gradient, so the bottom ~35px of the ring was underneath it: the claim held
+    // on three edges and failed on the one the eye goes to, because that is where the name is.
+    const ring = resting(".ll-card-open::after", "border");
+    expect(ring).toContain("var(--gold)");
+    expect(ring).toMatch(/3px/);
+    expect(resting(".ll-card-open::after", "inset")).toBe("0");
+    expect(resting(".ll-card-open::after", "position")).toBe("absolute");
+    // The occluded technique is gone rather than supplemented — two rings would be two
+    // answers to "how thick is an open card's frame".
+    expect(restingDeclaration(".ll-card-open", "box-shadow")).toBeNull();
+
+    // WHY IT PAINTS ABOVE THE PLATE, as two facts a stylesheet can hold: the ring stacks at 1
+    // and the plate does not stack at all. (jsdom lays nothing out, so this is the structural
+    // claim, not a measured one — the rendered check is a browser pass.)
+    expect(Number.parseInt(resting(".ll-card-open::after", "z-index"), 10)).toBeGreaterThanOrEqual(1);
+    expect(restingDeclaration(".ll-card-plate", "z-index")).toBeNull();
+    // It is decoration, so it must not eat the card's own clicks.
+    expect(resting(".ll-card-open::after", "pointer-events")).toBe("none");
+
+    // No palette value is ever written here — the accent must not start competing with --gold
+    // from the other direction either.
+    expect(ring).not.toMatch(/--list-accent|#[0-9a-f]{6}/i);
+  });
+
+  it("still marks the open card programmatically", () => {
+    // The non-visual half of the same fact, and the reason the ring does not have to carry it
+    // alone.
+    renderPanel(base([list("a", "Alpha"), list("b", "Beta")], [], { selectedListId: "a" }));
+    expect(screen.getByTestId("list-card-a")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("list-card-b")).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Issue #136 — the "Default list for saved loadouts" badge is gone.
+//
+// Governing: SPEC-0003 REQ "The Selected List Is Client State". The requirement is on the
+// BEHAVIOUR ("while a list is selected, a new save SHALL default to filing into that list"),
+// never on a label, so removing the badge is spec-legal. What is not acceptable is removing it
+// and leaving the behaviour undiscoverable — so the destination moved to the save control, and
+// ActionsPanel.test.jsx asserts that half.
+// ---------------------------------------------------------------------------------------
+
+describe("the expanded header carries no badge", () => {
+  it("shows no 'default list' pill on an expanded list", () => {
+    renderPanel(base([list("a", "Alpha")], [], { selectedListId: "a" }));
+    const head = screen.getByTestId("list-expanded");
+    expect(within(head).queryByText(/default list/i)).not.toBeInTheDocument();
+    expect(head.querySelector(".ll-badge")).toBeNull();
+  });
+
+  it("shows no 'not filed into any list' pill on Unassigned either", () => {
+    // The acceptance criterion is explicit that Unassigned's variant goes under the same
+    // decision rather than being left behind as the last badge on screen.
+    renderPanel(base([], [loadout("1", "x", null)], { unassignedOpen: true }));
+    const head = screen.getByTestId("list-expanded");
+    expect(within(head).queryByText(/not filed into any list/i)).not.toBeInTheDocument();
+    expect(head.querySelector(".ll-badge")).toBeNull();
+  });
+
+  it("leaves no orphaned .ll-badge rule in global.css", () => {
+    // Nothing else used it, so the rule goes with the markup. Left behind, it is what the next
+    // non-interactive label in this panel reaches for — which is how it got here.
+    expect(restingDeclaration(".ll-badge", "border")).toBeNull();
+    expect(CSS_RULES.some((rule) => rule.selectors.some((s) => s.includes("ll-badge")))).toBe(false);
+  });
+
+  it("has nothing left in the expanded header styled as interactive that is not", () => {
+    // The badge's actual defect, stated precisely: --gold-border and --gold-bright are the
+    // theme's INTERACTIVE colours (see the palette rationale in :root, and #132), which is why
+    // a pill wearing them read as a button. So the rule is about those colours specifically —
+    // not about borders, since `.ll-expanded-art` legitimately frames the portrait in a
+    // neutral --divider and always did.
+    renderPanel(base([list("a", "Alpha")], [], { selectedListId: "a" }));
+    const inert = [...screen.getByTestId("list-expanded").querySelectorAll(".ll-expanded-head *")]
+      .filter((el) => el.tagName !== "BUTTON" && !el.closest("button") && el.className);
+
+    expect(inert.length).toBeGreaterThan(0);
+    for (const el of inert) {
+      for (const className of String(el.className).split(" ").filter(Boolean)) {
+        for (const property of ["border", "border-color", "color"]) {
+          const value = restingDeclaration(`.${className}`, property);
+          if (value !== null) expect(value, `.${className} { ${property}: ${value} }`).not.toMatch(/--gold/);
+        }
+      }
+    }
+  });
 });
 
 describe("creating a list from the picker", () => {
@@ -579,11 +910,140 @@ describe("creating a list from the picker", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("previews the accent the new list will be assigned", async () => {
-    // Preview only — the server assigns least-used-first and the created record wins.
-    renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
+});
+
+// ---------------------------------------------------------------------------------------
+// Issue #135 — choosing a list's accent before it exists.
+//
+// Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+// Name", as widened on 2026-08-10: "the creating user MAY supply an accent, which SHALL be
+// validated against the palette and used as given. When the user supplies none, assignment on
+// creation SHALL select the least-used palette value among the owner's existing lists."
+//
+// REPLACES "previews the accent the new list will be assigned", which asserted the inline
+// background of an `aria-hidden` span. That span is gone: it showed a colour that looked
+// choosable and was not, which is the whole of what this issue was about.
+// ---------------------------------------------------------------------------------------
+
+describe("choosing an accent on the create form", () => {
+  const openCreateForm = async () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: /\+ New list/ })));
-    expect(screen.getByTestId("create-accent-preview").style.background).toContain("--list-accent-2");
+    return screen.getByRole("radiogroup", { name: "Accent colour for the new list" });
+  };
+
+  const created = (accent) => ({ id: "new", name: "New list", hunterId: null, accent });
+
+  it("offers all six palette values, pre-selected to the least-used one", async () => {
+    // "a" holds Clay, so least-used-first lands on Olive — the same answer the server would
+    // reach on its own. Doing nothing therefore still produces exactly today's list.
+    renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
+    const group = await openCreateForm();
+
+    const swatches = within(group).getAllByRole("radio");
+    expect(swatches.map((s) => s.getAttribute("aria-label"))).toEqual([
+      "Clay", "Olive", "Slate", "Teal", "Plum", "Amber",
+    ]);
+    const checked = swatches.filter((s) => s.getAttribute("aria-checked") === "true");
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toHaveAccessibleName("Olive");
+  });
+
+  it("sends the chosen accent on the POST and gives the created list that accent", async () => {
+    // The acceptance criterion in full: chosen, sent, and the accent the list HAS — with no
+    // second request. A create-then-PATCH would satisfy a weaker reading of "the list has the
+    // chosen accent" while leaving a window in which it has the wrong one.
+    global.fetch = vi.fn(async (_url, opts) => ({
+      ok: true,
+      status: 201,
+      json: async () => created(JSON.parse(opts.body).accent),
+    }));
+
+    const store = renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
+    const group = await openCreateForm();
+    await act(async () => fireEvent.click(within(group).getByRole("radio", { name: "Plum" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Create list" })));
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = global.fetch.mock.calls[0];
+    expect(String(url)).toContain("/api/loadout-lists");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body).accent).toBe("#8a5e86");
+
+    // No post-create PATCH: the one request above is the whole of it.
+    expect(global.fetch.mock.calls.map(([, o]) => o.method)).toEqual(["POST"]);
+    expect(store.getState().loadoutLists.items.find((l) => l.id === "new").accent).toBe("#8a5e86");
+    expect(screen.getByTestId("list-card-new")).toHaveAttribute("data-accent", "#8a5e86");
+  });
+
+  it("sends the seeded least-used value when the user touches nothing", async () => {
+    global.fetch = vi.fn(async (_url, opts) => ({
+      ok: true,
+      status: 201,
+      json: async () => created(JSON.parse(opts.body).accent),
+    }));
+
+    renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], []));
+    await openCreateForm();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Create list" })));
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).accent).toBe("#7a8a4e");
+  });
+
+  it("omits the key entirely when no accent is supplied, so least-used stays the server's job", async () => {
+    // The OTHER branch of the requirement, asserted at the seam that decides it. The panel
+    // always sends one, so this is the API wrapper's contract: an absent accent must leave the
+    // key off the body rather than send null, because absence is what routes the server to
+    // `nextAccent(...)`. The server's own test for that behaviour is what stays green.
+    global.fetch = vi.fn(async () => ({ ok: true, status: 201, json: async () => created("#b04a3e") }));
+
+    await createList({ name: "No accent", hunterId: null });
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ name: "No accent", hunterId: null });
+
+    await createList({ name: "With one", hunterId: null, accent: "#5e8a8a" });
+    expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({
+      name: "With one", hunterId: null, accent: "#5e8a8a",
+    });
+  });
+
+  it("is the SAME picker in both places — one radiogroup, one set of colour names", async () => {
+    // The acceptance criterion is "used in both places rather than duplicated", and a second
+    // copy is only ever detectable by the two drifting. So: identical swatch names, identical
+    // roles, identical keyboard model — and labels that differ in exactly the one way they
+    // must, because the create form has no list to name.
+    renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], [], { selectedListId: "a" }));
+    const expanded = screen.getByRole("radiogroup", { name: "Accent colour for Alpha" });
+    const create = await openCreateForm();
+
+    const namesIn = (group) =>
+      within(group).getAllByRole("radio").map((r) => r.getAttribute("aria-label"));
+    expect(namesIn(create)).toEqual(namesIn(expanded));
+    // Both are radiogroups of six radios — not a listbox here and a row of toggles there.
+    expect(within(create).getAllByRole("radio")).toHaveLength(6);
+    expect(within(expanded).getAllByRole("radio")).toHaveLength(6);
+    // And each has exactly one value in effect, which is what makes them radiogroups at all.
+    for (const group of [create, expanded]) {
+      expect(within(group).getAllByRole("radio").filter((r) => r.getAttribute("aria-checked") === "true"))
+        .toHaveLength(1);
+    }
+  });
+
+  it("names itself without a list, since there is no list yet", async () => {
+    // The expanded picker names the list it belongs to; that phrasing is unavailable here and
+    // "Accent colour for undefined" is the bug this asserts against.
+    renderPanel(base([], []));
+    const group = await openCreateForm();
+    expect(group).toHaveAccessibleName("Accent colour for the new list");
+    expect(group.getAttribute("aria-label")).not.toMatch(/undefined|null/);
+  });
+
+  it("has no decorative accent swatch left anywhere on the form", async () => {
+    // Withdrawn, not merely unused: an `aria-hidden` colour beside a name field is the thing
+    // that read as clickable, and left in place it is what a later reader restores.
+    renderPanel(base([], []));
+    await openCreateForm();
+    expect(screen.queryByTestId("create-accent-preview")).not.toBeInTheDocument();
+    expect(document.querySelector(".ll-create-accent")).toBeNull();
+    expect(restingDeclaration(".ll-create-accent", "width")).toBeNull();
   });
 });
 
@@ -633,151 +1093,12 @@ const drawn = (id) => [...previewOf(id).querySelectorAll("img")].map((img) => im
 // ---------------------------------------------------------------------------------------
 // Reading the size floors out of the stylesheet.
 //
-// WHAT THIS DOES AND DOES NOT COVER, stated plainly, because the previous version of this
-// helper claimed the opposite of what it did:
-//
-//   * It DOES resolve the declaration the cascade would actually apply, among the rules in
-//     global.css that can match an element carrying the given class: highest specificity
-//     wins, and among equal specificity the last in source order wins. A later
-//     `.ll-lp { min-width: 0 }`, or a higher-specificity `.panel .ll-lp { min-width: 12px }`,
-//     therefore CHANGES the answer instead of being absorbed into it.
-//   * It DOES refuse to answer at all when a conditional at-rule (`@media`, `@supports`,
-//     `@container`) declares the same property for the same class — that is a cascade this
-//     helper does not model, and silently merging it into the unconditional bucket is what
-//     the old parse did. `effective()` throws, loudly, rather than guessing.
-//   * It does NOT measure anything. jsdom performs no layout, so no assertion here is
-//     evidence of a rendered pixel width. What it proves is that the rule enforcing a floor
-//     reads the custom property the component sets, and caps it at the space available. The
-//     rendered widths are verified outside the suite, in a browser.
-//   * It does NOT model `!important`, inline style, `@layer`, or `:where()`/`:is()`
-//     specificity. global.css uses none of them for these selectors; `effective()` throws if
-//     it meets `!important` so that stays true.
-//
-// Located from the working directory rather than from `import.meta.url`, which under the
-// jsdom environment resolves against the dev server's origin rather than the filesystem.
-// Either candidate is right depending on whether the runner was started in the workspace or
-// at the repo root; neither existing is a broken test, not a skipped one.
-const CSS_PATH = ["src/styles/global.css", "client/src/styles/global.css"].find(existsSync);
-
-// Comments are stripped before parsing so prose about widths and floors can never satisfy —
-// or break — an assertion about declarations.
-function parseStylesheet(css) {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const rules = [];
-  const conditions = [];
-  let prelude = "";
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    // A statement at-rule (`@import`, `@charset`) ends at its semicolon and opens nothing.
-    if (ch === ";" && !prelude.includes("{")) {
-      prelude = "";
-      continue;
-    }
-    if (ch === "{") {
-      const head = prelude.trim();
-      prelude = "";
-      if (head.startsWith("@")) {
-        // A nested at-rule. Keyframes and font-face hold no selectors worth matching; the
-        // conditional group rules are remembered so a rule inside one is never mistaken for
-        // an unconditional declaration.
-        conditions.push(head);
-        continue;
-      }
-      let depth = 1;
-      let body = "";
-      i++;
-      for (; i < text.length; i++) {
-        if (text[i] === "{") depth++;
-        else if (text[i] === "}" && --depth === 0) break;
-        body += text[i];
-      }
-      rules.push({
-        selectors: head.split(",").map((s) => s.trim()).filter(Boolean),
-        body,
-        order: rules.length,
-        conditions: [...conditions],
-      });
-      continue;
-    }
-    if (ch === "}") {
-      conditions.pop();
-      prelude = "";
-      continue;
-    }
-    prelude += ch;
-  }
-  return rules;
-}
-
-const CSS_RULES = parseStylesheet(readFileSync(CSS_PATH, "utf8"));
-
-// a-b-c specificity, counted the way selectors level 4 counts it. Enough for this
-// stylesheet, which uses no ids, no `:where()` and no `:is()`.
-const specificity = (selector) => {
-  const ids = (selector.match(/#[\w-]+/g) || []).length;
-  const classes = (selector.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) || []).length;
-  const types = (selector.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
-  return ids * 10000 + classes * 100 + types;
-};
-
-// Does this selector match an element carrying `className`? Only the rightmost compound
-// selects, so `.ll-lcard-name` and `.ll-lcard-move select` do not answer for `.ll-lcard` —
-// and the word boundary is what keeps `.ll-lp` from matching `.ll-lp-slot`.
-const targets = (selector, className) => {
-  const rightmost = selector.split(/[\s>+~]+/).filter(Boolean).pop() || "";
-  return new RegExp(`\\.${className}(?![\\w-])`).test(rightmost);
-};
-
-const declarationsIn = (body, property) =>
-  [...body.matchAll(new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`, "g"))].map(([, v]) => v.trim());
-
-/**
- * The value of `property` that the cascade applies to an element carrying `classSelector`.
- *
- * Returns null when nothing declares it — which is itself assertable, and is how "no bare
- * `width` anywhere" is checked.
- */
-function effectiveDeclaration(rules, classSelector, property) {
-  const className = classSelector.replace(/^\./, "");
-  const candidates = rules
-    .map((rule) => {
-      const matching = rule.selectors.filter((sel) => targets(sel, className));
-      if (!matching.length) return null;
-      const values = declarationsIn(rule.body, property);
-      if (!values.length) return null;
-      return {
-        rule,
-        value: values[values.length - 1],
-        weight: Math.max(...matching.map(specificity)),
-      };
-    })
-    .filter(Boolean);
-
-  const conditional = candidates.filter((c) => c.rule.conditions.length);
-  if (conditional.length) {
-    throw new Error(
-      `${property} for ${classSelector} is also declared inside ${conditional
-        .map((c) => c.rule.conditions.join(" "))
-        .join(", ")}; this helper resolves unconditional rules only, so the assertion would ` +
-        "be reading a value the cascade may not apply. Model the at-rule or move the floor."
-    );
-  }
-  if (candidates.some((c) => /!\s*important/.test(c.value))) {
-    throw new Error(`${property} for ${classSelector} uses !important, which this helper does not order`);
-  }
-  if (!candidates.length) return null;
-
-  // Highest specificity wins; among equals, the last in source order.
-  candidates.sort((a, b) => a.weight - b.weight || a.rule.order - b.rule.order);
-  return candidates[candidates.length - 1].value;
-}
-
-/** As above, against global.css, and a missing declaration is a failure rather than a null. */
-const effective = (classSelector, property) => {
-  const value = effectiveDeclaration(CSS_RULES, classSelector, property);
-  if (value === null) throw new Error(`no rule in global.css declares ${property} for ${classSelector}`);
-  return value;
-};
+// The parser, the cascade resolver and the exact-selector reader moved to
+// ../../test/cssRules.js when the control size scale landed (#134) and needed asserting from
+// a suite that is not this component's. Everything about what they do and do not prove — in
+// particular why a geometry assertion must go through `resting()` and never `effective()` —
+// is documented at the top of that file.
+// ---------------------------------------------------------------------------------------
 
 // Spelled out per category, not `expect.any(String)`: the /images/{category}/ segment is the
 // only place the tool/consumable split is observable from outside, so pinning it is what
@@ -1075,7 +1396,7 @@ describe("the categorised loadout preview", () => {
     // is itself asserted. Each stylesheet below is global.css plus one override of the kind
     // that would silently lower a floor in production; the previous helper — which joined
     // every matching rule body and matched against the lot — stayed green through all three.
-    const SHEET = readFileSync(CSS_PATH, "utf8");
+    const SHEET = readGlobalCss();
     const floorOf = (css) => effectiveDeclaration(parseStylesheet(css), ".ll-lp", "min-width");
 
     expect(floorOf(SHEET)).toMatch(/^min\(var\(--ll-weapon-min/);
@@ -1302,23 +1623,6 @@ const describedAs = (item, description) => ({ ...item, description });
 const descOf = (id) => screen.queryByTestId(`loadout-desc-${id}`);
 const editControl = (id, name, action = "Edit") =>
   within(cardOf(id)).getByRole("button", { name: `${action} description: ${name}` });
-
-/**
- * A declaration from the ONE rule whose selector is exactly `selector`.
- *
- * `effective()` above resolves through the cascade by rightmost-compound match, which is
- * what you want for a layout floor — but it means `.ll-lcard-desc-btn:hover` answers for
- * `.ll-lcard-desc-btn` and, being more specific, outranks it. Contrast and the resting
- * affordance are properties of the control when nobody is pointing at it, so these
- * assertions have to read the base rule and not its hover state.
- */
-const resting = (selector, property) => {
-  const values = CSS_RULES.filter((rule) => rule.selectors.includes(selector)).flatMap((rule) =>
-    [...rule.body.matchAll(new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`, "g"))].map(([, v]) => v.trim())
-  );
-  if (!values.length) throw new Error(`no rule in global.css declares ${property} for exactly ${selector}`);
-  return values[values.length - 1];
-};
 
 /**
  * Run `fn` with every `<p>` reporting the given heights.

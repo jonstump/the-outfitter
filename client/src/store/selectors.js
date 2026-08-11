@@ -1,5 +1,6 @@
 import { createSelector } from "@reduxjs/toolkit";
 import { capMax, capUsed, slotMax, totalCost, upTotal } from "../utils/calc.js";
+import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
 //
@@ -29,3 +30,28 @@ export const selectEquipEntry = (index) =>
 
 export const selectWeaponSlot = (slot) =>
   createSelector([selectLoadout], (l) => l.weapons[slot]);
+
+/**
+ * The NAME of the list a save would file into, or null when it would go to Unassigned.
+ *
+ * Governing: SPEC-0003 REQ "The Selected List Is Client State".
+ *
+ * Goes through `resolveSaveListId` rather than reading `ui.selectedListId`, so the label on the
+ * save control and the destination of the save itself come from one rule.
+ *
+ * Stated precisely, because the obvious stronger claim is false: TODAY the two are
+ * indistinguishable, since looking a name up by id performs the same existence check the
+ * resolver does, and a stale id yields null down either path. The shared call is not fixing a
+ * live bug — it is what keeps the two in step the day the resolution rule gains a condition
+ * that ISN'T "the list exists". An archived flag, or a list the user may see but not file
+ * into, would immediately make a raw read name a destination the save refuses to use, and it
+ * would do so silently. `selectors.test.js` pins the agreement rather than the implementation,
+ * so that drift fails a test instead of shipping.
+ *
+ * Returns a name and not a record: the caller is a label, and handing it the whole list would
+ * re-render the button whenever anything on that record changed.
+ */
+export const selectSaveDestinationName = (state) => {
+  const id = resolveSaveListId(state);
+  return id ? (state.loadoutLists.items.find((l) => l.id === id)?.name ?? null) : null;
+};

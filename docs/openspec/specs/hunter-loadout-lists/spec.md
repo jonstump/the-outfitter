@@ -240,7 +240,9 @@ Because two lists MAY share a hunter, a list SHALL carry a distinguishing visual
 
 The accent SHALL be drawn from the fixed six-value palette defined in design.md and exposed as CSS custom properties in `client/src/styles/global.css`. Ad-hoc colour values MUST NOT be used. Every palette value SHALL meet WCAG 2.1 SC 1.4.11 (3:1 non-text contrast) against the panel, card, and page backgrounds.
 
-Assignment on creation SHALL select the least-used palette value among the owner's existing lists. Distinct lists SHOULD therefore receive distinct accent colours while any remain unused. The system MUST NOT reject or prevent a duplicate accent colour.
+The creating user MAY supply an accent, which SHALL be validated against the palette and used as given. **When the user supplies none**, assignment on creation SHALL select the least-used palette value among the owner's existing lists. Distinct lists SHOULD therefore receive distinct accent colours while any remain unused. The system MUST NOT reject or prevent a duplicate accent colour, whether it was chosen or assigned.
+
+*(qualifying clause added 2026-08-10, #135 — this sentence described least-used assignment as unconditional, which the server never was: `POST /api/loadout-lists` has always read an `accent` from the body and fallen back to least-used only in its absence. The clause described the fallback as though it were the whole rule, and the client offered no way to reach the other branch. Widening the sentence rather than the endpoint is the smaller change, because the endpoint was already right.)*
 
 Because palette values are separated primarily by hue rather than luminance, the accent MUST NOT be the sole means of distinguishing one list from another; the list name remains the primary accessible identity.
 
