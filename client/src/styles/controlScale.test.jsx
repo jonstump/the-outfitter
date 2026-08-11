@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Provider } from "react-redux";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import ActionsPanel from "../components/ActionsPanel/ActionsPanel.jsx";
 import LoadoutListsPanel from "../components/LoadoutListsPanel/LoadoutListsPanel.jsx";
 import Picker from "../components/Picker/Picker.jsx";
@@ -11,10 +11,16 @@ import {
   CSS_RULES,
   declarationsIn,
   effectiveDeclaration,
+  family,
   parseStylesheet,
   readGlobalCss,
   resting,
   restingDeclaration,
+  restingDeclarationIn,
+  specificity,
+  targets,
+  token,
+  tokenIn,
 } from "../test/cssRules.js";
 
 // ---------------------------------------------------------------------------------------
@@ -36,17 +42,56 @@ import {
 // claiming to check the resting one. `.btn:hover`, `.btn-outline:hover` and `.chip.active`
 // all outrank their base rules on specificity, so a cascade-resolving read would answer for
 // the wrong state. Geometry is a property of a control that nobody is pointing at.
+//
+// AND IT ASSERTS THE OUTPUT OF THE SCALE, NOT ONLY ITS INPUTS. The first version of this
+// file read padding and font-size and stopped there. Padding and font-size are what go INTO
+// a control's height; the tokens that decide the height itself — `--control-line`,
+// `--control-h` and their -sm twins — appeared nowhere, so deleting `height: var(--control-h)`
+// from `.select` (the single line that makes a dropdown 50px instead of 52px, i.e. the entire
+// point of the issue) left the suite green, as did `--control-h: 50px → 62px` and
+// `--control-line: 24px → normal`. That is the same shape of gap that let the original 2px
+// mismatch ship. The height arithmetic is asserted directly below.
 // ---------------------------------------------------------------------------------------
 
 const SHEET = readGlobalCss();
 
-/** Every declaration of `property` on the `:root` block — i.e. the scale's own values. */
-const token = (name) => {
-  const root = CSS_RULES.find((rule) => rule.selectors.includes(":root"));
-  const values = declarationsIn(root.body, name);
-  if (!values.length) throw new Error(`:root declares no ${name}`);
-  return values[values.length - 1];
+const px = (value) => Number.parseFloat(value);
+
+/** The two steps, named by the tokens that define them. */
+const STEPS = {
+  default: {
+    name: "default",
+    padY: "--control-pad-y",
+    line: "--control-line",
+    height: "--control-h",
+  },
+  sm: {
+    name: "-sm",
+    padY: "--control-pad-y-sm",
+    line: "--control-line-sm",
+    height: "--control-h-sm",
+  },
 };
+
+// Every control the scale covers, the step it takes, and the token its horizontal inset comes
+// from. Fields take a tighter inset than buttons at the same step — see the note in :root.
+// `height` is listed only for the selects, because they are the only controls that declare
+// one: everything else lands on the step's total by arithmetic, and a height on any of them
+// would be a second, competing source of truth.
+const SCALE = [
+  { selector: ".btn", step: "default", padX: "--control-pad-x" },
+  { selector: ".btn-primary", step: "default", padX: "--control-pad-x" },
+  { selector: ".btn-gold", step: "default", padX: "--control-pad-x" },
+  { selector: ".btn-outline", step: "default", padX: "--control-pad-x" },
+  { selector: ".text-input", step: "default", padX: "--field-pad-x" },
+  { selector: ".select", step: "default", padX: "--field-pad-x", declaresHeight: true },
+  { selector: ".toggle-btn", step: "sm", padX: "--control-pad-x-sm" },
+  { selector: ".chip", step: "sm", padX: "--control-pad-x-sm" },
+  { selector: ".number-input", step: "sm", padX: "--field-pad-x-sm" },
+  { selector: ".select-sm", step: "sm", padX: "--field-pad-x-sm", declaresHeight: true },
+];
+
+const SCALED = SCALE.map((c) => c.selector);
 
 /** `padding` and `font-size` as the exact rule for `selector` declares them. */
 const geometry = (selector) => ({
@@ -54,7 +99,30 @@ const geometry = (selector) => ({
   fontSize: resting(selector, "font-size"),
 });
 
-const px = (value) => Number.parseFloat(value);
+// --- the three predicates the scale rests on, each as a function of a parsed stylesheet -----
+//
+// Written against `rules` rather than against global.css directly so each can be RUN AGAINST A
+// MUTATION and shown to bite. Previously the floor check and the WCAG check restated numbers
+// that the exact-value test above them already pinned, so neither could go red on its own: any
+// edit that broke them broke that test first, and they were decoration. Below, each asserts on
+// the real sheet and then falsifies itself on a doctored one.
+
+/** Every scale token whose value has dropped below the largest that existed before it. */
+const floorViolations = (rules, floors) =>
+  Object.entries(floors).filter(([name, floor]) => px(tokenIn(rules, name)) < floor).map(([name]) => name);
+
+/**
+ * A step's total rendered height, from its own tokens: padding on both edges, the line box,
+ * and two 1px borders.
+ *
+ * The line box is `--control-line`, which is what the stylesheet actually applies. It used to
+ * be `font-size * 1.2` — a ratio global.css uses nowhere, which put the default step at 47px
+ * and left the WCAG 2.5.5 claim resting on a number no control has ever rendered at.
+ */
+const stepHeight = (rules, step) => 2 * px(tokenIn(rules, step.padY)) + px(tokenIn(rules, step.line)) + 2;
+
+/** The height the step DECLARES, which selects take verbatim. */
+const declaredHeight = (rules, step) => px(tokenIn(rules, step.height));
 
 describe("the control size scale exists in one place", () => {
   it("declares both steps as :root tokens", () => {
@@ -72,6 +140,21 @@ describe("the control size scale exists in one place", () => {
     expect(token("--control-font-sm")).toBe("16.5px");
   });
 
+  it("reads the token the cascade ends on, not the first one written", () => {
+    // `:root` is not a single block by decree, and the last unconditional declaration wins.
+    // Reading the first meant an appended `:root { --control-pad-y: 4px }` — or a themed
+    // block near the bottom of the file — moved every control in the app with every
+    // assertion in this file still green.
+    expect(tokenIn(parseStylesheet(`${SHEET}\n:root { --control-pad-y: 4px }`), "--control-pad-y")).toBe("4px");
+    // A CONDITIONAL redefinition is refused rather than ignored: it is a cascade this helper
+    // does not model, and answering with the unconditional value would be answering a
+    // question nobody asked.
+    const conditional = parseStylesheet(
+      `${SHEET}\n@media (prefers-color-scheme: light) { :root { --control-pad-y: 4px } }`
+    );
+    expect(() => tokenIn(conditional, "--control-pad-y")).toThrow(/prefers-color-scheme/);
+  });
+
   it("grew the small controls rather than shrinking the large ones", () => {
     // The load-bearing constraint. `.hp-fav` already records that 28px sits below WCAG 2.5.5's
     // 44px target; a scale that reached consistency by coming DOWN would have pushed more
@@ -85,25 +168,67 @@ describe("the control size scale exists in one place", () => {
       "--control-pad-y": 12, "--control-pad-x": 18, "--field-pad-x": 12, "--control-font": 17.5,
       "--control-pad-y-sm": 9, "--control-pad-x-sm": 14, "--field-pad-x-sm": 10, "--control-font-sm": 16.5,
     };
-    for (const [name, floor] of Object.entries(floors)) {
-      expect(px(token(name))).toBeGreaterThanOrEqual(floor);
-    }
+    expect(floorViolations(CSS_RULES, floors)).toEqual([]);
     // And the two steps stay ordered: -sm is the denser one, never accidentally the larger.
     expect(px(token("--control-pad-y-sm"))).toBeLessThan(px(token("--control-pad-y")));
     expect(px(token("--control-font-sm"))).toBeLessThan(px(token("--control-font")));
+
+    // The check is not decoration: a sheet that shrinks a control to reach consistency names
+    // the offender.
+    const shrunk = parseStylesheet(`${SHEET}\n:root { --control-pad-y: 8px; --control-font-sm: 14px }`);
+    expect(floorViolations(shrunk, floors)).toEqual(["--control-pad-y", "--control-font-sm"]);
   });
 
   it("clears the 44px target at the default step and the 24px minimum at -sm", () => {
     // Not a measurement — jsdom lays nothing out. It is arithmetic on the declared values,
-    // which is what the scale is: padding on both edges, plus a line box, plus two 1px borders.
-    // The point is that the numbers chosen leave the default step above WCAG 2.5.5's 44px AAA
-    // target rather than merely above where it started.
-    const lineBox = (fontSize) => px(fontSize) * 1.2;
-    const height = (padY, fontSize) => 2 * px(padY) + lineBox(fontSize) + 2;
-
-    expect(height(token("--control-pad-y"), token("--control-font"))).toBeGreaterThanOrEqual(44);
+    // which is what the scale is: padding on both edges, plus the line box the stylesheet
+    // pins, plus two 1px borders. The point is that the numbers chosen leave the default step
+    // above WCAG 2.5.5's 44px AAA target rather than merely above where it started.
+    expect(stepHeight(CSS_RULES, STEPS.default)).toBeGreaterThanOrEqual(44);
     // SC 2.5.8 (AA) asks 24px; the dense step clears it with room rather than by a hair.
-    expect(height(token("--control-pad-y-sm"), token("--control-font-sm"))).toBeGreaterThanOrEqual(24);
+    expect(stepHeight(CSS_RULES, STEPS.sm)).toBeGreaterThanOrEqual(24);
+
+    // Same falsification: a line-height trimmed to fit more on screen drops the default step
+    // under the target, and this check is what says so.
+    const trimmed = parseStylesheet(`${SHEET}\n:root { --control-line: 12px }`);
+    expect(stepHeight(trimmed, STEPS.default)).toBeLessThan(44);
+  });
+
+  it("pins each step's height to the arithmetic of its own tokens", () => {
+    // THE INVARIANT THE WHOLE SCALE HANGS ON, and the one that was unasserted:
+    //
+    //   --control-h    === 2 * --control-pad-y    + --control-line    + 2   (50 = 12+12+24+2)
+    //   --control-h-sm === 2 * --control-pad-y-sm + --control-line-sm + 2   (43 =  9+ 9+23+2)
+    //
+    // `--control-h` is what a <select> takes, because a select sizes its content box from a
+    // UA intrinsic minimum and ignores line-height; every other control lands on the same
+    // total from padding and line box alone. If the two sides of this equation drift, a
+    // dropdown is a different height from the button beside it — which is issue #134, exactly
+    // and entirely.
+    expect(stepHeight(CSS_RULES, STEPS.default)).toBe(declaredHeight(CSS_RULES, STEPS.default));
+    expect(declaredHeight(CSS_RULES, STEPS.default)).toBe(50);
+
+    expect(stepHeight(CSS_RULES, STEPS.sm)).toBe(declaredHeight(CSS_RULES, STEPS.sm));
+    expect(declaredHeight(CSS_RULES, STEPS.sm)).toBe(43);
+
+    // The `+ 2` is two 1px borders, and it is only a border-box height because of this rule.
+    // Under `content-box` every control would render 2px taller than the token says.
+    const boxSizing = CSS_RULES.filter((r) => r.selectors.includes("*")).flatMap((r) =>
+      declarationsIn(r.body, "box-sizing")
+    );
+    expect(boxSizing).toContain("border-box");
+  });
+
+  it("refuses `normal`, which is what the line-height tokens exist to replace", () => {
+    // `line-height: normal` is resolved by the UA per element type, and a <select>'s
+    // intrinsic content box is taller than a <button>'s — the 52px-vs-50px gap the issue was
+    // filed about. A token reverting to `normal` makes the arithmetic above unevaluable,
+    // which is the correct outcome and is asserted rather than assumed.
+    for (const step of Object.values(STEPS)) {
+      expect(token(step.line), `${step.name} line-height`).toMatch(/^\d+(\.\d+)?px$/);
+    }
+    const reverted = parseStylesheet(`${SHEET}\n:root { --control-line: normal }`);
+    expect(stepHeight(reverted, STEPS.default)).toBeNaN();
   });
 });
 
@@ -111,41 +236,88 @@ describe("every button, input and select consumes the scale", () => {
   // The default step. `.btn-primary` is in here deliberately: its 12px/17.5px is what SET the
   // default step, so it consuming the tokens is what stops the scale drifting away from the
   // control it was measured from.
-  it.each([
-    [".btn", "--control-pad-x"],
-    [".btn-primary", "--control-pad-x"],
-    [".btn-gold", "--control-pad-x"],
-    [".btn-outline", "--control-pad-x"],
-    [".text-input", "--field-pad-x"],
-    [".select", "--field-pad-x"],
-  ])("sizes %s from the default step", (selector, xToken) => {
-    const { padding, fontSize } = geometry(selector);
-    expect(padding).toBe(`var(--control-pad-y) var(${xToken})`);
-    expect(fontSize).toBe("var(--control-font)");
+  it.each(SCALE.filter((c) => c.step === "default").map((c) => [c.selector, c.padX]))(
+    "sizes %s from the default step",
+    (selector, xToken) => {
+      const { padding, fontSize } = geometry(selector);
+      expect(padding).toBe(`var(--control-pad-y) var(${xToken})`);
+      expect(fontSize).toBe("var(--control-font)");
+    }
+  );
+
+  it.each(SCALE.filter((c) => c.step === "sm").map((c) => [c.selector, c.padX]))(
+    "sizes %s from the -sm step",
+    (selector, xToken) => {
+      const { padding, fontSize } = geometry(selector);
+      expect(padding).toBe(`var(--control-pad-y-sm) var(${xToken})`);
+      expect(fontSize).toBe("var(--control-font-sm)");
+    }
+  );
+
+  it.each(SCALE.map((c) => [c.selector, STEPS[c.step].line]))(
+    "gives %s the line-height of its own step",
+    (selector, lineToken) => {
+      // The half of the scale that was declared and never asserted. `.number-input` is why
+      // this test exists as a sweep rather than a spot check: it took `--control-line` (the
+      // DEFAULT step's 24px) while its padding and font were -sm, so it rendered 44px between
+      // two 43px toggles on the budget row — #134's own defect, reintroduced by #134's fix,
+      // with a test one line above claiming in prose that the row matched.
+      expect(resting(selector, "line-height")).toBe(`var(${lineToken})`);
+    }
+  );
+
+  it.each(SCALE.map((c) => [c.selector, c.declaresHeight ? STEPS[c.step].height : null]))(
+    "settles %s's height the one way its control type allows",
+    (selector, heightToken) => {
+      if (heightToken) {
+        // Selects, and only selects. `appearance: auto` sizes the content box from a UA
+        // intrinsic minimum and ignores line-height, so the step's total has to be stated
+        // outright — this is the line whose deletion left 453/453 green.
+        expect(resting(selector, "height")).toBe(`var(${heightToken})`);
+      } else {
+        // Everything else derives it. A height here would be a second source of truth that
+        // agrees with the arithmetic today and stops agreeing the first time a token moves.
+        expect(restingDeclaration(selector, "height")).toBeNull();
+      }
+      // Neither kind may set a floor or a ceiling: both diverge from the declared step while
+      // padding, font-size and line-height all still read correctly.
+      expect(restingDeclaration(selector, "min-height")).toBeNull();
+      expect(restingDeclaration(selector, "max-height")).toBeNull();
+    }
+  );
+
+  it.each(SCALE.map((c) => [c.selector]))("gives %s the 1px border the arithmetic assumes", (selector) => {
+    // The `+ 2` in every step total. A 2px border makes the control 2px taller than its token
+    // says while padding, font-size and line-height all still read correctly — the same class
+    // of divergence the height tokens exist to prevent.
+    expect(resting(selector, "border")).toMatch(/^1px\b/);
+    for (const property of family("border").filter((p) => /width/.test(p))) {
+      expect(restingDeclaration(selector, property), `${selector} { ${property} }`).toBeNull();
+    }
   });
 
-  it.each([
-    [".toggle-btn", "--control-pad-x-sm"],
-    [".chip", "--control-pad-x-sm"],
-    [".number-input", "--field-pad-x-sm"],
-    [".select-sm", "--field-pad-x-sm"],
-  ])("sizes %s from the -sm step", (selector, xToken) => {
-    const { padding, fontSize } = geometry(selector);
-    expect(padding).toBe(`var(--control-pad-y-sm) var(${xToken})`);
-    expect(fontSize).toBe("var(--control-font-sm)");
+  it("leaves the selects' native appearance alone, which is why they need a height at all", () => {
+    // Recorded as a decision rather than left implicit: `appearance: none` would also fix the
+    // select's height, at the cost of hand-rolling a disclosure arrow on every platform. The
+    // height token is the smaller answer, and it is the RIGHT answer only while the control
+    // is still a native select. Changing this changes the reasoning, so it fails a test.
+    expect(restingDeclaration(".select", "appearance")).toBeNull();
+    expect(restingDeclaration(".select-sm", "appearance")).toBeNull();
+    expect(restingDeclaration(".select", "-webkit-appearance")).toBeNull();
+    expect(restingDeclaration(".select-sm", "-webkit-appearance")).toBeNull();
   });
 
   it("writes no literal padding or font-size on any of them", () => {
     // The scale is only one place while nothing restates it. A literal here is how seven
     // geometries came about, so its ABSENCE is the assertion — a rule that hard-codes `10px
     // 16px` again fails this even though every var-based assertion above still passes.
-    const scaled = [
-      ".btn", ".btn-primary", ".btn-gold", ".btn-outline", ".toggle-btn", ".chip",
-      ".text-input", ".number-input", ".select", ".select-sm",
-    ];
-    for (const selector of scaled) {
+    //
+    // Through `family()`, so `padding-left` is as visible as `padding`. Property matching is
+    // exact by name, which is right for reading a value and wrong for asserting an absence.
+    const properties = [...family("padding"), "font-size", "line-height"];
+    for (const selector of SCALED) {
       for (const rule of CSS_RULES.filter((r) => r.selectors.some((s) => s === selector || s.startsWith(`${selector} `)))) {
-        for (const property of ["padding", "font-size", "padding-top", "padding-bottom", "padding-left", "padding-right"]) {
+        for (const property of properties) {
           for (const value of declarationsIn(rule.body, property)) {
             expect(value, `${selector} { ${property}: ${value} }`).toMatch(/^var\(--/);
           }
@@ -207,6 +379,52 @@ describe("the pairs that were distinctions without a difference", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------
+// No call site patches around the scale.
+//
+// The base rules being right is half of "one scale". The other half is that nothing anywhere
+// restates a size for a control that has one — the pattern the issue describes as "each call
+// site patched the difference locally", which is how the scale stops being the answer.
+//
+// The guard used to cover `select` alone, matched by element name, so `.actions-row .btn-gold
+// { padding: 4px 8px }` and `.btn:hover { padding: 2px 4px }` were both still permitted. It
+// covers every scaled class and the three control ELEMENTS now: a descendant rule can reach a
+// control either way.
+// ---------------------------------------------------------------------------------------
+
+const BARE_ELEMENTS = ["select", "button", "input"];
+
+/** Every property that decides how tall a control renders, shorthands expanded. */
+const GEOMETRY_PROPERTIES = [
+  ...family("padding"),
+  "font-size", "line-height", "height", "min-height", "max-height",
+  ...family("border").filter((p) => /width/.test(p)),
+];
+
+/**
+ * Selectors that reach a scaled control from somewhere OTHER than its own base rule —
+ * ancestor-scoped (`.actions-row .btn-gold`), state-pseudo (`.btn:hover`), compound
+ * (`.chip.active`), or by element name (`.hp-filter select`).
+ */
+const isPerSiteOverride = (selector) => {
+  const s = selector.trim();
+  if (SCALED.includes(s) || BARE_ELEMENTS.includes(s)) return false;
+  const rightmost = s.split(/[\s>+~]+/).filter(Boolean).pop() || "";
+  const byClass = SCALED.some((base) => targets(s, base.slice(1)));
+  const byElement = BARE_ELEMENTS.some((el) => new RegExp(`(^|[^\\w\\-.])${el}(?![\\w-])`).test(rightmost));
+  return byClass || byElement;
+};
+
+const perSiteOverrides = (rules) =>
+  rules.flatMap((rule) => (rule.selectors.some(isPerSiteOverride) ? [rule] : []));
+
+const sizesDeclaredBy = (rules) =>
+  perSiteOverrides(rules).flatMap((rule) =>
+    GEOMETRY_PROPERTIES.flatMap((property) =>
+      declarationsIn(rule.body, property).map((value) => `${rule.selectors.join(", ")} { ${property}: ${value} }`)
+    )
+  );
+
 describe("dropdowns have an explicit contract", () => {
   it("no longer sizes a bare select element", () => {
     // The bigger half of the issue: selects never got a class, so they fell through to
@@ -222,19 +440,19 @@ describe("dropdowns have an explicit contract", () => {
     expect(resting(".select-sm", "background")).toBe("var(--input-bg)");
   });
 
-  it("has no per-site padding or font-size override on a select anywhere", () => {
+  it("has no per-site size override on any control anywhere", () => {
     // The criterion is that these are REMOVED rather than added to. A descendant rule may set
     // width — that is the call site's layout — but the moment one sets a size, the scale has
     // stopped being the answer and the next call site will patch around it too.
-    const perSite = CSS_RULES.filter((rule) =>
-      rule.selectors.some((s) => /\bselect\b/.test(s) && s !== "select" && !/^\.select(-sm)?$/.test(s.trim()))
-    );
-    expect(perSite.length, "expected .ll-lcard-move select to still exist").toBeGreaterThan(0);
-    for (const rule of perSite) {
-      for (const property of ["padding", "font-size"]) {
-        expect(declarationsIn(rule.body, property), `${rule.selectors.join(", ")} { ${property} }`).toHaveLength(0);
-      }
+    const reached = perSiteOverrides(CSS_RULES);
+    expect(reached.length, "the guard matched nothing at all, so it proves nothing").toBeGreaterThan(4);
+    // The states and call sites it is actually watching, named so a refactor that renames them
+    // out of the guard's reach is visible rather than silent.
+    const selectors = reached.flatMap((r) => r.selectors.filter(isPerSiteOverride));
+    for (const expected of [".btn:hover", ".chip.active", ".toggle-btn.on", ".ll-lcard-move select"]) {
+      expect(selectors).toContain(expected);
     }
+    expect(sizesDeclaredBy(CSS_RULES)).toEqual([]);
   });
 });
 
@@ -253,12 +471,32 @@ describe("the rules that hold the scale in place can fail", () => {
     expect(paddingOf(`${SHEET}\n.btn { padding: 10px 16px }`, ".btn")).toBe("10px 16px");
   });
 
-  it("sees a select size override coming back", () => {
-    const overridden = parseStylesheet(`${SHEET}\n.hp-filter select { padding: 4px 8px }`);
-    const offenders = overridden.filter(
-      (rule) => rule.selectors.some((s) => /\bselect\b/.test(s) && s !== "select" && !/^\.select(-sm)?$/.test(s.trim()))
+  it("sees a size override coming back, on a select OR on a button", () => {
+    const overridden = parseStylesheet(
+      `${SHEET}\n.hp-filter select { padding: 4px 8px }\n.actions-row .btn-gold { padding: 4px 8px }\n.btn:hover { padding: 2px 4px }`
     );
-    expect(offenders.flatMap((r) => declarationsIn(r.body, "padding"))).toContain("4px 8px");
+    expect(sizesDeclaredBy(overridden)).toEqual([
+      ".hp-filter select { padding: 4px 8px }",
+      ".actions-row .btn-gold { padding: 4px 8px }",
+      ".btn:hover { padding: 2px 4px }",
+    ]);
+  });
+
+  it("sees a shorthand written as a longhand", () => {
+    // `padding-left` used to be invisible where `padding` was asserted, which is a patch this
+    // guard was meant to catch wearing a different name.
+    const sneaky = parseStylesheet(`${SHEET}\n.actions-row .btn { padding-left: 4px }`);
+    expect(sizesDeclaredBy(sneaky)).toEqual([".actions-row .btn { padding-left: 4px }"]);
+  });
+
+  it("weighs a pseudo-element as a type selector rather than as a class", () => {
+    // `specificity()` ordered `effective()`'s candidates, and its pseudo-CLASS alternative was
+    // satisfied starting from the second colon of a `::` sequence — so `::after` scored 100
+    // instead of 1 and a pseudo-element rule outranked a two-class one that really beats it.
+    expect(specificity(".ll-card-open::after")).toBeLessThan(specificity(".ll-card.ll-card-open"));
+    expect(specificity("::-webkit-scrollbar")).toBe(specificity("div"));
+    // The pseudo-CLASS reading is untouched: `:hover` is still a class-weight selector.
+    expect(specificity(".btn:hover")).toBe(specificity(".btn.on"));
   });
 
   it("distinguishes a resting geometry from a hover one", () => {
@@ -268,6 +506,16 @@ describe("the rules that hold the scale in place can fail", () => {
     const withHover = `${SHEET}\n.btn:hover { padding: 99px }`;
     expect(paddingOf(withHover, ".btn")).toBe("var(--control-pad-y) var(--control-pad-x)");
     expect(effectiveDeclaration(parseStylesheet(withHover), ".btn", "padding")).toBe("99px");
+  });
+
+  it("refuses a geometry restated inside a media query rather than ignoring it", () => {
+    // `resting()` is what every geometry assertion in this file goes through, and it used to
+    // read the unconditional value and say nothing about a conditional one — so a
+    // `@media (prefers-color-scheme: light)` block could restate any of them unseen.
+    const conditional = parseStylesheet(
+      `${SHEET}\n@media (prefers-color-scheme: light) { .btn { padding: 2px 4px } }`
+    );
+    expect(() => restingDeclarationIn(conditional, ".btn", "padding")).toThrow(/prefers-color-scheme/);
   });
 });
 
@@ -331,6 +579,12 @@ describe("every rendered select carries the contract", () => {
   it("leaves no select in the app without one of the two classes", () => {
     // Swept rather than enumerated: a select added later with no class renders at browser
     // defaults, which is exactly the state this issue was filed about.
+    //
+    // THE SWEEP HAS TO MOUNT THE SELECTS TO SWEEP THEM. It used to render `Picker`, which has
+    // none, and `HunterPicker`'s two — the ones this issue put `.select` on — only exist while
+    // the create form has the portrait dialog open, which no state here set. Removing either
+    // class survived the sweep entirely. The dialog is opened below, from the create form, by
+    // the same route a user takes.
     const listRecord = { id: "a", name: "Alpha", hunterId: null, accent: "#b04a3e", createdAt: "2026-01-01" };
     withStore(
       baseState({
@@ -341,7 +595,7 @@ describe("every rendered select carries the contract", () => {
           status: "succeeded",
           error: null,
         },
-        ui: { ...createTestStore().getState().ui, selectedListId: "a" },
+        ui: { ...createTestStore().getState().ui, selectedListId: "a", creatingList: true },
       }),
       <>
         <ActionsPanel />
@@ -351,8 +605,13 @@ describe("every rendered select carries the contract", () => {
       </>
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /^Portrait:/ }));
+    // The hunter picker's two filter dropdowns, which are only reachable this way.
+    expect(screen.getByLabelText("Filter by acquisition")).toBeTruthy();
+    expect(screen.getByLabelText("Filter by availability")).toBeTruthy();
+
     const selects = [...document.querySelectorAll("select")];
-    expect(selects.length).toBeGreaterThan(0);
+    expect(selects.length).toBeGreaterThanOrEqual(5);
     for (const select of selects) {
       expect(
         select.classList.contains("select") || select.classList.contains("select-sm"),
@@ -386,6 +645,15 @@ describe("the controls that share a row share a step", () => {
     const row = document.querySelector(".budget-row");
     expect(within(row).getByRole("button", { name: /^Budget/ })).toHaveClass("toggle-btn");
     expect(row.querySelector("input[type=number]")).toHaveClass("number-input");
+
+    // And the same height, which is the claim this test was making in prose while checking
+    // only the padding token. `.number-input` was 44px between two 43px toggles, because its
+    // line-height came from the default step.
+    for (const selector of [".toggle-btn", ".number-input"]) {
+      expect(resting(selector, "line-height")).toBe("var(--control-line-sm)");
+      expect(resting(selector, "padding")).toMatch(/^var\(--control-pad-y-sm\)/);
+      expect(resting(selector, "font-size")).toBe("var(--control-font-sm)");
+    }
   });
 
   it("classes the create form's name field, which had no class at all", () => {

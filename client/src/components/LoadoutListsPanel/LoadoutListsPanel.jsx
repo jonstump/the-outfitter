@@ -568,11 +568,40 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
  * Name" — "an accent colour SHALL be assigned at creation and SHALL be user-editable", and
  * (as widened for #135) "the creating user MAY supply an accent".
  *
- * A radiogroup rather than six independent buttons: exactly one value is in effect, arrow
- * keys move between the swatches for free, and assistive tech announces "3 of 6" instead of
- * six unrelated toggles. Each swatch is labelled with its colour NAME, because a swatch
- * announced only as a colour block is nothing to a screen-reader user and the palette
- * separates by hue rather than luminance.
+ * A radiogroup rather than six independent buttons: exactly one value is in effect, and
+ * assistive tech announces "3 of 6" instead of six unrelated toggles. Each swatch is labelled
+ * with its colour NAME, because a swatch announced only as a colour block is nothing to a
+ * screen-reader user and the palette separates by hue rather than luminance.
+ *
+ * THE KEYBOARD MODEL IS IMPLEMENTED HERE, not inherited. This comment used to say arrow keys
+ * moved between the swatches "for free"; that is true of `<input type="radio">` and of nothing
+ * else. These are `<button role="radio">`, and with no key handler and no tabIndex the widget
+ * told assistive tech it was a radiogroup while behaving as six independent tab stops — seven
+ * Tab presses between the name field and "Create list". So it does what it says now, following
+ * the roving-tabindex idiom `HunterPicker` already uses in this codebase (one tab stop for the
+ * composite, arrow keys inside it, Home/End to the ends) rather than a second idiom:
+ *
+ *   - ONE tab stop. The checked swatch is the tab stop; when nothing is checked it is the
+ *     first, which is what keeps an off-palette stored value reachable rather than stranding
+ *     the group (see below).
+ *   - Left/Up and Right/Down move AND select, wrapping at both ends. Selecting on move is the
+ *     radio pattern rather than the listbox one, and it is what makes the group operable with
+ *     no modifier keys; the accent is a live, undoable preference, not a submitted answer.
+ *   - Home/End go to the first and last swatch, selecting likewise.
+ *   - Space and Enter select the focused swatch, which for a radio is a no-op after a move and
+ *     matters only for the swatch focus arrived at by Tab.
+ *
+ * `activeIndex` is DERIVED rather than stored: every move selects, so the roving tab stop and
+ * the checked swatch are the same thing by construction and cannot drift apart. Focus is moved
+ * imperatively in the handler because all six buttons are already mounted — there is no render
+ * to wait for, and an effect would paint one frame with focus on the old element.
+ *
+ * AN OFF-PALETTE `value` — a record written before the palette was fixed, or by hand — leaves
+ * every `aria-checked` false, which is the truth: the stored colour is not one of the six, and
+ * `accentVar` degrades it to a neutral border rather than painting an unvetted value. What
+ * that must NOT do is make the group unusable, so the roving tab stop falls back to the first
+ * swatch and the arrows work from there; picking any swatch resolves the record onto the
+ * palette.
  *
  * CONTROLLED, and taking a value rather than a list (#135). It used to take the list it
  * edited and dispatch the write itself, which meant it could only ever be used on a list that
@@ -590,19 +619,65 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
  * permitted outcome, so there is no check to fail and no warning to render.
  */
 function AccentPicker({ value, onChange, label }) {
+  const swatchRefs = useRef([]);
+  const checkedIndex = LIST_ACCENTS.findIndex((a) => a.value === value);
+  const activeIndex = checkedIndex < 0 ? 0 : checkedIndex;
+  const last = LIST_ACCENTS.length - 1;
+
+  const moveTo = (index) => {
+    const i = ((index % LIST_ACCENTS.length) + LIST_ACCENTS.length) % LIST_ACCENTS.length;
+    onChange(LIST_ACCENTS[i].value);
+    swatchRefs.current[i]?.focus();
+  };
+
+  const onKeyDown = (e, index) => {
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        e.preventDefault();
+        moveTo(index + 1);
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        e.preventDefault();
+        moveTo(index - 1);
+        break;
+      case "Home":
+        e.preventDefault();
+        moveTo(0);
+        break;
+      case "End":
+        e.preventDefault();
+        moveTo(last);
+        break;
+      case " ":
+      case "Enter":
+        e.preventDefault();
+        moveTo(index);
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <div className="ll-accent-picker" role="radiogroup" aria-label={label}>
-      {LIST_ACCENTS.map((a) => (
+      {LIST_ACCENTS.map((a, i) => (
         <button
           key={a.value}
           type="button"
           role="radio"
+          ref={(el) => {
+            swatchRefs.current[i] = el;
+          }}
           aria-checked={value === a.value}
           aria-label={a.name}
           title={a.name}
+          tabIndex={i === activeIndex ? 0 : -1}
           className={`ll-accent-swatch${value === a.value ? " ll-accent-swatch-on" : ""}`}
           style={{ background: `var(${a.cssVar})` }}
           onClick={() => onChange(a.value)}
+          onKeyDown={(e) => onKeyDown(e, i)}
         />
       ))}
     </div>

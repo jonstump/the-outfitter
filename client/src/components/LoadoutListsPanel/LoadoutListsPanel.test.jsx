@@ -453,6 +453,171 @@ describe("list accents", () => {
     expect(checked[0]).toHaveAccessibleName("Plum");
   });
 
+  // --- The radiogroup's keyboard model, which was announced and not implemented -----------
+  //
+  // `role="radiogroup"` over six `<button role="radio">` is a PROMISE: one tab stop, arrows
+  // inside it, and "3 of 6" announced instead of six unrelated toggles. Arrow keys come free
+  // with `<input type="radio">` and with nothing else, and this widget had no `onKeyDown` and
+  // no `tabIndex` at all — so AT announced a radiogroup and the user got six tab stops. Three
+  // places said otherwise, two of them written by #135 and one of them the design handoff.
+  //
+  // Driven with REAL KEY EVENTS rather than by asserting an attribute: the attribute is what
+  // was already there and true, and the behaviour is what was missing.
+
+  const swatches = (name) => within(screen.getByRole("radiogroup", { name })).getAllByRole("radio");
+  const CREATE_GROUP = "Accent colour for the new list";
+  const checkedName = (group) =>
+    swatches(group).find((r) => r.getAttribute("aria-checked") === "true")?.getAttribute("aria-label") ?? null;
+
+  it("has exactly one tab stop, and it is the checked swatch", () => {
+    renderPanel(base([list("a", "Alpha", { accent: "#8a5e86" })], [], { selectedListId: "a" }));
+    const group = swatches(/^Accent colour for/);
+    const tabbable = group.filter((r) => r.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAccessibleName("Plum");
+    // Every other swatch is reachable by arrow key and not by Tab. Six native tab stops is
+    // what six independent buttons look like, and it put "Create list" seven presses away.
+    expect(group.filter((r) => r.tabIndex === -1)).toHaveLength(5);
+  });
+
+  it("moves and selects with Left/Right and Up/Down, wrapping at both ends", () => {
+    // On the create form, where the value is local state and no request is involved. The
+    // palette order is Clay, Olive, Slate, Teal, Plum, Amber, and an empty list seeds Clay.
+    renderPanel(base([], [], { creatingList: true }));
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    const press = (key) => {
+      const from = swatches(CREATE_GROUP).find((r) => r.tabIndex === 0);
+      fireEvent.keyDown(from, { key });
+    };
+
+    press("ArrowRight");
+    expect(checkedName(CREATE_GROUP)).toBe("Olive");
+    // Focus follows the selection, which is what makes it one widget rather than a group with
+    // a cursor of its own.
+    expect(document.activeElement).toHaveAccessibleName("Olive");
+
+    press("ArrowDown");
+    expect(checkedName(CREATE_GROUP)).toBe("Slate");
+
+    press("ArrowLeft");
+    expect(checkedName(CREATE_GROUP)).toBe("Olive");
+    press("ArrowUp");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    // Wrapping, both directions — a radiogroup is a ring, not a line with two dead ends.
+    press("ArrowLeft");
+    expect(checkedName(CREATE_GROUP)).toBe("Amber");
+    press("ArrowRight");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+  });
+
+  it("jumps to the ends with Home and End, and selects with Space and Enter", () => {
+    renderPanel(base([], [], { creatingList: true }));
+    const press = (key) => fireEvent.keyDown(swatches(CREATE_GROUP).find((r) => r.tabIndex === 0), { key });
+
+    press("End");
+    expect(checkedName(CREATE_GROUP)).toBe("Amber");
+    expect(document.activeElement).toHaveAccessibleName("Amber");
+
+    press("Home");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+
+    // Space and Enter select the focused swatch. After a move that is a no-op, which is the
+    // point — the one case they matter is the swatch Tab landed on.
+    press("Enter");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+    press(" ");
+    expect(checkedName(CREATE_GROUP)).toBe("Clay");
+  });
+
+  it("writes the arrow-key choice through the same path a click takes", async () => {
+    // The expanded header's picker, where selecting dispatches a PATCH. Arrow keys are not a
+    // second, read-only way to move a cursor: moving IS selecting, and it persists.
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    const store = renderPanel(base([list("a", "Alpha", { accent: "#b04a3e" })], [], { selectedListId: "a" }));
+    const clay = screen.getByRole("radio", { name: "Clay" });
+    await act(async () => fireEvent.keyDown(clay, { key: "ArrowRight" }));
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ accent: "#7a8a4e" });
+    expect(store.getState().loadoutLists.items[0].accent).toBe("#7a8a4e");
+    expect(screen.getByTestId("list-card-a")).toHaveAttribute("data-accent", "#7a8a4e");
+  });
+
+  it("stays operable when the stored accent is not in the palette", () => {
+    // A record written before the palette was fixed, or by hand. Nothing is checked, which is
+    // the truth — `accentVar` degrades it to a neutral border rather than painting an unvetted
+    // colour — but the group must not become unreachable on the way. The roving tab stop falls
+    // back to the first swatch, and one arrow press resolves the record onto the palette.
+    global.fetch = vi.fn(async (url, opts) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "Alpha", hunterId: null, ...JSON.parse(opts.body) }),
+    }));
+
+    renderPanel(base([list("a", "Alpha", { accent: "#123456" })], [], { selectedListId: "a" }));
+    const group = swatches(/^Accent colour for/);
+    expect(group.filter((r) => r.getAttribute("aria-checked") === "true")).toHaveLength(0);
+    expect(screen.getByTestId("list-card-a").style.getPropertyValue("--ll-accent")).toBe("var(--border)");
+
+    const tabbable = group.filter((r) => r.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAccessibleName("Clay");
+  });
+
+  // --- The swatches themselves: size, and three visible states -----------------------------
+
+  it("gives the swatches a 24px target, the minimum this project cites twice", () => {
+    // SC 2.5.8 (AA). `.icon-btn` and `.hp-fav` both record 24px as the floor, and these were
+    // 18×18 — with #135 taking the create form from zero targets (the old swatch was
+    // decorative and aria-hidden) to six. A swatch carries no content, so the "determined by
+    // content" exemption does not apply: its size is a free choice.
+    expect(resting(".ll-accent-swatch", "width")).toBe("24px");
+    expect(resting(".ll-accent-swatch", "height")).toBe("24px");
+    expect(Number.parseFloat(resting(".ll-accent-swatch", "width"))).toBeGreaterThanOrEqual(24);
+  });
+
+  it("gives focus its own channel, distinct from both checked and hover (WCAG 2.4.7)", () => {
+    // The defect: `-on` set an author `outline`, which REPLACES the UA's :focus-visible ring
+    // rather than adding to it, and `:focus-visible` only re-set the `border-color` that `-on`
+    // had already set. Focusing the checked swatch produced no pixel change whatsoever — and
+    // on first run `previewNextAccent([])` pre-checks Clay, the create form's FIRST swatch, so
+    // the very first Tab out of the name field landed on invisible focus.
+    const focus = resting(".ll-accent-swatch:focus-visible", "outline");
+    expect(focus).toContain("var(--gold-bright)");
+    expect(focus).toMatch(/2px/);
+
+    // Only focus owns the outline. Either of the other two states writing it is the bug.
+    expect(restingDeclaration(".ll-accent-swatch-on", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-accent-swatch:hover", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-accent-swatch", "outline")).toBeNull();
+
+    // And focus is not merely re-stating what checked already says: the property it changes
+    // must be one `-on` does not set, or the checked swatch shows nothing on focus again.
+    const onProperties = new Set(
+      CSS_RULES.filter((r) => r.selectors.includes(".ll-accent-swatch-on"))
+        .flatMap((r) => [...r.body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map(([, p]) => p))
+    );
+    const focusProperties = CSS_RULES.filter((r) => r.selectors.includes(".ll-accent-swatch:focus-visible"))
+      .flatMap((r) => [...r.body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map(([, p]) => p));
+    expect(focusProperties.length).toBeGreaterThan(0);
+    for (const property of focusProperties) expect(onProperties).not.toContain(property);
+  });
+
+  it("keeps checked and hover apart from each other too", () => {
+    // Three states, three readings. Checked is the one that persists, so it gets the ring the
+    // other two do not draw.
+    expect(resting(".ll-accent-swatch-on", "box-shadow")).toContain("inset");
+    expect(resting(".ll-accent-swatch-on", "border-color")).toBe("var(--gold-bright)");
+    expect(restingDeclaration(".ll-accent-swatch:hover", "box-shadow")).toBeNull();
+    expect(resting(".ll-accent-swatch:hover", "border-color")).toBe("var(--gold-bright)");
+  });
+
   // --- Issue #132: the OPEN card keeps its accent ----------------------------------------
 
   it("keeps the open card's accent — selection is drawn on its own channel", () => {
@@ -466,10 +631,6 @@ describe("list accents", () => {
     expect(card).toHaveAttribute("data-accent", "#5e8a8a");
     expect(card.style.getPropertyValue("--ll-accent")).toBe("var(--list-accent-4)");
 
-    // `resting()`, NOT `effective()`: `.ll-card:hover` and `.ll-card:focus-visible` both set
-    // border-color and both outrank `.ll-card` on specificity, so a cascade-resolving read
-    // here would assert the hover colour while claiming to check the open one.
-    //
     // The whole point is an ABSENCE — this rule must declare no border-color at all, because
     // any value it names is a value that replaces the accent.
     expect(restingDeclaration(".ll-card-open", "border-color")).toBeNull();
@@ -478,18 +639,73 @@ describe("list accents", () => {
     expect(resting(".ll-card", "border")).toContain("var(--ll-accent");
   });
 
-  it("distinguishes the open card by drawn weight, not by hue alone", () => {
+  it("keeps the accent through hover and focus too, which is a question about the CASCADE", () => {
+    // THE HALF THAT WAS MISSING. `.ll-card-open` declaring no border-color settles nothing on
+    // its own: `.ll-card:hover, .ll-card:focus-visible { border-color: var(--gold-border) }` is
+    // specificity (0,2,0) against `.ll-card`'s (0,1,0), so pointing at the open card — or
+    // tabbing to it — painted the accent out and restored #132's exact complaint. The previous
+    // test read `.ll-card-open` with `resting()` and could not see that.
+    //
+    // So this one asks the cascade: across EVERY rule in the sheet that can match a card, what
+    // border-color ends up in effect? The answer must be "none declared anywhere", leaving the
+    // base rule's `border: 3px solid var(--ll-accent, …)` as the only thing painting the frame.
+    expect(effectiveDeclaration(CSS_RULES, ".ll-card", "border-color")).toBeNull();
+    expect(effectiveDeclaration(CSS_RULES, ".ll-card", "border")).toContain("var(--ll-accent");
+
+    // And it bites: the rule that used to be there is exactly what it now reports.
+    const restored = parseStylesheet(`${readGlobalCss()}\n.ll-card:hover { border-color: var(--gold-border) }`);
+    expect(effectiveDeclaration(restored, ".ll-card", "border-color")).toBe("var(--gold-border)");
+  });
+
+  it("gives hover, focus and open three channels, none of them the border", () => {
+    // Three states that co-occur constantly — a keyboard user tabs onto the card that is open,
+    // a mouse user hovers it — so each needs a channel of its own, and none of them may be the
+    // channel the accent uses.
+    expect(resting(".ll-card:hover", "filter")).toMatch(/brightness/);
+    expect(restingDeclaration(".ll-card:hover", "border-color")).toBeNull();
+    expect(restingDeclaration(".ll-card:hover", "box-shadow")).toBeNull();
+
+    const focus = resting(".ll-card:focus-visible", "outline");
+    expect(focus).toContain("var(--gold)");
+    expect(focus).toMatch(/3px/);
+    // Outboard of the frame, so it reads as a ring around the card rather than as part of it —
+    // which is what keeps it distinct from the open ring drawn inboard.
+    expect(resting(".ll-card:focus-visible", "outline-offset")).toBe("2px");
+    expect(restingDeclaration(".ll-card:focus-visible", "border-color")).toBeNull();
+
+    // Selection owns neither of the other two properties.
+    expect(restingDeclaration(".ll-card-open::after", "outline")).toBeNull();
+    expect(restingDeclaration(".ll-card-open::after", "filter")).toBeNull();
+  });
+
+  it("distinguishes the open card by drawn weight, not by hue alone — on all four edges", () => {
     // SC 1.4.1. The ring ADDS 3px of edge rather than recolouring 3px of it, so an open card
     // is distinguishable from a closed one whether or not gold and the accent can be told
     // apart — and --gold stays reserved for interactive/selected state, never entering the
     // accent palette or being painted as a frame.
-    const ring = resting(".ll-card-open", "box-shadow");
-    expect(ring).toContain("inset");
+    //
+    // "ON ALL FOUR EDGES" is the correction. The ring was `box-shadow: inset`, and an inset
+    // shadow paints in its own box's background layer — BELOW every positioned descendant.
+    // `.ll-card-plate` is absolutely positioned, pinned to the bottom edge, and carries a
+    // 0.95-alpha gradient, so the bottom ~35px of the ring was underneath it: the claim held
+    // on three edges and failed on the one the eye goes to, because that is where the name is.
+    const ring = resting(".ll-card-open::after", "border");
     expect(ring).toContain("var(--gold)");
     expect(ring).toMatch(/3px/);
-    // Not an outline: :focus-visible needs that property free, or an open card loses the one
-    // cue that tells a keyboard user where they are.
-    expect(restingDeclaration(".ll-card-open", "outline")).toBeNull();
+    expect(resting(".ll-card-open::after", "inset")).toBe("0");
+    expect(resting(".ll-card-open::after", "position")).toBe("absolute");
+    // The occluded technique is gone rather than supplemented — two rings would be two
+    // answers to "how thick is an open card's frame".
+    expect(restingDeclaration(".ll-card-open", "box-shadow")).toBeNull();
+
+    // WHY IT PAINTS ABOVE THE PLATE, as two facts a stylesheet can hold: the ring stacks at 1
+    // and the plate does not stack at all. (jsdom lays nothing out, so this is the structural
+    // claim, not a measured one — the rendered check is a browser pass.)
+    expect(Number.parseInt(resting(".ll-card-open::after", "z-index"), 10)).toBeGreaterThanOrEqual(1);
+    expect(restingDeclaration(".ll-card-plate", "z-index")).toBeNull();
+    // It is decoration, so it must not eat the card's own clicks.
+    expect(resting(".ll-card-open::after", "pointer-events")).toBe("none");
+
     // No palette value is ever written here — the accent must not start competing with --gold
     // from the other direction either.
     expect(ring).not.toMatch(/--list-accent|#[0-9a-f]{6}/i);

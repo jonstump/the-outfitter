@@ -138,7 +138,20 @@
 
      Measured in Chrome after both rules: every control at the default step is 50px and every
      control at -sm is 43px, selects included, in the loadout-lists header (#134's named worst
-     instance) and everywhere else. */
+     instance) and everywhere else.
+
+     THE FOUR TOKENS BELOW ARE HELD TOGETHER BY ARITHMETIC, and controlScale.test.jsx asserts
+     that arithmetic directly rather than restating the numbers:
+
+       --control-h    === 2 * --control-pad-y    + --control-line    + 2   (50 = 12+12+24+2)
+       --control-h-sm === 2 * --control-pad-y-sm + --control-line-sm + 2   (43 =  9+ 9+23+2)
+
+     The `+ 2` is the two 1px borders, and it only holds because `* { box-sizing: border-box }`
+     makes the height a border-box height — all three of those are asserted too. Editing one
+     token without the other now fails a test instead of reopening the gap this scale closed:
+     the first version of these tests read padding and font-size only, so deleting `height:
+     var(--control-h)` — the single line that makes a <select> 50px instead of 52px — left the
+     whole suite green. */
   --control-line: 24px;
   --control-line-sm: 23px;
   --control-h: 50px;
@@ -501,12 +514,14 @@ button {
    variant on a weapon slot. Call sites set WIDTH; they do not set padding or font-size. */
 .select,
 .select-sm {
-  line-height: var(--control-line-sm);
-  height: var(--control-h-sm);
   background: var(--input-bg);
   color: var(--text);
   border: 1px solid var(--border);
 }
+/* Each step states its OWN line-height and height, rather than the shared rule stating one
+   step's and `.select` overriding it. Two rules declaring the same property for the same
+   element is how "which value is in effect here" stops being answerable by reading one rule,
+   and it is the shape the geometry assertions have to reason about. */
 .select {
   line-height: var(--control-line);
   height: var(--control-h);
@@ -514,6 +529,8 @@ button {
   font-size: var(--control-font);
 }
 .select-sm {
+  line-height: var(--control-line-sm);
+  height: var(--control-h-sm);
   padding: var(--control-pad-y-sm) var(--field-pad-x-sm);
   font-size: var(--control-font-sm);
 }
@@ -752,9 +769,14 @@ button {
 
 /* The -sm step, matching the `.toggle-btn` it shares the budget row with (issue #134). It also
    takes the field inset rather than the button one: ActionsPanel gives these an inline width of
-   60–80px, and a button's shoulders would leave a four-digit budget nowhere to render. */
+   60–80px, and a button's shoulders would leave a four-digit budget nowhere to render.
+
+   ALL FOUR of padding, font-size, line-height and the resulting height come from the -sm step.
+   This rule took `--control-line` (the DEFAULT step's 24px) while its padding and font were
+   -sm, which rendered it 44px between two 43px toggles — the exact mismatch #134 exists to
+   eliminate, reintroduced by #134's own fix, and invisible to a test that read only padding. */
 .number-input {
-  line-height: var(--control-line);
+  line-height: var(--control-line-sm);
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
@@ -1058,9 +1080,29 @@ button {
   padding: 0;
   overflow: hidden;
 }
-.ll-card:hover,
+/* Governing: SPEC-0003 REQ "Lists Are Visually Distinguishable Independent of Portrait and
+   Name" (issue #132)
+
+   HOVER AND FOCUS ARE OFF THE BORDER TOO, for the same reason selection is. These two rules
+   used to say `border-color: var(--gold-border)`, at specificity (0,2,0) against `.ll-card`'s
+   (0,1,0) — so pointing at the open card, or reaching it with the keyboard, painted out the
+   accent that `.ll-card-open` had gone to some trouble not to touch. Moving selection to its
+   own channel settled nothing while the two states a user is IN most of the time still
+   consumed the identity channel.
+
+   Three states, three channels, all composable, none of them the border:
+     hover        — brightness. Works over a portrait, which a background change does not.
+     :focus-visible — an author outline OUTSIDE the frame, 2px clear of it.
+     open         — a gold ring INSIDE the frame (`.ll-card-open::after`, below).
+   Focused, open and hovered are therefore still tellable apart when they coincide: the ring
+   is inboard of the accent border, the focus outline is outboard of it with a visible gap,
+   and the whole card is brighter under the pointer. */
+.ll-card:hover {
+  filter: brightness(1.15);
+}
 .ll-card:focus-visible {
-  border-color: var(--gold-border);
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
 }
 .ll-card-unassigned {
   border-style: dashed;
@@ -1072,14 +1114,34 @@ button {
    Selection, on its own channel — see the full rationale beside the palette in :root. This
    rule sets NO border-color, deliberately and load-bearingly: the moment it does, the accent
    `.ll-card` paints from --ll-accent is gone again and the open card is the one card in the
-   grid with no identity on it (issue #132).
+   grid with no identity on it (issue #132). Neither do `:hover` and `:focus-visible` above,
+   which is the other half of the same requirement and used to be missing.
 
-   `box-shadow: inset`, not `outline`. An outline here would be painted over by the UA's own
-   focus ring — or, worse, would survive and replace it — and a keyboard user must still be
-   able to see where they are on a card that happens to be open. box-shadow leaves the outline
-   property entirely free for :focus-visible. */
-.ll-card-open {
-  box-shadow: inset 0 0 0 3px var(--gold);
+   A PSEUDO-ELEMENT RING, not `box-shadow: inset`, and not `outline`.
+
+   `outline` is out because it is the keyboard user's channel; giving it to selection would
+   make an open card and a focused card the same picture.
+
+   `box-shadow: inset` was the first answer and it was WRONG BY A THIRD OF THE CARD: an inset
+   shadow paints in the background layer of its own box, which is BELOW every positioned
+   descendant, and `.ll-card-plate` is an absolutely-positioned child pinned to the bottom
+   edge with a 0.95-alpha gradient over it. The bottom ~35px of the ring was underneath it.
+   The SC 1.4.1 claim — the open card is distinguishable without relying on colour, because
+   the ring ADDS drawn edge rather than recolouring one — therefore held on three edges and
+   failed on the fourth, which is where a user's eye goes, because that is where the name is.
+
+   `::after` is generated as the card's LAST child, so it paints after the plate in tree
+   order; `z-index: 1` says so outright rather than leaving it to that. `inset: 0` puts it
+   against the padding box, i.e. immediately inboard of the 3px accent border, so an open
+   card carries 6px of contiguous drawn edge against a closed card's 3px — twice the weight,
+   now on all four edges. `pointer-events: none` keeps it out of the card's own hit testing. */
+.ll-card-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 3px solid var(--gold);
+  pointer-events: none;
 }
 .ll-card-mono {
   font-family: "IM Fell English SC", serif;
@@ -1170,20 +1232,38 @@ button {
   gap: 6px;
   align-items: center;
 }
+/* 24px, not the 18px these were. `.icon-btn` and `.hp-fav` both record 24px as this project's
+   floor (SC 2.5.8 AA, "Target Size (Minimum)"), and a swatch under it is the same defect those
+   comments exist to flag — with the aggravation that #135 took the create form from zero
+   targets (the old swatch was decorative and `aria-hidden`) to six. Not exempt: the exemption
+   SC 2.5.8 offers is for targets whose size is determined by the content they carry, and a
+   swatch carries no content at all — its size is a free choice, so it is made a compliant one.
+   24px also gives the checked state room to draw an inset ring that reads at a glance.
+
+   CHECKED, HOVERED AND FOCUSED ARE THREE CHANNELS (WCAG 2.4.7). `-on` used to set an author
+   `outline`, which REPLACES the UA's `:focus-visible` ring rather than adding to it, and
+   `:focus-visible` only re-set the `border-color` that `-on` had already set — so tabbing onto
+   the checked swatch produced no pixel change whatsoever. On first run `previewNextAccent([])`
+   pre-checks Clay, which is the create form's first swatch, so the very first Tab out of the
+   name field landed on invisible focus. Now: checked owns the inset ring, hover owns the
+   border colour, and focus owns the outline — and only focus owns the outline. */
 .ll-accent-swatch {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   cursor: pointer;
   border: 1px solid var(--border-soft);
 }
 .ll-accent-swatch-on {
   border-color: var(--gold-bright);
-  outline: 1px solid var(--gold-border);
+  box-shadow: inset 0 0 0 2px var(--panel);
 }
-.ll-accent-swatch:hover,
-.ll-accent-swatch:focus-visible {
+.ll-accent-swatch:hover {
   border-color: var(--gold-bright);
+}
+.ll-accent-swatch:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
 }
 .ll-expanded-title {
   flex: 1;
@@ -1633,7 +1713,7 @@ button {
 /* `.ll-create-accent` was here and is gone with the decorative swatch it painted (#135). The
    create form runs the real `.ll-accent-picker` now; all it needs from this rule is the
    vertical alignment, because `.ll-create` bottom-aligns its row against a text field taller
-   than a row of 18px swatches. */
+   than a row of 24px swatches. */
 .ll-create .ll-accent-picker {
   align-self: center;
 }

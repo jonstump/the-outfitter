@@ -4,7 +4,14 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import ActionsPanel from "./ActionsPanel.jsx";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { uiActions } from "../../store/uiSlice.js";
-import { restingDeclaration } from "../../test/cssRules.js";
+import {
+  family,
+  parseStylesheet,
+  readGlobalCss,
+  restingDeclaration,
+  restingDeclarationIn,
+  restingFamily,
+} from "../../test/cssRules.js";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
@@ -196,9 +203,29 @@ describe("the save control names its destination", () => {
     const dest = saveButton().querySelector(".save-dest");
     expect(dest).toHaveTextContent("shotgun experiments");
 
-    for (const property of ["border", "border-color", "text-transform", "letter-spacing", "color"]) {
+    // THROUGH `restingFamily`, which is the correction. `restingDeclaration(".save-dest",
+    // "border")` is exact by property name, so it answered "null" for a rule declaring
+    // `border-bottom` or `border-width`, and the badge this test is named for could come back
+    // as a filled, underlined pill with every assertion here still green. `border`,
+    // `background` and `padding` each cover their longhands now.
+    for (const property of ["border", "background", "padding", "outline"]) {
+      expect(restingFamily(".save-dest", property), `.save-dest declares a ${property}`).toEqual([]);
+    }
+    for (const property of ["text-transform", "letter-spacing", "color", "border-radius", "box-shadow"]) {
       expect(restingDeclaration(".save-dest", property)).toBeNull();
     }
     expect(restingDeclaration(".save-dest", "font-style")).toBe("italic");
+  });
+
+  it("the shorthand guard above sees a longhand, which is how the badge would come back", () => {
+    // The mutation that used to survive: a border written as `border-bottom` and a fill
+    // written as `background-color` are the pill in every visible respect, and neither was
+    // named by the properties this test asserted.
+    const pill = parseStylesheet(
+      `${readGlobalCss()}\n.save-dest { border-bottom: 1px solid var(--gold-border); background-color: var(--input-bg); padding-left: 6px }`
+    );
+    expect(family("border").some((p) => restingDeclarationIn(pill, ".save-dest", p) !== null)).toBe(true);
+    expect(family("background").some((p) => restingDeclarationIn(pill, ".save-dest", p) !== null)).toBe(true);
+    expect(family("padding").some((p) => restingDeclarationIn(pill, ".save-dest", p) !== null)).toBe(true);
   });
 });
