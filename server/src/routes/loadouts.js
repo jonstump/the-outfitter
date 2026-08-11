@@ -11,6 +11,7 @@ import {
   tokenLimiter,
 } from "../lib/ownership.js";
 import { resolveOwnedList } from "./loadoutLists.js";
+import { charCount, DESCRIPTION_MAX_CHARS, validateDescription } from "../lib/descriptions.js";
 
 // Ownership primitives (callerToken, liveRecords, the stacked rate limiters) moved to
 // ../lib/ownership.js when SPEC-0003 added a second owned collection. Both routers MUST
@@ -56,40 +57,17 @@ function isValidData(data) {
 // so there is nothing to migrate.
 const isListRef = (v) => v === null || v === undefined || (typeof v === "string" && v.length > 0 && v.length <= 100);
 
-// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description"
-//
-// The caps, as names rather than as literals. SPEC-0003's Security Requirements ask for the
-// description cap to be "declared as a named constant beside the existing name cap", and at
-// least 1000 characters: the dataset's longest description is 404 ("The Night Seer"), and
-// that text is what a user most often starts from when they edit, so a cap that could not
-// hold it would reject the default the application itself offered.
-//
 // NAME_MAX_CHARS governs the ENVELOPE's name. The identical-looking 200 inside isValidData
 // caps `data.n`, which is wire-format validation frozen by REQ "The Saved-Loadout Wire
 // Format Is Unchanged" — a different rule that happens to have landed on the same number,
 // so it is deliberately left as its own literal rather than made to share this constant.
 const NAME_MAX_CHARS = 200;
-export const DESCRIPTION_MAX_CHARS = 1000;
 
-/**
- * How many characters a description is, in the unit its own rejection message names.
- *
- * `String.prototype.length` counts UTF-16 CODE UNITS, which charges two for every emoji and
- * every other non-BMP glyph — so a 501-emoji note would be refused by a message that claims
- * a 1000-character limit. That fails closed, but it fails closed while saying something
- * untrue, and the user cannot act on it. Spreading iterates by code point instead, which is
- * the unit a person counting what they typed is counting.
- *
- * Code points, not grapheme clusters: a flag or a family emoji is still several. Segmenting
- * properly would need `Intl.Segmenter` and would make the cap depend on the ICU data the
- * runtime happens to carry, which is a worse trade for a courtesy limit. What matters is
- * that the number is bounded and the message is honest about what it counted.
- *
- * The storage consequence is checked, not assumed: 1000 code points is at most 4000 bytes of
- * UTF-8, well inside the 64kb request-body limit set in index.js.
- */
-const charCount = (s) => [...s].length;
+// The description cap and its validator are shared with the LIST route (lib/descriptions.js).
+// Both records carry a description under the same wire discipline and the same limit; what
+// differs is only what an absent value means, and that difference lives in the handlers rather
+// than in the check. Re-exported because this module is where callers already look for it.
+export { DESCRIPTION_MAX_CHARS };
 
 // Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
 // undefined rather than null. Serialise it explicitly so the API shape is uniform: every
@@ -97,48 +75,17 @@ const charCount = (s) => [...s].length;
 // absent field. Without this, every consumer has to coalesce, and the no-op comparison in
 // PATCH below would miss the legacy shape.
 //
-// `description` is coalesced the same way and for the same reason, but note what the
-// coalescing does NOT do: it maps absent -> null only. An empty string survives as an empty
-// string, because absent/null ("never edited — inherit from the list's hunter") and ""
-// ("deliberately blank") are two different states and the client has to be able to tell
-// them apart. `rec.description ?? null` is deliberate — `||` here would collapse the two.
+// `description` is coalesced the same way and for the same reason. A loadout's description is
+// the user's own note about the build and NOTHING is inherited into it, so absent, null and ""
+// all render as no note — the coalescing is for a uniform API shape, not to preserve a
+// distinction. (It was three states until #181 moved inheritance to the list, where the hunter
+// actually lives; `""` survives as `""` here only because rewriting stored records to say the
+// same thing a different way would be a migration with nothing to gain.)
 const publicLoadout = (rec) => ({
   ...publicRecord(rec),
   listId: rec.listId ?? null,
   description: rec.description ?? null,
 });
-
-/**
- * Validate a caller-supplied description.
- *
- * Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 Security
- * Requirements ("Request Body Size Limits").
- *
- * Called ONLY when the key is present in the body — "omitted" is a third answer that means
- * "leave the field alone", and it is the caller's job to check for the key before asking.
- * Folding that check in here would make an omitted key indistinguishable from `null`, which
- * is the exact collapse this requirement exists to prevent.
- *
- * The text is stored VERBATIM: no trim. Trimming would silently turn a whitespace-only
- * description into the deliberately-blank state, which is a state change the user did not
- * ask for. The cap therefore governs exactly what is stored.
- */
-function validateDescription(description, res) {
-  if (description === null) return { ok: true, value: null };
-  if (typeof description !== "string") {
-    res.status(400).json({ error: "description must be a string or null" });
-    return { ok: false };
-  }
-  if (charCount(description) > DESCRIPTION_MAX_CHARS) {
-    // The rejected text is NOT echoed back. It is user prose, one of whose two sources was
-    // scraped off-origin, and an error body is the easiest place for it to end up somewhere
-    // it was never rendered as text — a log aggregator, a bug report, a toast built by
-    // concatenation. The cap is the only thing the caller needs told.
-    res.status(400).json({ error: `description must be at most ${DESCRIPTION_MAX_CHARS} characters` });
-    return { ok: false };
-  }
-  return { ok: true, value: description };
-}
 
 /**
  * Validate a caller-supplied listId against the lists the CALLER owns.
@@ -204,7 +151,7 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       return res.status(400).json({ error: "data must be a valid loadout payload" });
     }
 
-    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 § HTTP
+    // Governing: SPEC-0003 REQ "Loadouts Carry a Description of Their Own", SPEC-0003 § HTTP
     // API — "`POST` SHALL accept an optional `description`, so that saving a loadout with one
     // written up front is a single write rather than a save followed by a patch". The key's
     // PRESENCE is the question, not its truthiness: `"description" in body` distinguishes
@@ -242,10 +189,9 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       record = existing;
     } else {
       record = { id: randomUUID(), owner: token, name: trimmedName, data, listId: ref.value, updatedAt: now };
-      // The key is written only when the caller supplied one. A record that has never been
-      // described carries NO `description` field at all — that is the state SPEC-0003 calls
-      // "never edited", and the API surfaces it as null through publicLoadout without the
-      // store having to hold a placeholder for it.
+      // The key is written only when the caller supplied one. A record nobody has written a
+      // note about carries NO `description` field at all, and the API surfaces that as null
+      // through publicLoadout without the store having to hold a placeholder for it.
       if (describes) record.description = desc.value;
       db.data.loadouts.push(record);
     }
@@ -261,9 +207,8 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 /**
  * Move a loadout between lists, and/or edit its description.
  *
- * Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
- * SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable Reference", SPEC-0003 REQ
- * "Loadouts Carry an Editable Description".
+ * Governing: ADR-0006 (list filing model), SPEC-0003 REQ "Loadouts Are Filed into Lists by
+ * Nullable Reference", SPEC-0003 REQ "Loadouts Carry a Description of Their Own".
  *
  * Two mutable fields, and they are INDEPENDENT: this endpoint used to require `listId`,
  * which would have made "describe" impossible without also restating where the loadout is
@@ -273,12 +218,13 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
  * The whole endpoint turns on presence rather than value. For BOTH fields:
  *
  *   omitted  -> leave it exactly as it is
- *   null     -> `listId: null` files into Unassigned; `description: null` restores the
- *               inherited default (the list hunter's text, resolved at render time — never
- *               copied into the record, which is why "restore" is a write of null and not
- *               a write of the hunter's prose)
- *   a string -> store it, including `description: ""`, which is the deliberately-blank
- *               state and must NOT re-inherit
+ *   null     -> `listId: null` files into Unassigned; `description: null` CLEARS the note
+ *   a string -> store it, `description: ""` included
+ *
+ * `description: null` meant "restore the inherited default" until #181 moved inheritance to
+ * the list. A loadout has no hunter of its own to inherit from — its list does — so null and
+ * `""` now say the same thing here, and both are accepted rather than one being rejected: a
+ * client that clears a field by writing null is not wrong, and records already store both.
  *
  * A body carrying neither key is rejected rather than treated as a no-op: it is a client
  * that believes it is writing something, and answering 200 would hide that.
@@ -313,9 +259,8 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
 
     // Coalesce before comparing: a record predating SPEC-0003 has `listId` undefined, not
     // null, so a plain === would miss "already Unassigned" and take the write path. The
-    // description comparison coalesces the same way and, again, only absent -> null: `""`
-    // compares as `""`, so clearing a description that was inherited IS a change and IS
-    // written, which is what stops the hunter's text reappearing.
+    // description comparison coalesces the same way, so clearing a note that was never
+    // written is correctly seen as the no-op it is.
     const sameList = (loadout.listId ?? null) === ref.value;
     const sameDescription = (loadout.description ?? null) === desc.value;
     if (sameList && sameDescription) {
@@ -331,9 +276,9 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     console.info("loadout updated", {
       loadoutId: loadout.id,
       listId: sameList ? undefined : ref.value,
-      // The TEXT is never logged — it is user prose, and one of the two sources it can come
-      // from is scraped off-origin. Which state it landed in is what a log needs to say.
-      description: sameDescription ? undefined : desc.value === null ? "inherited" : `${charCount(desc.value)} chars`,
+      // The TEXT is never logged — it is the user's own prose. Which state it landed in is
+      // what a log needs to say.
+      description: sameDescription ? undefined : desc.value === null ? "cleared" : `${charCount(desc.value)} chars`,
     });
     res.json(publicLoadout(loadout));
   } catch (err) {

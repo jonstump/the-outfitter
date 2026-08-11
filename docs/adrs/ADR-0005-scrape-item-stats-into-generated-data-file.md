@@ -581,7 +581,7 @@ and must not be extended to cover:
 **Why:** measured, not argued. Both sources reach 5, counted separately because they do not currently agree on this column:
 
 * **`client/src/data/catalog.js`** (hand-authored, 39 weapons): sizes distribute `{1:6, 2:10, 3:12, 4:9, 5:2}` — **11 at size 4 or 5**.
-* **`client/src/data/itemStats.json`** (scraped, 39 weapons carrying a `Size`): `{1:9, 2:6, 3:7, 4:14, 5:3}` — **17 at size 4 or 5**.
+* **`client/src/data/itemStats.json`** (scraped, 38 weapon rows carrying a `Size` — `winfield-m1873c` is a known duplicate with no page of its own): `{1:9, 2:5, 3:7, 4:14, 5:3}` — **17 at size 4 or 5**.
 
 5 is the entire weapon budget `calc.js`'s `capMax()` grants (a size-5 weapon fills it), so a range assertion written to `1..3` would have refused more than a quarter of the hand-authored arsenal — and nearly half the scraped one — on a *correct* parse, turning the guardrail into the defect it exists to prevent.
 

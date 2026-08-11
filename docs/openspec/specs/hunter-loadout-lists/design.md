@@ -280,17 +280,31 @@ The risk this creates is specific and worth stating as a requirement rather than
 
 ### Descriptions are resolved from the dataset, not copied into the record
 
-*Added 2026-08-10.*
+*Added 2026-08-10. **Revised 2026-08-11 (#181): the field described below is the LIST's.** It was placed on the loadout, and that was the wrong record — see "Two descriptions, on the two records that earn them" below.*
 
-**Choice**: `description` is a nullable field on the loadout envelope with three meaningful states — null (never edited), empty string (deliberately blank), and non-empty (the user's text). When null, the UI resolves the description of the hunter on the list the loadout is filed into, live from the hunters dataset. That text is never written into the record in order to display it.
+**Choice**: `description` is a nullable field on the loadout list envelope with three meaningful states — null (never edited), empty string (deliberately blank), and non-empty (the user's text). When null, the UI resolves the description of the hunter the list references, live from the hunters dataset. That text is never written into the record in order to display it.
 
 **Rationale**: The alternative — stamping the hunter's lore into the record at save time — is simpler to implement and worse in three specific ways. A re-scrape that fixes a typo would never reach existing records. Every loadout in a list would carry an identical several-hundred-byte copy of the same prose. And a loadout moved to a different list would keep the previous hunter's biography, which reads as a bug rather than as a feature.
 
 Resolving live avoids all three, at the cost of one genuine complication: **null and empty string have to mean different things.** A user who clears a description is expressing "this has no description", and re-inheriting the hunter's lore at that point would make the field impossible to empty. That is why the spec states the three states as a table rather than in prose — collapsing them to a truthy check is the obvious implementation and the wrong one.
 
-The inheritance path is deliberately indirect: loadout → list → hunter → description. A loadout has no hunter of its own, and giving it one would duplicate the list's portrait reference and immediately raise the question of which wins. Inheriting through the list means the answer is always "the list", and a loadout in Unassigned simply has nothing to inherit from — an ordinary state, not an error.
+The inheritance path is direct: list → hunter → description. The list is the record that references a hunter, so there is nothing to reach through. *(It was loadout → list → hunter until #181, an indirection that existed only because the field was on the wrong record.)*
 
-**This is a read-time join, and it is a cheap one.** The hunters dataset is module-level and already indexed by id for `hunterNameFor`; the same lookup returns the description. The cost is one map access per rendered row.
+**This is a read-time join, and it is a cheap one.** The hunters dataset is module-level and already indexed by id for `hunterNameFor`; the same lookup returns the description. The cost is one map access per open list — and, since #181, one per list rather than one per card in it.
+
+### Two descriptions, on the two records that earn them
+
+*Added 2026-08-11 (#181).*
+
+**Choice**: there are two description fields. `LOADOUT_LIST.description` is the one above — three states, inherited from the list's hunter, restorable. `LOADOUT.description` is the user's own note about a build: two states, no default, no restore, no hunter lookup anywhere on its path.
+
+**Rationale**: the decision above was right about resolving live and wrong about where to put the field. The hunter belongs to the list, so a description inherited from a hunter belongs to the list too. On the loadout it produced the same paragraph of lore under every card filed into a list — the exact duplication the "never copy it into the record" rule exists to avoid, arriving through rendering instead of through storage — and it left a note about a *specific build* with nowhere to live that was not also the list's business.
+
+Both halves were named in "Alternatives considered" below, one as rejected and one as deferred. Taking the deferred one answers the rejection: a list description does give every loadout in a list the same text, and that is correct, because it is the *list's* text and it renders once, on the list. The per-build note is a separate field, which is what "leaves no place for a note about a specific build" was actually asking for.
+
+**The loadout's field is deliberately the poorer of the two.** No inherited default means two states rather than three, which means no restore control, no attribution line, and no reason for a loadout card to know which list it is filed into in order to render. A build has no hunter, so there is nothing honest to default it to: a generated summary of its contents would restate the categorised preview drawn directly below it, and the list's text would be the duplication all over again. An empty field with a prompt is the truthful default.
+
+**Migration is nothing, and that is a property of the original design rather than luck.** Because inherited text was never written into a record, every stored loadout description is text a user typed, and it stays on the loadout untouched. A loadout storing null simply stops inheriting; the lore it was showing now renders once on its list. Had the 2026-08-10 decision stamped the hunter's prose into records, this correction would have required distinguishing copied lore from user prose after the fact — which is undecidable, since a user may have adopted the lore verbatim.
 
 **Three states need three wire values, not two.** Because null carries meaning here, a PATCH cannot use "key absent" and "value null" interchangeably the way the loadout endpoints do today: absent means *leave it alone*, explicit null means *reset to inherited*, and empty string means *deliberately blank*. The same rule extends to `listId` on that endpoint, where explicit null is the only way to express "move to Unassigned" — previously unambiguous only because `listId` had no third state to confuse it with.
 
@@ -300,8 +314,8 @@ The inheritance path is deliberately indirect: loadout → list → hunter → d
 
 **Alternatives considered**:
 - *Copy the lore in at creation*: rejected for the three reasons above. It was the other option genuinely on the table.
-- *Put the description on the list instead of the loadout*: simpler — the list is what has a hunter — but it gives every loadout in a list the same text and leaves no place for a note about a specific build.
-- *Both a list description and a loadout note*: deferred rather than rejected. It is the natural extension if per-loadout notes prove to want a separate home from inherited lore, and nothing here forecloses it.
+- ~~*Put the description on the list instead of the loadout*: simpler — the list is what has a hunter — but it gives every loadout in a list the same text and leaves no place for a note about a specific build.~~ **Half right, and taken in #181.** The list is indeed what has a hunter; the objection was answered by taking the option below at the same time, which is where the note about a specific build now lives.
+- ~~*Both a list description and a loadout note*: deferred rather than rejected. It is the natural extension if per-loadout notes prove to want a separate home from inherited lore, and nothing here forecloses it.~~ **Taken in #181**, sooner than "if it proves to": shipping the single field made the duplication visible on screen immediately, which is faster evidence than waiting for the deferral to mature.
 - *Store it in `data`*: rejected for the same reason `listId` is not in `data` — it would bump the format version, lengthen share URLs, and send one user's notes to another.
 
 ### List ordering is client-side, with alphabetical as the default
@@ -353,6 +367,7 @@ erDiagram
         string owner FK "client token"
         string name "free text, mutable"
         string hunterId FK "nullable, NON-unique"
+        string description "null=inherit, ''=blank"
         string accent "palette value, least-used-first"
         string createdAt
     }
@@ -363,30 +378,32 @@ erDiagram
         string name
         object data "wire format, UNCHANGED"
         uuid listId FK "nullable = Unassigned"
-        string description "null=inherit, ''=blank"
+        string description "the user's own note"
         string updatedAt
     }
 ```
 
 `HUNTER_PORTRAIT` is generated, committed, and identical for every user. `LOADOUT_LIST` and `LOADOUT` are per-user rows in `db.json`. The portrait relationship is deliberately many-to-one and carries no uniqueness constraint.
 
-`LOADOUT.description` is envelope state like `listId`, never part of `data`. Its null state is not "no description" but "inherit", and the inheritance is a read-time join along the existing edges — `LOADOUT → LOADOUT_LIST → HUNTER_PORTRAIT` — which is why the diagram needs no new relationship to express it:
+Both descriptions are envelope state, never part of `data`. They differ in what null means. `LOADOUT.description` is null when there is no note. `LOADOUT_LIST.description` is null when the list has never been described, which means *inherit* — a read-time join along the existing edge `LOADOUT_LIST → HUNTER_PORTRAIT`, which is why the diagram needs no new relationship to express it:
 
 ```mermaid
 flowchart LR
-    A["render a loadout row"] --> B{"description<br/>absent or null?"}
+    A["render a list header"] --> B{"description<br/>absent or null?"}
     B -->|"no"| C["render stored text<br/>(empty string renders nothing)"]
-    B -->|"yes"| D{"filed into a list<br/>with a hunterId?"}
-    D -->|"no"| E["render nothing<br/>(Unassigned, or no portrait)"]
+    B -->|"yes"| D{"carries a<br/>hunterId?"}
+    D -->|"no"| E["render nothing<br/>(no portrait, or Unassigned)"]
     D -->|"yes"| F{"hunter in<br/>dataset?"}
     F -->|"no"| E
     F -->|"yes"| G["render hunter.description<br/>— nothing is written"]
     style E fill:none,stroke:#888
 ```
 
-The path terminating at "render nothing" three different ways is deliberate: no-hunter, no-list and hunter-left-the-dataset are all ordinary states, and none of them is an error or a reason to hide the row.
+The path terminating at "render nothing" three different ways is deliberate: no-hunter, Unassigned and hunter-left-the-dataset are all ordinary states, and none of them is an error or a reason to hide anything.
 
-**The first branch tests absent-or-null, not strictly null.** Every loadout record written before this field existed has no `description` key at all, so a strict `=== null` check would send all of them down the "render stored text" path and show nothing — silently denying inheritance to exactly the records that most need it. This is the same three-states-collapsed-to-two failure the risk register names, arriving through a comparison operator rather than through a truthy check.
+A loadout's note needs no such diagram, which is the point of it: non-empty renders, anything else does not.
+
+**The first branch tests absent-or-null, not strictly null.** Every list record written before this field existed has no `description` key at all — which today is *every list in the data file* — so a strict `=== null` check would send all of them down the "render stored text" path and show nothing, silently denying inheritance to the entire collection. This is the same three-states-collapsed-to-two failure the risk register names, arriving through a comparison operator rather than through a truthy check.
 
 ### Filing a loadout — the ownership check in context
 
@@ -456,7 +473,8 @@ Note `.ll-empty` on `main` carries the same violation and is deliberately untouc
 - **First heavy image assets in the app** → Portraits are photographic, the picker shows many at once, and the dataset covers the full roster rather than a subset. Mitigated by lazy-loading and the SPEC-0001 fallback chain; the sequencing below defers assets entirely until the feature works, so the weight lands last and can be tuned independently.
 - **Hunters dataset refreshes independently of stored lists** → A list may outlive its hunter's dataset entry. The spec requires such a list stay fully usable behind a neutral placeholder rather than breaking or disappearing; this is the concrete reason `hunterId` resolution must never be treated as a hard reference.
 - **Cross-artifact edges must stay in step with reversals** → SPEC-0003 `implements` ADR-0006, so a decision reversed here has to be reflected there or the graph reports two sources of truth. The in-use-marker reversal required an amendment to ADR-0006 for exactly this reason. The 2026-08-10 amendments do not reach ADR-0006: it records the filing model and the identity/imagery split, and says nothing about favorites ordering, row previews, or descriptions.
-- **`description`'s three states will get collapsed to two** → The obvious implementation is a truthy check, which silently merges "never edited" with "deliberately blank" and makes the field impossible to empty. Addressed by specifying the states as a table with a dedicated scenario for the cleared case; the test for "clearing does not re-inherit" is the one that catches the regression.
+- **The LIST `description`'s three states will get collapsed to two** → The obvious implementation is a truthy check, which silently merges "never edited" with "deliberately blank" and makes the field impossible to empty. Addressed by specifying the states as a table with a dedicated scenario for the cleared case; the test for "clearing does not re-inherit" is the one that catches the regression. *(Subject changed 2026-08-11 (#181): the loadout's field has two states by design and nothing to collapse, so this risk now attaches only to the list. The countermeasure did not move.)*
+- **The two fields will be made to agree** → They are both called `description`, they share a cap and a validator, and on their two PATCH endpoints `null` means opposite things — *inherit* on a list, *clear* on a loadout. A tidying pass that unified them would either give loadouts an inherited default again or take inheritance away from lists. Addressed by naming both meanings in the spec's HTTP section, in the route comments beside each handler, and in a test that asserts the two log lines differ.
 - **Auto-enabling "favorites only" reads as a gate to a future reviewer** → It is a default, not a state the user cannot leave, but the two look alike in a screenshot. Addressed by stating the distinction in both the requirement and the decision, and by the scenario asserting every hunter stays one control away.
 - **Previews multiply image requests per expanded list** → A list of twenty loadouts could reference well over a hundred item icons. Mitigated by lazy loading — the shed-at-narrow-widths half of this mitigation was withdrawn on 2026-08-10 with the strip, and the DOM cost is now carried by the card-grid risk above; the icons are also the same small assets already cached from the equipment panel, so a returning user mostly re-renders from cache rather than refetching.
 - **Live-resolved descriptions change under the user on a re-scrape** → Intended, and the reason the field is resolved rather than copied, but it does mean text a user read yesterday may differ today. Bounded by the fact that it only ever affects loadouts the user has never edited; anything they typed is theirs and is never overwritten.
@@ -504,7 +522,7 @@ Raised by the 2026-08-10 amendments:
 
 - ~~Does the preview show traits?~~ **Resolved twice.** #139 answered "a count, no tiles"; the 2026-08-10 amendment overrides that with a fifteen-cell trait grid, the game's per-hunter maximum. The count survives only in the preview's single text equivalent, where announcing fifteen cells individually would be worse than useless.  
   *(original #139 note kept for the record:)* a count, no tiles. Traits appear in the preview's single text equivalent ("…3 tools, 2 consumables, 1 trait") and draw no imagery. A traits-only loadout reads "Empty — no weapons or equipment · 1 trait", because what is empty is the *strip*, not the record — asserting "Empty" about a loadout that holds something would be a wrong claim about the record.
-- Should an inherited description be distinguished *visually* from a written one — greyed, italic, marked "from The Turncoat"? The spec already settles the non-visual half: it MUST NOT be announced as though the user wrote it. What remains open is whether to also mark it on screen, which is more honest and more cluttered.
+- ~~Should an inherited description be distinguished *visually* from a written one?~~ **Settled 2026-08-11 (#181): yes — italic and de-emphasised, with a written description in ordinary body text.** The trade named here was "more honest and more cluttered", and honesty won: prose a user does not remember writing is exactly what wants explaining, and the app supplied it. The clutter is bounded because the marking is typographic rather than another element on screen — the "From {hunter}" line it accompanies was already required by the non-visual half of the rule. Two constraints came with it: the styling is presentational and so may never be the only carrier of the distinction, and "greyed" lowers the emphasis, never the contrast ratio.
 - Is 10 the right threshold? It is a judgement recorded as one. Worth revisiting once there is any usage data, and cheap to change by design.
-- **Where** on the loadout *card* does the description sit, and how tall is it before it clamps? *(Reworded 2026-08-10: it was "in the loadout row" until loadouts became cards.)* The spec requires it bounded with a reveal affordance and never overflowing its card, but not where the clamp falls — one line beside the preview and a full paragraph on expand are both conforming, and they read very differently. #140 is still unimplemented, so this is cheap to settle now.
+- ~~**Where** does the description sit, and how tall is it before it clamps?~~ **Settled across two changes.** The clamp is three lines, revealed to a bounded ~14em scroll container — bounded on both sides because cards share a grid row, and one open description otherwise stretches every sibling beside it. Placement was settled by #181: the **list's** description renders in the expanded list header beside rename and accent, never on the compact list card in the selector grid; the **loadout's** renders on its card, between the head and the preview, as a sibling of the preview so no length of prose can displace its category structure.
 - Should restoring inheritance be an explicit control ("use The Turncoat's description") or should clearing the field twice mean reset? The spec requires a distinct action and deliberately does not name it, since a double-clear gesture is undiscoverable.
