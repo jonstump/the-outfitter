@@ -1476,7 +1476,7 @@ describe("saved loadouts as a card grid", () => {
 
     const card = cardOf("1");
     expect(within(card).getByRole("button", { name: "long ammo" })).toBeInTheDocument();
-    expect(within(card).getByText("$354")).toBeInTheDocument();
+    expect(within(card).getByText("$388")).toBeInTheDocument();
     expect(within(card).getByTestId("loadout-preview-1")).toBeInTheDocument();
     expect(within(card).getByLabelText("List for long ammo")).toBeInTheDocument();
     expect(within(card).getByLabelText("Delete loadout: long ammo")).toBeInTheDocument();
@@ -1580,7 +1580,7 @@ describe("saved loadouts as a card grid", () => {
 
     // And every control that identifies and files a loadout is still there.
     expect(screen.getByRole("button", { name: "long ammo" })).toBeInTheDocument();
-    expect(screen.getByText("$354")).toBeInTheDocument();
+    expect(screen.getByText("$388")).toBeInTheDocument();
     expect(screen.getByLabelText("List for long ammo")).toBeEnabled();
   });
 

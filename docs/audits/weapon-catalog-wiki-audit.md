@@ -325,6 +325,18 @@ but it is also explicitly dual-wieldable, and the wiki does not make clear wheth
 size is per-pistol or per-pair. **Confidence: LOW.** Flagged so the scraper resolves it, not
 because it is likely wrong.
 
+**Update 2026-08-11 (#195): applied as `1`, and the question stays open.** The scrape read `1`
+off the page and the write-through applied it, which is correct under SPEC-0007 — the scraped
+value is authoritative. But this row was never flagged because the page's number was unknown;
+it was flagged because the number is *ambiguous*, and re-reading the same page returns the same
+ambiguous number. The LOW confidence above is therefore undischarged, and this entry stays open
+as a wiki-vs-game discrepancy rather than being ticked off by the run that applied it.
+
+What would actually resolve it is in-game observation of whether a Sparks Pistol occupies one
+slot or two, which no scrape can supply. Related: **#179** records that a loadout entry carries
+no pair flag, so `size` is unambiguously per-*entry* in this app's model regardless of what the
+wiki means by it — which is why applying `1` is safe to ship while the question is still open.
+
 ### 3.6 — Whole-table cost/size staleness after Update 2.8
 
 | Stat | App Value | Expected Wiki Value | Status |
