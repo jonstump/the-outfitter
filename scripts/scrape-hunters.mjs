@@ -104,8 +104,10 @@ import {
   ScrapeError,
   USER_AGENT,
   WIKI_ORIGIN,
+  decodeEntities,
   fetchRobotsTxt,
   isAllowedByRobots,
+  readRlconf,
   slugify,
 } from "./lib/wiki.mjs";
 
@@ -197,39 +199,11 @@ export class ImageProcessingUnavailableError extends ScrapeError {}
 // Parsing helpers.
 // ---------------------------------------------------------------------------
 
-const NAMED_ENTITIES = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-  ndash: "–",
-  mdash: "—",
-  hellip: "…",
-  rsquo: "’",
-  lsquo: "‘",
-  ldquo: "“",
-  rdquo: "”",
-};
-
-/**
- * Decode the HTML entities MediaWiki actually emits.
- *
- * Non-breaking spaces are folded to ordinary ones. The wiki writes `Source: The Revenant&#160;DLC`,
- * and a U+00A0 surviving into `source` would make the stored string compare unequal to the visually
- * identical text anyone would type when checking or correcting a mapping.
- */
-export function decodeEntities(text) {
-  return text
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, hx) => String.fromCodePoint(parseInt(hx, 16)))
-    .replace(/&([a-z]+);/gi, (whole, name) => {
-      const key = name.toLowerCase();
-      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, key) ? NAMED_ENTITIES[key] : whole;
-    })
-    .replace(/ /g, " ");
-}
+// decodeEntities and readRlconf moved to scripts/lib/wiki.mjs when scrape-stats.mjs became a
+// second consumer of both. readRlconf is where the canonical page title and the current revision
+// id are read, and that revision is the provenance baseline every payload records — two readers
+// would mean two definitions of it. Re-exported here so this module's import surface is unchanged.
+export { decodeEntities, readRlconf };
 
 /**
  * Strip tags and normalise whitespace — the text a reader would see.
@@ -257,20 +231,6 @@ export function stripTags(html) {
     .trim();
 }
 
-/**
- * Pull a value out of the page's RLCONF blob.
- *
- * This is where the canonical page title and the current revision id live. Reading them from
- * RLCONF rather than from the URL is what makes redirects (Hunters/Bad_Hand -> Hunters/The_Revenant)
- * resolve to one identity instead of two.
- */
-export function readRlconf(html, key) {
-  const numeric = html.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`));
-  if (numeric) return Number(numeric[1]);
-  const str = html.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
-  if (str) return decodeEntities(str[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
-  return null;
-}
 
 /** The wiki namespaces hunter pages under "Hunters/"; the display title drops that segment. */
 export function pageTitleToDisplay(pageTitle) {

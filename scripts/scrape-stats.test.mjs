@@ -20,23 +20,29 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  CATEGORIES,
   InfoboxFieldNotFoundError,
   InfoboxNotFoundError,
   ItemPageNotFoundError,
   NetworkFailureError,
   RateLimiter,
   RobotsDisallowedError,
+  buildStatsRecord,
   classifyPageFetchError,
   createSummary,
+  extractInfoboxTitle,
   extractInfoboxes,
   formatSummary,
+  pageTitleToDisplay,
   parseArgs,
   parseInfoboxFields,
   readInfoboxField,
   runStatsScrape,
   scrapeItemStats,
+  selectBaseInfobox,
   sliceBalancedDiv,
   textContent,
+  writeStatsFile,
 } from "./scrape-stats.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,12 +77,32 @@ const TWO_INFOBOX_PAGE =
 const okResponse = (body) => ({ ok: true, status: 200, text: async () => body });
 const errResponse = (status) => ({ ok: false, status, text: async () => "" });
 
-/** A fetchFn that serves robots.txt permissively and routes every wiki page to `pageBody`. */
+/**
+ * A page whose RLCONF name and infobox title both derive from the URL being fetched.
+ *
+ * Since #184 the scrape selects its infobox by matching the page's canonical title, so a fixture
+ * without a title resolves to nothing — correctly. Deriving both from the URL keeps the generic
+ * fixture faithful to that contract instead of working around it.
+ */
+function pageForUrl(url, rows = PRICE_ROW + SIZE_ROW + AMMO_ROW) {
+  const pageName = decodeURIComponent(new URL(url).pathname.replace(/^\/wiki\//, ""));
+  const title = pageName.replace(/^[^/]+\//, "").replace(/[/_]+/g, " ");
+  return (
+    `<html><script>RLCONF={"wgPageName":"${pageName}","wgCurRevisionId":16192};</script><body>` +
+    `<div class="druid-infobox druid-container"><div><div class="druid-title">${title}</div></div>${rows}</div>` +
+    `</body></html>`
+  );
+}
+
+/**
+ * A fetchFn that serves robots.txt permissively and routes every wiki page to `pageBody`.
+ * Passing no body yields a URL-derived page that selection can resolve.
+ */
 function fakeFetch(pageBody, { robots = "User-agent: *\nDisallow:\n", onPage } = {}) {
   return async (url) => {
     if (url.endsWith("/robots.txt")) return { ok: true, status: 200, text: async () => robots };
     if (onPage) return onPage(url);
-    return okResponse(pageBody);
+    return okResponse(pageBody ?? pageForUrl(url));
   };
 }
 
@@ -236,7 +262,7 @@ const allowAll = [{ userAgents: ["*"], rules: [] }];
 
 test("scrapeItemStats: parses fields from a page and reports how many infoboxes it saw", async () => {
   const result = await scrapeItemStats(target, {
-    fetchFn: fakeFetch(ONE_INFOBOX_PAGE),
+    fetchFn: fakeFetch(),
     rateLimiter: noWait,
     robotsGroups: allowAll,
   });
@@ -245,16 +271,23 @@ test("scrapeItemStats: parses fields from a page and reports how many infoboxes 
   assert.equal(result.fields.Price, "75");
 });
 
-test("scrapeItemStats: returns every variant's fields, choosing none of them", async () => {
+test("scrapeItemStats: picks the titled base infobox out of several, not the first", async () => {
+  // The skin comes first on the page. Before #184 this returned the skin's stats as the weapon's.
+  const page =
+    `<html><script>RLCONF={"wgPageName":"Weapons/Ranger_73","wgCurRevisionId":15379};</script><body>` +
+    `<div class="druid-infobox druid-container"><div><div class="druid-title">Fifty Laurels</div></div>` +
+    `<div class="druid-data druid-data-Price">999</div></div>` +
+    `<div class="druid-infobox druid-container"><div><div class="druid-title">Ranger 73</div></div>` +
+    `${PRICE_ROW}</div></body></html>`;
   const result = await scrapeItemStats(target, {
-    fetchFn: fakeFetch(TWO_INFOBOX_PAGE),
+    fetchFn: fakeFetch(page),
     rateLimiter: noWait,
     robotsGroups: allowAll,
   });
-  // Which infobox describes the catalog row is #184's decision; this story hands over all of them.
-  assert.equal(result.variants.length, 2);
-  assert.equal(result.variants[0].Price, "75");
-  assert.equal(result.variants[1].Price, "120");
+  assert.equal(result.infoboxCount, 2);
+  assert.equal(result.selection.index, 1);
+  assert.equal(result.selection.title, "Ranger 73");
+  assert.equal(result.fields.Price, "75", "the skin's 999 must not be read as the weapon's price");
 });
 
 test("scrapeItemStats: a page with no infobox is InfoboxNotFoundError, not a missing page", async () => {
@@ -391,7 +424,7 @@ test("runStatsScrape: one item's failure does not abort the run", async () => {
   const fetchFn = async (url) => {
     if (url.endsWith("/robots.txt")) return { ok: true, status: 200, text: async () => "User-agent: *\nDisallow:\n" };
     call += 1;
-    return call === 1 ? errResponse(500) : okResponse(ONE_INFOBOX_PAGE);
+    return call === 1 ? errResponse(500) : okResponse(pageForUrl(url));
   };
 
   const summary = await runStatsScrape(
@@ -426,7 +459,7 @@ test("runStatsScrape: emits a structured per-run summary", async () => {
   const lines = [];
   await runStatsScrape(
     { categories: ["traits"], delayMs: 0, limit: 2 },
-    { fetchFn: fakeFetch(ONE_INFOBOX_PAGE), log: (e) => lines.push(e) }
+    { fetchFn: fakeFetch(), log: (e) => lines.push(e) }
   );
   const runSummary = lines.find((l) => l.event === "run-summary");
   assert.ok(runSummary);
@@ -494,12 +527,46 @@ test("parseArgs: a nonsense delay or limit is ignored rather than applied", () =
 // Structural guarantees this story promises
 // ---------------------------------------------------------------------------
 
-test("this story writes nothing: the module imports no filesystem API", async () => {
+// #183 asserted this module imported no filesystem API at all. #184 gives it one, so the guard
+// narrows rather than disappears: the dataset is the ONLY thing it may write. Reconciling a scraped
+// value against a hand-authored one is #185's guarded, opt-in write-through, and until that lands a
+// run must not be able to change a number the app does budget math with.
+test("the scrape writes the dataset and nothing else — catalog.js is never a write target", async () => {
   const src = await readFile(path.join(__dirname, "scrape-stats.mjs"), "utf8");
+  const writeTargets = [...src.matchAll(/fsWriteFile\(\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1]);
+  assert.deepEqual(
+    [...new Set(writeTargets)],
+    ["datasetPath"],
+    "the only path this module writes is the dataset; catalog write-through is #185"
+  );
+  // Comments discuss catalog.js at length; what matters is that no executable line resolves a path
+  // to it. Strip line comments before checking so the guard tests code, not prose.
+  const code = src
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    })
+    .join("\n");
   assert.equal(
-    /from\s+["']node:fs/.test(src),
+    /catalog\.js/.test(code),
     false,
-    "scrape-stats.mjs must not import a filesystem API — the dataset write is #184"
+    "no executable line may name catalog.js — the write-through is #185"
+  );
+});
+
+test("a full run writes catalog.js not at all — verified against the committed tree", async () => {
+  // The generated dataset is committed, so this asserts a property of the artifact rather than of
+  // the code: itemStats.json exists, is marked generated, and catalog.js carries none of its data.
+  const stats = JSON.parse(await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8"));
+  assert.ok(stats._generated, "the dataset carries the generated marker SPEC-0007 requires");
+  assert.match(stats._generated.warning, /do not hand-edit/i);
+
+  const catalogSrc = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
+  assert.equal(
+    /sourceRevision|ingestedAt|_generated/.test(catalogSrc),
+    false,
+    "catalog.js stays hand-authored — generated stat data must not be interleaved into it"
   );
 });
 
@@ -544,4 +611,185 @@ test("the running app issues no request to the wiki", async () => {
   }
   await walk(clientSrc);
   assert.deepEqual(offenders, [], `client code must not reach the wiki at runtime:\n${offenders.join("\n")}`);
+});
+
+// ---------------------------------------------------------------------------
+// #184 — variant selection, provenance, and the generated dataset
+// ---------------------------------------------------------------------------
+
+const titled = (title, rows = "") =>
+  `<div class="druid-infobox druid-container"><div><div class="druid-title">${title}</div></div>${rows}</div>`;
+
+const rlconf = (page, rev) =>
+  `<script>RLCONF={"wgPageName":"${page}","wgCurRevisionId":${rev},"wgRevisionId":${rev}};</script>`;
+
+test("pageTitleToDisplay: drops the category namespace and flattens the rest", () => {
+  assert.equal(pageTitleToDisplay("Weapons/Nagant_M1895"), "Nagant M1895");
+  assert.equal(pageTitleToDisplay("Weapons/Ranger_73"), "Ranger 73");
+  assert.equal(pageTitleToDisplay("Tools/Alert_Trip_Mines"), "Alert Trip Mines");
+});
+
+test("pageTitleToDisplay: a variant subpage keeps both segments", () => {
+  // Taking only the last segment would yield "Pistol" and match no infobox title.
+  assert.equal(pageTitleToDisplay("Weapons/Sparks/Pistol"), "Sparks Pistol");
+});
+
+test("pageTitleToDisplay: empty input is null, not an empty string", () => {
+  assert.equal(pageTitleToDisplay(""), null);
+  assert.equal(pageTitleToDisplay(null), null);
+});
+
+test("extractInfoboxTitle: reads the infobox heading", () => {
+  assert.equal(extractInfoboxTitle(titled("Nagant M1895")), "Nagant M1895");
+  assert.equal(extractInfoboxTitle(infobox(PRICE_ROW)), null);
+});
+
+test("selectBaseInfobox: matches the canonical page title, not position", () => {
+  // The base weapon is deliberately NOT first here — position would pick the skin.
+  const boxes = [titled("Copperhead"), titled("Nagant M1895"), titled("Steelroot")];
+  const sel = selectBaseInfobox(boxes, { canonicalTitle: "Nagant M1895", displayName: "Nagant M1895" });
+  assert.equal(sel.index, 1);
+  assert.equal(sel.method, "canonical-title");
+});
+
+test("selectBaseInfobox: falls back to the catalog display name", () => {
+  const boxes = [titled("Skin"), titled("Hive Bomb")];
+  const sel = selectBaseInfobox(boxes, { canonicalTitle: null, displayName: "Hive Bomb" });
+  assert.equal(sel.index, 1);
+  assert.equal(sel.method, "display-name");
+});
+
+test("selectBaseInfobox: the canonical title wins where the catalog name is stale", () => {
+  // winfield-m1873 is named "Winfield M1873" in the catalog and "Ranger 73" on the wiki. Matching
+  // the catalog name would fail on exactly the items the scrape exists to correct.
+  const boxes = [titled("Fifty Laurels"), titled("Ranger 73")];
+  const sel = selectBaseInfobox(boxes, { canonicalTitle: "Ranger 73", displayName: "Winfield M1873" });
+  assert.equal(sel.index, 1);
+  assert.equal(sel.method, "canonical-title");
+});
+
+test("selectBaseInfobox: no match is 'unresolved', never a silent index 0", () => {
+  const sel = selectBaseInfobox([titled("Skin A"), titled("Skin B")], {
+    canonicalTitle: "Something Else",
+    displayName: "Also Not This",
+  });
+  assert.equal(sel.index, -1);
+  assert.equal(sel.method, "unresolved");
+  assert.deepEqual(sel.titles, ["Skin A", "Skin B"]);
+});
+
+test("selectBaseInfobox: title comparison ignores case and punctuation", () => {
+  const sel = selectBaseInfobox([titled("Bornheim No. 3")], { canonicalTitle: "bornheim no 3" });
+  assert.equal(sel.index, 0);
+});
+
+test("scrapeItemStats: records the revision and the canonical title as provenance", async () => {
+  const page = `<html>${rlconf("Weapons/Nagant_M1895", 16192)}<body>${titled("Nagant M1895", PRICE_ROW)}</body></html>`;
+  const result = await scrapeItemStats(
+    { category: "weapons", id: "nagant-m1895", name: "Nagant M1895", wikiPath: "Weapons/Nagant_M1895" },
+    { fetchFn: fakeFetch(page), rateLimiter: noWait, robotsGroups: allowAll }
+  );
+  assert.equal(result.revision, "16192");
+  assert.equal(result.canonicalTitle, "Nagant M1895");
+  assert.equal(result.selection.method, "canonical-title");
+  assert.equal(result.fields.Price, "75");
+});
+
+test("scrapeItemStats: an unmatchable page fails rather than writing a skin's stats", async () => {
+  const page = `<html>${rlconf("Weapons/Mystery", 1)}<body>${titled("Some Skin", PRICE_ROW)}</body></html>`;
+  await assert.rejects(
+    scrapeItemStats(
+      { category: "weapons", id: "x", name: "Totally Different", wikiPath: "Weapons/Mystery" },
+      { fetchFn: fakeFetch(page), rateLimiter: noWait, robotsGroups: allowAll }
+    ),
+    (err) => err instanceof InfoboxNotFoundError && /matches its title/.test(err.message)
+  );
+});
+
+test("buildStatsRecord: the id is the key and is never duplicated into the record", () => {
+  const record = buildStatsRecord(
+    {
+      item: "Nagant M1895",
+      canonicalTitle: "Nagant M1895",
+      url: "https://w/x",
+      revision: "16192",
+      infoboxCount: 5,
+      selection: { index: 0, method: "canonical-title", title: "Nagant M1895" },
+      fields: { Price: "24" },
+    },
+    { now: () => "2026-08-11T00:00:00.000Z" }
+  );
+  assert.equal("id" in record, false, "the catalog id is the key; a second copy could disagree");
+  assert.equal(record.sourceRevision, "16192");
+  assert.equal(record.ingestedAt, "2026-08-11T00:00:00.000Z");
+  assert.equal(record.selectedBy, "canonical-title");
+});
+
+test("writeStatsFile: sorts keys and stamps the generated marker", async () => {
+  let written = null;
+  await writeStatsFile(
+    { zeta: { fields: {} }, alpha: { fields: {} } },
+    {
+      datasetPath: "/tmp/x/itemStats.json",
+      fsMkdir: async () => {},
+      fsWriteFile: async (_p, body) => {
+        written = JSON.parse(body);
+      },
+    }
+  );
+  assert.deepEqual(Object.keys(written.items), ["alpha", "zeta"]);
+  assert.match(written._generated.warning, /do not hand-edit/i);
+});
+
+test("runStatsScrape: an unknown category fails loudly instead of visiting zero items", async () => {
+  await assert.rejects(
+    runStatsScrape({ categories: ["weapon"], delayMs: 0 }, { fetchFn: fakeFetch(ONE_INFOBOX_PAGE), log: () => {} }),
+    (err) => /unknown category: weapon/.test(err.message) && /Valid values/.test(err.message)
+  );
+});
+
+test("runStatsScrape: a partial run reports but never rewrites the dataset", async () => {
+  let wrote = false;
+  const page = `<html>${rlconf("Traits/X", 5)}<body>${titled("X", PRICE_ROW)}</body></html>`;
+  const summary = await runStatsScrape(
+    { categories: ["traits"], delayMs: 0, limit: 2 },
+    { fetchFn: fakeFetch(page), log: () => {}, fsWriteFile: async () => { wrote = true; }, fsMkdir: async () => {} }
+  );
+  assert.equal(wrote, false, "a --limit run must not truncate the dataset to what it visited");
+  assert.equal(summary.datasetPath, null);
+});
+
+test("runStatsScrape: --dry-run writes nothing", async () => {
+  let wrote = false;
+  await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0, dryRun: true },
+    { fetchFn: fakeFetch(ONE_INFOBOX_PAGE), log: () => {}, fsWriteFile: async () => { wrote = true; }, fsMkdir: async () => {} }
+  );
+  assert.equal(wrote, false);
+});
+
+// ---------------------------------------------------------------------------
+// The committed dataset itself
+// ---------------------------------------------------------------------------
+
+test("every key in itemStats.json resolves to a live catalog id", async () => {
+  const { WEAPONS, TOOLS, TRAITS, CONS } = await import("../client/src/data/catalog.js");
+  const known = new Set([...WEAPONS, ...TOOLS, ...TRAITS, ...CONS].map((row) => row[0]));
+  const stats = JSON.parse(await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8"));
+  const orphans = Object.keys(stats.items).filter((id) => !known.has(id));
+  assert.deepEqual(orphans, [], `itemStats.json keys must name real catalog items; orphans: ${orphans}`);
+});
+
+test("every record in itemStats.json carries provenance", async () => {
+  const stats = JSON.parse(await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8"));
+  const entries = Object.entries(stats.items);
+  assert.ok(entries.length > 0);
+  const missing = entries.filter(([, r]) => !r.sourceRevision || !r.ingestedAt).map(([id]) => id);
+  assert.deepEqual(missing, [], `every record needs sourceRevision and ingestedAt; missing on: ${missing}`);
+});
+
+test("no record was selected by falling back to position", async () => {
+  const stats = JSON.parse(await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8"));
+  const methods = new Set(Object.values(stats.items).map((r) => r.selectedBy));
+  assert.equal(methods.has("unresolved"), false, "an unresolved selection must fail its item, not be written");
 });

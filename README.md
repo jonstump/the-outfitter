@@ -56,14 +56,22 @@ hand only when refreshing the data:
 node scripts/scrape-images.mjs            # catalog item art
 node scripts/scrape-hunters.mjs           # hunter roster + portraits
 node scripts/scrape-hunters.mjs --names-only   # roster only; no sharp required
+node scripts/scrape-stats.mjs             # catalog item stats
 ```
 
-Both respect `robots.txt` (aborting if it can't be read), rate-limit every request, and report a
-structured per-run summary. `scrape-hunters.mjs` writes `data/hunters.json` (a repo-root artifact:
+All three respect `robots.txt` (aborting if it can't be read), rate-limit every request, and report
+a structured per-run summary. `scrape-hunters.mjs` writes `data/hunters.json` (a repo-root artifact:
 the client bundles it and the server reads it to validate favorited hunter ids) plus one
 trimmed AVIF portrait per hunter under `client/public/images/hunters/`, enforcing a per-asset and a
 total byte budget — an over-budget asset fails its hunter rather than being written. Useful flags:
 `--force` (re-encode existing art), `--limit=N`, `--dry-run`, `--delay-ms=N`.
+
+`scrape-stats.mjs` writes `client/src/data/itemStats.json` — one record per catalog item, keyed by
+catalog id, carrying the wiki revision it came from. It is **additive**: it never edits
+`catalog.js`, so it cannot change a number the app does budget math with. Reconciling a scraped
+value against a hand-authored one is a separate, opt-in step (SPEC-0007, not yet built). A partial
+run (`--limit` or `--only`) reports without writing, so it cannot truncate the dataset to whatever
+it happened to visit.
 
 Generated files are committed and must not be hand-edited; re-running the scrape rewrites them.
 

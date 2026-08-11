@@ -20,18 +20,22 @@
 //       --only=weapons,tools,traits,consumables   Limit the run to these categories (default: all)
 //       --delay-ms=1500                           Minimum delay between requests (default: 1500ms)
 //       --limit=N                                 Stop after N items (useful for a smoke run)
+//       --out=PATH                                Override the dataset path
 //       --dry-run                                 Resolve URLs and check robots.txt, but fetch
-//                                                  nothing
+//                                                  nothing and write nothing
 //
-// WHAT THIS SCRIPT DOES NOT DO YET, DELIBERATELY
+// WHAT THIS SCRIPT WRITES, AND WHAT IT STILL DOES NOT
 //
-// It writes nothing. Not `client/src/data/itemStats.json`, not `catalog.js`, not a byte anywhere.
-// This is the skeleton story (#183): the run loop, the robots and rate-limit posture, the parse
-// seam, and the error contract. The generated dataset is #184 and the guarded write-through to
-// catalog.js is #185, and both are specified before either is built precisely so the dangerous
-// half arrives last. A run today fetches each item's page, extracts its infobox fields, and
-// reports what it found — which is enough to exercise the whole path against real markup without
-// putting anything on disk.
+// It writes `client/src/data/itemStats.json` — generated, committed, keyed by catalog id, and
+// never hand-edited (#184). It does NOT write `catalog.js`. Reconciling a scraped value against a
+// hand-authored one is the guarded, opt-in write-through in #185, and until that lands a run here
+// cannot change a single number the app does budget math with. That ordering is deliberate:
+// ADR-0005 names its worst realistic failure as a parser regression silently overwriting a correct
+// cost, and an additive scrape cannot produce it.
+//
+// A partial run (`--limit` or `--only`) reports but does not write. Otherwise the dataset would be
+// truncated to whatever that run happened to visit, and the deletion would look like a scrape
+// result rather than a flag.
 //
 // Error handling (SPEC-0007 REQ "Error Handling Standards"):
 //   - Every layer boundary (robots fetch, page fetch, infobox extraction, field read) wraps its
@@ -51,6 +55,7 @@
 // exact failure ADR-0005 extracted that module to prevent (and which issue #119 already caught
 // once, on the client end).
 
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -64,13 +69,17 @@ import {
   NetworkFailureError,
   RateLimiter,
   RobotsDisallowedError,
+  ScrapeError,
   USER_AGENT,
+  WIKI_CATEGORY,
   buildItemPageUrl,
   collectCatalogItems,
   createSummary,
+  decodeEntities,
   fetchRobotsTxt,
   isAllowedByRobots,
   logStructured,
+  readRlconf,
   recordResult,
   resolveWikiPath,
 } from "./lib/wiki.mjs";
@@ -95,6 +104,18 @@ export {
   resolveWikiPath,
   slugify,
 } from "./lib/wiki.mjs";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Where the generated dataset lands (SPEC-0007 REQ "Generated, Committed Stats File").
+ *
+ * Beside `catalog.js` in the client workspace, per ADR-0005 — deliberately NOT the repo root that
+ * `data/hunters.json` uses. That one sits at the root because the server reads it too; nothing on
+ * the server reads item stats, so the generated blob stays adjacent to the hand-authored table it
+ * annotates. If a server consumer ever appears, this moves and SPEC-0007 says so first.
+ */
+export const STATS_DATA_PATH = path.join(REPO_ROOT, "client", "src", "data", "itemStats.json");
 
 // ---------------------------------------------------------------------------
 // Infobox extraction — the payload-specific half, and the seam #184 builds the dataset on.
@@ -159,19 +180,96 @@ export function extractInfoboxes(html) {
   return blocks;
 }
 
-/** Strip tags and entities down to the text a reader would see, with whitespace collapsed. */
+/**
+ * Strip tags and entities down to the text a reader would see, with whitespace collapsed.
+ *
+ * Entity decoding is delegated to the shared `decodeEntities`, which covers numeric, hex, and
+ * named forms. The hand-rolled list this replaced handled only the half-dozen entities the first
+ * fixtures happened to contain, so a `&#233;` would have survived into a stored value.
+ *
+ * DELIBERATELY NOT `stripTags` from the hunter scrape, which keeps `alt` text. That is right for
+ * its payload — a Blood Bonds hunter's `Source` is literally `900 <img alt="Blood Bonds">`, and
+ * dropping the alt makes it unclassifiable — and wrong for this one, where the icon restates a
+ * value already in the text: `Price` is `75&#160;<img alt="Hunt Dollars">` and would read
+ * "75 Hunt Dollars", `Size` is `<a>4</a> <img alt="4">` and would read "4 4". Same wiki, opposite
+ * correct answer, so the two extractors stay separate on purpose.
+ */
 export function textContent(fragment) {
-  return fragment
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;|&#xa0;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;|&apos;|&#x27;/gi, "'")
+  return decodeEntities(
+    fragment.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "").replace(/<[^>]+>/g, " ")
+  )
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Turn a wiki page name into the title a reader sees.
+ *
+ * `wgPageName` is the namespaced path — "Weapons/Nagant_M1895", "Weapons/Sparks/Pistol". Dropping
+ * the leading category segment and flattening the rest gives "Nagant M1895" and "Sparks Pistol",
+ * which is what the infobox heading says. Taking only the LAST segment would turn
+ * "Weapons/Sparks/Pistol" into "Pistol" and match nothing.
+ */
+export function pageTitleToDisplay(pageName) {
+  const raw = String(pageName ?? "").trim();
+  if (!raw) return null;
+  const withoutNamespace = raw.replace(
+    new RegExp(`^(?:${Object.values(WIKI_CATEGORY).join("|")})/`, "i"),
+    ""
+  );
+  return withoutNamespace.replace(/[/_]+/g, " ").replace(/\s+/g, " ").trim() || null;
+}
+
+/** The infobox's own heading — `<div class="druid-title">Nagant M1895</div>`. */
+export function extractInfoboxTitle(infoboxHtml) {
+  const match = infoboxHtml.match(/<div\b[^>]*class="[^"]*\bdruid-title\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+  return match ? textContent(match[1]) : null;
+}
+
+/** Compare titles the way a reader would: case- and punctuation-insensitive, whitespace-collapsed. */
+function normalizeTitle(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[_‐-―-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Pick the infobox that describes the catalog row, out of the several a page carries.
+ *
+ * A weapon page carries one infobox per cosmetic skin — five on Nagant M1895 (Copperhead,
+ * Steelroot, Red Azimuth, Motley Madness), six on Ranger 73 (Fifty Laurels, The Redmartin,
+ * Soothsayer, …). Only one describes the purchasable weapon, and "take the first" is a positional
+ * guess that happens to be right on the pages checked so far. Guessing is what #183 explicitly
+ * refused to do, so this matches on the infobox's own title instead.
+ *
+ * Preference order, and why:
+ *
+ *   1. The **canonical page title** read from RLCONF. This is the wiki's current name for the page
+ *      and survives redirects.
+ *   2. The **catalog display name**. A fallback rather than the primary, because the audit found 14
+ *      stale display names — matching on the catalog's own name would fail on exactly the items
+ *      whose names the scrape exists to correct. `winfield-m1873` is named "Winfield M1873" here and
+ *      "Ranger 73" on the wiki, and only the canonical title matches.
+ *   3. **Unresolved.** If nothing matches, say so. Returning index 0 with a shrug is the trap: a
+ *      skin's stat block would be written as the weapon's, and every number would be plausible.
+ */
+export function selectBaseInfobox(infoboxes, { canonicalTitle = null, displayName = null } = {}) {
+  const titles = infoboxes.map((block) => extractInfoboxTitle(block));
+
+  for (const [method, candidate] of [
+    ["canonical-title", canonicalTitle],
+    ["display-name", displayName],
+  ]) {
+    const wanted = normalizeTitle(candidate);
+    if (!wanted) continue;
+    const index = titles.findIndex((t) => normalizeTitle(t) === wanted);
+    if (index !== -1) return { index, method, title: titles[index], titles };
+  }
+
+  return { index: -1, method: "unresolved", title: null, titles };
 }
 
 /**
@@ -303,9 +401,21 @@ export async function scrapeItemStats(target, deps) {
     throw new InfoboxNotFoundError(`no infobox on page for "${item}" at ${pageUrl}`, { item, url: pageUrl });
   }
 
-  // All of them, in document order. Which one describes the catalog row is #184's decision — a
-  // page carries one infobox per variant and the first is not reliably the base item.
-  const variants = infoboxes.map((block) => parseInfoboxFields(block));
+  // Provenance, per ADR-0005: the revision this record was derived from, and when. Read from
+  // RLCONF rather than from the URL, so a redirect resolves to one identity rather than two.
+  const revision = readRlconf(html, "wgCurRevisionId") ?? readRlconf(html, "wgRevisionId");
+  const canonicalTitle = pageTitleToDisplay(readRlconf(html, "wgPageName"));
+
+  const selection = selectBaseInfobox(infoboxes, { canonicalTitle, displayName: item });
+  if (selection.index === -1) {
+    throw new InfoboxNotFoundError(
+      `no infobox on the page for "${item}" matches its title at ${pageUrl} ` +
+        `(canonical "${canonicalTitle}"; infobox titles: ${JSON.stringify(selection.titles)})`,
+      { item, url: pageUrl }
+    );
+  }
+
+  const fields = parseInfoboxFields(infoboxes[selection.index]);
 
   return {
     status: "succeeded",
@@ -313,9 +423,31 @@ export async function scrapeItemStats(target, deps) {
     id,
     item,
     url: pageUrl,
+    canonicalTitle,
+    revision: revision === null ? null : String(revision),
     infoboxCount: infoboxes.length,
-    fields: variants[0],
-    variants,
+    selection: { index: selection.index, method: selection.method, title: selection.title },
+    fields,
+  };
+}
+
+/**
+ * The record written to itemStats.json for one item.
+ *
+ * `id` is deliberately NOT stored inside the record — it is the key, and a second copy invites the
+ * two to disagree. Nothing here is derived from the wiki except the field values themselves:
+ * ADR-0005 makes the wiki authoritative for values and never for identity.
+ */
+export function buildStatsRecord(result, { now = () => new Date().toISOString() } = {}) {
+  return {
+    name: result.canonicalTitle || result.item,
+    wikiUrl: result.url,
+    infoboxTitle: result.selection.title,
+    selectedBy: result.selection.method,
+    variantCount: result.infoboxCount,
+    fields: result.fields,
+    sourceRevision: result.revision,
+    ingestedAt: now(),
   };
 }
 
@@ -324,8 +456,32 @@ export async function scrapeItemStats(target, deps) {
 // ---------------------------------------------------------------------------
 
 export async function runStatsScrape(options, deps) {
-  const { categories = CATEGORIES, delayMs = DEFAULT_DELAY_MS, dryRun = false, limit = null } = options;
-  const { fetchFn, userAgent = USER_AGENT, log = logStructured } = deps;
+  const {
+    categories = CATEGORIES,
+    delayMs = DEFAULT_DELAY_MS,
+    dryRun = false,
+    limit = null,
+    datasetPath = STATS_DATA_PATH,
+  } = options;
+  const {
+    fetchFn,
+    userAgent = USER_AGENT,
+    log = logStructured,
+    now = () => new Date().toISOString(),
+    fsWriteFile = writeFile,
+    fsMkdir = mkdir,
+  } = deps;
+
+  const unknown = categories.filter((c) => !CATEGORIES.includes(c));
+  if (unknown.length > 0) {
+    // Fail loudly rather than visiting zero items and exiting 0. `collectCatalogItems` skips names
+    // it does not recognise, so `--only=weapon` (typo'd singular) used to run clean and scrape
+    // nothing, which reads as "the catalog is empty" rather than "the flag is wrong".
+    throw new ScrapeError(
+      `unknown categor${unknown.length === 1 ? "y" : "ies"}: ${unknown.join(", ")}. ` +
+        `Valid values are: ${CATEGORIES.join(", ")}`
+    );
+  }
 
   const summary = createSummary();
 
@@ -343,11 +499,14 @@ export async function runStatsScrape(options, deps) {
   let items = collectCatalogItems(categories);
   if (limit !== null && limit >= 0) items = items.slice(0, limit);
 
+  const records = {};
+
   for (const target of items) {
     try {
       // eslint-disable-next-line no-await-in-loop
       const result = await scrapeItemStats(target, { ...deps, robotsGroups, rateLimiter, userAgent, dryRun });
       recordResult(summary, result);
+      if (result.status === "succeeded") records[result.id] = buildStatsRecord(result, { now });
       log({
         level: "info",
         event: `item-${result.status}`,
@@ -356,7 +515,9 @@ export async function runStatsScrape(options, deps) {
         id: target.id,
         ...(result.reason ? { reason: result.reason } : {}),
         ...(result.infoboxCount ? { infoboxes: result.infoboxCount } : {}),
+        ...(result.selection ? { selectedBy: result.selection.method } : {}),
         ...(result.fields ? { fields: Object.keys(result.fields).length } : {}),
+        ...(result.revision ? { revision: result.revision } : {}),
       });
     } catch (err) {
       recordResult(summary, {
@@ -381,15 +542,59 @@ export async function runStatsScrape(options, deps) {
     }
   }
 
+  // The dataset is written only for a run that could have covered the whole catalog. A --limit or
+  // --only run would otherwise silently truncate itemStats.json to whatever it happened to visit,
+  // and the deletion would look like a scrape result rather than a flag.
+  const partial = limit !== null || categories.length !== CATEGORIES.length;
+  let written = null;
+  if (!dryRun && !partial && Object.keys(records).length > 0) {
+    written = await writeStatsFile(records, { datasetPath, fsWriteFile, fsMkdir });
+  }
+
   log({
     level: "info",
     event: "run-summary",
     succeeded: summary.succeeded.length,
     failed: summary.failed.length,
     skipped: summary.skipped.length,
+    records: Object.keys(records).length,
+    ...(written ? { wrote: written } : {}),
+    ...(partial ? { datasetSkipped: "partial run (--limit or --only) never rewrites the dataset" } : {}),
+    ...(dryRun ? { datasetSkipped: "dry-run writes nothing" } : {}),
   });
 
+  summary.records = records;
+  summary.datasetPath = written;
   return summary;
+}
+
+/**
+ * Write itemStats.json.
+ *
+ * Keys are sorted so a re-scrape produces a diff that reflects what the wiki changed rather than
+ * the order the catalog happened to iterate in. `_generated` is the in-file marker SPEC-0007 asks
+ * for: JSON carries no comments, and this file must never be hand-edited.
+ */
+export async function writeStatsFile(records, { datasetPath = STATS_DATA_PATH, fsWriteFile = writeFile, fsMkdir = mkdir } = {}) {
+  const sorted = {};
+  for (const id of Object.keys(records).sort()) sorted[id] = records[id];
+
+  const payload = {
+    _generated: {
+      by: "scripts/scrape-stats.mjs",
+      governedBy: "ADR-0005, SPEC-0007 REQ \"Generated, Committed Stats File\"",
+      warning: "Generated file — do not hand-edit. Re-running the scrape rewrites it in place.",
+    },
+    items: sorted,
+  };
+
+  try {
+    await fsMkdir(path.dirname(datasetPath), { recursive: true });
+    await fsWriteFile(datasetPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  } catch (err) {
+    throw new ScrapeError(`failed to write dataset to ${datasetPath}: ${err.message}`, { cause: err });
+  }
+  return datasetPath;
 }
 
 export function formatSummary(summary) {
@@ -427,6 +632,9 @@ export function parseArgs(argv) {
     } else if (arg.startsWith("--limit=")) {
       const parsed = Number(arg.slice("--limit=".length));
       if (Number.isInteger(parsed) && parsed >= 0) options.limit = parsed;
+    } else if (arg.startsWith("--out=")) {
+      const value = arg.slice("--out=".length).trim();
+      if (value) options.datasetPath = path.resolve(value);
     }
   }
   return options;
@@ -434,12 +642,19 @@ export function parseArgs(argv) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const partial = options.limit !== null || options.categories.length !== CATEGORIES.length;
   console.log(
     `scrape-stats: starting (${options.categories.join(", ")}), delay=${options.delayMs}ms, ` +
       `dry-run=${options.dryRun}${options.limit === null ? "" : `, limit=${options.limit}`}`
   );
   console.log("scrape-stats: manual, offline tool per ADR-0002/ADR-0005 — not run by build/dev/CI.");
-  console.log("scrape-stats: this story reports only and writes no files (see #184 for the dataset).");
+  if (options.dryRun) console.log("scrape-stats: dry-run — nothing will be written.");
+  else if (partial) {
+    console.log(
+      "scrape-stats: partial run (--limit/--only) — reports only. The dataset is rewritten by a full run,"
+    );
+    console.log("              so a partial one cannot truncate it to whatever it happened to visit.");
+  }
 
   const summary = await runStatsScrape(options, { fetchFn: fetch });
   console.log(formatSummary(summary));
