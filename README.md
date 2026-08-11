@@ -279,7 +279,9 @@ page. `server/src/index.test.js` holds that behaviour in place.
 
 ## Attribution
 
-Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via [huntshowdown.wiki.gg](https://huntshowdown.wiki.gg). This project is fan-made and not affiliated with or endorsed by Crytek.
+This is a fan page for [Hunt: Showdown](https://www.huntshowdown.com) whose only purpose is to help players build better loadouts. It is not affiliated with, endorsed by, or sponsored by Crytek.
+
+This project claims no ownership of any game content used here. Copyrights and/or trademarks of the images, names and statistics shown belong to [Crytek GmbH](https://www.crytek.com). Item images, stats and descriptions are sourced from [huntshowdown.wiki.gg](https://huntshowdown.wiki.gg).
 
 ## Architecture docs
 

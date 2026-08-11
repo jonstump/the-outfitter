@@ -61,12 +61,14 @@ Item imagery — whether a scraped photo or an SVG fallback — SHALL be present
 
 ### Requirement: Attribution
 
-The application SHALL display attribution crediting Crytek and huntshowdown.wiki.gg as the source of scraped imagery.
+The application SHALL display attribution crediting Crytek as the rights holder of the game content shown and huntshowdown.wiki.gg as the source of the scraped imagery and data.
 
 #### Scenario: Attribution is visible in the footer
 
 - **WHEN** any page of the application is rendered
-- **THEN** the footer MUST include the text: "Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg."
+- **THEN** the footer MUST state that the site claims no ownership of the game content used, MUST name Crytek GmbH as the holder of the copyrights and/or trademarks in that content, and MUST credit huntshowdown.wiki.gg as the source of the item images, stats and descriptions
+- **AND** the footer MUST link Hunt: Showdown (`https://www.huntshowdown.com`), Crytek GmbH (`https://www.crytek.com`), and huntshowdown.wiki.gg (`https://huntshowdown.wiki.gg`)
+- **AND** the footer MUST disclaim affiliation with, endorsement by, and sponsorship by Crytek, and MUST NOT assert that the content is used under Crytek's fan content policy
 
 ### Requirement: Error Handling Standards
 

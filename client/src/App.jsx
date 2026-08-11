@@ -52,10 +52,26 @@ export default function App() {
         <p>
           Fan-made planner. Sizes, prices and rules are community-compiled approximations of the Update 2.8 loadout
           system (5-point weapon capacity, 6 with Quartermaster; 8 mixed equipment slots, max 4 of each consumable).
-          Not affiliated with Crytek.
         </p>
         <p>
-          Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg.
+          This is a fan page for{" "}
+          <a href="https://www.huntshowdown.com" target="_blank" rel="noreferrer">
+            Hunt: Showdown
+          </a>{" "}
+          whose only purpose is to help players build better loadouts. It is not affiliated with, endorsed by, or
+          sponsored by Crytek.
+        </p>
+        <p>
+          This site claims no ownership of any game content used here. Copyrights and/or trademarks of the images,
+          names and statistics shown belong to{" "}
+          <a href="https://www.crytek.com" target="_blank" rel="noreferrer">
+            Crytek GmbH
+          </a>
+          . Item images, stats and descriptions are sourced from{" "}
+          <a href="https://huntshowdown.wiki.gg" target="_blank" rel="noreferrer">
+            huntshowdown.wiki.gg
+          </a>
+          .
         </p>
       </footer>
     </div>

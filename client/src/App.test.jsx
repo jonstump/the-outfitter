@@ -24,22 +24,10 @@ describe("App footer attribution", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the exact Crytek/wiki.gg attribution string", () => {
-    const store = createTestStore();
-    const { getByText } = render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(
-      getByText(
-        "Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg."
-      )
-    ).toBeInTheDocument();
-  });
-
-  it("renders the attribution inside the app footer", () => {
+  // The attribution is asserted element by element rather than as one exact sentence: the copy is
+  // split across links now, so a single string match would break on wording the requirement doesn't
+  // pin down. What the requirement does pin down is who is named, who is linked, and where.
+  it("names Crytek as rights holder and the wiki as the data source, inside the app footer", () => {
     const store = createTestStore();
     const { container } = render(
       <Provider store={store}>
@@ -49,8 +37,38 @@ describe("App footer attribution", () => {
 
     const footer = container.querySelector("footer.app-footer");
     expect(footer).toBeInTheDocument();
-    expect(footer.textContent).toContain(
-      "Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg."
+    expect(footer.textContent).toContain("This site claims no ownership of any game content used here");
+    expect(footer.textContent).toContain("Crytek GmbH");
+    expect(footer.textContent).toContain("sourced from");
+    expect(footer.textContent).toContain("huntshowdown.wiki.gg");
+  });
+
+  it("links Hunt: Showdown, Crytek and the wiki from the footer", () => {
+    const store = createTestStore();
+    const { container } = render(
+      <Provider store={store}>
+        <App />
+      </Provider>
     );
+
+    const footer = container.querySelector("footer.app-footer");
+    const hrefs = [...footer.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+
+    expect(hrefs).toContain("https://www.huntshowdown.com");
+    expect(hrefs).toContain("https://www.crytek.com");
+    expect(hrefs).toContain("https://huntshowdown.wiki.gg");
+  });
+
+  it("disclaims affiliation with Crytek without invoking a fan content policy", () => {
+    const store = createTestStore();
+    const { container } = render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    const footer = container.querySelector("footer.app-footer");
+    expect(footer.textContent).toContain("not affiliated with, endorsed by, or sponsored by Crytek");
+    expect(footer.textContent).not.toContain("fan content policy");
   });
 });

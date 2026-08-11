@@ -56,7 +56,7 @@ This supersedes ADR-0001 in full: the in-house schematic SVG icons are retired a
 * The scrape MUST run as an offline/dev-time script, not as part of the app's runtime request path or every CI build — it is invoked deliberately (initial catalog population, then re-run only when new items ship)
 * The scrape script MUST respect `robots.txt`, rate-limit its requests, and fetch only the specific item images the catalog needs — not mirror the wiki wholesale
 * Downloaded images MUST be committed/cached as static assets served from the app's own origin — no runtime `fetch`/`<img src>` pointed at huntshowdown.wiki.gg
-* The app's footer MUST carry the attribution line: "Hunt: Showdown assets © Crytek GmbH, used under Crytek's fan content policy; data via huntshowdown.wiki.gg."
+* The app's footer MUST carry attribution that disclaims ownership of the game content shown, names Crytek GmbH as the holder of its copyrights and/or trademarks, credits huntshowdown.wiki.gg as the source of the images and data, and links all three — see SPEC "Equipment Iconography" REQ "Attribution" for the binding wording. The footer MUST NOT claim the content is used *under* Crytek's fan content policy: the policy is a permission the project relies on, not a licence it has been granted, and the footer should not represent it as one
 * If Crytek's fan content policy terms become unclear, more restrictive, or are found to not cover this app's use case, this decision MUST be revisited via a new ADR rather than silently continued
 
 ## Pros and Cons of the Options
