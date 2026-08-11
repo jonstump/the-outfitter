@@ -33,7 +33,9 @@ The system SHALL source item imagery via a bounded, offline scrape of huntshowdo
 
 ### Requirement: Image Coverage Across All Catalog Categories, with Fallback
 
-The system SHALL render an image for items in every catalog category — Weapons, Tools, Traits, and Consumables — everywhere that category's items appear in the UI (equipment slots, weapon slots, trait chips, and picker rows). For each item, the system SHALL render the scraped/self-hosted image when one exists, and SHALL fall back to the item's in-house SVG icon (per-item if defined, else per-category/group) when no scraped image is available yet.
+*(amended 2026-08-11 in #227 — "trait chip" is now "trait cell", here and in "Consistent Visual Presentation" below. The traits panel draws a fixed fifteen-cell grid rather than a wrapping row of chips, so the element this requirement enumerated no longer exists under that name. A rename only: the call site, the fallback chain, and the container treatment it asks for are all unchanged, and the tests pinning them survived the rewrite. Recorded rather than silently renamed because an enumerated call-site list is only useful if it names things that exist.)*
+
+The system SHALL render an image for items in every catalog category — Weapons, Tools, Traits, and Consumables — everywhere that category's items appear in the UI (equipment slots, weapon slots, trait cells, and picker rows). For each item, the system SHALL render the scraped/self-hosted image when one exists, and SHALL fall back to the item's in-house SVG icon (per-item if defined, else per-category/group) when no scraped image is available yet.
 
 #### Scenario: Item with a scraped image renders it
 
@@ -56,7 +58,7 @@ Item imagery — whether a scraped photo or an SVG fallback — SHALL be present
 
 #### Scenario: Scraped images and SVG fallbacks share the same container treatment
 
-- **WHEN** any item image (scraped or SVG fallback) is rendered in a weapon slot, equipment slot, trait chip, or picker row
+- **WHEN** any item image (scraped or SVG fallback) is rendered in a weapon slot, equipment slot, trait cell, or picker row
 - **THEN** it MUST be presented within the same fixed-size, bordered container used across those call sites, with `object-fit: contain` (or equivalent) applied to scraped photos so they don't distort or overflow
 
 ### Requirement: Attribution

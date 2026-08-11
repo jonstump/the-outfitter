@@ -35,10 +35,19 @@ export default function App() {
           <WeaponsPanel />
           <EquipmentPanel />
           <TraitsPanel />
-          <ActionsPanel />
         </section>
+        {/* The actions box lives at the BOTTOM OF THE PICKER'S COLUMN, not in the loadout
+            column. Traits is the last panel on the left, so putting actions last on the right
+            lands the two side by side across the columns — each at full column width, which is
+            the size both of them want. The picker list absorbs whatever height is left, so the
+            actions box takes its height out of the list rather than out of the page: the list
+            is the tallest thing here and it scrolls internally, so height is the one thing it
+            can afford to give. */}
         <section className="right-column">
-          <Picker />
+          <div className="picker-panel">
+            <Picker />
+          </div>
+          <ActionsPanel />
         </section>
         {/* Full-width row beneath both columns: the roster is a grid of cards, so it wants
             the whole page rather than a 400px column. .app-main already wraps, so a

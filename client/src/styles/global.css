@@ -284,13 +284,25 @@ button {
   gap: 22px;
 }
 
+/* A stack, not a panel. It used to BE the picker's chrome; now it holds the actions box and
+   the picker as two panels, so the background and border moved to .picker-panel. */
 .right-column {
   flex: 1.25 1 440px;
   min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.picker-panel {
   background: var(--panel);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  /* Claims the height the actions box above it does not use. min-height 0 lets it actually
+     shrink — without it the list's own floor would push the column taller instead. */
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 /* Saved loadouts span the full page beneath both columns. The roster is a card grid
@@ -747,37 +759,151 @@ button {
   height: 96px;
 }
 
-/* Traits panel */
+/* Traits panel
 
-.trait-chips {
-  display: flex;
-  flex-wrap: wrap;
+   A fixed fifteen-cell grid, five across — the same shape the saved-loadout preview draws
+   (`.ll-lp-traits` below), so a loadout reads the same way in the builder as on its card.
+   SPEC-0003 REQ "Filed Loadouts Preview Their Contents" asks for exactly that parity; it used
+   to hold in one direction only, because the preview had a grid and this panel had chips.
+
+   Fifteen is ADR-0012's cap, NOT the trait-point budget. That budget is user-settable and off
+   by default, so deriving the column count from it would reflow the grid when a setting
+   changed — the same reason recorded on `.ll-lp-traits`. */
+
+.trait-grid {
+  display: grid;
+  /* The TILE fills the panel; the ART inside it does not stretch.
+
+     Every catalog image is 64x64 — that is the wiki's own resolution, not a scrape setting
+     (scrape-images.mjs has no resize step). Drawing a 64px source at 94px is the 1.47x
+     upscale that reads as soft. So the cell grows to fill the column and the image is capped
+     at its native size and centred inside, which buys a larger, better-spaced grid without
+     asking pixels that do not exist to cover more ground.
+
+     The 112px ceiling stops a very wide column turning the tiles into mostly-empty boxes. */
+  grid-template-columns: repeat(var(--trait-cols, 5), minmax(0, var(--trait-cell-max, 112px)));
+  justify-content: start;
   gap: 8px;
   margin-top: 10px;
 }
 
-.trait-chip {
+/* Square, because the art is square. The old 7/6 echoed the chip thumb it replaced and left
+   letterboxing above and below a 64x64 image. */
+.trait-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* An empty cell is information and is drawn as one — dashed, matching the preview's empty
+   cell and the builder's empty equipment slot. Never announced. */
+.trait-cell-empty {
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+
+.trait-cell-filled {
   background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 10px 14px;
-  font-size: 15.5px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  cursor: pointer;
 }
-.trait-chip:hover {
+.trait-cell-filled:hover,
+.trait-cell-filled:focus-visible {
   border-color: var(--red-border);
 }
 
-.trait-chip-up {
-  color: var(--text-muted);
-  font-size: 13px;
+/* A share of the tile, not a fixed pixel size.
+
+   This DOES upscale — a deliberate trade, reversing the earlier "never above native" rule.
+   At native 64px in a 97px tile the icon sat in a third of empty box and read as lost, which
+   is worse than a little softness. 82% is 80px here, a 1.25x upscale; the version that was
+   called soft was 1.47x, so this keeps most of the size while staying well under it.
+
+   Expressed as a percentage rather than a pixel value so the margin around the icon stays
+   proportionate at any tile size — including the 112px ceiling, where a fixed 80px would
+   start looking lost again.
+
+   The real fix is a better source: all 32 trait assets are 64x64 because that is what the
+   wiki's infobox <img> serves, and scrape-images.mjs takes that src verbatim. wiki.gg
+   usually also exposes the unscaled original, so a scrape that reached for it would let this
+   go back to 1x. Tracked on #228. */
+.trait-cell-thumb {
+  width: var(--trait-art-scale, 82%);
+  height: var(--trait-art-scale, 82%);
+  object-fit: contain;
+  display: block;
 }
 
-.trait-thumb {
-  width: 56px;
-  height: 48px;
+/* The upgrade-point cost, on the icon. Bottom-right so it clears the artwork's usual mass,
+   with its own backing so it stays legible whatever the icon behind it does. */
+.trait-cell-up {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 21px;
+  padding: 0 5px;
+  font-size: 16px;
+  line-height: 21px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+
+/* Hover/focus detail.
+
+   Decorative duplication, deliberately: the button's `aria-label` already carries the name and
+   the cost, so a screen reader never depends on this surface and a keyboard user gets it on
+   focus rather than hover alone — hover-only content would fail SPEC-0003's WCAG 2.1 AA
+   requirement. `pointer-events: none` keeps the tip from eating the click that removes the
+   trait.
+
+   ONE line, and the CSS says so. It carries the trait name and nothing else — the cost is
+   badged on the icon, so repeating it here said the same thing twice in one hover. An earlier
+   draft stacked name over cost and left behind a flex column plus `.trait-cell-tip-name` /
+   `.trait-cell-tip-up` rules that no element ever carried; those are gone rather than kept
+   against a second line that may never come. Adding a description line (#228) means wrapping
+   the name in its own element and restoring the column here — a real edit, not a free slot. */
+.trait-cell-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: none;
+  width: max-content;
+  max-width: 180px;
+  padding: 5px 8px;
+  font-size: 13.5px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+.trait-cell-filled:hover .trait-cell-tip,
+.trait-cell-filled:focus-visible .trait-cell-tip {
+  display: block;
+}
+
+/* The top row's tip opens downward instead.
+
+   Measured rather than guessed: above the first row the tip lands at the panel's very top edge
+   and covers the "Traits" title — the one piece of text identifying what the panel is. Opening
+   downward puts it over the second row of cells instead, which is transient and costs nothing.
+   The rows below keep opening upward, because downward from the last row escapes the panel and
+   lands on the actions row.
+
+   `-n+5` is the first row because the grid is fixed at five columns. If --trait-cols ever
+   becomes configurable, this selector has to move with it. */
+.trait-grid > .trait-cell:nth-child(-n + 5) .trait-cell-tip {
+  top: calc(100% + 6px);
+  bottom: auto;
 }
 
 /* Actions panel */
@@ -978,20 +1104,47 @@ button {
      on narrow viewports — where there is no leftover space to claim — the list is exactly
      as tall as it was before. */
   flex: 1 1 0;
-  min-height: 680px;
+  /* The 680px floor is now scoped to the stacked case only.
+
+     It existed so that when the columns stack on a narrow viewport — where there is no
+     leftover height to claim — the list stays as tall as it always was. Side by side it did
+     something else: it made the list unshrinkable, so the actions box moving into this column
+     would have pushed the column taller rather than taking height out of the list. 360px is
+     the floor here, roughly five rows, below which the list stops being a list. */
+  min-height: 360px;
 }
 
+@media (max-width: 760px) {
+  .picker-list {
+    min-height: 680px;
+  }
+}
+
+/* Compacted from 14px/18px padding and a 56px min-height, which put a traits row at 85px.
+   At 10px/14px and a 44px thumb it is 65px — both measured, not derived, and both for a
+   square-thumb tab: the wide weapon thumb makes a weapons row 73px, so there is no single
+   row height here. The list scrolls internally either way, so the height a row spends is
+   height the next item does not get.
+
+   What this buys is smaller than it looks, and the honest number is worth keeping: the list
+   also gives the actions box its height, so visible rows go 8 -> 8 at 1280x1024 and 8 -> 9
+   at 1440x1600. The compaction PAYS FOR the move rather than profiting from it. An earlier
+   draft of this comment claimed ten rows becoming fourteen, and said the freed width went to
+   the left column — neither survived measurement, and no column's flex basis changed in this
+   branch at all.
+
+   The thumb still draws under its 64px native size, so nothing here softens the art. */
 .picker-row {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
   background: none;
   border: none;
   border-bottom: 1px solid var(--divider);
-  padding: 14px 18px;
-  min-height: 56px;
+  padding: 10px 14px;
+  min-height: 44px;
 }
 .picker-row:hover {
   background: var(--row-hover);
@@ -1007,13 +1160,13 @@ button {
 /* Weapons read as wide silhouettes; everything else is roughly square, so the picker
    asks for the shape that suits the active tab (see thumbVariant in Picker.jsx). */
 .picker-row-thumb.wide {
-  width: 176px;
-  height: 44px;
+  width: 140px;
+  height: 38px;
 }
 
 .picker-row-thumb.square {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
 }
 
 /* Once the two columns stack, the picker is only as wide as the viewport, and the 176px
