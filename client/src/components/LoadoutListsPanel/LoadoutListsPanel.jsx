@@ -43,6 +43,7 @@ import { loadSavedThunk } from "../../store/thunks.js";
 import { deleteSaved, describeSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
 import {
   createListThunk,
+  describeListThunk,
   renameListThunk,
   retireListThunk,
   setListAccentThunk,
@@ -536,6 +537,35 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
         </button>
       </div>
 
+      {/* Governing: SPEC-0003 REQ "Lists Carry an Editable Description".
+
+          Part of the header, below its control row rather than inside it: the row is a
+          baseline-aligned line of controls, and a paragraph in it would either stretch the row
+          or force the prose into a column the width of a button. Below it, the description
+          still reads as the list's own — it sits above the card grid, inside the accented
+          panel, with rename and accent a line away — and it is a full-width block, which is
+          what prose needs.
+
+          THE TAB ORDER FOLLOWS: rename, accent, retire, close, then the description's own
+          controls, then the cards. A keyboard user reaches it while still in the header,
+          rather than after every loadout in the list.
+
+          Unassigned renders none. It is a rendering of the loadouts that are filed nowhere,
+          not a record — it has no id to write to and no hunter to inherit from. */}
+      {!unassigned && list && (
+        <div className="ll-expanded-desc">
+          {/* KEYED BY THE LIST. This panel is one instance reused as the user switches lists —
+              `ExpandedList` is rendered without a key, which is why the rename field beside it
+              carries an effect to resync `draftName` on `list.id`. The description block holds
+              more state than a rename does (an open editor, a draft, a revealed paragraph, a
+              pending focus target), and all of it belongs to the record it was opened on: a
+              draft typed against one list must not be sitting in the editor of the next, where
+              saving would write it to the wrong record. A key says that in one word, and
+              cannot fall out of step the way a growing list of resync effects would. */}
+          <ListDescription key={list.id} list={list} />
+        </div>
+      )}
+
       {/* Governing: SPEC-0003 REQ "Saved Loadouts Render as a Card Grid".
 
           `auto-fill` + `1fr` against a minimum track IS the whole responsive rule: cards
@@ -802,29 +832,42 @@ function LoadoutPreview({ item, loadout }) {
 }
 
 // ---------------------------------------------------------------------------------------
-// The loadout description
+// Descriptions — one on a list, one on a loadout
 //
 // Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+// SPEC-0003 REQ "Lists Carry an Editable Description", SPEC-0003 REQ "Loadouts Carry a
+// Description of Their Own"
 //
-// THREE states, and the whole point of the code below is that they never become two:
+// TWO fields, deliberately unalike, and the difference is which record has a hunter.
 //
-//   null / absent    never edited      -> the list hunter's description, resolved LIVE
+// A LIST's description has THREE states, and the whole point of `resolveListDescription` is
+// that they never become two:
+//
+//   null / absent    never edited       -> the list hunter's description, resolved LIVE
 //   ""               deliberately blank -> nothing
 //   non-empty string the user's words   -> that text
 //
 // design.md's risk register names the failure directly: "the obvious implementation is a
 // truthy check, which silently merges 'never edited' with 'deliberately blank' and makes the
 // field impossible to empty". So the resolution is a named function returning a discriminated
-// answer, rather than an expression like `item.description || inherited` sprinkled through the
-// card — one place to read, one place to test, and `??` where it matters instead of `||`.
+// answer, rather than an expression like `list.description || inherited` sprinkled through the
+// header — one place to read, one place to test, and `??` where it matters instead of `||`.
 //
-// The inheritance path is loadout -> list -> hunter -> description, and it is a read-time
-// join: the hunters dataset is already indexed by id, so this costs one map access per card
-// and writes nothing. A re-scrape that improves a hunter's prose therefore reaches every
-// unedited loadout without touching a single stored record, and a loadout moved to another
-// list picks up that list's hunter instead — both of those are the intended consequences,
-// not side effects.
+// The inheritance path is list -> hunter -> description, and it is a read-time join: the
+// hunters dataset is already indexed by id, so this costs one map access per open list and
+// writes nothing. A re-scrape that improves a hunter's prose therefore reaches every unedited
+// list without touching a single stored record, and re-portraiting a list picks up the new
+// hunter instead — both of those are the intended consequences, not side effects.
+//
+// A LOADOUT's description inherits NOTHING (#181). It is the user's own note about that build,
+// so it has two states — written or not — and no hunter lookup at all. It used to inherit
+// through its list, which put the same paragraph of lore under every card filed into a list and
+// left a note about a specific build with nowhere of its own to live.
+//
+// Both fields share one editor, below, because they share every hard part: bounding a paragraph
+// that can run to 1000 characters, measuring whether anything is actually hidden, and re-homing
+// focus when the control the user was on unmounts. What they do not share is inheritance, and
+// that is a prop.
 // ---------------------------------------------------------------------------------------
 
 /**
@@ -845,37 +888,54 @@ export function descriptionOf(hunter) {
 }
 
 /**
- * What a loadout card should render for its description, and where that text came from.
+ * What a list should render for its description, and where that text came from.
  *
  * Returns `{ text, inherited, hunterName }`, where `text` is null when nothing at all is to
  * be rendered — which is BOTH "deliberately blank" (stored "") and "nothing to inherit". The
  * two are indistinguishable on screen by design; they differ in what a subsequent write
  * means, and that difference lives in the stored value, not here.
  *
- * `item.description ?? null` is load-bearing twice over. `||` would send a stored `""` down
+ * `list.description ?? null` is load-bearing twice over. `||` would send a stored `""` down
  * the inheritance path and make the field impossible to empty, and a strict `=== null` would
  * miss every record written before the field existed — design.md calls out that second one
  * as the same collapse "arriving through a comparison operator rather than through a truthy
- * check". Absent and null are one state; `""` is not part of it.
+ * check". EVERY list record written before #181 is in exactly that shape, so this is not a
+ * hypothetical: it is the state of every list in the data file today.
  */
-export function resolveDescription(item, list) {
-  const stored = item?.description ?? null;
+export function resolveListDescription(list) {
+  const stored = list?.description ?? null;
   if (stored !== null) return { text: stored === "" ? null : stored, inherited: false, hunterName: null };
 
   const hunter = hunterFor(list?.hunterId);
   const text = descriptionOf(hunter);
-  // A loadout in Unassigned, in a list with no portrait, or in one whose hunter has left the
-  // roster has nothing to inherit. That is an ordinary state, not an error, and the card
-  // stays fully usable.
+  // A list with no portrait, or one whose hunter has left the roster, has nothing to inherit.
+  // That is an ordinary state, not an error, and the list stays fully usable.
   return { text, inherited: text !== null, hunterName: text === null ? null : hunter.name };
 }
 
 /**
- * The description block on a loadout card: render, edit, clear, restore.
+ * What a loadout card should render for its note.
+ *
+ * The same shape as `resolveListDescription` so both can feed one editor, but the answer is
+ * never inherited: a loadout has no hunter of its own, and reaching through its list for one
+ * is the thing #181 removed. Null and `""` therefore mean the same thing here — no note —
+ * and neither is a state a subsequent write has to preserve.
+ */
+export function resolveLoadoutNote(item) {
+  const stored = item?.description ?? null;
+  return { text: stored === null || stored === "" ? null : stored, inherited: false, hunterName: null };
+}
+
+/**
+ * A description: render, edit, clear, and — where there is something to inherit — restore.
  *
  * Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
- * SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 Accessibility
- * Requirements ("Keyboard Navigation").
+ * SPEC-0003 REQ "Lists Carry an Editable Description", SPEC-0003 REQ "Loadouts Carry a
+ * Description of Their Own", SPEC-0003 Accessibility Requirements ("Keyboard Navigation").
+ *
+ * ONE component for both surfaces, taking its resolved answer rather than computing one. The
+ * two callers differ in exactly two ways — whether `onRestore` exists, and what `subject`
+ * names — and everything else here is behaviour neither should have its own copy of.
  *
  * Both texts it can render are UNTRUSTED — the user's own, and the dataset's, which was
  * scraped off-origin and is the less trustworthy of the two. Each is rendered as a JSX text
@@ -883,16 +943,17 @@ export function resolveDescription(item, list) {
  * be one added.
  *
  * The editor is a `<textarea>` with explicit save and cancel controls rather than a
- * commit-on-blur field like the list rename above it. A description can be a paragraph, so
+ * commit-on-blur field like the list rename beside it. A description can be a paragraph, so
  * Tab has to be able to LEAVE the field (SPEC-0003 says so outright) — and with
  * commit-on-blur, tabbing to "cancel" would save on the way there. Escape abandons the edit
  * without writing.
  *
- * "Restore" is offered whenever anything is stored, including the deliberately-blank state,
- * because clearing the field is explicitly NOT the path back to inheriting: it is a distinct
- * action that writes null. It is offered even when the list has no hunter to inherit from —
- * the state it restores is "inherit whatever this list offers", which is meaningful whether
- * or not the list offers anything today.
+ * "Restore" is offered whenever `onRestore` is given and anything is stored, including the
+ * deliberately-blank state, because clearing the field is explicitly NOT the path back to
+ * inheriting: it is a distinct action that writes null. It is offered even when the list has
+ * no hunter to inherit from — the state it restores is "inherit whatever this list depicts",
+ * which is meaningful whether or not the list depicts anything today. A loadout passes no
+ * `onRestore` at all, because there is no state for it to return to.
  *
  * No length cap is enforced here. The cap is the server's (DESCRIPTION_MAX_CHARS), and
  * restating it in the client would put the number in two places; an over-long write is
@@ -901,13 +962,14 @@ export function resolveDescription(item, list) {
  *
  * EVERY accessible name below CONTAINS its visible label (WCAG 2.5.3 Label in Name): a Voice
  * Control user says "click more", and a name of "Reveal the whole description" answers to
- * nothing they can see. The loadout's name stays in the name for the reason above; the
- * visible word leads it.
+ * nothing they can see. The subject stays in the name for the reason above; the visible word
+ * leads it.
  */
-function LoadoutDescription({ item, list }) {
-  const dispatch = useDispatch();
-  const { text, inherited, hunterName } = resolveDescription(item, list);
-  const stored = item.description ?? null;
+function DescriptionBlock({ kind, recordId, subject, stored, text, inherited, hunterName, onSave, onRestore }) {
+  // `aria-controls` needs the paragraph to have an id, and the paragraph's testid is already
+  // unique per record — one string, both jobs. The siblings hang off the same stem, which is
+  // the shape every other testid in this panel uses (`list-card-${id}`).
+  const domId = `${kind}-desc-${recordId}`;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -915,8 +977,8 @@ function LoadoutDescription({ item, list }) {
   // a snapshot of the moment the editor opened and the values it is derived from are live —
   // see `commit`.
   const [seed, setSeed] = useState("");
-  // The reveal. Bounded height is the stylesheet's job (`.ll-lcard-desc-clamped` bounds the
-  // collapsed state, `.ll-lcard-desc-open` bounds the revealed one); these are only the
+  // The reveal. Bounded height is the stylesheet's job (`.ll-desc-clamped` bounds the
+  // collapsed state, `.ll-desc-open` bounds the revealed one); these are only the
   // states that switch between them.
   const [revealed, setRevealed] = useState(false);
   // Is there anything hidden to reveal? MEASURED, not assumed. The card's width is not
@@ -932,10 +994,6 @@ function LoadoutDescription({ item, list }) {
   // Which exit is waiting for focus to be re-homed: "editor" or "restore". See below.
   const pendingFocus = useRef(null);
 
-  // `aria-controls` needs the paragraph to have an id, and the testid is already unique per
-  // loadout — one string, both jobs.
-  const descriptionId = `loadout-desc-${item.id}`;
-
   useEffect(() => {
     if (editing) fieldRef.current?.focus();
   }, [editing]);
@@ -945,7 +1003,7 @@ function LoadoutDescription({ item, list }) {
   // Every exit from this block unmounts the control that had focus — save, Escape and cancel
   // unmount the editor, and "use hunter's" unmounts ITSELF once the write lands. An unmount
   // drops focus on `<body>`, from which a keyboard user has to Tab back through the header,
-  // the sort select, every list card and every preceding loadout card to get back here.
+  // the sort select and every list card to get back here.
   //
   // So each exit ARMS this ref and the layout effect below hands focus to the control that
   // logically owns the result: the edit/add trigger, which survives all four. A ref plus a
@@ -965,8 +1023,8 @@ function LoadoutDescription({ item, list }) {
     triggerRef.current?.focus();
   });
 
-  // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description" ("bounded in height,
-  // with an affordance to reveal the rest").
+  // Governing: SPEC-0003 REQ "Lists Carry an Editable Description" ("bounded in height, with
+  // an affordance to reveal the rest") — required of both surfaces, met by this one block.
   //
   // The control is offered only when something is actually hidden. An always-on control that
   // reports `aria-expanded="false"` over fully visible text tells a screen-reader user there
@@ -1002,14 +1060,14 @@ function LoadoutDescription({ item, list }) {
   const commit = async () => {
     // Compare the draft against the value it was SEEDED with — never against `stored`.
     //
-    // The two disagree in exactly one case, and it is the common one: a loadout showing an
-    // INHERITED description seeds the field with the hunter's lore while `stored` is null.
+    // The two disagree in exactly one case, and on a list it is the common one: a list showing
+    // an INHERITED description seeds the field with the hunter's lore while `stored` is null.
     // Comparing against `stored` there makes "click edit to read it, click save" a write of
     // the hunter's prose into the record — which SPEC-0003 forbids outright ("The system
     // MUST NOT write that text into the record in order to display it"), and which silently
-    // severs the loadout from its list's hunter for every future re-scrape and every move.
+    // severs the list from its hunter for every future re-scrape and every re-portraiting.
     // The same disagreement turns "add description" then save on an untouched empty field
-    // into a write of "", permanently opting the loadout out of inheritance.
+    // into a write of "", permanently opting the record out of inheritance.
     //
     // Seeding is what makes the guard agree with cancel: leaving the editor without touching
     // it writes nothing, by whichever of the three exits the user takes.
@@ -1023,7 +1081,7 @@ function LoadoutDescription({ item, list }) {
       return;
     }
     try {
-      await dispatch(describeSaved({ id: item.id, description: draft, loadoutName: item.name })).unwrap();
+      await onSave(draft);
       closeEditor();
     } catch {
       // The server refused it — over the cap, over the body limit, or offline. The editor
@@ -1036,7 +1094,7 @@ function LoadoutDescription({ item, list }) {
   const restore = async () => {
     pendingFocus.current = "restore";
     try {
-      await dispatch(describeSaved({ id: item.id, description: null, loadoutName: item.name })).unwrap();
+      await onRestore();
     } catch {
       // The control is still mounted and still has focus; nothing to re-home.
       pendingFocus.current = null;
@@ -1045,11 +1103,11 @@ function LoadoutDescription({ item, list }) {
 
   if (editing) {
     return (
-      <div className="ll-lcard-desc-wrap" data-testid={`loadout-desc-wrap-${item.id}`}>
+      <div className="ll-desc-wrap" data-testid={`${kind}-desc-wrap-${recordId}`}>
         <textarea
           ref={fieldRef}
-          className="ll-lcard-desc-field"
-          aria-label={`Description for ${item.name}`}
+          className="ll-desc-field"
+          aria-label={`Description for ${subject}`}
           value={draft}
           rows={4}
           onChange={(e) => setDraft(e.target.value)}
@@ -1062,17 +1120,17 @@ function LoadoutDescription({ item, list }) {
             }
           }}
         />
-        <div className="ll-lcard-desc-controls">
+        <div className="ll-desc-controls">
           <button
-            className="ll-lcard-desc-btn"
-            aria-label={`Save description: ${item.name}`}
+            className="ll-desc-btn"
+            aria-label={`Save description: ${subject}`}
             onClick={commit}
           >
             save
           </button>
           <button
-            className="ll-lcard-desc-btn"
-            aria-label={`Cancel editing description: ${item.name}`}
+            className="ll-desc-btn"
+            aria-label={`Cancel editing description: ${subject}`}
             onClick={closeEditor}
           >
             cancel
@@ -1083,40 +1141,44 @@ function LoadoutDescription({ item, list }) {
   }
 
   return (
-    <div className="ll-lcard-desc-wrap" data-testid={`loadout-desc-wrap-${item.id}`}>
+    <div className="ll-desc-wrap" data-testid={`${kind}-desc-wrap-${recordId}`}>
       {text !== null && (
         <>
           {/* Visible AND announced. SPEC-0003: an inherited description must not be announced
-              as though the user wrote it, and where the distinction is surfaced visually it
-              must be available non-visually — so this is one plain element rather than a
-              styled cue plus a separate screen-reader-only string that could drift from it. */}
+              as though the user wrote it, and the italic-and-muted styling on the paragraph
+              below is presentational only — so the fact is carried HERE, in text, rather than
+              by a styled cue alone. One plain element rather than a visual treatment plus a
+              separate screen-reader-only string that could drift from it. */}
           {inherited && (
-            <span className="ll-lcard-desc-from" data-testid={`loadout-desc-from-${item.id}`}>
+            <span className="ll-desc-from" data-testid={`${kind}-desc-from-${recordId}`}>
               From {hunterName}
             </span>
           )}
           <p
             ref={paraRef}
-            id={descriptionId}
-            // Revealed, the paragraph is a bounded scroll container (`.ll-lcard-desc-open`),
-            // and a scroll container that cannot take focus cannot be scrolled by keyboard
-            // at all in Chrome — WCAG 2.1.1. So it becomes a tab stop exactly while it is
-            // scrollable, and no card adds a stop in its resting state.
+            id={domId}
+            // Revealed, the paragraph is a bounded scroll container (`.ll-desc-open`), and a
+            // scroll container that cannot take focus cannot be scrolled by keyboard at all
+            // in Chrome — WCAG 2.1.1. So it becomes a tab stop exactly while it is
+            // scrollable, and nothing adds a stop in its resting state.
             tabIndex={revealed ? 0 : undefined}
-            className={`ll-lcard-desc${revealed ? " ll-lcard-desc-open" : " ll-lcard-desc-clamped"}`}
+            className={`ll-desc${revealed ? " ll-desc-open" : " ll-desc-clamped"}`}
+            // Drives the italic-and-muted treatment in global.css, and it is read off the
+            // SAME resolved flag the "From …" line above uses. One source, so the styling and
+            // the announcement cannot come to disagree about whose words these are.
             data-source={inherited ? "inherited" : "own"}
-            data-testid={descriptionId}
+            data-testid={domId}
           >
             {text}
           </p>
           {(clamped || revealed) && (
             <button
-              className="ll-lcard-desc-btn"
+              className="ll-desc-btn"
               aria-expanded={revealed}
               // Names what it expands, so `aria-expanded` describes a target rather than
               // hanging off a control with nothing attached to it.
-              aria-controls={descriptionId}
-              aria-label={`${revealed ? "Less" : "More"} of description: ${item.name}`}
+              aria-controls={domId}
+              aria-label={`${revealed ? "Less" : "More"} of description: ${subject}`}
               onClick={() => setRevealed(!revealed)}
             >
               {revealed ? "less" : "more"}
@@ -1126,10 +1188,10 @@ function LoadoutDescription({ item, list }) {
       )}
       <button
         ref={triggerRef}
-        className="ll-lcard-desc-btn"
-        // Names the action AND the loadout, per SPEC-0003's icon/control naming rule: a grid
+        className="ll-desc-btn"
+        // Names the action AND its subject, per SPEC-0003's icon/control naming rule: a grid
         // of cards otherwise presents a column of identically named "edit" stops.
-        aria-label={`${text === null ? "Add" : "Edit"} description: ${item.name}`}
+        aria-label={`${text === null ? "Add" : "Edit"} description: ${subject}`}
         onClick={() => {
           const value = stored ?? text ?? "";
           setDraft(value);
@@ -1139,16 +1201,73 @@ function LoadoutDescription({ item, list }) {
       >
         {text === null ? "add description" : "edit"}
       </button>
-      {stored !== null && (
+      {onRestore && stored !== null && (
         <button
-          className="ll-lcard-desc-btn"
-          aria-label={`Use hunter's description: ${item.name}`}
+          className="ll-desc-btn"
+          aria-label={`Use hunter's description: ${subject}`}
           onClick={restore}
         >
           use hunter's
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * A list's description, in the expanded list header.
+ *
+ * Governing: ADR-0007 (dataset carries descriptions), SPEC-0003 REQ "Lists Carry an Editable
+ * Description".
+ *
+ * NOT on the list card in the selector grid, and that is a requirement rather than a layout
+ * preference: the card is a compact scanning target carrying a portrait, a name and a count,
+ * and a paragraph of lore on each one would swamp the grid it exists to let you scan. The
+ * header is also where the list's other editable properties already live, so the edit
+ * affordance sits with rename and accent rather than somewhere new.
+ */
+function ListDescription({ list }) {
+  const dispatch = useDispatch();
+  const resolved = resolveListDescription(list);
+  const describe = (description) =>
+    dispatch(describeListThunk({ id: list.id, description, listName: list.name })).unwrap();
+
+  return (
+    <DescriptionBlock
+      kind="list"
+      recordId={list.id}
+      subject={list.name}
+      stored={list.description ?? null}
+      {...resolved}
+      onSave={describe}
+      onRestore={() => describe(null)}
+    />
+  );
+}
+
+/**
+ * A loadout's own note, on its card.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Carry a Description of Their Own".
+ *
+ * No `list` prop and no `onRestore`: this description inherits nothing, so there is no hunter
+ * to look up and no earlier state to return to. Clearing the field is simply clearing it.
+ */
+function LoadoutNote({ item }) {
+  const dispatch = useDispatch();
+  const resolved = resolveLoadoutNote(item);
+
+  return (
+    <DescriptionBlock
+      kind="loadout"
+      recordId={item.id}
+      subject={item.name}
+      stored={item.description ?? null}
+      {...resolved}
+      onSave={(description) =>
+        dispatch(describeSaved({ id: item.id, description, loadoutName: item.name })).unwrap()
+      }
+    />
   );
 }
 
@@ -1194,15 +1313,15 @@ function LoadoutCard({ item, lists }) {
       </div>
 
       {/* Between the head and the preview, which is the position the card reserved for it.
-          The description annotates the loadout, so it reads before the contents it describes
-          — and it sits OUTSIDE the preview, which is what keeps it from displacing the
-          preview's category structure however long the prose is (SPEC-0003 REQ "Loadouts
-          Carry an Editable Description").
+          The note annotates the loadout, so it reads before the contents it describes — and
+          it sits OUTSIDE the preview, which is what keeps it from displacing the preview's
+          category structure however long the prose is (SPEC-0003 REQ "Loadouts Carry a
+          Description of Their Own").
 
-          `lists` is passed rather than the resolved list: a dangling `listId` resolves to
-          undefined here exactly as it does in the move control above, so a loadout filed
-          into a retired list inherits nothing instead of throwing. */}
-      <LoadoutDescription item={item} list={lists.find((l) => l.id === item.listId) || null} />
+          The loadout is all it takes: this note inherits nothing, so the card no longer has
+          to find the list it is filed into in order to render a description, and a dangling
+          `listId` has nothing here left to dangle into. */}
+      <LoadoutNote item={item} />
 
       <LoadoutPreview item={item} loadout={loadout} />
 

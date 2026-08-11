@@ -25,7 +25,7 @@ Three changes were accepted on **2026-08-10**; **one has shipped and survived**.
 
 - ~~**Favorites are sectioned rather than interleaved**, and default to favorites-only past a threshold~~ — **implemented in #138.** Amended "Favorite Hunters" and one sentence of "The Hunter Picker Is Filterable and Bounded"
 - ~~**Loadout rows preview what they hold**~~ — shipped in #139 as a compact strip, then **superseded the same day**: the requirement licensed something smaller than intended, and is now "Filed Loadouts Preview Their Contents" as a categorised panel plus "Saved Loadouts Render as a Card Grid". Both are **not yet implemented**
-- **Loadouts carry an editable description** — new requirement, "Loadouts Carry an Editable Description", plus a new clause on "The Saved-Loadout Wire Format Is Unchanged". **Still outstanding — #140.**
+- ~~**Loadouts carry an editable description**~~ — shipped in #177, then **corrected in #181**: the field was put on the loadout, which is not the record that references a hunter. It is now two requirements — "Lists Carry an Editable Description" (the inherited one) and "Loadouts Carry a Description of Their Own" (the user's note) — plus the same clause on "The Saved-Loadout Wire Format Is Unchanged"
 
 A fourth change reached this spec from outside it, also on 2026-08-10: the **ADR-0007 amendment replacing two portrait sizes with one trimmed asset**. It rewrites part of "Hunter Dataset Consumption Contract" — the size-selection rule, the cross-size fallback ordering, and the assumption of a uniform portrait aspect — and is **still outstanding — #148**. SPEC-0004 owns the production half, which shipped in #147; the consumption half is amended here rather than overridden from there, and is what #148 implements.
 
@@ -186,7 +186,7 @@ The set of a user's lists MUST NOT be derived from the distinct `listId` values 
 
 This capability consumes a hunters dataset; it does not specify how that dataset is produced. Production is specified by SPEC-0004 (Hunter Roster Dataset), which realizes ADR-0007.
 
-The dataset SHALL provide, for each hunter, a stable identifier, a display name, a description, and a portrait asset self-hosted under the application's own origin *(description added 2026-08-10, consumed by "Loadouts Carry an Editable Description")*.
+The dataset SHALL provide, for each hunter, a stable identifier, a display name, a description, and a portrait asset self-hosted under the application's own origin *(description added 2026-08-10, consumed by "Lists Carry an Editable Description" — by the LIST, which is the record that references a hunter, since 2026-08-11)*.
 
 *(amended 2026-08-10; not yet implemented)* Per the ADR-0007 amendment of that date, a hunter has **one** portrait asset, trimmed to the subject and stored at its native resolution. Consuming code SHALL request that single asset and MUST NOT select between sizes. The `size` argument currently threaded through the portrait render path SHALL be removed rather than defaulted, so no call site can ask for a size that no longer exists.
 
@@ -231,8 +231,8 @@ Consuming code MUST likewise tolerate a dataset entry whose description is absen
 
 #### Scenario: A hunter carrying no description yields no default
 
-- **WHEN** a loadout inherits its description from a hunter whose dataset entry has an absent or empty description
-- **THEN** no description SHALL be rendered, and neither the loadout nor the list SHALL fail
+- **WHEN** a list inherits its description from a hunter whose dataset entry has an absent or empty description
+- **THEN** no description SHALL be rendered, and neither the list nor its loadouts SHALL fail
 
 ### Requirement: Lists Are Visually Distinguishable Independent of Portrait and Name
 
@@ -567,7 +567,7 @@ Rendering a preview MUST NOT write to the record, MUST NOT alter `data`, and MUS
 
 Saved loadouts SHALL be presented as a **grid of cards**, not as rows. A categorised preview does not fit a row, and stacking full-height rows down a page makes a list of ten unreadable.
 
-Each card SHALL carry at least: the loadout's name, its cost, its preview, controls to move it between lists and to delete it, and — where one is rendered — its description and that description's edit control (see "Loadouts Carry an Editable Description"). The list is a floor, not an exhaustive enumeration. Every control that was reachable on the row SHALL remain reachable on the card — **the move affordance in particular SHALL remain an explicit, keyboard-operable control** rather than becoming drag-only, preserving the rule "Keyboard Navigation" already states.
+Each card SHALL carry at least: the loadout's name, its cost, its preview, controls to move it between lists and to delete it, and — where one is rendered — its description and that description's edit control (see "Loadouts Carry a Description of Their Own"). The list is a floor, not an exhaustive enumeration. Every control that was reachable on the row SHALL remain reachable on the card — **the move affordance in particular SHALL remain an explicit, keyboard-operable control** rather than becoming drag-only, preserving the rule "Keyboard Navigation" already states.
 
 **A loadout card MUST be visually distinguishable from a list card at a glance.** The list selector directly above is already a grid of cards, and two nested card grids in one panel invite the reader to mistake a loadout for a list. The distinction MUST NOT rest on size alone, since both grids reflow with the viewport. The list card's identity is a portrait, an accent frame and a loadout count; a loadout card SHALL NOT reuse that combination.
 
@@ -593,11 +593,11 @@ The card grid SHALL be responsive: cards SHALL reflow by count rather than being
 - **WHEN** the panel is rendered at a phone width
 - **THEN** the cards SHALL reflow to fewer per row, no card SHALL overflow horizontally, and each preview SHALL retain its category structure and cell counts
 
-### Requirement: Loadouts Carry an Editable Description
+### Requirement: Lists Carry an Editable Description
 
-*(added 2026-08-10; not yet implemented)*
+*(added 2026-08-10 as "Loadouts Carry an Editable Description"; **split in two and moved to the list 2026-08-11** — see #181. The field was placed on the loadout, which is not the record that references a hunter, so inherited lore repeated on every card filed into a list and a note about a specific build had nowhere of its own to live. The inherited half is here; the per-build half is "Loadouts Carry a Description of Their Own" below.)*
 
-Each saved loadout record MAY carry a `description` field on the record **envelope**, sibling to `name`, `listId` and `updatedAt`. The `description` field MUST NOT be placed inside the loadout's `data` payload.
+Each loadout list record MAY carry a `description` field on the record **envelope**, sibling to `name`, `hunterId` and `accent`.
 
 The field SHALL distinguish three states, and consuming code MUST NOT collapse them into two:
 
@@ -607,18 +607,22 @@ The field SHALL distinguish three states, and consuming code MUST NOT collapse t
 | empty string | deliberately blank | nothing |
 | non-empty string | the user's own text | that text |
 
-**The default is resolved, not copied.** When `description` is null, the UI SHALL render the description of the hunter referenced by the list the loadout is filed into, resolved through the hunters dataset at render time. The system MUST NOT write that text into the record in order to display it.
+**The default is resolved, not copied.** When `description` is null, the UI SHALL render the description of the hunter the list references, resolved through the hunters dataset at render time. The system MUST NOT write that text into the record in order to display it.
 
 Two consequences follow, and both are intended:
 
-- Moving an **unedited** loadout to a list with a different hunter SHALL re-inherit that list's hunter description. Moving an **edited** loadout SHALL preserve the user's text unchanged
-- A re-scrape that improves a hunter's description SHALL be reflected on every unedited loadout without touching a single stored record
+- Changing the hunter on an **unedited** list SHALL re-inherit the new hunter's description. Changing the hunter on an **edited** list SHALL preserve the user's text unchanged
+- A re-scrape that improves a hunter's description SHALL be reflected on every unedited list without touching a single stored record
 
-A loadout with no hunter to inherit from — filed into Unassigned, filed into a list carrying no `hunterId`, or filed into a list whose `hunterId` is absent from the dataset — SHALL render no description and SHALL remain fully usable. Absence of a default is an ordinary state, not an error.
+A list with no hunter to inherit from — carrying no `hunterId`, or carrying one absent from the dataset — SHALL render no description and SHALL remain fully usable. Absence of a default is an ordinary state, not an error.
 
-**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest. Hunter lore runs to several hundred characters and shares a card with the preview, so an unclamped description would dominate the card it is meant to annotate. A description MUST NOT cause its card to overflow at any width, and MUST NOT displace the preview's category structure *(re-scoped from row to card 2026-08-10, before implementation — see "Saved Loadouts Render as a Card Grid")*.
+**The description SHALL render in the expanded list header** and MUST NOT be rendered on the list card in the selector grid *(placement settled 2026-08-11)*. The card is a compact scanning target carrying a portrait, a name and a count; a paragraph of lore on each one would swamp the grid it exists to let the user scan. The header is where the list's other editable properties already live.
 
-**Inheritance SHALL be restorable.** A user who has edited a description SHALL be able to return the loadout to the inherited state; editing MUST NOT be a one-way door. Clearing the field to empty is *not* that path — empty means deliberately blank — so restoring inheritance SHALL be a distinct, explicitly offered action that sets the stored value back to null.
+Unassigned is a rendering of the loadouts filed nowhere rather than a record, so it SHALL carry no description and SHALL offer no control to write one.
+
+**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest. Hunter lore runs to several hundred characters, so an unclamped description would push the card grid below it off the screen. A description MUST NOT cause its container to overflow at any width.
+
+**Inheritance SHALL be restorable.** A user who has edited a description SHALL be able to return the list to the inherited state; editing MUST NOT be a one-way door. Clearing the field to empty is *not* that path — empty means deliberately blank — so restoring inheritance SHALL be a distinct, explicitly offered action that sets the stored value back to null.
 
 On the wire, the distinction between the three states SHALL be carried explicitly:
 
@@ -626,54 +630,109 @@ On the wire, the distinction between the three states SHALL be carried explicitl
 - A write supplying `description: ""` SHALL store the deliberately-blank state
 - A write **omitting** the `description` key SHALL leave the field unchanged
 
-The same distinction SHALL apply to `listId` on the same endpoint, where an explicit null files the loadout into Unassigned and an omitted key leaves its filing untouched. A write supplying neither key SHALL be rejected, so that "move" and "describe" remain independent operations rather than mutually required ones.
+**`null` means two different things on this endpoint and both SHALL be honoured.** `hunterId: null` is an absence — the list depicts nobody. `description: null` is a deferral — inherit from whoever it depicts. A request supplying both SHALL apply both.
 
-Editing a description SHALL persist it under the same ownership rules as every other field on the record. The description SHALL be length-capped on the server with an explicit maximum. Editing a description MUST NOT alter `data`, the format version, `listId`, or the loadout's position in any list.
+Editing a description SHALL persist it under the same ownership rules as every other field on the record. The description SHALL be length-capped on the server with an explicit maximum. Editing a description MUST NOT alter the list's `name`, `hunterId`, `accent`, or which loadouts are filed into it.
 
-#### Scenario: An unedited loadout shows its list's hunter description
+#### Scenario: An unedited list shows its hunter's description
 
-- **WHEN** a loadout with no stored description is filed into a list whose hunter is "The Turncoat"
-- **THEN** the loadout SHALL render The Turncoat's description from the hunters dataset, and the stored record SHALL still carry no `description` field
+- **WHEN** a list whose hunter is "The Turncoat" has no stored description
+- **THEN** the expanded list SHALL render The Turncoat's description from the hunters dataset, and the stored record SHALL still carry no `description` field
 
 #### Scenario: Editing replaces the inherited text
 
-- **WHEN** a user edits the description of a loadout that was showing an inherited default
-- **THEN** the typed text SHALL persist on the record, and the inherited default SHALL NOT be shown again for that loadout
+- **WHEN** a user edits the description of a list that was showing an inherited default
+- **THEN** the typed text SHALL persist on the record, and the inherited default SHALL NOT be shown again for that list
 
 #### Scenario: Clearing a description leaves it blank rather than re-inheriting
 
 - **WHEN** a user clears an edited description to empty
-- **THEN** the record SHALL store an empty string, the loadout SHALL render no description, and the hunter's text MUST NOT reappear
+- **THEN** the record SHALL store an empty string, the list SHALL render no description, and the hunter's text MUST NOT reappear
 
-#### Scenario: Moving an unedited loadout re-inherits
+#### Scenario: Changing the hunter on an unedited list re-inherits
 
-- **WHEN** a loadout with no stored description is moved from a list whose hunter is "The Turncoat" to one whose hunter is "The Rat"
-- **THEN** the loadout SHALL render The Rat's description
+- **WHEN** a list with no stored description has its `hunterId` changed from "The Turncoat" to "The Rat"
+- **THEN** the list SHALL render The Rat's description
 
-#### Scenario: Moving an edited loadout preserves its text
+#### Scenario: Changing the hunter on an edited list preserves its text
 
-- **WHEN** a loadout with a user-written description is moved between lists
+- **WHEN** a list with a user-written description has its `hunterId` changed
 - **THEN** its description SHALL be unchanged
 
-#### Scenario: A loadout with no hunter to inherit from
+#### Scenario: A list with no hunter to inherit from
 
-- **WHEN** a loadout with no stored description sits in Unassigned, or in a list with no portrait
-- **THEN** no description SHALL be rendered, and the card SHALL remain fully usable
+- **WHEN** a list carries no `hunterId`
+- **THEN** no description SHALL be rendered, and the list SHALL remain fully usable
 
 #### Scenario: A hunter absent from the dataset yields no default
 
-- **WHEN** a loadout with no stored description is filed into a list whose `hunterId` no longer appears in the dataset
-- **THEN** no description SHALL be rendered, and neither the loadout nor the list SHALL fail
+- **WHEN** a list's `hunterId` no longer appears in the dataset
+- **THEN** no description SHALL be rendered, and neither the list nor its loadouts SHALL fail
+
+#### Scenario: The description never appears on a list card
+
+- **WHEN** a list carries a description of any kind
+- **THEN** its card in the selector grid SHALL be unchanged — portrait, name and count only
 
 #### Scenario: Inheritance can be restored after editing
 
-- **WHEN** a user restores an edited loadout to the inherited state
-- **THEN** the stored `description` SHALL be null again, and the loadout SHALL render its list hunter's description as it did before the edit
+- **WHEN** a user restores an edited list to the inherited state
+- **THEN** the stored `description` SHALL be null again, and the list SHALL render its hunter's description as it did before the edit
+
+#### Scenario: An omitted key is not a reset
+
+- **WHEN** a write renames a list without supplying a `description` key
+- **THEN** the stored `description` SHALL be unchanged, and MUST NOT be reset to the inherited state
+
+#### Scenario: An over-long description is rejected
+
+- **WHEN** a description exceeding the server's cap is submitted
+- **THEN** the write SHALL be rejected with a client error and the stored record SHALL be unchanged
+
+### Requirement: Loadouts Carry a Description of Their Own
+
+*(added 2026-08-11 — see #181. The per-build half of the requirement above, separated from it because the two differ in the only way that matters: this one has no hunter to inherit from.)*
+
+Each saved loadout record MAY carry a `description` field on the record **envelope**, sibling to `name`, `listId` and `updatedAt`. The `description` field MUST NOT be placed inside the loadout's `data` payload.
+
+**Nothing is inherited into this field.** A loadout has no hunter of its own, and it SHALL NOT draw a default from the list it is filed into, from that list's hunter, or from its own contents. A loadout with no stored description SHALL render none, and the editor SHALL open on an empty field rather than seeding it with text the user did not write.
+
+It follows that the field has two states rather than three: a non-empty string renders as that text, and absent, null or empty renders nothing. Both null and `""` SHALL be accepted on write and stored as given; neither SHALL be rewritten into the other, since records already carry both and they say the same thing.
+
+Because there is no inherited state, no control to restore one SHALL be offered.
+
+Filing SHALL NOT affect the description. Moving a loadout between lists, into Unassigned, or into a list whose `hunterId` is absent from the dataset SHALL leave its description exactly as it was.
+
+**A rendered description SHALL be bounded in height**, with an affordance to reveal the rest, under the same rule as a list's. It MUST NOT cause its card to overflow at any width, and MUST NOT displace the preview's category structure *(re-scoped from row to card 2026-08-10 — see "Saved Loadouts Render as a Card Grid")*.
+
+On the wire, the same key-presence discipline applies: `description: null` clears the field, `""` stores the empty state, and an omitted key leaves it unchanged. The same distinction SHALL apply to `listId` on the same endpoint, where an explicit null files the loadout into Unassigned and an omitted key leaves its filing untouched. A write supplying neither key SHALL be rejected, so that "move" and "describe" remain independent operations rather than mutually required ones.
+
+Editing a description SHALL persist it under the same ownership rules as every other field on the record. The description SHALL be length-capped on the server with an explicit maximum. Editing a description MUST NOT alter `data`, the format version, `listId`, or the loadout's position in any list.
+
+#### Scenario: A loadout inherits nothing from anywhere
+
+- **WHEN** a loadout with no stored description is filed into a list whose hunter is "The Turncoat"
+- **THEN** the loadout SHALL render no description, and The Turncoat's description SHALL appear only on the list
+
+#### Scenario: A written note persists
+
+- **WHEN** a user writes a description on a loadout
+- **THEN** the typed text SHALL persist on the record and SHALL render on its card
+
+#### Scenario: Moving a loadout preserves its description
+
+- **WHEN** a loadout with a stored description is moved between lists
+- **THEN** its description SHALL be unchanged, and no description SHALL be inherited at either end
+
+#### Scenario: No restore control is offered
+
+- **WHEN** a loadout carries a stored description
+- **THEN** no control returning it to an inherited state SHALL be offered, in any stored state
 
 #### Scenario: An omitted key is not a reset
 
 - **WHEN** a write changes a loadout's `listId` without supplying a `description` key
-- **THEN** the stored `description` SHALL be unchanged, and MUST NOT be reset to the inherited state
+- **THEN** the stored `description` SHALL be unchanged
 
 #### Scenario: A write carrying neither field is rejected
 
@@ -691,10 +750,17 @@ This capability MUST NOT change the loadout wire format. **Nothing in this spec*
 
 `description` is subject to this requirement for exactly the reason `listId` is: it is a property of the user's filing, not of the loadout itself. A recipient opening a share URL receives the build, not the sender's notes about it *(clause added 2026-08-10)*.
 
+**Both descriptions are filing state** *(amended 2026-08-11, when the single description requirement was split in two)*. Since the split there are two of them — the list's own description and the saved loadout's note — and neither reaches an encoded payload, a share URL, or a local draft. The reason is the same for both and is the reason it was for `listId`: a list description belongs to the shelf rather than to anything on it, and a loadout note is the filer's annotation rather than a property of the build. Neither is something a recipient asked for. Where this requirement says `description` unqualified, it binds **both** fields.
+
 #### Scenario: Share URLs are unaffected
 
 - **WHEN** a user shares a loadout that is filed into a list
 - **THEN** the resulting share URL SHALL be byte-identical to the URL the same loadout would produce with no `listId`, at the same format version
+
+#### Scenario: Neither description reaches a share URL
+
+- **WHEN** a user shares a loadout that carries its own note and is filed into a list that itself has a description
+- **THEN** the share URL SHALL be byte-identical to the one the same loadout produces with no description anywhere, and neither description SHALL appear in the encoded payload or the local draft
 
 #### Scenario: Loading a shared loadout produces no list assignment
 
@@ -780,13 +846,15 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 |--------|------|------|-------------|
 | GET | /api/loadout-lists | Token-scoped | List the caller's lists |
 | POST | /api/loadout-lists | Token-scoped | Create a list |
-| PATCH | /api/loadout-lists/:id | Token-scoped | Rename a list or change its portrait |
+| PATCH | /api/loadout-lists/:id | Token-scoped | Rename a list, change its portrait or accent, or edit its `description` |
 | DELETE | /api/loadout-lists/:id | Token-scoped | Retire a list |
 | POST | /api/loadouts | Token-scoped | Save a loadout, optionally with a `listId` and a `description` |
 | PATCH | /api/loadouts/:id | Token-scoped | Move a loadout between lists, and/or edit its `description` |
 | DELETE | /api/loadouts/:id | Token-scoped | Delete a loadout |
 
-*(added 2026-08-10)* `POST` SHALL accept an optional `description`, so that saving a loadout with one written up front is a single write rather than a save followed by a patch. `PATCH /api/loadouts/:id` currently requires `listId` in the body; it SHALL accept `listId` and `description` independently. The length cap and the null-versus-omitted semantics defined in "Loadouts Carry an Editable Description" apply identically on both verbs.
+*(added 2026-08-10)* `POST /api/loadouts` SHALL accept an optional `description`, so that saving a loadout with one written up front is a single write rather than a save followed by a patch. `PATCH /api/loadouts/:id` SHALL accept `listId` and `description` independently rather than requiring `listId`. The length cap and the null-versus-omitted semantics apply identically on both verbs.
+
+*(added 2026-08-11)* `POST /api/loadout-lists` and `PATCH /api/loadout-lists/:id` SHALL accept an optional `description` under the same cap and the same key-presence rules, as defined in "Lists Carry an Editable Description". On the list endpoints an explicit `description: null` means *inherit*; on the loadout endpoints it means *clear*. The two are different fields on different records, and the endpoints SHALL NOT be made to agree on a single meaning.
 
 **"Token-scoped" is the honest designation and is REQUIRED on every endpoint in this capability.** No endpoint in this capability SHALL be public. The one public endpoint in the application — the liveness probe at `/healthz` — is outside this capability's scope and is public because orchestrator health checks require unauthenticated access.
 
@@ -810,7 +878,7 @@ Responses SHALL set `X-Content-Type-Options: nosniff`. The application SHALL set
 
 The JSON body parser SHALL enforce an explicit maximum request body size rather than relying on an implicit default. List names SHALL be length-capped on the server, and `hunterId` SHALL be length-capped and validated against the known library.
 
-Loadout descriptions SHALL be length-capped on the server with an explicit maximum, declared as a named constant beside the existing name cap *(added 2026-08-10)*. The cap SHALL be **at least 1000 characters**, which leaves room above the longest description the dataset currently carries (404 characters, "The Night Seer") — the text a user most often starts from when they edit, so a cap that truncated it would reject the default the app itself offered.
+List and loadout descriptions SHALL be length-capped on the server with an explicit maximum, declared as a named constant beside the existing name cap *(added 2026-08-10; extended to lists 2026-08-11)*. One constant SHALL govern both records: they carry the same kind of text under the same wire discipline, and two constants would be two places for the limit to drift. The cap SHALL be **at least 1000 characters**, which leaves room above the longest description the dataset currently carries (404 characters, "The Night Seer"). That floor is justified by the **list** description specifically — it is the only one seeded from the dataset, so it is the only one a user starts editing from the hunter's own text, and a cap that truncated it would reject the default the app itself offered.
 
 The cap governs **stored** text only. A description resolved live from the dataset is never written to the record and is therefore not subject to it, so a future scrape producing longer prose cannot retroactively invalidate stored records or fail a read.
 
@@ -870,9 +938,13 @@ All interactive elements MUST be operable via keyboard: logical tab order follow
 
 Filing a loadout into a list MUST be achievable without a pointer. The initial move affordance SHALL be an explicit control on the loadout card — a menu or select — rather than drag-and-drop *(re-scoped from row to card 2026-08-10)*. Drag-and-drop is deferred as a future enhancement; if it is later added, the explicit keyboard-operable control MUST remain rather than being replaced by it.
 
-Editing a loadout's description MUST be achievable without a pointer *(added 2026-08-10)*. The edit control MUST have an accessible name identifying both the action and the loadout, MUST be reachable in the card's tab order, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
+Editing a description MUST be achievable without a pointer *(added 2026-08-10; applied to both descriptions 2026-08-11)*. The edit control MUST have an accessible name identifying both the action and its subject — the list or the loadout — MUST be reachable in the tab order of the thing it describes, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
 
-An inherited description MUST NOT be announced as though the user wrote it. Where the distinction is surfaced visually, it MUST also be available non-visually.
+Because a list's description sits in the expanded list header, it MUST fall in that header's tab order alongside rename and accent, rather than after the loadout cards below it *(added 2026-08-11)*.
+
+An inherited description MUST NOT be announced as though the user wrote it. It SHALL also be marked visually — rendered in italic and in a de-emphasised tone, where a written description is neither *(settled 2026-08-11; the spec previously left the visual half open)*. Because that marking is presentational, it MUST NOT be the only carrier of the distinction: the non-visual announcement remains REQUIRED rather than an alternative to it, and both MUST be driven from the same resolved state so they cannot disagree.
+
+The de-emphasised tone SHALL meet the WCAG 2.1 AA text-contrast ratio this spec already mandates, on every surface the description renders on. "Greyed" licenses lower emphasis, not lower contrast.
 
 ### Focus Management
 

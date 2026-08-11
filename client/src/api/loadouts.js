@@ -65,12 +65,12 @@ export function upsertLoadout(name, data, listId) {
   }).then(asJson);
 }
 
-// Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description"
+// Governing: ADR-0006 (list filing model), SPEC-0003 REQ "Loadouts Carry a Description of
+// Their Own"
 //
 // PATCH speaks in KEYS, not in values. The server reads `"listId" in body` and
 // `"description" in body`, so a key that is present and null is an instruction ("file into
-// Unassigned", "go back to inheriting") while an absent key means "leave that field alone".
+// Unassigned", "clear the note") while an absent key means "leave that field alone".
 //
 // That makes `undefined` the one value that must never be handed to JSON.stringify here: it
 // deletes its own key on the way out, turning a reset into a body the server rejects for
@@ -101,11 +101,12 @@ export function moveLoadout(id, listId) {
 }
 
 /**
- * Set a loadout's description.
+ * Set a loadout's description — the user's own note about the build.
  *
- * `null` restores the inherited default — the description of the hunter on the list the
- * loadout is filed into, resolved at render time and never written here. `""` stores the
- * deliberately-blank state, which renders as nothing and does NOT re-inherit.
+ * Nothing is inherited into this field (that is the LIST's description, which draws on its
+ * hunter), so `null` and `""` both simply clear it. The wrapper still refuses `undefined`
+ * outright: it would vanish in JSON.stringify and turn a clear into a body the server rejects
+ * for carrying no instruction at all.
  */
 export function describeLoadout(id, description) {
   if (description !== null && typeof description !== "string") {
@@ -156,6 +157,30 @@ export function updateList(id, patch) {
     headers: headers(),
     body: JSON.stringify(patch),
   }).then(asJson);
+}
+
+/**
+ * Set a list's description.
+ *
+ * Governing: ADR-0007 (dataset carries descriptions), SPEC-0003 REQ "Lists Carry an Editable
+ * Description".
+ *
+ * THIS is the description with an inherited default. `null` restores it — the list hunter's
+ * text, resolved at render time and never written here, which is why restoring is a write of
+ * null and not a write of the hunter's prose. `""` stores the deliberately-blank state, which
+ * renders as nothing and does NOT re-inherit.
+ *
+ * Its own function rather than `updateList(id, { description })` at each call site, for the
+ * reason the loadout's has one: `undefined` deletes its own key inside JSON.stringify, so a
+ * restore built from a variable that happened to be undefined would silently become a request
+ * that changes nothing at all. Refused here, where the value is still visible.
+ */
+export function describeList(id, description) {
+  if (description !== null && typeof description !== "string") {
+    throw new TypeError("description must be a string or null");
+  }
+  // Exactly one key: describing a list must not restate its name, hunter or accent.
+  return updateList(id, { description });
 }
 
 /** Retire a list. The server drops its loadouts into Unassigned; it never deletes them. */

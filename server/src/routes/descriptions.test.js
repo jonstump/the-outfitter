@@ -2,20 +2,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import { DESCRIPTION_MAX_CHARS, loadoutsRouter } from "./loadouts.js";
-import { loadoutListsRouter } from "./loadoutLists.js";
+import { ACCENT_PALETTE, loadoutListsRouter } from "./loadoutLists.js";
 import { db } from "../db.js";
+import { randomUUID } from "node:crypto";
 
 // Governing: ADR-0006 (list filing model), ADR-0007 (dataset carries descriptions),
-// SPEC-0003 REQ "Loadouts Carry an Editable Description", REQ "The Saved-Loadout Wire Format
-// Is Unchanged"
+// SPEC-0003 REQ "Lists Carry an Editable Description", REQ "Loadouts Carry a Description of
+// Their Own", REQ "The Saved-Loadout Wire Format Is Unchanged"
 //
-// What every test below is really guarding is ONE property: `description` has three states —
-// null/absent (never edited), "" (deliberately blank) and a non-empty string (the user's
-// text) — and none of the code between the request body and the data file may collapse them
-// into two. design.md's risk register names the mechanism: a truthy check. So the suite is
-// arranged so that `if (description)`, `description || fallback` or `!description` anywhere
-// in the write path turns at least one of these red — see "stores an empty string" and
-// "an omitted key is not a reset" in particular.
+// TWO records carry a description, and the suites below are separate because the records mean
+// different things by the field.
+//
+// A LIST's `description` has three states — null/absent (never edited, inherit the hunter's
+// text), "" (deliberately blank) and a non-empty string (the user's own) — and none of the
+// code between the request body and the data file may collapse them into two. design.md's
+// risk register names the mechanism: a truthy check. So the list suite is arranged so that
+// `if (description)`, `description || fallback` or `!description` anywhere in that write path
+// turns at least one test red — see "stores an empty string" and "an omitted key is not a
+// reset" in particular.
+//
+// A LOADOUT's `description` inherits nothing (#181): it is the user's own note about the
+// build, so null and "" say the same thing and only the WIRE discipline is load-bearing —
+// an omitted key must still leave the field alone, and the cap still applies. The loadout
+// suite keeps the null/"" cases anyway, because records store both and a read must survive
+// whichever it meets.
 
 function makeApp() {
   const app = express();
@@ -63,11 +73,10 @@ describe("loadout descriptions", () => {
     const saved = await save(app, { name: "__test__d-none", data: validData });
 
     expect(saved.status).toBe(201);
-    // The API shape is uniform — every loadout carries the key, and "never edited" is null…
+    // The API shape is uniform — every loadout carries the key, and "no note" is null…
     expect(saved.body).toHaveProperty("description");
     expect(saved.body.description).toBeNull();
-    // …but nothing is WRITTEN for a loadout that has never been described. The inherited text
-    // is resolved by the client at render time and must never be copied into the record.
+    // …but nothing is WRITTEN for a loadout nobody has written a note about.
     expect(await stored(saved.body.id)).not.toHaveProperty("description");
   });
 
@@ -86,10 +95,12 @@ describe("loadout descriptions", () => {
     expect(Object.keys(rec.data)).not.toContain("description");
   });
 
-  it("stores an empty string as an empty string — deliberately blank is not 'never edited'", async () => {
-    // THE test. Every truthy check in the write path — `if (description)`,
-    // `description || null`, `!description` — turns "" into the inherit state here, which is
-    // what makes a description impossible to empty.
+  it("stores an empty string as an empty string, and a read survives it", async () => {
+    // A loadout's "" and null both mean "no note", so nothing here is load-bearing on the
+    // DISTINCTION — what is load-bearing is that a write of "" is stored and read back
+    // verbatim rather than being normalised on the way past. Records in the data file carry
+    // both shapes, and neither may make a read fail. (The distinction that must survive is a
+    // list's; it is asserted in the list suite below.)
     const app = makeApp();
     const saved = await save(app, { name: "__test__d-blank", data: validData, description: "words" });
 
@@ -103,19 +114,20 @@ describe("loadout descriptions", () => {
     expect(listed.body.find((l) => l.id === saved.body.id).description).toBe("");
   });
 
-  it("resets to the inherited state on an explicit null, storing null and not the hunter's text", async () => {
+  it("clears the note on an explicit null", async () => {
     const app = makeApp();
     const saved = await save(app, { name: "__test__d-restore", data: validData, description: "mine" });
 
-    const restored = await patch(app, saved.body.id, { description: null });
-    expect(restored.status).toBe(200);
-    expect(restored.body.description).toBeNull();
+    const cleared = await patch(app, saved.body.id, { description: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.description).toBeNull();
     expect((await stored(saved.body.id)).description).toBeNull();
   });
 
-  it("distinguishes null from empty string end to end", async () => {
-    // The two states side by side, so a change that merges them cannot pass by satisfying
-    // each of the previous two tests separately.
+  it("accepts both null and empty string, storing each as written", async () => {
+    // Neither is rejected and neither is rewritten into the other. A loadout means the same
+    // thing by both — no note — and normalising here would rewrite records to say that same
+    // thing a different way, which is a migration with nothing to gain.
     const app = makeApp();
     const blank = await save(app, { name: "__test__d-x-blank", data: validData, description: "" });
     const inherit = await save(app, { name: "__test__d-x-inherit", data: validData, description: null });
@@ -137,14 +149,15 @@ describe("loadout descriptions", () => {
     const moved = await patch(app, saved.body.id, { listId: list.body.id });
     expect(moved.status).toBe(200);
     expect(moved.body.listId).toBe(list.body.id);
-    // Not reset to the inherited state. A move changes filing and nothing else.
+    // A move changes filing and nothing else. This is the property #181 made LOAD-BEARING for
+    // loadouts: a note is now the only description a loadout has, so a move that disturbed it
+    // would lose the user's words outright rather than swapping one inherited default for
+    // another.
     expect(moved.body.description).toBe("mine");
     expect((await stored(saved.body.id)).description).toBe("mine");
   });
 
-  it("leaves a deliberately-blank description blank when a move omits the key", async () => {
-    // The same rule for the state most easily lost: a move must not turn "" back into null,
-    // which would make the hunter's lore reappear on a loadout the user emptied on purpose.
+  it("leaves an empty description empty when a move omits the key", async () => {
     const app = makeApp();
     const list = await mkList(app, "__test__d-dest2");
     const saved = await save(app, { name: "__test__d-blank-mover", data: validData, description: "" });
@@ -212,9 +225,11 @@ describe("loadout descriptions", () => {
 
   it("caps stored descriptions at a named constant of at least 1000 characters", async () => {
     // SPEC-0003 Security Requirements: at least 1000, so the roster's longest description
-    // (404 chars, "The Night Seer") — the text a user most often starts from when they edit —
-    // fits with room to spare. Asserted against the exported constant AND against the
-    // requirement's own floor, so raising the constant cannot quietly lower the guarantee.
+    // (404 chars, "The Night Seer") fits with room to spare. That floor is justified by the
+    // LIST description — the only one seeded from the dataset, and so the only one a user
+    // starts editing from the hunter's own text — and the same constant governs both records.
+    // Asserted against the exported constant AND against the requirement's own floor, so
+    // raising the constant cannot quietly lower the guarantee.
     expect(DESCRIPTION_MAX_CHARS).toBeGreaterThanOrEqual(1000);
 
     const app = makeApp();
@@ -362,7 +377,7 @@ describe("loadout descriptions", () => {
     expect(JSON.stringify(await stored(bs.body.id))).toBe(before);
   });
 
-  it("refuses to restore another token's loadout to the inherited state", async () => {
+  it("refuses to clear another token's loadout note", async () => {
     // The destructive shape of the same hole: `description: null` throws away prose the
     // attacker never had to read.
     const app = makeApp();
@@ -416,8 +431,8 @@ describe("loadout descriptions", () => {
 
       const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
       expect(logged).not.toContain("SENTINEL-PROSE");
-      // …but the write IS logged, and says which of the three states it landed in. An
-      // implementation that satisfied the line above by logging nothing at all fails here.
+      // …but the write IS logged, and says which state it landed in. An implementation that
+      // satisfied the line above by logging nothing at all fails here.
       expect(logged).toContain("loadout updated");
       expect(logged).toContain("chars");
     } finally {
@@ -425,7 +440,7 @@ describe("loadout descriptions", () => {
     }
   });
 
-  it("logs a restore as the state it is, still without any text", async () => {
+  it("logs a clear as the state it is, still without any text", async () => {
     const app = makeApp();
     const saved = await save(app, { name: "__test__d-log2", data: validData, description: "SENTINEL-PROSE" });
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -433,7 +448,7 @@ describe("loadout descriptions", () => {
       await patch(app, saved.body.id, { description: null });
       const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
       expect(logged).not.toContain("SENTINEL-PROSE");
-      expect(logged).toContain("inherited");
+      expect(logged).toContain("cleared");
     } finally {
       info.mockRestore();
     }
@@ -472,5 +487,327 @@ describe("loadout descriptions", () => {
     const res = await save(app, { name: `__test__${"n".repeat(200)}`, data: validData });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/at most 200 characters/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// The LIST description — the one with an inherited default
+//
+// Governing: ADR-0007 (dataset carries descriptions), SPEC-0003 REQ "Lists Carry an Editable
+// Description".
+//
+// This is where the three states are load-bearing, and where a truthy check does real damage:
+// merge null with "" and a list's description becomes impossible to empty, because clearing it
+// hands the user back the hunter's lore they just deleted.
+//
+// The server never resolves the default — the client does, live, at render time (that is the
+// point of storing null rather than a copy). So what these tests can check is the half the
+// server owns: that the three states go in and come back out distinct, that an omitted key is
+// not a write, and that nothing about a list except the field asked for ever moves.
+// ---------------------------------------------------------------------------------------
+
+// A FRESH owner token per test, rather than the file-level TOKEN_A.
+//
+// Writes are rate-limited per token at 60/minute (lib/ownership.js), and both suites in this
+// file run inside one window. Sharing a token across two suites of write-heavy tests puts the
+// later ones over the budget, and a 429 mid-suite reads as a description bug rather than as
+// the fixture problem it is. The per-IP floor is 4x higher and comfortably clear of the whole
+// file. A new token also guarantees each test an empty collection of its own to list.
+let owner;
+const mkListAs = (app, token, body) =>
+  request(app).post("/api/loadout-lists").set("x-loadout-token", token).send(body);
+const mkListWith = (app, body) => mkListAs(app, owner, body);
+const patchListAs = (app, token, id, body) =>
+  request(app).patch(`/api/loadout-lists/${id}`).set("x-loadout-token", token).send(body);
+const patchList = (app, id, body) => patchListAs(app, owner, id, body);
+const storedList = async (id) => {
+  await db.read();
+  return db.data.loadoutLists.find((l) => l.id === id);
+};
+
+describe("list descriptions", () => {
+  beforeEach(async () => {
+    owner = randomUUID();
+    await db.read();
+  });
+  afterEach(async () => {
+    await db.read();
+    db.data.loadoutLists = db.data.loadoutLists.filter((l) => !l.name.startsWith("__test__"));
+    await db.write();
+  });
+
+  // --- The three states, in storage and on the wire ---------------------------------
+
+  it("stores no description field at all when none is supplied", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-none", hunterId: "the-turncoat" });
+
+    expect(list.status).toBe(201);
+    // Uniform API shape — every list carries the key, and "never edited" is null…
+    expect(list.body).toHaveProperty("description");
+    expect(list.body.description).toBeNull();
+    // …but NOTHING is written. The hunter's text is resolved by the client at render time and
+    // must never be copied into the record, which is what makes a re-scrape reach every
+    // unedited list without touching the data file.
+    expect(await storedList(list.body.id)).not.toHaveProperty("description");
+  });
+
+  it("accepts a description on POST", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-post", description: "my own words" });
+
+    expect(list.status).toBe(201);
+    expect(list.body.description).toBe("my own words");
+    expect((await storedList(list.body.id)).description).toBe("my own words");
+  });
+
+  it("stores an empty string as an empty string — deliberately blank is not 'never edited'", async () => {
+    // THE test. Every truthy check in the write path — `if (description)`,
+    // `description || null`, `!description` — turns "" into the inherit state here, which is
+    // what makes a list's description impossible to empty: clear it, and the lore is back.
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-blank", hunterId: "the-turncoat" });
+
+    const cleared = await patchList(app, list.body.id, { description: "" });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.description).toBe("");
+    expect(await storedList(list.body.id)).toHaveProperty("description", "");
+
+    // And it survives a read: "" must not be coalesced to null on the way back out either.
+    const listed = await request(app).get("/api/loadout-lists").set("x-loadout-token", owner);
+    expect(listed.body.find((l) => l.id === list.body.id).description).toBe("");
+  });
+
+  it("restores inheritance on an explicit null, storing null and not the hunter's text", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, {
+      name: "__test__l-restore", hunterId: "the-turncoat", description: "mine",
+    });
+
+    const restored = await patchList(app, list.body.id, { description: null });
+    expect(restored.status).toBe(200);
+    expect(restored.body.description).toBeNull();
+    const rec = await storedList(list.body.id);
+    expect(rec.description).toBeNull();
+    // The whole point of null: no prose was written in its place. A "restore" that copied the
+    // hunter's text in would look identical to the user today and would silently freeze the
+    // list against every future re-scrape.
+    expect(JSON.stringify(rec)).not.toMatch(/[Ss]ilent|lore|hunter's/);
+  });
+
+  it("distinguishes null from empty string end to end", async () => {
+    // The two states side by side, so a change that merges them cannot pass by satisfying
+    // each of the previous two tests separately.
+    const app = makeApp();
+    const blank = await mkListWith(app, { name: "__test__l-x-blank", description: "" });
+    const inherit = await mkListWith(app, { name: "__test__l-x-inherit", description: null });
+
+    expect(blank.body.description).toBe("");
+    expect(inherit.body.description).toBeNull();
+    expect(blank.body.description).not.toBe(inherit.body.description);
+    expect((await storedList(blank.body.id)).description).toBe("");
+    expect((await storedList(inherit.body.id)).description).toBeNull();
+  });
+
+  it("reads a record written before the field existed as 'never edited'", async () => {
+    // Every list in the data file is in exactly this shape today, so this is the migration
+    // path rather than a hypothetical. A strict `=== null` anywhere on the read would answer
+    // "the user wrote nothing on purpose" for all of them and deny inheritance to the entire
+    // collection — design.md calls this the same collapse "arriving through a comparison
+    // operator rather than through a truthy check".
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-legacy", hunterId: "the-turncoat" });
+    await db.read();
+    const rec = db.data.loadoutLists.find((l) => l.id === list.body.id);
+    delete rec.description; // belt and braces: the POST above already wrote no key
+    await db.write();
+
+    const listed = await request(app).get("/api/loadout-lists").set("x-loadout-token", owner);
+    expect(listed.body.find((l) => l.id === list.body.id).description).toBeNull();
+  });
+
+  // --- Omitted is a third answer ------------------------------------------------------
+
+  it("leaves the description untouched when a rename omits the key", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-rename", description: "kept" });
+
+    const renamed = await patchList(app, list.body.id, { name: "__test__l-renamed" });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.name).toBe("__test__l-renamed");
+    expect(renamed.body.description).toBe("kept");
+    expect((await storedList(list.body.id)).description).toBe("kept");
+  });
+
+  it("leaves a deliberately-blank description blank when another field is written", async () => {
+    // The state most easily lost: an accent change must not turn "" back into null, which
+    // would make the hunter's lore reappear on a list the user emptied on purpose.
+    const app = makeApp();
+    const list = await mkListWith(app, {
+      name: "__test__l-blank-keep", hunterId: "the-turncoat", description: "",
+    });
+
+    const accented = await patchList(app, list.body.id, { accent: ACCENT_PALETTE[2] });
+    expect(accented.body.description).toBe("");
+    expect((await storedList(list.body.id)).description).toBe("");
+  });
+
+  it("changes the hunter without disturbing an edited description", async () => {
+    // SPEC-0003: moving an EDITED list to another hunter preserves the user's text. Only the
+    // unedited case re-inherits, and it re-inherits by resolving null at render time rather
+    // than by anything happening here.
+    const app = makeApp();
+    const list = await mkListWith(app, {
+      name: "__test__l-rehunt", hunterId: "the-turncoat", description: "mine, and staying",
+    });
+
+    const rehunted = await patchList(app, list.body.id, { hunterId: "the-rat" });
+    expect(rehunted.body.hunterId).toBe("the-rat");
+    expect(rehunted.body.description).toBe("mine, and staying");
+  });
+
+  it("keeps the two meanings of null on this endpoint apart", async () => {
+    // `hunterId: null` is an absence — the list depicts nobody. `description: null` is a
+    // deferral — inherit from whoever it depicts. Same literal, opposite directions, one
+    // request. A handler that treated null uniformly would empty the wrong field.
+    const app = makeApp();
+    const list = await mkListWith(app, {
+      name: "__test__l-two-nulls", hunterId: "the-turncoat", description: "mine",
+    });
+
+    const both = await patchList(app, list.body.id, { hunterId: null, description: null });
+    expect(both.status).toBe(200);
+    expect(both.body.hunterId).toBeNull();
+    expect(both.body.description).toBeNull();
+
+    // …and each alone leaves the other alone.
+    const one = await mkListWith(app, {
+      name: "__test__l-one-null", hunterId: "the-turncoat", description: "mine",
+    });
+    const dropped = await patchList(app, one.body.id, { hunterId: null });
+    expect(dropped.body.description).toBe("mine");
+    const restored = await patchList(app, one.body.id, { description: null });
+    expect(restored.body.hunterId).toBeNull();
+    expect(restored.body.description).toBeNull();
+  });
+
+  it("changes only what it is asked to, and nothing else on the record", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-narrow", hunterId: "the-turncoat" });
+    const before = { ...list.body };
+
+    const described = await patchList(app, list.body.id, { description: "annotation" });
+    expect(described.body.id).toBe(before.id);
+    expect(described.body.name).toBe(before.name);
+    expect(described.body.hunterId).toBe(before.hunterId);
+    expect(described.body.accent).toBe(before.accent);
+    expect(described.body.createdAt).toBe(before.createdAt);
+  });
+
+  // --- The cap, shared with the loadout route -------------------------------------------
+
+  it("caps a list description at the same named constant", async () => {
+    const app = makeApp();
+    const atCap = await mkListWith(app, {
+      name: "__test__l-at-cap", description: "x".repeat(DESCRIPTION_MAX_CHARS),
+    });
+    expect(atCap.status).toBe(201);
+    expect(atCap.body.description).toHaveLength(DESCRIPTION_MAX_CHARS);
+
+    const over = await mkListWith(app, {
+      name: "__test__l-over-cap", description: "x".repeat(DESCRIPTION_MAX_CHARS + 1),
+    });
+    expect(over.status).toBe(400);
+    expect(over.body.error).toMatch(new RegExp(`at most ${DESCRIPTION_MAX_CHARS} characters`));
+  });
+
+  it("rejects an over-long description on PATCH, leaving the record unchanged", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-patch-cap", description: "short" });
+
+    const res = await patchList(app, list.body.id, { description: "x".repeat(DESCRIPTION_MAX_CHARS + 1) });
+    expect(res.status).toBe(400);
+    expect((await storedList(list.body.id)).description).toBe("short");
+  });
+
+  it("rejects a description that is neither a string nor null", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-type" });
+
+    for (const bad of [42, true, { text: "no" }, ["no"]]) {
+      const res = await patchList(app, list.body.id, { description: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/string or null/);
+    }
+    expect(await storedList(list.body.id)).not.toHaveProperty("description");
+  });
+
+  it("validates before applying, so a rejected description leaves no half-written rename", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-atomic" });
+
+    const res = await patchList(app, list.body.id, {
+      name: "__test__l-atomic-renamed",
+      description: "x".repeat(DESCRIPTION_MAX_CHARS + 1),
+    });
+    expect(res.status).toBe(400);
+    expect((await storedList(list.body.id)).name).toBe("__test__l-atomic");
+  });
+
+  // --- Ownership and side channels --------------------------------------------------
+
+  it("refuses to describe another token's list, leaving the record byte-identical", async () => {
+    const app = makeApp();
+    const stranger = randomUUID();
+    const bs = await mkListAs(app, stranger, { name: "__test__l-owned-by-b", description: "B's own words" });
+    expect(bs.status).toBe(201);
+    const before = JSON.stringify(await storedList(bs.body.id));
+
+    const res = await patchListAs(app, owner, bs.body.id, { description: "A was here" });
+
+    // 404, not 403 — the same answer whether it does not exist or belongs to someone else.
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain("B's own words");
+    expect(JSON.stringify(await storedList(bs.body.id))).toBe(before);
+  });
+
+  it("never echoes the rejected description back, and never logs the text", async () => {
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-echo" });
+    const marker = "SENTINEL-PROSE";
+
+    const rejected = await patchList(app, list.body.id, {
+      description: `${marker}${"y".repeat(DESCRIPTION_MAX_CHARS)}`,
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.text).not.toContain(marker);
+
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await patchList(app, list.body.id, { description: `${marker} the user wrote` });
+      const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
+      expect(logged).not.toContain(marker);
+      // …but the write IS logged, and says which state it landed in. Logging nothing at all
+      // would satisfy the line above and fail here.
+      expect(logged).toContain("loadout list described");
+      expect(logged).toContain("chars");
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("logs a restore as inherited, distinguishing it from a clear", async () => {
+    // The two nulls again, this time in the log: "inherited" is what a list's null means, and
+    // a log that said "cleared" would describe the loadout route's null instead.
+    const app = makeApp();
+    const list = await mkListWith(app, { name: "__test__l-log", description: "mine" });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await patchList(app, list.body.id, { description: null });
+      const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
+      expect(logged).toContain("inherited");
+    } finally {
+      info.mockRestore();
+    }
   });
 });
