@@ -142,6 +142,31 @@ just the same — run one instance, keep `server/data` on durable disk, and set
 `PORT` and `NODE_ENV` yourself. The production server exposes `GET /healthz`
 for orchestrator liveness checks.
 
+### Reverse proxies and `TRUST_PROXY`
+
+Set `TRUST_PROXY` **only when a reverse proxy is actually in front of the
+process**, and leave it unset otherwise. It decides which peers the server
+believes `X-Forwarded-*` from, which in turn decides `req.protocol`, the
+X-Forwarded-Host lookup behind the same-origin check, and `req.ip` — the key
+both rate limiters use. On a directly-exposed deploy, believing the header lets
+any client put itself in a fresh rate-limit bucket on every request simply by
+varying it.
+
+| Topology | Setting |
+|---|---|
+| `docker compose up`, or the `Procfile` VM with nothing in front | unset (the default) |
+| A proxy on the same host (nginx, Caddy) | `TRUST_PROXY=loopback` |
+| A proxy elsewhere on your network | `TRUST_PROXY=10.0.0.0/8` — its address or CIDR |
+| A managed platform that always terminates for you (Render, Fly) | `TRUST_PROXY=1` |
+
+Prefer naming the proxy over a hop count where you can: an address, CIDR or
+named range (`loopback`, `uniquelocal`) compiles to a check on the peer that
+connected, so a direct client is refused whatever it claims. A bare number is a
+hop count, which Express applies without looking at who connected — correct
+behind a platform that always terminates in front of you, meaningless if the
+process is also reachable directly. An unparseable value stops the server at
+boot rather than downgrading to trusting everything or nothing.
+
 ### Separate origins (optional)
 
 To serve the client from a CDN/static host and the API elsewhere, build the

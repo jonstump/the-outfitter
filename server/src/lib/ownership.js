@@ -72,7 +72,10 @@ export class UnknownReferenceError extends OwnershipError {}
 //     trip the IP floor; anonymous (no-token) requests key by IP.
 // ---------------------------------------------------------------------------
 
-const WRITE_PER_IP = 240; // generous hard floor (4x the per-token budget)
+// Exported so the trust-proxy regression test in index.test.js can exhaust the IP budget
+// exactly rather than restating the number — the assertion is "these requests shared a
+// bucket", and a hardcoded copy would start testing a stale constant the day this changes.
+export const WRITE_PER_IP = 240; // generous hard floor (4x the per-token budget)
 const WRITE_PER_TOKEN = 60;
 
 function ipKey(req) {
