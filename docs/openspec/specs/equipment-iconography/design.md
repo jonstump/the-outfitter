@@ -50,11 +50,11 @@ The previous revision of this spec (implementing ADR-0001) planned to extend tha
 
 **Rationale**: Real photos and abstract SVG silhouettes have very different natural aspect ratios and framing; without a shared container treatment, the UI would look inconsistent depending on whether a given item happens to be scraped yet. A shared container makes the transition from "mostly fallback icons" to "mostly real photos" (as scraping coverage grows over time) visually seamless rather than jarring.
 
-### Attribution as a fixed footer line
+### Attribution as fixed footer copy
 
-**Choice**: Add the required attribution text verbatim to the app's existing footer, alongside (not replacing) the existing "fan-made planner... Not affiliated with Crytek" disclaimer.
+**Choice**: Carry the attribution in the app's existing footer, alongside (not replacing) the existing "fan-made planner..." rules disclaimer: a fan-page statement linking Hunt: Showdown and disclaiming affiliation, then an ownership statement naming Crytek GmbH as rights holder and huntshowdown.wiki.gg as the source of the images and data, with both linked.
 
-**Rationale**: Simple, always-visible, no interaction required — consistent with how the app already surfaces its fan-made-tool disclaimer.
+**Rationale**: Simple, always-visible, no interaction required — consistent with how the app already surfaces its fan-made-tool disclaimer. The requirement fixes *what the footer must say and link* rather than one verbatim sentence, so the copy can be reworded without a spec change as long as the named parties, the disclaimer of ownership, and the links survive. Linking Crytek and the wiki rather than only naming them makes the attribution checkable by a reader instead of just present.
 
 ## Architecture
 
