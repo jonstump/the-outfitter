@@ -88,7 +88,11 @@ A write-through run SHALL print a per-field diff of every hand-authored value it
 
 `scrape-stats.mjs` SHALL be the only script that ever writes `catalog.js`. `scrape-images.mjs` SHALL remain write-only to `client/public/images/`.
 
-Parsed numerics SHALL be range-asserted before they are written — cost greater than zero, weapon size within 1–3, trait UP within the game's range. A value failing its assertion SHALL fail that item and be recorded, rather than being written.
+Parsed numerics SHALL be range-asserted before they are written — cost greater than zero, weapon size within **1–5**, trait UP within the game's range. A value failing its assertion SHALL fail that field and be recorded, rather than being written. Failing one field MUST NOT discard the item's other fields.
+
+*(Corrected 2026-08-11. This requirement first said "size within 1–3", inherited from ADR-0005's confirmation criteria, which carries the same error. Measured against both the catalog and the wiki, weapon slot sizes run **1 to 5** — 17 of 38 weapons are size 4 or 5, and 5 is the entire weapon budget `calc.js`'s `capMax` grants. Implementing the stated range literally would have failed 45% of the arsenal on a correct parse, which is the opposite of what a range assertion is for.)*
+
+Parsing SHALL be strict: a value that is not a whole number SHALL be refused rather than coerced. Stripping non-digits and keeping the remainder is how a wrong-but-well-formed number gets written — `"1.5"` becomes `15`, and a currency suffix becomes part of the value on one page and not another.
 
 #### Scenario: The default run does not touch the catalog
 

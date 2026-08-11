@@ -29,6 +29,20 @@
 // scrape script (issue #7) can add/replace image files under client/public/images/ without any
 // catalog.js change being required to pick them up.
 
+// WIRE-FORMAT GATE — read before editing any pool below.
+//
+// A saved ammo selection persists as a BARE INDEX into AMMO[ammoClass] (loadoutCodec.js writes it,
+// calc.js reads it back). So inserting, removing, or reordering a variant inside a pool silently
+// re-points every saved selection in that class: a loadout that stored "index 2" keeps storing 2
+// and starts meaning a different round. Nothing errors, and the cost line just changes.
+//
+// Any such edit therefore needs a FORMAT_VERSION bump and a saved-selection migration, on the same
+// terms already required for changing a weapon's `ammoClass`. Appending to the END of a pool is the
+// one safe edit, because it cannot move an existing index.
+//
+// This table is also NEVER written by a scrape (SPEC-0007 REQ "Fields the Scraper Must Not Derive"):
+// the wiki has no per-pool source page — /wiki/Ammo is prose, and prices are stated per weapon
+// inside each weapon's own progression table, not per class.
 export const AMMO = {
   compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
   medium: [["FMJ", 22], ["Spitzer", 60], ["Dumdum", 28], ["Incendiary", 24], ["Poison", 21]],
