@@ -5,7 +5,9 @@ import {
   callerToken,
   ipLimiter,
   liveRecords,
+  ownedBy,
   publicRecord,
+  readLimiter,
   RecordNotFoundError,
   RecordNotOwnedError,
   tokenLimiter,
@@ -32,13 +34,38 @@ const isNonnegInt = (n) => Number.isInteger(n) && n >= 0;
 const isId = (s) => typeof s === "string" && s.length > 0 && s.length <= 100;
 const isRef = (v, bound) => (isNonnegInt(v) && v < bound) || isId(v);
 
+// Governing: issue #198.
+//
+// Every key the wire format defines, and nothing else. `isValidData` used to check that the
+// fields it NAMES were present and well-shaped and then return true, which is a required-
+// fields check rather than an allowlist — and since the validated object is stored verbatim
+// (see the POST handler), any extra property a caller invented was persisted with it. The
+// 64kb body cap was the only ceiling on how much of it there could be.
+//
+// Kept as a Set beside the validator rather than derived from it: the fields are checked in
+// six hand-written lines that a regexp over the source could not honestly enumerate, so the
+// list is stated once, explicitly, and any new field has to be added here to be accepted.
+const DATA_KEYS = new Set(["v", "w", "e", "tr", "n", "b"]);
+
+// A courtesy ceiling, not a security boundary — and worth being precise about which, because
+// the difference determines what it is allowed to cost a real user. Owner tokens are
+// caller-chosen and unlimited (lib/ownership.js), so anyone willing to rotate one is bounded
+// by the rate limiters and not by this. What this stops is a single client, or a loop with a
+// bug in it, quietly turning the store into something the process has to re-serialise on
+// every write. 200 is far past any plausible collection of saved builds.
+const MAX_LOADOUTS_PER_OWNER = 200;
+
 function isValidData(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  if (Object.keys(data).some((k) => !DATA_KEYS.has(k))) return false;
   if (data.v !== undefined && typeof data.v !== "number") return false;
   if (!Array.isArray(data.w) || data.w.length !== 2) return false;
-  if (!data.w.every((slot) => slot === null || (Array.isArray(slot) && slot.length >= 2 && isRef(slot[0], WIRE_CATEGORIES.w) && Number.isInteger(slot[1])))) return false;
+  // Exactly two entries per tuple, not "at least". A floor with no ceiling accepted a slot
+  // carrying any amount of trailing junk, which was then stored — the same unbounded-growth
+  // hole as an unknown key, wearing the shape of a field the format does define.
+  if (!data.w.every((slot) => slot === null || (Array.isArray(slot) && slot.length === 2 && isRef(slot[0], WIRE_CATEGORIES.w) && Number.isInteger(slot[1])))) return false;
   if (!Array.isArray(data.e) || data.e.length > 8) return false;
-  if (!data.e.every((entry) => Array.isArray(entry) && entry.length >= 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC))) return false;
+  if (!data.e.every((entry) => Array.isArray(entry) && entry.length === 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC))) return false;
   if (!Array.isArray(data.tr) || data.tr.length > 40) return false;
   if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return false;
   if (typeof data.n !== "string" || data.n.length > 200) return false;
@@ -176,7 +203,11 @@ function validateListRef(listId, token, res) {
 // middleware, so every handler wraps its body in try/catch (issue #18) — a
 // corrupt data file, disk-full, or permission error returns a clean 500 instead
 // of crashing the process.
-loadoutsRouter.get("/", async (_req, res) => {
+// Governing: issue #198. The read path carries `readLimiter` — reads mutate nothing, but
+// db.read() re-parses the entire data file on every one of them, so an unlimited GET is an
+// unlimited parse rate that gets worse as the store grows. The budget is far looser than the
+// write floor; see lib/ownership.js.
+loadoutsRouter.get("/", readLimiter, async (_req, res) => {
   try {
     await db.read();
     const token = callerToken(_req);
@@ -228,6 +259,15 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     const trimmedName = name.trim();
     const now = new Date().toISOString();
     const existing = liveRecords(db.data.loadouts).find((l) => l.owner === token && l.name === trimmedName);
+
+    // Governing: issue #198. Only a NEW record is refused: re-saving under an existing name
+    // is an update, and an owner sitting at the ceiling must still be able to edit what they
+    // already have. 409 rather than 400 — the payload is fine, the collection's state is what
+    // makes it unacceptable, and the caller fixes it by deleting something.
+    if (!existing && ownedBy(db.data.loadouts, token).length >= MAX_LOADOUTS_PER_OWNER) {
+      console.warn("loadout create refused at cap", { cap: MAX_LOADOUTS_PER_OWNER });
+      return res.status(409).json({ error: `at most ${MAX_LOADOUTS_PER_OWNER} saved loadouts` });
+    }
 
     let record;
     if (existing) {

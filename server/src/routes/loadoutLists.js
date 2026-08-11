@@ -18,6 +18,7 @@ import {
   liveRecords,
   ownedBy,
   publicRecord,
+  readLimiter,
   RecordNotFoundError,
   RecordNotOwnedError,
   tokenLimiter,
@@ -128,7 +129,9 @@ function respondToOwnershipError(res, err, op) {
 // middleware, so every handler wraps its body in try/catch (issue #18) — a corrupt data
 // file, disk-full, or permission error returns a clean 500 instead of crashing.
 
-loadoutListsRouter.get("/", async (req, res) => {
+// `readLimiter` bounds the full-file parse every read performs (issue #198); the budget is
+// far looser than the write floor, and is per-IP only. See lib/ownership.js.
+loadoutListsRouter.get("/", readLimiter, async (req, res) => {
   try {
     await db.read();
     const token = callerToken(req);

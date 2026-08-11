@@ -26,6 +26,7 @@ import {
   ipLimiter,
   ownedBy,
   publicRecord,
+  readLimiter,
   tokenLimiter,
   UnknownReferenceError,
 } from "../lib/ownership.js";
@@ -93,8 +94,11 @@ function respondToUnknownHunter(res, err, op) {
  * about the roster. The picker shows all 242 either way — SPEC-0003 REQ "Favorite Hunters"
  * makes favorites their own section plus an optional client-side toggle — so an empty array
  * here is an ordinary, expected answer and not an empty picker.
+ *
+ * `readLimiter` bounds the full-file parse every read performs (issue #198); the budget is
+ * far looser than the write floor, and is per-IP only. See lib/ownership.js.
  */
-hunterFavoritesRouter.get("/", async (req, res) => {
+hunterFavoritesRouter.get("/", readLimiter, async (req, res) => {
   try {
     await db.read();
     const token = callerToken(req);
