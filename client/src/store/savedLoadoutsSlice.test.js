@@ -8,7 +8,7 @@ import savedLoadoutsReducer, {
   deleteSaved,
   describeSaved,
 } from "./savedLoadoutsSlice.js";
-import { describeLoadout } from "../api/loadouts.js";
+import { describeLoadout, moveLoadout } from "../api/loadouts.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Governing: issue #20 (failed save/delete/fetch attempts must surface in the UI)
@@ -145,6 +145,38 @@ describe("editing a loadout description", () => {
     expect(() => describeLoadout("l1", undefined)).toThrow(TypeError);
     expect(() => describeLoadout("l1", 42)).toThrow(TypeError);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses an undefined listId on the OTHER patch wrapper too", async () => {
+    // The same invariant, on the same endpoint, reached through the other door. The file
+    // argues at length that `undefined` must never reach JSON.stringify here — an argument
+    // that is only load-bearing if both writers actually hold to it. `moveLoadout(id)` with
+    // a caller that forgot its second argument serialises to `{}`, which the server rejects
+    // for carrying no instruction at all, and the 400 blames a key the caller thinks it sent.
+    expect(() => moveLoadout("l1", undefined)).toThrow(TypeError);
+    expect(() => moveLoadout("l1", 42)).toThrow(TypeError);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("sends no description key when SAVING — a re-save must not rewrite the note", async () => {
+    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description" — an omitted key
+    // leaves the field alone, and that is the only correct thing for this path to say. The
+    // server accepts a description on POST (spec-normative), so nothing but this assertion
+    // stands between "the save path grew a description key" and shipping: the nearest string
+    // to hand at the call site is the build's inner name, and sending `description: data.n`
+    // would silently overwrite whatever the user wrote about the loadout on every re-save.
+    //
+    // Asserted as the EXACT key set rather than as `not.toHaveProperty`, so any new envelope
+    // field has to be added here deliberately.
+    global.fetch.mockResolvedValueOnce(respond({ id: "l1", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    await store.dispatch(saveCurrent());
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts$/);
+    expect(opts.method).toBe("POST");
+    expect(Object.keys(bodyOf(global.fetch.mock.calls.at(-1))).sort()).toEqual(["data", "listId", "name"]);
+    expect(opts.body).not.toContain("description");
   });
 
   it("surfaces a failed description write with the error prefix", async () => {

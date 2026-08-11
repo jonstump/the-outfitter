@@ -18,7 +18,7 @@
 // than luminance, so anything that made the accent load-bearing would be unreadable to a
 // colour-blind user.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import HunterPortrait from "../HunterPortrait/HunterPortrait.jsx";
 import HunterPicker from "../HunterPicker/HunterPicker.jsx";
@@ -781,7 +781,13 @@ export function resolveDescription(item, list) {
  *
  * No length cap is enforced here. The cap is the server's (DESCRIPTION_MAX_CHARS), and
  * restating it in the client would put the number in two places; an over-long write is
- * refused and surfaces through the same message banner every other failure uses.
+ * refused and surfaces through the same message banner every other failure uses — and,
+ * since a refusal leaves the editor open, over the draft that provoked it.
+ *
+ * EVERY accessible name below CONTAINS its visible label (WCAG 2.5.3 Label in Name): a Voice
+ * Control user says "click more", and a name of "Reveal the whole description" answers to
+ * nothing they can see. The loadout's name stays in the name for the reason above; the
+ * visible word leads it.
  */
 function LoadoutDescription({ item, list }) {
   const dispatch = useDispatch();
@@ -790,25 +796,135 @@ function LoadoutDescription({ item, list }) {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  // The reveal. Bounded height is the stylesheet's job (`.ll-lcard-desc-clamped`); this is
-  // only the state that lifts the bound. It is offered whenever there is any text at all
-  // rather than past some character threshold, because the card's width is not knowable from
-  // here — a description short enough to fit at 400px is four clamped lines at 168px, and a
-  // threshold would leave that one clipped with no way to read the rest.
+  // What `draft` was SEEDED with. Kept beside it rather than recomputed, because the seed is
+  // a snapshot of the moment the editor opened and the values it is derived from are live —
+  // see `commit`.
+  const [seed, setSeed] = useState("");
+  // The reveal. Bounded height is the stylesheet's job (`.ll-lcard-desc-clamped` bounds the
+  // collapsed state, `.ll-lcard-desc-open` bounds the revealed one); these are only the
+  // states that switch between them.
   const [revealed, setRevealed] = useState(false);
+  // Is there anything hidden to reveal? MEASURED, not assumed. The card's width is not
+  // knowable from here, so the answer changes with reflow — hence a ResizeObserver rather
+  // than a character threshold or an always-on control. Initialised to `true` because the
+  // honest default for "not measured yet" is "assume there is more", and because jsdom lays
+  // nothing out: under test the initial value is the answer.
+  const [clamped, setClamped] = useState(true);
+
   const fieldRef = useRef(null);
+  const triggerRef = useRef(null);
+  const paraRef = useRef(null);
+  // Which exit is waiting for focus to be re-homed: "editor" or "restore". See below.
+  const pendingFocus = useRef(null);
+
+  // `aria-controls` needs the paragraph to have an id, and the testid is already unique per
+  // loadout — one string, both jobs.
+  const descriptionId = `loadout-desc-${item.id}`;
 
   useEffect(() => {
     if (editing) fieldRef.current?.focus();
   }, [editing]);
 
-  const commit = () => {
+  // Governing: SPEC-0003 Accessibility Requirements ("Focus Management"), WCAG 2.4.3.
+  //
+  // Every exit from this block unmounts the control that had focus — save, Escape and cancel
+  // unmount the editor, and "use hunter's" unmounts ITSELF once the write lands. An unmount
+  // drops focus on `<body>`, from which a keyboard user has to Tab back through the header,
+  // the sort select, every list card and every preceding loadout card to get back here.
+  //
+  // So each exit ARMS this ref and the layout effect below hands focus to the control that
+  // logically owns the result: the edit/add trigger, which survives all four. A ref plus a
+  // layout effect rather than `autoFocus` — the target is chosen by IDENTITY, not by being
+  // first in the tab order, and it is focused before the browser paints the new frame.
+  //
+  // The effect deliberately has no dependency array: it must run on whichever render the
+  // departing control actually goes away on, and for "restore" that is a render driven by
+  // the thunk resolving, not by any value in this component's own state.
+  useLayoutEffect(() => {
+    if (!pendingFocus.current) return;
+    // Not yet: the control that has focus is still mounted, and moving focus off a live
+    // control the user is still on would be the bug rather than the fix.
+    if (pendingFocus.current === "editor" && editing) return;
+    if (pendingFocus.current === "restore" && stored !== null) return;
+    pendingFocus.current = null;
+    triggerRef.current?.focus();
+  });
+
+  // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description" ("bounded in height,
+  // with an affordance to reveal the rest").
+  //
+  // The control is offered only when something is actually hidden. An always-on control that
+  // reports `aria-expanded="false"` over fully visible text tells a screen-reader user there
+  // is more to read when there is not, so the answer has to be measured: `scrollHeight >
+  // clientHeight` on the clamped paragraph, re-measured on every reflow.
+  //
+  // Skipped while revealed — an unclamped paragraph never overflows, so measuring there
+  // would answer "nothing is hidden" and delete the control that collapses it again. The
+  // last collapsed measurement stands for as long as the paragraph is open.
+  useLayoutEffect(() => {
+    const el = paraRef.current;
+    if (!el || revealed) return undefined;
+    const measure = () => {
+      // jsdom implements no layout: every box measures 0×0. A zero client height therefore
+      // means "nothing measured this", not "nothing is hidden" — so the state is left at its
+      // initial `true` and the control stays reachable under test, while a real browser
+      // (which always reports a non-zero height for rendered prose) overrules it.
+      if (el.clientHeight === 0) return;
+      setClamped(el.scrollHeight > el.clientHeight);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, revealed]);
+
+  const closeEditor = () => {
+    pendingFocus.current = "editor";
     setEditing(false);
-    // Saving the text that is already stored is not a write. Note that saving the INHERITED
-    // text unchanged very much is one: the user has adopted it as their own, and from then
-    // on a better scrape must not overwrite what they kept.
-    if (draft !== stored) {
-      dispatch(describeSaved({ id: item.id, description: draft, loadoutName: item.name }));
+  };
+
+  const commit = async () => {
+    // Compare the draft against the value it was SEEDED with — never against `stored`.
+    //
+    // The two disagree in exactly one case, and it is the common one: a loadout showing an
+    // INHERITED description seeds the field with the hunter's lore while `stored` is null.
+    // Comparing against `stored` there makes "click edit to read it, click save" a write of
+    // the hunter's prose into the record — which SPEC-0003 forbids outright ("The system
+    // MUST NOT write that text into the record in order to display it"), and which silently
+    // severs the loadout from its list's hunter for every future re-scrape and every move.
+    // The same disagreement turns "add description" then save on an untouched empty field
+    // into a write of "", permanently opting the loadout out of inheritance.
+    //
+    // Seeding is what makes the guard agree with cancel: leaving the editor without touching
+    // it writes nothing, by whichever of the three exits the user takes.
+    //
+    // Adopting the inherited text as one's own therefore requires CHANGING it — which is the
+    // deliberate trade. An unchanged save is indistinguishable from a cancel by construction,
+    // and the failure mode of the alternative (silent, invisible except for the attribution
+    // quietly vanishing) is far worse than "type a word to make it yours".
+    if (draft === seed) {
+      closeEditor();
+      return;
+    }
+    try {
+      await dispatch(describeSaved({ id: item.id, description: draft, loadoutName: item.name })).unwrap();
+      closeEditor();
+    } catch {
+      // The server refused it — over the cap, over the body limit, or offline. The editor
+      // stays OPEN with the draft intact: the prose is the whole feature, and closing before
+      // the write settled would destroy what the user typed and leave the banner explaining
+      // a failure they can no longer retry. The banner is raised by the thunk itself.
+    }
+  };
+
+  const restore = async () => {
+    pendingFocus.current = "restore";
+    try {
+      await dispatch(describeSaved({ id: item.id, description: null, loadoutName: item.name })).unwrap();
+    } catch {
+      // The control is still mounted and still has focus; nothing to re-home.
+      pendingFocus.current = null;
     }
   };
 
@@ -827,7 +943,7 @@ function LoadoutDescription({ item, list }) {
               // Abandon, writing nothing. Stopped from propagating so the panel's other
               // Escape handlers cannot also act on a key that was meant for this field.
               e.stopPropagation();
-              setEditing(false);
+              closeEditor();
             }
           }}
         />
@@ -842,7 +958,7 @@ function LoadoutDescription({ item, list }) {
           <button
             className="ll-lcard-desc-btn"
             aria-label={`Cancel editing description: ${item.name}`}
-            onClick={() => setEditing(false)}
+            onClick={closeEditor}
           >
             cancel
           </button>
@@ -865,29 +981,44 @@ function LoadoutDescription({ item, list }) {
             </span>
           )}
           <p
-            className={`ll-lcard-desc${revealed ? "" : " ll-lcard-desc-clamped"}`}
+            ref={paraRef}
+            id={descriptionId}
+            // Revealed, the paragraph is a bounded scroll container (`.ll-lcard-desc-open`),
+            // and a scroll container that cannot take focus cannot be scrolled by keyboard
+            // at all in Chrome — WCAG 2.1.1. So it becomes a tab stop exactly while it is
+            // scrollable, and no card adds a stop in its resting state.
+            tabIndex={revealed ? 0 : undefined}
+            className={`ll-lcard-desc${revealed ? " ll-lcard-desc-open" : " ll-lcard-desc-clamped"}`}
             data-source={inherited ? "inherited" : "own"}
-            data-testid={`loadout-desc-${item.id}`}
+            data-testid={descriptionId}
           >
             {text}
           </p>
-          <button
-            className="ll-lcard-desc-btn"
-            aria-expanded={revealed}
-            aria-label={`${revealed ? "Collapse" : "Reveal the whole"} description: ${item.name}`}
-            onClick={() => setRevealed(!revealed)}
-          >
-            {revealed ? "less" : "more"}
-          </button>
+          {(clamped || revealed) && (
+            <button
+              className="ll-lcard-desc-btn"
+              aria-expanded={revealed}
+              // Names what it expands, so `aria-expanded` describes a target rather than
+              // hanging off a control with nothing attached to it.
+              aria-controls={descriptionId}
+              aria-label={`${revealed ? "Less" : "More"} of description: ${item.name}`}
+              onClick={() => setRevealed(!revealed)}
+            >
+              {revealed ? "less" : "more"}
+            </button>
+          )}
         </>
       )}
       <button
+        ref={triggerRef}
         className="ll-lcard-desc-btn"
         // Names the action AND the loadout, per SPEC-0003's icon/control naming rule: a grid
         // of cards otherwise presents a column of identically named "edit" stops.
         aria-label={`${text === null ? "Add" : "Edit"} description: ${item.name}`}
         onClick={() => {
-          setDraft(stored ?? text ?? "");
+          const value = stored ?? text ?? "";
+          setDraft(value);
+          setSeed(value);
           setEditing(true);
         }}
       >
@@ -896,8 +1027,8 @@ function LoadoutDescription({ item, list }) {
       {stored !== null && (
         <button
           className="ll-lcard-desc-btn"
-          aria-label={`Restore inherited description: ${item.name}`}
-          onClick={() => dispatch(describeSaved({ id: item.id, description: null, loadoutName: item.name }))}
+          aria-label={`Use hunter's description: ${item.name}`}
+          onClick={restore}
         >
           use hunter's
         </button>

@@ -72,6 +72,25 @@ const isListRef = (v) => v === null || v === undefined || (typeof v === "string"
 const NAME_MAX_CHARS = 200;
 export const DESCRIPTION_MAX_CHARS = 1000;
 
+/**
+ * How many characters a description is, in the unit its own rejection message names.
+ *
+ * `String.prototype.length` counts UTF-16 CODE UNITS, which charges two for every emoji and
+ * every other non-BMP glyph — so a 501-emoji note would be refused by a message that claims
+ * a 1000-character limit. That fails closed, but it fails closed while saying something
+ * untrue, and the user cannot act on it. Spreading iterates by code point instead, which is
+ * the unit a person counting what they typed is counting.
+ *
+ * Code points, not grapheme clusters: a flag or a family emoji is still several. Segmenting
+ * properly would need `Intl.Segmenter` and would make the cap depend on the ICU data the
+ * runtime happens to carry, which is a worse trade for a courtesy limit. What matters is
+ * that the number is bounded and the message is honest about what it counted.
+ *
+ * The storage consequence is checked, not assumed: 1000 code points is at most 4000 bytes of
+ * UTF-8, well inside the 64kb request-body limit set in index.js.
+ */
+const charCount = (s) => [...s].length;
+
 // Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
 // undefined rather than null. Serialise it explicitly so the API shape is uniform: every
 // loadout carries a `listId`, and "Unassigned" is always `null` rather than sometimes an
@@ -110,7 +129,11 @@ function validateDescription(description, res) {
     res.status(400).json({ error: "description must be a string or null" });
     return { ok: false };
   }
-  if (description.length > DESCRIPTION_MAX_CHARS) {
+  if (charCount(description) > DESCRIPTION_MAX_CHARS) {
+    // The rejected text is NOT echoed back. It is user prose, one of whose two sources was
+    // scraped off-origin, and an error body is the easiest place for it to end up somewhere
+    // it was never rendered as text — a log aggregator, a bug report, a toast built by
+    // concatenation. The cap is the only thing the caller needs told.
     res.status(400).json({ error: `description must be at most ${DESCRIPTION_MAX_CHARS} characters` });
     return { ok: false };
   }
@@ -181,10 +204,17 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       return res.status(400).json({ error: "data must be a valid loadout payload" });
     }
 
-    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description" — POST accepts an
-    // optional description so that saving a build with one written up front is a single
-    // write rather than a save followed by a patch. The key's PRESENCE is the question, not
-    // its truthiness: `"description" in body` distinguishes "said nothing" from "said null".
+    // Governing: SPEC-0003 REQ "Loadouts Carry an Editable Description", SPEC-0003 § HTTP
+    // API — "`POST` SHALL accept an optional `description`, so that saving a loadout with one
+    // written up front is a single write rather than a save followed by a patch". The key's
+    // PRESENCE is the question, not its truthiness: `"description" in body` distinguishes
+    // "said nothing" from "said null".
+    //
+    // No client path sends the key today — the description editor lives on a saved card, so
+    // there is nothing to write up front yet, and client/src/api/loadouts.js says so at the
+    // call site and pins it with a test. This branch is kept anyway because the SHALL above
+    // is normative on the endpoint, not on the caller; deleting it would put the server out
+    // of conformance to make a coverage observation go away.
     const describes = "description" in body;
     const desc = describes ? validateDescription(body.description, res) : { ok: true, value: null };
     if (!desc.ok) return;
@@ -303,7 +333,7 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
       listId: sameList ? undefined : ref.value,
       // The TEXT is never logged — it is user prose, and one of the two sources it can come
       // from is scraped off-origin. Which state it landed in is what a log needs to say.
-      description: sameDescription ? undefined : desc.value === null ? "inherited" : `${desc.value.length} chars`,
+      description: sameDescription ? undefined : desc.value === null ? "inherited" : `${charCount(desc.value)} chars`,
     });
     res.json(publicLoadout(loadout));
   } catch (err) {

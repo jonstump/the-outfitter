@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import { DESCRIPTION_MAX_CHARS, loadoutsRouter } from "./loadouts.js";
@@ -26,15 +26,20 @@ function makeApp() {
 }
 
 const TOKEN_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+// A SECOND caller. The suite ran entirely on one token, which is exactly how the record
+// ownership check on PATCH ended up with no coverage at all — see the ownership block below.
+const TOKEN_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 const validData = { w: [[0, -1], null], e: [["T", 0]], tr: [0], n: "fixture", b: 0 };
 
 const mkList = (app, name) =>
   request(app).post("/api/loadout-lists").set("x-loadout-token", TOKEN_A).send({ name });
-const save = (app, body) =>
-  request(app).post("/api/loadouts").set("x-loadout-token", TOKEN_A).send(body);
-const patch = (app, id, body) =>
-  request(app).patch(`/api/loadouts/${id}`).set("x-loadout-token", TOKEN_A).send(body);
+const saveAs = (app, token, body) =>
+  request(app).post("/api/loadouts").set("x-loadout-token", token).send(body);
+const save = (app, body) => saveAs(app, TOKEN_A, body);
+const patchAs = (app, token, id, body) =>
+  request(app).patch(`/api/loadouts/${id}`).set("x-loadout-token", token).send(body);
+const patch = (app, id, body) => patchAs(app, TOKEN_A, id, body);
 const stored = async (id) => {
   await db.read();
   return db.data.loadouts.find((l) => l.id === id);
@@ -307,6 +312,158 @@ describe("loadout descriptions", () => {
     expect(saved.status).toBe(201);
     expect(saved.body.description).toBeNull();
     expect(await stored(saved.body.id)).not.toHaveProperty("description");
+  });
+
+  // --- Record ownership on PATCH -------------------------------------------------------
+  //
+  // Governing: SPEC-0003 REQ "Cross-Collection Ownership Enforcement" and the per-record
+  // ownership rule issue #17 established.
+  //
+  // Nothing tested this. Deleting `&& l.owner === token` from the PATCH handler left the
+  // entire server suite green, and this PR is what widened that guard's blast radius from
+  // "which list is it in" to "the prose the user wrote". The test that LOOKS like it covers
+  // it — filing.test.js "refuses to move another token's loadout" — passes for the wrong
+  // reason: its target list is one B also owns, so `validateListRef` 404s on the CROSS-
+  // COLLECTION check before record ownership is ever consulted. Hence the `listId: null`
+  // variant below, which has no list to check at all.
+
+  it("refuses to describe another token's loadout, leaving the record byte-identical", async () => {
+    const app = makeApp();
+    const bs = await saveAs(app, TOKEN_B, {
+      name: "__test__d-owned-by-b", data: validData, description: "B's own words",
+    });
+    expect(bs.status).toBe(201);
+    const before = JSON.stringify(await stored(bs.body.id));
+
+    const res = await patchAs(app, TOKEN_A, bs.body.id, { description: "A was here" });
+
+    // 404, not 403: the same answer whether it does not exist or belongs to someone else, so
+    // the endpoint is not an existence oracle.
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/loadout not found/);
+    // Nothing of B's came back, either — a leak of the record is as bad as a write to it.
+    expect(JSON.stringify(res.body)).not.toContain("B's own words");
+    expect(JSON.stringify(await stored(bs.body.id))).toBe(before);
+  });
+
+  it("refuses it with no listId to check, so the cross-collection guard cannot mask it", async () => {
+    // `listId: null` short-circuits validateListRef entirely — no list is resolved and no
+    // ownership question is asked of the lists collection — so the ONLY thing standing
+    // between A and B's record here is the `l.owner === token` clause on the record itself.
+    const app = makeApp();
+    const bs = await saveAs(app, TOKEN_B, {
+      name: "__test__d-owned-by-b2", data: validData, description: "still B's",
+    });
+    const before = JSON.stringify(await stored(bs.body.id));
+
+    const res = await patchAs(app, TOKEN_A, bs.body.id, { listId: null, description: "A was here" });
+
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(await stored(bs.body.id))).toBe(before);
+  });
+
+  it("refuses to restore another token's loadout to the inherited state", async () => {
+    // The destructive shape of the same hole: `description: null` throws away prose the
+    // attacker never had to read.
+    const app = makeApp();
+    const bs = await saveAs(app, TOKEN_B, {
+      name: "__test__d-owned-by-b3", data: validData, description: "B wrote this and wants it kept",
+    });
+
+    expect((await patchAs(app, TOKEN_A, bs.body.id, { description: null })).status).toBe(404);
+    expect((await stored(bs.body.id)).description).toBe("B wrote this and wants it kept");
+  });
+
+  // --- The text never leaves by a side channel -------------------------------------------
+
+  it("never echoes the rejected description back in the error body", async () => {
+    // The rejected text is user prose — and on the edit path it is most often prose the app
+    // itself offered, scraped off-origin. An error body is the easiest place for it to end up
+    // somewhere it was never rendered as text: a log aggregator, a bug report, a toast built
+    // by concatenation. The cap is all the caller needs told.
+    const app = makeApp();
+    const saved = await save(app, { name: "__test__d-echo", data: validData });
+    const marker = "SENTINEL-PROSE";
+
+    for (const body of [
+      { description: `${marker}${"y".repeat(DESCRIPTION_MAX_CHARS)}` }, // over the cap
+      { description: { text: marker } }, // wrong type
+    ]) {
+      const res = await patch(app, saved.body.id, body);
+      expect(res.status).toBe(400);
+      expect(res.text).not.toContain(marker);
+      expect(JSON.stringify(res.body)).not.toContain(marker);
+    }
+
+    // …and the same on POST, whose rejection path is a different call site.
+    const posted = await save(app, {
+      name: "__test__d-echo-post", data: validData, description: `${marker}${"y".repeat(DESCRIPTION_MAX_CHARS)}`,
+    });
+    expect(posted.status).toBe(400);
+    expect(posted.text).not.toContain(marker);
+  });
+
+  it("logs which state a description landed in, never the text itself", async () => {
+    // The handler carries a comment asserting the text is never logged. Nothing checked it,
+    // so any `description: desc.value` slipped into that object would ship silently — and
+    // application logs are exactly where scraped-then-stored prose should not accumulate.
+    const app = makeApp();
+    const saved = await save(app, { name: "__test__d-log", data: validData });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const res = await patch(app, saved.body.id, { description: "SENTINEL-PROSE the user wrote" });
+      expect(res.status).toBe(200);
+
+      const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
+      expect(logged).not.toContain("SENTINEL-PROSE");
+      // …but the write IS logged, and says which of the three states it landed in. An
+      // implementation that satisfied the line above by logging nothing at all fails here.
+      expect(logged).toContain("loadout updated");
+      expect(logged).toContain("chars");
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("logs a restore as the state it is, still without any text", async () => {
+    const app = makeApp();
+    const saved = await save(app, { name: "__test__d-log2", data: validData, description: "SENTINEL-PROSE" });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await patch(app, saved.body.id, { description: null });
+      const logged = info.mock.calls.map((args) => JSON.stringify(args)).join("\n");
+      expect(logged).not.toContain("SENTINEL-PROSE");
+      expect(logged).toContain("inherited");
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("counts the cap in characters a reader can see, not in UTF-16 code units", async () => {
+    // `String.prototype.length` charges TWO for every non-BMP character, so a cap enforced on
+    // it refuses 501 astral-plane glyphs with a message claiming a limit of 1000 characters.
+    // That fails closed, but it fails closed while saying something the user cannot act on.
+    //
+    // Written as a code-point escape rather than as a literal so this file stays ASCII —
+    // file(1) classifies non-ASCII sources as binary, which makes them invisible to a plain
+    // grep and is a trap this repo has already been bitten by.
+    const astral = String.fromCodePoint(0x1f701); // ALCHEMICAL SYMBOL FOR AIR, one code point
+    expect(astral.length).toBe(2); // …and two code units, which is the whole point
+
+    const app = makeApp();
+    const under = await save(app, {
+      name: "__test__d-astral", data: validData, description: astral.repeat(DESCRIPTION_MAX_CHARS),
+    });
+    expect(under.status).toBe(201);
+    expect([...under.body.description]).toHaveLength(DESCRIPTION_MAX_CHARS);
+    expect((await stored(under.body.id)).description).toBe(astral.repeat(DESCRIPTION_MAX_CHARS));
+
+    // The cap still bites — in the same unit the message names.
+    const over = await save(app, {
+      name: "__test__d-astral-over", data: validData, description: astral.repeat(DESCRIPTION_MAX_CHARS + 1),
+    });
+    expect(over.status).toBe(400);
+    expect(over.body.error).toMatch(new RegExp(`at most ${DESCRIPTION_MAX_CHARS} characters`));
   });
 
   it("still caps the envelope name at 200 characters", async () => {

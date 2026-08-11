@@ -1185,7 +1185,11 @@ button {
   min-width: 0;
   font-size: 13px;
   line-height: 1.45;
-  color: var(--text-dim);
+  /* --text-muted, not --text-dim: 6.01:1 on the card's --panel against --text-dim's 4.09:1,
+     and 13px/400 is body text, so WCAG 2.1 SC 1.4.3 asks for 4.5:1 rather than the 3:1
+     large-text allowance. SPEC-0003 makes AA mandatory. The same figure is recorded on
+     `.ll-lcard` above and on `.ll-lp-empty` below — this is the third rule to measure it. */
+  color: var(--text-muted);
   /* Lore arrives as prose, but a user can type one unbroken 300-character token. Breaking it
      is what keeps "no card overflows horizontally at any supported width" true of the
      CONTENT and not merely of the boxes — the same rule `.ll-lcard-name` already follows. */
@@ -1205,6 +1209,16 @@ button {
   line-clamp: 3;
   overflow: hidden;
 }
+/* Revealing is bounded too, and this is not a detail. Cards share a grid ROW, and a grid row
+   is as tall as its tallest cell — so an unbounded reveal on one card stretches every sibling
+   beside it (measured at 1280px: four cards, 668px -> 1234px, for one description opened).
+   The ceiling scales with nothing: the 1000-character cap could otherwise make that row ten
+   screens tall. ~14 lines is comfortably more than the roster's longest lore needs at a
+   normal card width, and the rest scrolls inside the paragraph rather than inside the page. */
+.ll-lcard-desc-open {
+  max-height: 20em;
+  overflow-y: auto;
+}
 /* Announced as the source of the text, not decoration — see the note in the component. */
 .ll-lcard-desc-from {
   flex-basis: 100%;
@@ -1213,17 +1227,34 @@ button {
   text-transform: uppercase;
   color: var(--text-muted);
 }
+/* A RESTING affordance, not a hover one. These controls sit inline with the description, and
+   an inherited description is italic — so italic 13px --text-dim controls beside italic 13px
+   --text-dim prose were byte-identical to it in presentation. At 320px the wrap puts "more
+   edit" on the line under the lore, where it reads as a trailing clause of the sentence
+   rather than as two buttons; a pointer user finds them by accident and a low-vision user
+   not at all. So they refuse the prose's identity in three ways at once: upright against its
+   italic, underlined, and --gold rather than a text colour.
+
+   --gold on --panel is 7.37:1, past the 4.5:1 body-text requirement — measured, like the
+   6.01:1 on `.ll-lcard-desc` above. The underline is what carries the distinction where
+   colour cannot (SC 1.4.1: colour is never the only cue). */
 .ll-lcard-desc-btn {
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
-  font-style: italic;
+  font-style: normal;
   font-size: 13px;
-  color: var(--text-dim);
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .ll-lcard-desc-btn:hover {
   color: var(--gold-bright);
+}
+.ll-lcard-desc-btn:focus-visible {
+  outline: 1px solid var(--gold-border);
+  outline-offset: 2px;
 }
 .ll-lcard-desc-field {
   flex-basis: 100%;

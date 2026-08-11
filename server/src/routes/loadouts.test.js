@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
 import { loadoutsRouter } from "./loadouts.js";
+import { ipLimiter, tokenLimiter } from "../lib/ownership.js";
 import { db } from "../db.js";
 
 // Governing: #17 (per-user ownership), #19 (payload shape validation), #21 (rate limiting)
@@ -225,6 +226,37 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "namecheck")
       .send({ name: "x".repeat(201), data: validData });
     expect(res.status).toBe(400);
+  });
+
+  it("mounts BOTH shared limiters on EVERY write verb, and neither on the read", () => {
+    // Governing: SPEC-0003 § Rate Limiting, which is normative for POST, PATCH and DELETE
+    // alike. Only POST was pinned: deleting `ipLimiter, tokenLimiter` from the PATCH — the
+    // verb this feature just widened from "move" to "move and/or write user prose" — left
+    // the whole server suite green, and DELETE was in the same position.
+    //
+    // Asserted by IDENTITY against the exports from lib/ownership.js, mirroring the check
+    // hunterFavorites.test.js already makes. Driving 241 requests per verb is what the two
+    // behavioural tests around this one do, and doing it a third and fourth time would
+    // exhaust the shared test IP's budget for the window — the limiters are module-level
+    // singletons every makeApp() shares — and make the siblings order-dependent. A header
+    // probe cannot tell one limiter from two stacked, either: both emit draft-7
+    // `RateLimit-*` and the last to run wins the header.
+    const layerFor = (method, path) =>
+      loadoutsRouter.stack.find((l) => l.route?.path === path && l.route?.methods?.[method]);
+
+    for (const [method, path] of [["post", "/"], ["patch", "/:id"], ["delete", "/:id"]]) {
+      const layer = layerFor(method, path);
+      expect(layer, `${method.toUpperCase()} ${path} is not routed`).toBeTruthy();
+      const handlers = layer.route.stack.map((s) => s.handle);
+      expect(handlers, `${method.toUpperCase()} ${path} is missing ipLimiter`).toContain(ipLimiter);
+      expect(handlers, `${method.toUpperCase()} ${path} is missing tokenLimiter`).toContain(tokenLimiter);
+    }
+
+    // The listing is a read and deliberately unlimited — a limiter there would throttle the
+    // app's own boot fetch.
+    const get = layerFor("get", "/");
+    expect(get.route.stack.map((s) => s.handle)).not.toContain(ipLimiter);
+    expect(get.route.stack.map((s) => s.handle)).not.toContain(tokenLimiter);
   });
 
   it("hits the per-IP floor even when rotating the token on every write", async () => {
