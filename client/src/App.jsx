@@ -10,6 +10,7 @@ import WeaponsPanel from "./components/WeaponsPanel/WeaponsPanel.jsx";
 import EquipmentPanel from "./components/EquipmentPanel/EquipmentPanel.jsx";
 import TraitsPanel from "./components/TraitsPanel/TraitsPanel.jsx";
 import ActionsPanel from "./components/ActionsPanel/ActionsPanel.jsx";
+import RandomizerPanel from "./components/RandomizerPanel/RandomizerPanel.jsx";
 import LoadoutListsPanel from "./components/LoadoutListsPanel/LoadoutListsPanel.jsx";
 import Picker from "./components/Picker/Picker.jsx";
 
@@ -34,7 +35,18 @@ export default function App() {
         <section className="left-column">
           <WeaponsPanel />
           <EquipmentPanel />
-          <TraitsPanel />
+          {/* Traits and the randomizer share a row rather than stacking. Three reasons: it
+              takes a panel's worth of height out of the page, it gives the randomizer room to
+              grow into (SPEC-0008 replaces it with archetype-driven generation), and it
+              narrows the traits grid — whose art is 64px native and was being upscaled at
+              full column width.
+
+              Only the randomizer moved. Budget, save and share stayed in ActionsPanel below,
+              at full width: four control groups in a 280px column wrapped every one of them. */}
+          <div className="build-row">
+            <TraitsPanel />
+            <RandomizerPanel />
+          </div>
           <ActionsPanel />
         </section>
         <section className="right-column">

@@ -117,11 +117,15 @@ describe("TraitsPanel cell detail", () => {
     expect(container.querySelector(".trait-cell-tip")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("puts the trait name and cost in the hover tip", () => {
+  it("puts the trait name in the hover tip, and not the cost again", () => {
+    // The cost is already badged on the icon; repeating it as "8 UP" in the same hover said
+    // the same thing twice. The unit survives only in the accessible name, where a bare
+    // number would be meaningless read aloud.
     const def = TRAITS[0];
     const { container } = renderPanel([def[0]]);
-    expect(container.querySelector(".trait-cell-tip-name")).toHaveTextContent(def[1]);
-    expect(container.querySelector(".trait-cell-tip-up")).toHaveTextContent(`${def[2]} UP`);
+    const tip = container.querySelector(".trait-cell-tip");
+    expect(tip).toHaveTextContent(def[1]);
+    expect(tip.textContent).not.toMatch(/UP/);
   });
 
   it("singularises a one-point cost in the accessible name", () => {

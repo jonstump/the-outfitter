@@ -758,17 +758,64 @@ button {
    by default, so deriving the column count from it would reflow the grid when a setting
    changed — the same reason recorded on `.ll-lp-traits`. */
 
+/* Traits and actions side by side. The randomizer is deliberately given comparable width
+   rather than the leftovers — SPEC-0008 replaces it with archetype-driven generation, so the
+   space is provisioned for what is coming rather than for what it holds today. */
+.build-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  align-items: flex-start;
+}
+/* An even split, which the widened left column now affords. The traits panel's width is
+   load-bearing — it has to seat five cells plus gaps, and anything under ~300px drops them
+   below the 48px floor the preview's cells already use. Both wrap to full width below the
+   flex-basis. */
+/* Not an even split. The traits panel's width is load-bearing — it seats five cells plus
+   gaps, and an even split left them at 40px, under the 48px floor the preview's cells use.
+   1.3:1 lands traits near 300px (48px cells) and the randomizer near 233px, which still fits
+   "Random loadout" on one line. Both wrap to full width below the flex-basis. */
+.build-row > .panel:first-child {
+  flex: 1.3 1 300px;
+  min-width: 0;
+}
+.build-row > .panel:last-child {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* The randomizer's two buttons sit on one line and the panel is left taller than they need.
+   That headroom is the point — see the component comment. */
+.randomizer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.randomizer-go {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
 .trait-grid {
   display: grid;
-  grid-template-columns: repeat(var(--trait-cols, 5), minmax(0, 1fr));
+  /* Capped at the art's own resolution, not stretched to the column.
+
+     Every catalog image is 64x64. At full column width these cells were 98px and the art
+     was being drawn at 94px — a 1.47x upscale, which is exactly the softness that shows.
+     `minmax(0, 64px)` lets a cell shrink on a narrow viewport but never grow past the pixels
+     that actually exist, so the grid cannot reintroduce the blur at any width. */
+  grid-template-columns: repeat(var(--trait-cols, 5), minmax(0, var(--trait-cell-max, 64px)));
+  justify-content: start;
   gap: 6px;
   margin-top: 10px;
 }
 
+/* Square, because the art is square. The old 7/6 echoed the chip thumb it replaced and left
+   letterboxing above and below a 64x64 image. */
 .trait-cell {
   position: relative;
-  aspect-ratio: 7 / 6;
-  min-height: 48px;
+  aspect-ratio: 1;
   display: block;
   padding: 0;
 }
@@ -803,14 +850,15 @@ button {
 .trait-cell-up {
   position: absolute;
   right: 2px;
-  bottom: 1px;
-  min-width: 15px;
-  padding: 0 3px;
-  font-size: 12px;
-  line-height: 15px;
+  bottom: 2px;
+  min-width: 18px;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
   text-align: center;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.82);
   border: 1px solid var(--border);
   pointer-events: none;
 }
@@ -834,6 +882,8 @@ button {
   width: max-content;
   max-width: 180px;
   padding: 5px 8px;
+  font-size: 13.5px;
+  color: var(--text);
   background: var(--panel-bg, #14100c);
   border: 1px solid var(--border);
   pointer-events: none;

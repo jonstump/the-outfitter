@@ -2,7 +2,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
-import { randomizeThunk, clearBuildThunk, shareThunk } from "../../store/thunks.js";
+import { shareThunk } from "../../store/thunks.js";
 import { selectSaveDestinationName, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
@@ -45,15 +45,9 @@ export default function ActionsPanel() {
 
   return (
     <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="actions-row">
-        <button className="btn-primary" style={{ flex: 1, minWidth: 150 }} onClick={() => dispatch(randomizeThunk())}>
-          Random loadout
-        </button>
-        <button className="btn" onClick={() => dispatch(clearBuildThunk())}>
-          Clear
-        </button>
-      </div>
-
+      {/* Random loadout and Clear moved to RandomizerPanel, which sits beside the traits grid.
+          What is left here is everything about a build that already exists — its budgets, its
+          name, saving it, sharing it. */}
       <div className="budget-row">
         <span className="budget-group">
           <button

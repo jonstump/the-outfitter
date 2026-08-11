@@ -43,9 +43,11 @@ function TraitCell({ trait, onRemove }) {
       <span className="trait-cell-up" aria-hidden="true">
         {up}
       </span>
+      {/* The tip carries the name only. The cost is already on the icon, and repeating it as
+          "8 UP" was saying the same thing twice in the same hover. The unit survives in the
+          accessible name above, where a bare "8" would mean nothing read aloud. */}
       <span className="trait-cell-tip" aria-hidden="true">
-        <span className="trait-cell-tip-name">{name}</span>
-        <span className="trait-cell-tip-up">{up} UP</span>
+        {name}
       </span>
     </button>
   );
