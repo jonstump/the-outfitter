@@ -414,6 +414,67 @@ export class RateLimiter {
 // silent failure mode — but it is real duplication and should be collapsed.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// HTML parsing helpers shared by every payload.
+//
+// Implements: SPEC-0007 REQ "Provenance Is Recorded and Ids Are Never Wiki-Derived" (readRlconf is
+// where the recorded revision comes from), SPEC-0007 REQ "Canonical Titles Are Read From the Page"
+//
+// These moved here from scrape-hunters.mjs when scrape-stats.mjs became the second consumer.
+// readRlconf in particular is the "must not diverge" class: it is where the canonical page title
+// and the current revision id live, and both scrapes record that revision as provenance. Two
+// implementations would mean two definitions of what "the revision I ingested" means.
+// ---------------------------------------------------------------------------
+
+const NAMED_ENTITIES = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+  rsquo: "’",
+  lsquo: "‘",
+  ldquo: "“",
+  rdquo: "”",
+};
+
+/**
+ * Decode the HTML entities MediaWiki actually emits.
+ *
+ * Non-breaking spaces are folded to ordinary ones. The wiki writes `Source: The Revenant&#160;DLC`,
+ * and a U+00A0 surviving into a stored string would make it compare unequal to the visually
+ * identical text anyone would type when checking or correcting a mapping.
+ */
+export function decodeEntities(text) {
+  return text
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hx) => String.fromCodePoint(parseInt(hx, 16)))
+    .replace(/&([a-z]+);/gi, (whole, name) => {
+      const key = name.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, key) ? NAMED_ENTITIES[key] : whole;
+    })
+    .replace(/ /g, " ");
+}
+
+/**
+ * Pull a value out of the page's RLCONF blob.
+ *
+ * This is where the canonical page title and the current revision id live. Reading them from
+ * RLCONF rather than from the URL is what makes redirects (Hunters/Bad_Hand -> Hunters/The_Revenant)
+ * resolve to one identity instead of two.
+ */
+export function readRlconf(html, key) {
+  const numeric = html.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`));
+  if (numeric) return Number(numeric[1]);
+  const str = html.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+  if (str) return decodeEntities(str[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
+  return null;
+}
+
 export function logStructured(event, { write = (line) => console.log(line) } = {}) {
   write(JSON.stringify({ ts: new Date().toISOString(), ...event }));
 }
