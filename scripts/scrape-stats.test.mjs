@@ -279,6 +279,57 @@ test("scrapeItemStats: a 404 is ItemPageNotFoundError", async () => {
   );
 });
 
+test("scrapeItemStats: a body-read failure is a NetworkFailureError carrying the url", async () => {
+  // fetch() resolves on headers; the body streams afterward, so a mid-response reset rejects at
+  // res.text() rather than at the fetch. Unwrapped it would surface as a bare TypeError with no
+  // url, collapsing a transport failure into an unclassified one.
+  const err = await scrapeItemStats(target, {
+    fetchFn: fakeFetch(null, {
+      onPage: () => ({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new TypeError("terminated");
+        },
+      }),
+    }),
+    rateLimiter: noWait,
+    robotsGroups: allowAll,
+  }).then(
+    () => assert.fail("expected the body read to reject"),
+    (e) => e
+  );
+
+  assert.ok(err instanceof NetworkFailureError);
+  assert.equal(err.item, "Ranger 73");
+  assert.match(err.url, /Weapons\/Ranger_73$/);
+  assert.match(err.message, /terminated/);
+  assert.equal(err.cause.name, "TypeError");
+});
+
+test("runStatsScrape: a body-read failure records the url, not an unclassified error", async () => {
+  const summary = await runStatsScrape(
+    { categories: ["traits"], delayMs: 0, limit: 1 },
+    {
+      fetchFn: fakeFetch(null, {
+        onPage: () => ({
+          ok: true,
+          status: 200,
+          text: async () => {
+            throw new TypeError("terminated");
+          },
+        }),
+      }),
+      log: () => {},
+    }
+  );
+
+  const failure = summary.failed[0];
+  assert.equal(failure.errorType, "NetworkFailureError");
+  assert.ok(failure.url, "failure records the URL");
+  assert.ok(failure.item && failure.reason);
+});
+
 test("scrapeItemStats: a known duplicate is skipped without spending a request", async () => {
   let fetched = 0;
   const result = await scrapeItemStats(

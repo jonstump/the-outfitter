@@ -284,7 +284,20 @@ export async function scrapeItemStats(target, deps) {
   }
   if (!res.ok) throw classifyPageFetchError(res.status, item, pageUrl);
 
-  const html = await res.text();
+  // Reading the body is its own transport failure point, not part of the fetch above: fetch()
+  // resolves as soon as the headers arrive and the body streams afterward, so a connection reset
+  // mid-response rejects here rather than there. Left unwrapped it escapes as a bare TypeError with
+  // no url, which is exactly the collapse SPEC-0007's error contract forbids.
+  let html;
+  try {
+    html = await res.text();
+  } catch (err) {
+    throw new NetworkFailureError(
+      `network failure reading item page body for "${item}" at ${pageUrl}: ${err.message}`,
+      { cause: err, item, url: pageUrl }
+    );
+  }
+
   const infoboxes = extractInfoboxes(html);
   if (infoboxes.length === 0) {
     throw new InfoboxNotFoundError(`no infobox on page for "${item}" at ${pageUrl}`, { item, url: pageUrl });
