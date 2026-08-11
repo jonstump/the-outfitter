@@ -19,14 +19,13 @@
 // mean a second script quietly scraping on terms the first one honors.
 //
 // This module is import-only — it has no CLI entrypoint and performs no I/O on import. Consumers
-// today: scripts/scrape-images.mjs. Consumers planned: scripts/scrape-stats.mjs (ADR-0005) and
-// scripts/scrape-hunters.mjs (ADR-0007, whose confirmation criteria require it to import slug
-// derivation, robots handling, rate limiting, the user agent, and the sentinel errors from here).
+// today: scripts/scrape-images.mjs (ADR-0002), scripts/scrape-hunters.mjs (ADR-0007), and
+// scripts/scrape-stats.mjs (ADR-0005, SPEC-0007).
 //
-// Note on USER_AGENT: the string still describes itself as an image scrape, which is accurate for
-// today's only consumer. It is deliberately left as-is here so this extraction stays byte-for-byte
-// behaviour-preserving; generalize it when the second consumer lands, since the wiki sees it on
-// every request either script makes.
+// Note on USER_AGENT: it previously described itself as an image scrape and carried a note to
+// generalize it once a second consumer landed. Two have. The string is now payload-neutral,
+// because the wiki sees it on every request any of the three scripts makes and a UA that
+// misdescribes the run is worse than a generic one.
 //
 // Note for future work: ADR-0005's out-of-scope section anticipates a revision-history-driven
 // refresh built on MediaWiki's API rather than HTML page fetches. Nothing here assumes HTML scraping
@@ -38,7 +37,7 @@ export const WIKI_ORIGIN = "https://huntshowdown.wiki.gg";
 export const DEFAULT_DELAY_MS = 1500;
 export const USER_AGENT =
   "TheOutfitterScrapeBot/1.0 (+https://github.com/jonstump/the-outfitter; contact: jmstump@gmail.com; " +
-  "one-time offline catalog image scrape per ADR-0002, not a crawler)";
+  "offline, human-invoked catalog scrape per ADR-0002 and ADR-0005, not a crawler)";
 
 // ---------------------------------------------------------------------------
 // Sentinel errors (SPEC-0001 "Error Handling Standards": domain-specific failure modes the
@@ -60,6 +59,25 @@ export class ItemPageNotFoundError extends ScrapeError {}
 
 /** The item's wiki page loaded, but no usable image asset could be located on it. */
 export class ImageAssetNotFoundError extends ScrapeError {}
+
+/**
+ * The item's wiki page loaded, but carries no infobox to read stats from.
+ *
+ * Distinct from ItemPageNotFoundError (no page at all) and from InfoboxFieldNotFoundError (an
+ * infobox exists but lacks the field asked for). SPEC-0007 REQ "Error Handling Standards" requires
+ * these three to stay distinguishable: a page with no infobox is usually a disambiguation or
+ * category page that resolution landed on by mistake, while a missing field is a real gap in the
+ * wiki's data for an item that is otherwise fine. Collapsing them hides which one happened.
+ */
+export class InfoboxNotFoundError extends ScrapeError {}
+
+/** An infobox was located, but it carries no field under the requested name. */
+export class InfoboxFieldNotFoundError extends ScrapeError {
+  constructor(message, options = {}) {
+    super(message, options);
+    this.field = options.field;
+  }
+}
 
 /** A network, HTTP, or rate-limit failure occurred while talking to the wiki. */
 export class NetworkFailureError extends ScrapeError {}
@@ -380,4 +398,31 @@ export class RateLimiter {
     }
     this.lastRequestAt = this.now();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Structured logging and the per-run summary.
+//
+// SPEC-0001 and SPEC-0007 both require structured run reporting rather than string interpolation,
+// and a per-run summary of succeeded/failed/skipped with reasons. That is shared reporting
+// infrastructure, so it lives here.
+//
+// NOTE: scrape-images.mjs and scrape-hunters.mjs each still carry their own byte-identical copy of
+// logStructured, predating this one. They are not migrated here because doing so is a refactor of
+// two working scripts and their suites, which is out of scope for the story that added this. The
+// divergence risk is low — unlike slugify() or the robots rules, a drifting log helper has no
+// silent failure mode — but it is real duplication and should be collapsed.
+// ---------------------------------------------------------------------------
+
+export function logStructured(event, { write = (line) => console.log(line) } = {}) {
+  write(JSON.stringify({ ts: new Date().toISOString(), ...event }));
+}
+
+export function createSummary() {
+  return { succeeded: [], failed: [], skipped: [] };
+}
+
+export function recordResult(summary, result) {
+  summary[result.status].push(result);
+  return summary;
 }
