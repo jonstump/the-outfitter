@@ -23,6 +23,8 @@
 //       --out=PATH                                Override the dataset path
 //       --allow-shrink                            Permit a write that drops already-covered items
 //       --write-catalog                           Apply scraped values over hand-authored ones
+//       --discover                                Crawl the wiki's category indexes and report
+//                                                  coverage, classifying what the catalog lacks
 //       --dry-run                                 Resolve URLs and check robots.txt, but fetch
 //                                                  nothing and write nothing
 //
@@ -468,6 +470,13 @@ export async function scrapeItemStats(target, deps) {
     item,
     url: pageUrl,
     canonicalTitle,
+    // SPEC-0007 REQ "Canonical Titles Are Read From the Page": an HTTP 200 does not confirm the
+    // catalog's display name is current, because MediaWiki serves renamed pages through redirects.
+    // Comparing what the page calls itself against what the catalog calls it turns a rename into a
+    // reported candidate instead of something absorbed silently.
+    renamed: canonicalTitle && canonicalTitle.trim().toLowerCase() !== item.trim().toLowerCase()
+      ? { from: item, to: canonicalTitle }
+      : null,
     revision: revision === null ? null : String(revision),
     infoboxCount: infoboxes.length,
     selection: { index: selection.index, method: selection.method, title: selection.title },
@@ -489,10 +498,366 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     infoboxTitle: result.selection.title,
     selectedBy: result.selection.method,
     variantCount: result.infoboxCount,
+    // Scrape metadata, never a catalog field, and never `group` (SPEC-0007 REQ "Acquisition Class
+    // Is Captured So Roster Membership Is Checkable"). This is what makes "should this item have a
+    // row?" checkable instead of arguable.
+    ...acquisitionOf(result.fields),
     fields: result.fields,
     sourceRevision: result.revision,
     ingestedAt: now(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Discovery (SPEC-0007 REQ "Discovery Classifies Every Unmatched Page Before Proposing It",
+// REQ "Roster Coverage Is Reported Against the Wiki's Own Categories").
+//
+// A wiki page existing does not mean the item exists. `Category:Tools` has 23 members and two are
+// tombstones — the Electric Lamp, removed in Update 2.0 and deleted from TOOLS in e0076d3 with a
+// legacy carve-out still held at LEGACY_TOOL_IDS[9], and the Multitool, a prototype that never
+// shipped. That is 9% of one category, and a diff that treats "in the category, not in the catalog"
+// as "missing" proposes re-adding both.
+//
+// So every unmatched member is classified before it can be proposed. The default is `live`
+// deliberately: a live item wrongly proposed is a suggestion a human rejects, while a live item
+// wrongly hidden as a tombstone is information nobody sees again.
+// ---------------------------------------------------------------------------
+
+/** The wiki category that enumerates each catalog category's membership. */
+export const CATEGORY_INDEX = {
+  weapons: "Category:Weapons",
+  tools: "Category:Tools",
+  traits: "Category:Purchasable_Traits",
+  consumables: "Category:Consumables",
+};
+
+/**
+ * Pages this project has already decided about, so a diff cannot re-litigate them.
+ *
+ * Keyed by wiki page path. The reason is recorded rather than implied — #164's whole point is that
+ * skipping silently is indistinguishable from a parse failure.
+ */
+export const KNOWN_TOMBSTONES = {
+  "Tools/Electric_Lamp": {
+    state: "removed",
+    reason:
+      "removed from the game in Update 2.0; deleted from TOOLS in e0076d3, with a null placeholder " +
+      "still held at LEGACY_TOOL_IDS[9] so legacy saved loadouts keep resolving",
+  },
+  // Its own class, not a synonym for removed: nothing was ever taken away, so there is no legacy id
+  // to preserve and no saved loadout that could reference it.
+  "Tools/Multitool": {
+    state: "never-shipped",
+    reason: "a cut prototype; lockpicking was removed as a feature before release",
+  },
+};
+
+const REMOVED_SIGNALS = [
+  /removed from the game/i,
+  /was removed in update/i,
+  /no longer (?:available|obtainable|in the game)/i,
+];
+const NEVER_SHIPPED_SIGNALS = [/\bprototype\b/i, /early alpha/i, /never (?:released|implemented|shipped)/i];
+
+/**
+ * Classify one wiki page as live, removed, or never-shipped, with the evidence that decided it.
+ *
+ * Evidence is returned rather than just a verdict so a run summary can be audited without
+ * re-fetching every page — "removed, because the page says 'Iron Repeater removed from the game'"
+ * is checkable; "removed" alone is a claim.
+ */
+export function classifyPage(html, { page } = {}) {
+  const known = page ? KNOWN_TOMBSTONES[page] : null;
+  if (known) return { ...known, evidence: "recorded in KNOWN_TOMBSTONES" };
+  const text = textContent(html);
+  for (const rx of REMOVED_SIGNALS) {
+    const hit = rx.exec(text);
+    if (hit) {
+      return { state: "removed", reason: "the page states it was removed", evidence: excerptAround(text, hit.index) };
+    }
+  }
+  for (const rx of NEVER_SHIPPED_SIGNALS) {
+    const hit = rx.exec(text);
+    if (hit) {
+      return {
+        state: "never-shipped",
+        reason: "the page describes it as a prototype or alpha-only",
+        evidence: excerptAround(text, hit.index),
+      };
+    }
+  }
+  return { state: "live", reason: "no removal or prototype language on the page", evidence: null };
+}
+
+function excerptAround(text, index, span = 90) {
+  return text.slice(Math.max(0, index - span / 2), index + span).trim();
+}
+
+/**
+ * Member page paths listed under a category index page, in document order.
+ *
+ * Reads the FIRST page of the index only — there is no follow of MediaWiki's "next page" link. Not
+ * currently reachable: the largest category is `Category:Weapons` at 147 against MediaWiki's
+ * 200-per-page default. A category crossing 200 would silently under-report coverage, which is the
+ * exact failure mode the coverage table exists to prevent, so the bound is recorded here rather
+ * than discovered later from a number that looks plausible.
+ */
+export function parseCategoryMembers(html) {
+  const anchor = html.indexOf('id="mw-pages"');
+  if (anchor === -1) return [];
+  const seg = html.slice(anchor);
+  const seen = [];
+  for (const m of seg.matchAll(/<a href="\/wiki\/([^"?#]+)"[^>]*title="/g)) {
+    const page = decodeURIComponent(m[1]).replace(/_/g, " ");
+    if (/^(?:Category|File|Special|Template|Help):/i.test(page)) continue;
+    if (!seen.includes(page)) seen.push(page);
+  }
+  return seen;
+}
+
+/**
+ * The acquisition metadata that decides whether an item belongs in the catalog at all.
+ *
+ * SPEC-0007 REQ "Acquisition Class Is Captured": this is scrape metadata, not a catalog field, and
+ * it MUST NOT be written into `group`. Traits carry a literal `Category` field ("Supportive",
+ * "Offensive") that looks exactly like `group` and is the wiki's functional taxonomy — it is
+ * deliberately not read here.
+ *
+ * Two signals, both stated by the wiki rather than inferred:
+ *   - Traits carry `Type`: Regular / Burn / Scarce / Event, which is SPEC-0007's vocabulary exactly.
+ *   - Everything else carries `Price`, and an unpurchasable item says so in words: a Tarot Card's
+ *     price is the literal string "Scarce". `parseNumeric` already refuses it rather than coercing,
+ *     which is why purchasability falls out of the same strict parse the write-through uses.
+ *
+ * `purchasable` is deliberately THREE-valued — `true`, `false`, `null` — because two of them cannot
+ * carry the difference that matters:
+ *
+ *   - `false` means the page stated a price this parser refuses. That is a determination the wiki
+ *     made, and it is what makes the Tarot Card boundary machine-checkable.
+ *   - `null` means no `Price` or `Cost` field was found at all. That is no evidence either way.
+ *
+ * Folding the second into the first reported an ABSENT field as a deliberate exclusion, which is
+ * exactly what SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids: an
+ * attribute the scrape cannot resolve is recorded as unresolved, never defaulted to a value that
+ * reads as a determination. (Review of #186.)
+ */
+export function acquisitionOf(fields = {}) {
+  const acquisition = fields.Type ?? null;
+  const priceRaw = fields.Price ?? fields.Cost ?? null;
+  const priceValue = parseNumeric(priceRaw);
+
+  let purchasable = null;
+  if (priceValue !== null && priceValue > 0) purchasable = true;
+  else if (priceRaw !== null && String(priceRaw).trim() !== "") purchasable = false;
+
+  return { acquisition, priceStated: priceRaw, purchasable };
+}
+
+/**
+ * Crawl each category index, diff it against the catalog, and classify what does not match.
+ *
+ * Deliberately its own phase behind `--discover`: the unmatched set is ~160 pages (109 of the 147
+ * weapon-category members are variants and skins the catalog does not model), and a stats run
+ * should not quietly triple its request count.
+ */
+export async function runDiscovery(options, deps) {
+  const { categories = CATEGORIES, delayMs = DEFAULT_DELAY_MS, dryRun = false } = options;
+  const { fetchFn, userAgent = USER_AGENT, log = logStructured, robotsGroups, rateLimiter } = deps;
+
+  const limiter = rateLimiter ?? new RateLimiter(delayMs);
+  const report = {};
+
+  for (const category of categories) {
+    const indexPage = CATEGORY_INDEX[category];
+    if (!indexPage) continue;
+
+    const indexUrl = buildItemPageUrl(indexPage);
+
+    // The index fetch is the FIRST request this phase makes, and it was the one request that went
+    // out without asking. Every other path here and in scrapeItemStats consults robots first, and
+    // runStatsScrape fails closed when robots.txt cannot even be read — an un-consented request to
+    // establish the crawl is the one place that posture cannot afford an exception. (Review of #186.)
+    if (!isAllowedByRobots(robotsGroups, userAgent, new URL(indexUrl).pathname)) {
+      throw new RobotsDisallowedError(`robots.txt disallows ${indexPage}`, { url: indexUrl });
+    }
+
+    // `--dry-run` promises "resolve URLs and check robots.txt, but fetch nothing". Discovery is the
+    // most expensive phase in the script (~160 live requests), so ignoring the flag here meant the
+    // one mode chosen to avoid requests made the most of them. Report what would be crawled.
+    if (dryRun) {
+      report[category] = {
+        indexPage,
+        indexUrl,
+        dryRun: true,
+        wikiMembers: null,
+        catalogRows: collectCatalogItems([category]).length,
+        matched: null,
+        unmatched: [],
+        missing: [],
+        unpurchasable: [],
+        unresolved: [],
+        tombstones: [],
+        failures: [],
+      };
+      log({ level: "info", event: "discovery-dry-run", category, indexUrl });
+      continue;
+    }
+
+    await limiter.wait();
+    const res = await fetchFn(indexUrl, { headers: { "User-Agent": userAgent } });
+    if (!res.ok) {
+      throw new NetworkFailureError(`failed to fetch ${indexPage}: HTTP ${res.status} at ${indexUrl}`, {
+        url: indexUrl,
+      });
+    }
+    const members = parseCategoryMembers(await res.text());
+
+    // The catalog's own targets, normalised the same way the member list is.
+    const norm = (p) => String(p).replace(/_/g, " ").trim().toLowerCase();
+    const catalogTargets = new Map(
+      collectCatalogItems([category])
+        .filter((item) => item.wikiPath)
+        .map((item) => [norm(item.wikiPath), item])
+    );
+
+    const unmatched = [];
+    for (const page of members) {
+      if (catalogTargets.has(norm(page))) continue;
+
+      let classification = { state: "live", reason: "not fetched", evidence: null };
+      if (KNOWN_TOMBSTONES[page.replace(/ /g, "_")] || KNOWN_TOMBSTONES[page]) {
+        classification = classifyPage("", { page: page.replace(/ /g, "_") });
+      } else {
+        const url = buildItemPageUrl(page);
+        if (!isAllowedByRobots(robotsGroups, userAgent, new URL(url).pathname)) {
+          // "unreadable" rather than "live": we learned nothing about this page. Calling it live
+          // filed it under `missing`, so a wiki with tighter robots rules than today's would report
+          // false missing counts with no signal that a fetch was skipped. (Review of #186.)
+          classification = { state: "unreadable", reason: "robots.txt disallows fetching it", evidence: null };
+        } else {
+          await limiter.wait();
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const pageRes = await fetchFn(url, { headers: { "User-Agent": userAgent } });
+            if (pageRes.ok) {
+              const html = await pageRes.text();
+              classification = classifyPage(html, { page: page.replace(/ /g, "_") });
+              // The page is already in hand, so purchasability costs nothing extra — and it is what
+              // separates "the catalog is missing this" from "the catalog excludes this on purpose".
+              // A Tarot Card is a live page the catalog deliberately lacks; its price is the literal
+              // string "Scarce", so the boundary is machine-checkable rather than re-argued.
+              //
+              // Selected through selectBaseInfobox rather than taking index 0: that helper exists
+              // because a page's first infobox is often a variant or skin, and reading a variant's
+              // price as the base item's is how a base-page price goes missing on exactly the
+              // multi-infobox pages this crawl visits most.
+              const boxes = extractInfoboxes(html);
+              if (boxes.length > 0) {
+                const canonicalTitle = canonicalTitleFromPageName(readRlconf(html, "wgPageName"));
+                const selection = selectBaseInfobox(boxes, { canonicalTitle, displayName: page });
+                const box = selection.index === -1 ? boxes[0] : boxes[selection.index];
+                Object.assign(classification, acquisitionOf(parseInfoboxFields(box)), {
+                  infoboxMethod: selection.method,
+                });
+              }
+            } else {
+              classification = { state: "unreadable", reason: `HTTP ${pageRes.status}`, evidence: null };
+            }
+          } catch (err) {
+            // Per-page, matching runStatsScrape's own posture: one page's transport failure must not
+            // end a ~160-page crawl the way an uncaught throw here did.
+            classification = { state: "unreadable", reason: err.message, evidence: null };
+          }
+        }
+      }
+      unmatched.push({ page, ...classification });
+      log({
+        level: classification.state === "unreadable" ? "warn" : "info",
+        event: "discovery-unmatched",
+        category,
+        page,
+        state: classification.state,
+        ...(classification.reason ? { reason: classification.reason } : {}),
+      });
+    }
+
+    const live = unmatched.filter((u) => u.state === "live");
+    report[category] = {
+      indexPage,
+      wikiMembers: members.length,
+      catalogRows: collectCatalogItems([category]).length,
+      matched: members.length - unmatched.length,
+      unmatched,
+      // Five buckets, not three. `missing` now requires a POSITIVE purchasability signal, so a page
+      // whose price could not be read lands in `unresolved` rather than being proposed as a catalog
+      // gap — and a page that could not be read at all lands in `failures` rather than either.
+      missing: live.filter((u) => u.purchasable === true),
+      unpurchasable: live.filter((u) => u.purchasable === false),
+      unresolved: live.filter((u) => u.purchasable == null),
+      tombstones: unmatched.filter((u) => u.state === "removed" || u.state === "never-shipped"),
+      failures: unmatched.filter((u) => u.state === "unreadable"),
+    };
+    log({
+      level: "info",
+      event: "discovery-category",
+      category,
+      wikiMembers: report[category].wikiMembers,
+      catalogRows: report[category].catalogRows,
+      missing: report[category].missing.length,
+      unpurchasable: report[category].unpurchasable.length,
+      unresolved: report[category].unresolved.length,
+      tombstones: report[category].tombstones.length,
+      failures: report[category].failures.length,
+    });
+  }
+
+  return report;
+}
+
+/**
+ * The coverage table SPEC-0007 asks for.
+ *
+ * "Page exists but the item does not" and "item missing from the catalog" are reported as separate
+ * columns on purpose: the audit's trait delta of 26 was read as 26 missing traits, and at least one
+ * of them — Iron Repeater — is a tombstone sitting in `Category:Purchasable_Traits`. A single
+ * "delta" number invites that reading; two columns do not.
+ */
+export function formatCoverage(report) {
+  const lines = ["coverage against the wiki's own category indexes:"];
+  for (const [category, r] of Object.entries(report)) {
+    if (r.dryRun) {
+      lines.push(`  ${category.padEnd(12)} dry-run — would crawl ${r.indexUrl}`);
+      continue;
+    }
+    lines.push(
+      `  ${category.padEnd(12)} wiki ${String(r.wikiMembers).padStart(3)}  catalog ${String(r.catalogRows).padStart(3)}` +
+        `  matched ${String(r.matched).padStart(3)}  missing ${String(r.missing.length).padStart(3)}` +
+        `  unpurchasable ${String((r.unpurchasable ?? []).length).padStart(3)}` +
+        `  unresolved ${String((r.unresolved ?? []).length).padStart(3)}` +
+        `  not-an-item ${String(r.tombstones.length).padStart(3)}` +
+        `  unreadable ${String((r.failures ?? []).length).padStart(3)}`
+    );
+    for (const u of r.unpurchasable ?? []) {
+      lines.push(`      unpurchasable ${u.page} — price stated as ${JSON.stringify(u.priceStated)}`);
+    }
+    // Reported, not silently folded into `missing`: "no price field was found" is not a finding
+    // about the item, it is a finding about the parse, and the two must not read the same.
+    for (const u of r.unresolved ?? []) {
+      lines.push(`      unresolved    ${u.page} — no Price or Cost field found; purchasability unknown`);
+    }
+    // The excerpt is why the verdict is checkable. `classifyPage` collects it precisely so a summary
+    // can be audited without re-fetching, and printing only the generic reason threw that away —
+    // which matters most here, because the classification is whole-page regex over content that
+    // includes update-history and trivia, so a live item whose VARIANT was removed can match.
+    for (const t of r.tombstones) {
+      lines.push(`      ${t.state.padEnd(13)} ${t.page} — ${t.reason}`);
+      if (t.evidence) lines.push(`                      evidence: ${t.evidence}`);
+    }
+    for (const f of r.failures ?? []) {
+      lines.push(`      unreadable    ${f.page} — ${f.reason}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -868,6 +1233,7 @@ export async function runStatsScrape(options, deps) {
   if (limit !== null && limit >= 0) items = items.slice(0, limit);
 
   const records = {};
+  const renames = [];
 
   for (const target of items) {
     try {
@@ -886,7 +1252,9 @@ export async function runStatsScrape(options, deps) {
         ...(result.selection ? { selectedBy: result.selection.method } : {}),
         ...(result.fields ? { fields: Object.keys(result.fields).length } : {}),
         ...(result.revision ? { revision: result.revision } : {}),
+        ...(result.renamed ? { renamedFrom: result.renamed.from, renamedTo: result.renamed.to } : {}),
       });
+      if (result.renamed) renames.push({ id: target.id, ...result.renamed, url: result.url });
     } catch (err) {
       recordResult(summary, {
         status: "failed",
@@ -1016,15 +1384,21 @@ export async function runStatsScrape(options, deps) {
     ...(datasetSkipped ? { datasetSkipped } : {}),
     ...(blockedByShrink ? { wouldDrop: dropped } : {}),
     ...(catalogWritten ? { catalogWritten } : {}),
+    ...(renames.length ? { renameCandidates: renames.length } : {}),
     ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
   summary.records = records;
+  summary.renames = renames;
   summary.datasetPath = written;
   summary.droppedIds = dropped;
   summary.catalogPlan = catalogPlan;
   summary.catalogWritten = catalogWritten;
   summary.catalogSkipped = catalogSkipped;
+  // Handed back so a --discover phase can reuse both rather than re-fetching robots.txt and
+  // starting a second, independent rate limiter that knows nothing about the requests just made.
+  summary.robotsGroups = robotsGroups;
+  summary.rateLimiter = rateLimiter;
   return summary;
 }
 
@@ -1093,11 +1467,13 @@ export function parseArgs(argv) {
     limit: null,
     allowShrink: false,
     writeCatalog: false,
+    discover: false,
   };
   for (const arg of argv) {
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--allow-shrink") options.allowShrink = true;
     else if (arg === "--write-catalog") options.writeCatalog = true;
+    else if (arg === "--discover") options.discover = true;
     else if (arg.startsWith("--only=")) {
       options.categories = arg
         .slice("--only=".length)
@@ -1153,6 +1529,31 @@ async function main() {
   if (summary.catalogSkipped) {
     console.log(`scrape-stats: --write-catalog refused — ${summary.catalogSkipped}`);
   }
+
+  if (options.discover) {
+    if (options.dryRun) {
+      console.log("scrape-stats: --discover under --dry-run — resolving index URLs, fetching none.");
+    } else {
+      console.log("scrape-stats: --discover — crawling category indexes. Unmatched pages are fetched to");
+      console.log("              classify them, so this makes materially more requests than a stats run.");
+    }
+    // robots.txt and the rate limiter come from the run that just finished rather than being
+    // re-established: a second fetch of robots.txt is a request we already made, and a second
+    // limiter would let discovery burst against a site the stats phase was just pacing itself for.
+    const report = await runDiscovery(options, {
+      fetchFn: fetch,
+      robotsGroups: summary.robotsGroups,
+      rateLimiter: summary.rateLimiter,
+    });
+    console.log(formatCoverage(report));
+    summary.discovery = report;
+  }
+
+  if (summary.renames?.length) {
+    console.log(`rename candidates: ${summary.renames.length} item(s) whose page title differs from the catalog`);
+    for (const r of summary.renames) console.log(`  ${r.id}: "${r.from}" -> "${r.to}"   ${r.url}`);
+  }
+
   console.log(formatSummary(summary));
 
   process.exitCode = summary.failed.length > 0 ? 1 : 0;

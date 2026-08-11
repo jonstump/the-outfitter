@@ -215,10 +215,22 @@ Every scraped trait record SHALL carry its acquisition class (Regular, Burn, Sca
 
 The exclusion boundary SHALL be stated in `catalog.js` in terms of purchasability rather than in terms of any event's duration, since a limited-time item can become permanent while remaining unpurchasable.
 
+Purchasability SHALL be recorded three ways, not two: purchasable, stated-unpurchasable, and unresolved. "Stated-unpurchasable" requires that a price was actually read and refused — a Tarot Card's literal `Scarce`. An item whose page carries no price field at all SHALL be recorded as unresolved and reported in its own column, since defaulting it to either determination is the inference this spec's "Stored, Never Inferred" requirement forbids.
+
 #### Scenario: A Scarce item is identified as out of scope, not as missing
 
 - **WHEN** a discovery run encounters a Tarot Card page with no catalog row
 - **THEN** it SHALL be reported as out of scope on the recorded ground that it is not purchasable with Hunt Dollars, not as a missing item
+
+#### Scenario: An unreadable price is not an exclusion
+
+- **WHEN** a discovery run reaches an unmatched page carrying no `Price` or `Cost` field
+- **THEN** it SHALL be reported as unresolved, and MUST NOT be reported either as a missing catalog row or as a deliberate exclusion
+
+#### Scenario: A page the crawl could not read is not a catalog gap
+
+- **WHEN** a page fetch is refused by `robots.txt`, returns a non-OK status, or throws
+- **THEN** that page SHALL be reported as unreadable with its reason, MUST NOT be counted as missing, and the rest of the crawl SHALL continue
 
 ### Requirement: Roster Coverage Is Reported Against the Wiki's Own Categories
 
