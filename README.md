@@ -67,11 +67,17 @@ total byte budget — an over-budget asset fails its hunter rather than being wr
 `--force` (re-encode existing art), `--limit=N`, `--dry-run`, `--delay-ms=N`.
 
 `scrape-stats.mjs` writes `client/src/data/itemStats.json` — one record per catalog item, keyed by
-catalog id, carrying the wiki revision it came from. It is **additive**: it never edits
-`catalog.js`, so it cannot change a number the app does budget math with. Reconciling a scraped
-value against a hand-authored one is a separate, opt-in step (SPEC-0007, not yet built). A partial
-run (`--limit` or `--only`) reports without writing, so it cannot truncate the dataset to whatever
-it happened to visit. The same applies to coverage lost to failure rather than to a flag: a run
+catalog id, carrying the wiki revision it came from. A default run is **additive**: it never edits
+`catalog.js`, so it cannot change a number the app does budget math with. A partial run (`--limit`
+or `--only`) reports without writing, so it cannot truncate the dataset to whatever it happened to
+visit.
+
+`--write-catalog` additionally reconciles `catalog.js`, applying scraped values over hand-authored
+ones for cost, size and UP. It prints every intended overwrite before applying any of them, refuses
+values outside the ranges the game actually uses, and edits tuples in place so the result is a
+reviewable `git diff` against a hand-authored file. It deliberately never touches a weapon's
+`ammoClass` (a saved ammo selection is a bare index into that pool), an item's display name (it
+feeds the on-disk image path), or `group`, `type` and the `AMMO` table at all. The same applies to coverage lost to failure rather than to a flag: a run
 that would drop items the committed dataset already covers writes nothing and names them, and
 `--allow-shrink` is how a genuine removal gets through.
 

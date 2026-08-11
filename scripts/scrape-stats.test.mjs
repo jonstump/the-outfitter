@@ -27,16 +27,22 @@ import {
   NetworkFailureError,
   RateLimiter,
   RobotsDisallowedError,
+  applyCatalogWrites,
   buildStatsRecord,
   canonicalTitleFromPageName,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
   extractInfoboxes,
+  formatCatalogPlan,
   formatSummary,
   isPartialRun,
   parseArgs,
   parseInfoboxFields,
+  parseNumeric,
+  planCatalogWrites,
+  rangeViolation,
+  replaceTupleField,
   readInfoboxField,
   runStatsScrape,
   scrapeItemStats,
@@ -528,32 +534,14 @@ test("parseArgs: a nonsense delay or limit is ignored rather than applied", () =
 // Structural guarantees this story promises
 // ---------------------------------------------------------------------------
 
-// #183 asserted this module imported no filesystem API at all. #184 gives it one, so the guard
-// narrows rather than disappears: the dataset is the ONLY thing it may write. Reconciling a scraped
-// value against a hand-authored one is #185's guarded, opt-in write-through, and until that lands a
-// run must not be able to change a number the app does budget math with.
-test("the scrape writes the dataset and nothing else — catalog.js is never a write target", async () => {
+// This guard has narrowed twice rather than disappearing, which is the point of keeping it.
+// #183: the module imported no filesystem API at all. #184: the dataset became its only write
+// target. #185 adds catalog.js as a second — so the guard now pins the write set to exactly two
+// paths, and a third one appearing has to be a deliberate edit to this assertion.
+test("the module writes exactly two paths: the dataset, and the catalog under its flag", async () => {
   const src = await readFile(path.join(__dirname, "scrape-stats.mjs"), "utf8");
-  const writeTargets = [...src.matchAll(/fsWriteFile\(\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1]);
-  assert.deepEqual(
-    [...new Set(writeTargets)],
-    ["datasetPath"],
-    "the only path this module writes is the dataset; catalog write-through is #185"
-  );
-  // Comments discuss catalog.js at length; what matters is that no executable line resolves a path
-  // to it. Strip line comments before checking so the guard tests code, not prose.
-  const code = src
-    .split("\n")
-    .filter((line) => {
-      const t = line.trim();
-      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
-    })
-    .join("\n");
-  assert.equal(
-    /catalog\.js/.test(code),
-    false,
-    "no executable line may name catalog.js — the write-through is #185"
-  );
+  const writeTargets = [...new Set([...src.matchAll(/fsWriteFile\(\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
+  assert.deepEqual(writeTargets.sort(), ["catalogPath", "datasetPath"]);
 });
 
 test("a full run writes catalog.js not at all — verified against the committed tree", async () => {
@@ -936,4 +924,200 @@ test("a first run with no dataset on disk is not treated as a shrink", async () 
 test("parseArgs: --allow-shrink is off unless asked for", () => {
   assert.equal(parseArgs([]).allowShrink, false);
   assert.equal(parseArgs(["--allow-shrink"]).allowShrink, true);
+});
+
+// ---------------------------------------------------------------------------
+// #185 — catalog write-through: bounded, reviewable, opt-in
+// ---------------------------------------------------------------------------
+
+test("parseNumeric: accepts whole numbers, including comma-grouped", () => {
+  assert.equal(parseNumeric("75"), 75);
+  assert.equal(parseNumeric(" 1,015 "), 1015);
+});
+
+test("parseNumeric: refuses anything that is not a whole number", () => {
+  // The lenient alternative — strip non-digits and take what is left — is exactly how
+  // "wrong but well-formed" gets written: "1.5" would become 15 and land silently.
+  assert.equal(parseNumeric("1.5"), null);
+  assert.equal(parseNumeric("75 Hunt Dollars"), null);
+  assert.equal(parseNumeric("~80"), null);
+  assert.equal(parseNumeric(""), null);
+  assert.equal(parseNumeric(undefined), null);
+});
+
+test("rangeViolation: accepts the ranges the game actually uses", () => {
+  assert.equal(rangeViolation(1, "size"), null);
+  // 17 of 38 weapons are size 4 or 5. ADR-0005 and SPEC-0007 as first written said 1..3, which
+  // would have failed 45% of the arsenal on a correct parse.
+  assert.equal(rangeViolation(4, "size"), null);
+  assert.equal(rangeViolation(5, "size"), null);
+  assert.equal(rangeViolation(9, "up"), null);
+  assert.equal(rangeViolation(1015, "cost"), null);
+});
+
+test("rangeViolation: rejects implausible values with a reason naming the range", () => {
+  assert.match(rangeViolation(7, "size"), /outside the plausible size range 1\.\.5/);
+  assert.match(rangeViolation(0, "cost"), /outside the plausible cost range/);
+});
+
+test("planCatalogWrites: plans only the fields that actually differ", () => {
+  const rows = { weapons: [["w1", "W One", 2, 30, "compact", "Pistols"]] };
+  const records = { w1: { fields: { Price: "24", Size: "2" }, wikiUrl: "https://w/1" } };
+  const { changes, rejected } = planCatalogWrites(records, rows);
+  assert.equal(rejected.length, 0);
+  assert.deepEqual(
+    changes.map((c) => [c.label, c.from, c.to]),
+    [["cost", 30, 24]] // Size matched, so it is not a change
+  );
+});
+
+test("planCatalogWrites: an out-of-range value is refused, and the rest of the item still lands", () => {
+  const rows = { weapons: [["w1", "W One", 2, 30, "compact", "Pistols"]] };
+  const records = { w1: { fields: { Price: "24", Size: "9" }, wikiUrl: "https://w/1" } };
+  const { changes, rejected } = planCatalogWrites(records, rows);
+  assert.deepEqual(changes.map((c) => c.label), ["cost"], "the good field still lands");
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].label, "size");
+  assert.equal(rejected[0].url, "https://w/1", "the refusal carries the source URL");
+  assert.match(rejected[0].reason, /outside the plausible size range/);
+});
+
+test("planCatalogWrites: traits map from Cost, not Price", () => {
+  // The wiki labels Upgrade Points "Cost". Mapping traits to "Price" would silently plan nothing
+  // for all 32 of them, which reads as "the trait table is already correct".
+  const rows = { traits: [["t1", "T One", 4, "Combat"]] };
+  const { changes } = planCatalogWrites({ t1: { fields: { Cost: "6" }, wikiUrl: "u" } }, rows);
+  assert.deepEqual(changes.map((c) => [c.label, c.from, c.to]), [["up", 4, 6]]);
+});
+
+test("planCatalogWrites: never plans a write for group, type, ammoClass, or name", () => {
+  const rows = { weapons: [["w1", "W One", 2, 30, "compact", "Pistols"]], consumables: [["c1", "C One", 50, "Shot", "Shots"]] };
+  const records = {
+    w1: { fields: { Price: "24", AmmoType: "medium", Description: "renamed thing" }, wikiUrl: "u" },
+    // Traits carry a literal `Category` field — the exact trap, since it looks like `group`.
+    c1: { fields: { Price: "50", Category: "Healing", Type: "Placeable" }, wikiUrl: "u" },
+  };
+  const { changes } = planCatalogWrites(records, rows);
+  const touched = new Set(changes.map((c) => c.label));
+  assert.deepEqual([...touched], ["cost"]);
+  for (const forbidden of ["group", "type", "ammoClass", "name"]) {
+    assert.equal(touched.has(forbidden), false, `${forbidden} must never be planned`);
+  }
+});
+
+test("replaceTupleField: replaces one field and leaves the rest of the line byte-identical", () => {
+  const line = '  ["nagant-m1895", "Nagant M1895", 1, 30, "compact", "Pistols"],';
+  assert.equal(
+    replaceTupleField(line, 3, 24),
+    '  ["nagant-m1895", "Nagant M1895", 1, 24, "compact", "Pistols"],'
+  );
+});
+
+test("replaceTupleField: a comma inside a quoted value does not split the tuple", () => {
+  const line = '  ["x", "Crown, King & Co", 2, 30, "compact", "Shotguns"],';
+  assert.equal(
+    replaceTupleField(line, 3, 44),
+    '  ["x", "Crown, King & Co", 2, 44, "compact", "Shotguns"],'
+  );
+});
+
+test("replaceTupleField: refuses rather than mangling when the index is out of range", () => {
+  assert.equal(replaceTupleField('  ["x", "X", 1],', 9, 5), null);
+  assert.equal(replaceTupleField("  not a tuple at all", 1, 5), null);
+});
+
+test("applyCatalogWrites: locates rows by id and reports any it cannot find", () => {
+  const source = [
+    "// a comment that must survive",
+    '  ["a", "A", 1, 10, "compact", "Pistols"],',
+    '  ["b", "B", 2, 20, "medium", "Rifles"],',
+  ].join("\n");
+  const { source: next, applied, unlocated } = applyCatalogWrites(source, [
+    { id: "b", index: 3, to: 25, label: "cost", category: "weapons" },
+    { id: "ghost", index: 3, to: 1, label: "cost", category: "weapons" },
+  ]);
+  assert.match(next, /\/\/ a comment that must survive/, "comments survive a surgical edit");
+  assert.match(next, /\["b", "B", 2, 25, "medium", "Rifles"\]/);
+  assert.match(next, /\["a", "A", 1, 10, "compact", "Pistols"\]/, "untouched rows are unchanged");
+  assert.equal(applied.length, 1);
+  assert.deepEqual(unlocated.map((u) => u.id), ["ghost"]);
+});
+
+test("formatCatalogPlan: prints old -> new per field, and the refusals with their reasons", () => {
+  const out = formatCatalogPlan({
+    changes: [{ category: "weapons", id: "nagant-m1895", label: "cost", from: 30, to: 24, url: "https://w/n" }],
+    rejected: [{ category: "weapons", id: "x", label: "size", raw: "9", reason: "outside range", url: "https://w/x" }],
+  });
+  assert.match(out, /nagant-m1895\s+cost: 30 -> 24/);
+  assert.match(out, /https:\/\/w\/n/);
+  assert.match(out, /refused/);
+  assert.match(out, /size: "9" — outside range/);
+});
+
+test("a default run never touches catalog.js", async () => {
+  const writes = [];
+  await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0 },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsMkdir: async () => {},
+      fsReadFile: async () => JSON.stringify({ items: {} }),
+      fsWriteFile: async (p) => writes.push(p),
+    }
+  );
+  assert.equal(
+    writes.some((p) => String(p).endsWith("catalog.js")),
+    false,
+    "without --write-catalog the catalog is not a write target"
+  );
+});
+
+test("a --write-catalog run prints every change before it applies any of them", async () => {
+  const events = [];
+  const order = [];
+  await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0, writeCatalog: true },
+    {
+      fetchFn: fakeFetch(),
+      log: (e) => events.push(e),
+      fsMkdir: async () => {},
+      fsReadFile: async (p) =>
+        String(p).endsWith("catalog.js") ? (order.push("read-catalog"), "// empty") : JSON.stringify({ items: {} }),
+      fsWriteFile: async (p) => {
+        if (String(p).endsWith("catalog.js")) order.push("write-catalog");
+      },
+    }
+  );
+  const firstChangeLog = events.findIndex((e) => e.event === "catalog-change");
+  assert.ok(firstChangeLog !== -1, "every intended overwrite is logged");
+  // The plan is printed before the file is even read, let alone written.
+  assert.deepEqual(order, ["read-catalog", "write-catalog"]);
+  const planEvent = events.find((e) => e.event === "catalog-plan");
+  assert.ok(planEvent && planEvent.changes > 0);
+});
+
+test("a partial run refuses the write-through even when asked", async () => {
+  const writes = [];
+  const summary = await runStatsScrape(
+    { categories: ["weapons"], delayMs: 0, writeCatalog: true },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsMkdir: async () => {},
+      fsReadFile: async () => "// catalog",
+      fsWriteFile: async (p) => writes.push(String(p)),
+    }
+  );
+  assert.equal(writes.some((p) => p.endsWith("catalog.js")), false);
+  assert.equal(summary.catalogPlan, null, "no plan is even computed for a run that saw one category");
+});
+
+test("catalog.js states the wire-format gate beside the AMMO table", async () => {
+  // SPEC-0007 requires the gate to live where an editor will see it, not only in the spec.
+  const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
+  const gate = src.slice(Math.max(0, src.indexOf("export const AMMO") - 1200), src.indexOf("export const AMMO"));
+  assert.match(gate, /FORMAT_VERSION/);
+  assert.match(gate, /bare index/i);
+  assert.match(gate, /migration/i);
 });
