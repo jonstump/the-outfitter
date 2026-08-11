@@ -1090,14 +1090,43 @@ test("a --write-catalog run prints every change before it applies any of them", 
       fsWriteFile: async (p) => {
         if (String(p).endsWith("catalog.js")) order.push("write-catalog");
       },
+      printPlan: () => order.push("print-plan"),
     }
   );
   const firstChangeLog = events.findIndex((e) => e.event === "catalog-change");
   assert.ok(firstChangeLog !== -1, "every intended overwrite is logged");
-  // The plan is printed before the file is even read, let alone written.
-  assert.deepEqual(order, ["read-catalog", "write-catalog"]);
+  // The READABLE plan is printed before the file is even read, let alone written. Asserting only
+  // ["read-catalog", "write-catalog"] let the table be printed after the rewrite while the banner
+  // claimed otherwise — the machine-readable events were "before", the operator's view was not.
+  assert.deepEqual(order, ["print-plan", "read-catalog", "write-catalog"]);
   const planEvent = events.find((e) => e.event === "catalog-plan");
   assert.ok(planEvent && planEvent.changes > 0);
+});
+
+test("a run that trips the shrink guard refuses the write-through even when asked", async () => {
+  // The shrink guard's signal — a wiki markup change the parser no longer matches — is a reason to
+  // distrust the parses that DID survive, and those are the ones that write to catalog.js. Gating
+  // only the regenerable dataset on it left the budget math unprotected. (Review of #194.)
+  const writes = [];
+  const summary = await runStatsScrape(
+    { categories: CATEGORIES, delayMs: 0, writeCatalog: true },
+    {
+      fetchFn: fakeFetch(),
+      log: () => {},
+      fsMkdir: async () => {},
+      // The committed dataset covers an id this run did not resolve, so the run would shrink it.
+      fsReadFile: async (p) =>
+        String(p).endsWith("catalog.js")
+          ? "// catalog"
+          : JSON.stringify({ items: { "long-covered-id": { fields: {} } } }),
+      fsWriteFile: async (p) => writes.push(String(p)),
+    }
+  );
+
+  assert.equal(writes.some((p) => p.endsWith("catalog.js")), false, "catalog.js is not rewritten");
+  assert.equal(writes.some((p) => p.endsWith("itemStats.json")), false, "nor is the dataset");
+  assert.equal(summary.catalogPlan, null, "no plan is computed for a run whose parses are suspect");
+  assert.match(summary.catalogSkipped, /shrink guard/, "and the refusal is reported, not silent");
 });
 
 test("a partial run refuses the write-through even when asked", async () => {
@@ -1174,6 +1203,8 @@ test("applyCatalogWrites: a row missing from its own category is unlocated, not 
 test("the readable plan is actually printed, not just exported", async () => {
   // formatCatalogPlan was built and tested but never wired into the run path, so an operator
   // running --write-catalog saw a wall of JSON events instead of the diff table. (Review of #194.)
+  // The ordering test above owns "before the write"; this owns "main() supplies a real printer",
+  // which no in-process test can see because main() is only reached through the CLI entrypoint.
   const src = await readFile(path.join(__dirname, "scrape-stats.mjs"), "utf8");
   const code = src
     .split("\n")
@@ -1182,5 +1213,31 @@ test("the readable plan is actually printed, not just exported", async () => {
       return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
     })
     .join("\n");
-  assert.match(code, /console\.log\(formatCatalogPlan\(/, "main() must print the human-readable plan");
+  assert.match(code, /printPlan:\s*\(plan\)\s*=>\s*console\.log\(formatCatalogPlan\(plan\)\)/);
+});
+
+test("a --write-catalog run leaves the AMMO table byte-identical", async () => {
+  // The one prohibition with no test behind it. Structurally unreachable — categoryLineRange bounds
+  // every edit to one of the four category arrays — which is exactly why it is cheap to pin, and
+  // why a future change to that bounding should fail here rather than in a released build.
+  const ammo = [
+    "export const AMMO = {",
+    '  compact: [["fmj", "FMJ", 1, 15], ["dumdum", "Dum Dum", 2, 25]],',
+    '  special: [["poison", "Poison", 1, 30]],',
+    "};",
+  ].join("\n");
+  const source = [
+    "export const WEAPONS = [",
+    '  ["nagant", "Nagant M1895", 1, 30, "compact", "Pistols"],',
+    "];",
+    ammo,
+  ].join("\n");
+
+  const { source: next, applied } = applyCatalogWrites(source, [
+    { id: "nagant", category: "weapons", index: 3, to: 24, label: "cost" },
+  ]);
+
+  assert.equal(applied.length, 1);
+  assert.match(next, /\["nagant", "Nagant M1895", 1, 24, "compact", "Pistols"\]/, "the weapon row moved");
+  assert.ok(next.includes(ammo), "and the AMMO table is untouched, tuple-shaped rows and all");
 });

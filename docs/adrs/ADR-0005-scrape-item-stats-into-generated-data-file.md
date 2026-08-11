@@ -578,7 +578,14 @@ and must not be extended to cover:
 
 **Amended to:** weapon slot sizes run **1 to 5**.
 
-**Why:** measured, not argued. The hand-authored catalog and the wiki agree — of the 38 weapons the stats scrape resolves, **17 are size 4 or 5**, and 5 is the entire weapon budget `calc.js`'s `capMax()` grants (a size-5 weapon fills it). A range assertion written to `1..3` would have refused 45% of the arsenal on a *correct* parse, turning the guardrail into the defect it exists to prevent.
+**Why:** measured, not argued. Both sources reach 5, counted separately because they do not currently agree on this column:
+
+* **`client/src/data/catalog.js`** (hand-authored, 39 weapons): sizes distribute `{1:6, 2:10, 3:12, 4:9, 5:2}` — **11 at size 4 or 5**.
+* **`client/src/data/itemStats.json`** (scraped, 39 weapons carrying a `Size`): `{1:9, 2:6, 3:7, 4:14, 5:3}` — **17 at size 4 or 5**.
+
+5 is the entire weapon budget `calc.js`'s `capMax()` grants (a size-5 weapon fills it), so a range assertion written to `1..3` would have refused more than a quarter of the hand-authored arsenal — and nearly half the scraped one — on a *correct* parse, turning the guardrail into the defect it exists to prevent.
+
+The gap between 11 and 17 is neither noise nor an argument against the correction: it is the size half of the 74-field wiki-vs-catalog delta that issue #195 exists to apply, and applying it moves the catalog's own count to 17. Either count refutes `1..3` on its own.
 
 The error is this ADR's, not the implementation's: SPEC-0007 inherited `1..3` verbatim from the criterion above and has been corrected in the same pass.
 
