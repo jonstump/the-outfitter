@@ -191,7 +191,7 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
   it.each([
     [0, "First Aid Kit"], [4, "Throwing Knives"], [8, "Fusees"],
     [10, "Spyglass"], [11, "Decoys"], [12, "Blank Fire Decoys"], [13, "Decoy Fuses"],
-    [14, "Alert Trip Mine"], [15, "Concertina Trip Mine"], [16, "Poison Trip Mine"],
+    [14, "Alert Trip Mines"], [15, "Concertina Trip Mines"], [16, "Poison Trip Mines"],
     [17, "Quad Derringer"],
   ])("legacy tool index %i resolves to %s", (index, name) => {
     expect(equipNames(legacyTools(index))).toEqual([name]);

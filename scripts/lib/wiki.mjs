@@ -172,39 +172,34 @@ export const WIKI_CATEGORY = {
 // docs/audits/weapon-catalog-wiki-audit.md.
 // ---------------------------------------------------------------------------
 
+// SEVENTEEN ENTRIES REMOVED 2026-08-12 (#232), and the reason is worth reading before adding one
+// back. Most of this table existed to compensate for stale display names: the catalog said "Caldwell
+// Pax" while the wiki page was "Weapons/Pax", so an override supplied the difference. #232 brought
+// the names current, which makes the DEFAULT path correct for all of them — an override that merely
+// restates the default is dead weight that also cannot be told apart from a live mapping.
+//
+// What remains is only what the default genuinely cannot produce, and each is a different reason:
+// three variant SUB-PAGES (the default joins with `_`, the wiki nests with `/`), one cross-namespace
+// page, and one deliberate null. `resolveWikiPathIsNeeded` in the tests asserts every entry still
+// differs from its default, so the table cannot silently regrow redundant rows the next time names
+// move.
 export const WIKI_TITLE_OVERRIDES = {
   weapons: {
-    "caldwell-conversion-pistol": "Weapons/Conversion",
-    "caldwell-conversion-uppercut": "Weapons/Uppercut",
-    "caldwell-pax": "Weapons/Pax",
-    "caldwell-rival-78": "Weapons/Rival_78",
-    "crown-king-auto-5": "Weapons/Auto-5",
-    "krag-m1894": "Weapons/Krag",
-    "lemat-mark-ii": "Weapons/LeMat",
-    "martini-henry-ic1": "Weapons/Martini-Henry",
+    // Variant sub-pages. The default would join the name with an underscore
+    // ("Weapons/Mosin-Nagant_Avtomat"); the wiki nests the variant under its base weapon.
     "mosin-nagant-avtomat": "Weapons/Mosin-Nagant/Avtomat",
-    "mosin-nagant-m1891": "Weapons/Mosin-Nagant",
     "nagant-officer-carbine": "Weapons/Officer/Carbine",
-    "scottfield-model-3": "Weapons/Scottfield",
-    "sparks-lrr": "Weapons/Sparks",
     "sparks-pistol": "Weapons/Sparks/Pistol",
-    "vetterli-71-karabiner": "Weapons/Vetterli_71",
-    "winfield-1876-centennial": "Weapons/Centennial",
-    // Not a duplicate: this IS the live weapon the wiki now calls "Ranger 73". It was mapped to
-    // null until the wiki audit, on the mistaken belief that a separate "Ranger 73" catalog row
-    // covered it — there is no such row, so the only entry for this weapon was being skipped
-    // outright. Per ADR-0005 the id stays `winfield-m1873`; only the display name is stale.
-    "winfield-m1873": "Weapons/Ranger_73",
-    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES.
+    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES. Not renamed by #232 and not deleted: it sits
+    // in loadoutCodec's frozen LEGACY_WEAPON_IDS at index 16, so removing the live row would drop
+    // this weapon from any pre-versioning saved loadout rather than resolving it to `frontier-73c`,
+    // which is the same gun. That remap is a migration decision and has its own issue.
     "winfield-m1873c": null,
   },
   tools: {
-    // The wiki files the Katana under Weapons even though the catalog treats it as a Tool.
+    // The wiki files the Katana under Weapons even though the catalog treats it as a Tool. The only
+    // entry here whose namespace differs from its category, which is why the default cannot reach it.
     katana: "Weapons/Katana",
-    // The wiki pluralizes the placeable trap pages; the catalog uses the singular in-game label.
-    "alert-trip-mine": "Tools/Alert_Trip_Mines",
-    "concertina-trip-mine": "Tools/Concertina_Trip_Mines",
-    "poison-trip-mine": "Tools/Poison_Trip_Mines",
   },
   traits: {},
   consumables: {},
