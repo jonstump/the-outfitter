@@ -193,12 +193,26 @@ describe("descriptionFor", () => {
     expect(tooLong).toEqual([]);
   });
 
-  it("has no description long enough to suggest the tip budget is the whole story", () => {
-    // Traits are all the tip renders today, but `descriptionFor` is a general accessor and the
-    // longest value in the file is a consumable (flash-bomb, 221). Pinned so a second consumer
-    // inherits a known ceiling rather than rediscovering it the way the tip did.
-    const longest = Math.max(...Object.keys(ITEM_STATS).map((k) => ITEM_STATS[k].description?.length ?? 0));
-    expect(longest).toBeLessThanOrEqual(240);
+  it("keeps a known file-wide ceiling, which is no longer the trait tip's", () => {
+    // This pinned 240 on the premise that "the longest value in the file is a consumable
+    // (flash-bomb, 221)" — comfortably under the trait tip's budget, so one number served both.
+    // #233 ended that coincidence: weapons gained descriptions and weapon prose runs longer than
+    // trait prose. The Flame Rifle is 296, and the file-wide maximum now EXCEEDS what the trait tip
+    // can show.
+    //
+    // Raising the trait budget to match would be the wrong repair — the tip's 10-line clamp is
+    // measured against a 180px box and nothing about a weapon's description changes that. The two
+    // ceilings are simply different, and the test above owns the one that binds a rendered surface.
+    // What survives here is the original point: a second consumer should inherit a known number.
+    // That number is no longer the trait one, which is the fact worth pinning, because reusing
+    // `.trait-cell-tip`'s clamp for a weapon surface would silently truncate.
+    const FILE_CEILING = 320;
+    const byLength = Object.keys(ITEM_STATS)
+      .map((k) => [k, ITEM_STATS[k].description?.length ?? 0])
+      .sort((a, b) => b[1] - a[1]);
+    const [longestId, longest] = byLength[0];
+    expect(longest, `${longestId} is the longest description`).toBeLessThanOrEqual(FILE_CEILING);
+    expect(FILE_CEILING).toBeGreaterThan(240);
   });
 });
 
