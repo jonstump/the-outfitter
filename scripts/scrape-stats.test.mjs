@@ -37,6 +37,7 @@ import {
   categoryLineRange,
   CATEGORY_INDEX,
   classifyPage,
+  dualWieldFrom,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
@@ -396,8 +397,10 @@ test("scrapeItemStats: a known duplicate is skipped without spending a request",
   assert.equal(result.status, "skipped");
   assert.equal(fetched, 0);
   assert.match(result.reason, /no wiki page/);
-  // The recorded reason names the duplication rather than leaving it as a bare skip.
-  assert.match(result.reason, /Frontier 73C/);
+  // The reason used to quote KNOWN_CATALOG_DUPLICATES' explanation, which named the Frontier 73C. That
+  // table is empty since #243 retired its last entry, so an unmapped item gets the generic reason —
+  // still explained, still not a silent skip, which is the property this asserts.
+  assert.match(result.reason, /no wiki page mapped for this catalog entry/);
 });
 
 test("scrapeItemStats: a robots-disallowed path throws before fetching", async () => {
@@ -2015,15 +2018,84 @@ test("runDiscovery: a live page the catalog excludes on purpose is not reported 
   assert.equal(cons.unpurchasable[0].priceStated, "Scarce");
 });
 
-test("catalog.js states the roster boundary in terms of purchasability", async () => {
-  // SPEC-0007 REQ "Acquisition Class Is Captured": the boundary must be recorded where an editor
-  // sees it, and phrased on purchasability rather than on any event's duration — the earlier
-  // "limited-time event item" framing carried a revisit trigger that Update 2.8.1 has already fired.
+test("catalog.js states the roster boundary as a scope decision, not a purchasability rule", async () => {
+  // Governing: SPEC-0007 REQ "Acquisition Class Is Captured", **as amended 2026-08-12 per ADR-0013** —
+  // the boundary is stated in `catalog.js` "as the scope decision it is, and never in terms of any
+  // event's duration". This test enforces that post-ADR-0013 phrasing, and nothing else.
+  //
+  // It is deliberately the inverse of what it asserted before. The un-amended paragraph required the
+  // comment to be "phrased on purchasability", which was right until ADR-0013 made unpurchasability a
+  // cost of ZERO rather than a ground for exclusion — twelve Scarce rows now sit in the catalog, so a
+  // comment claiming purchasability as the criterion states something the same file falsifies. The
+  // spec paragraph carries that reversal marked rather than rewritten; so does this header, because a
+  // test whose stated authority contradicts its assertions is how the old rationale creeps back. (#161)
+  //
+  // Asserted on the two things that stay true: the boundary names Tarot Cards as the excluded set, and
+  // it does NOT claim unpurchasability as the criterion. The duration half of the requirement is
+  // untouched by the amendment, and is still checked below.
   const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
-  const boundary = src.slice(Math.max(0, src.indexOf("export const CONS") - 1600), src.indexOf("export const CONS"));
-  assert.match(boundary, /hunt dollars/i);
-  assert.match(boundary, /Scarce/);
-  assert.match(boundary, /purchasab/i);
-  // And phrased on purchasability rather than on an event's duration.
-  assert.match(boundary, /permanence was never the criterion|not "limited-time|NOT "limited-time/i);
+  const anchor = src.indexOf("export const CONS");
+  const boundary = src.slice(Math.max(0, anchor - 3200), anchor);
+  assert.match(boundary, /Tarot Card/i, "the excluded set is named");
+  assert.match(boundary, /Scarce/, "and the wiki's own word for their price is quoted");
+  assert.match(boundary, /scope decision/i, "the current reason is recorded as a choice");
+  // Both retired rationales are kept as history rather than deleted, so a reader learns the boundary
+  // has outlived two reasons instead of trusting whichever one they find.
+  assert.match(boundary, /permanence was never the criterion|limited-time/i);
+  assert.match(boundary, /ADR-0013/, "and the decision that retired the second one is cited");
+  // The load-bearing negative: the comment must not reassert purchasability as the criterion.
+  assert.doesNotMatch(
+    boundary,
+    /excluded on that ground and no other|reason is purchasability/i,
+    "twelve unpurchasable rows are IN the catalog, so that claim would be false"
+  );
+});
+
+// Governing: #178 (weapons carry no dual-wield attribute), SPEC-0007 REQ "Budget-Affecting Attributes
+// Are Stored, Never Inferred"
+test("dualWieldFrom: reads the wiki's own sentence", () => {
+  assert.equal(dualWieldFrom("Nagant made, double-action revolver. Can be dual wielded."), true);
+  // Both spellings the wiki uses in practice.
+  assert.equal(dualWieldFrom("Can be dual-wielded."), true);
+});
+
+test("dualWieldFrom: a description that does not say it is false, not null", () => {
+  // A read happened and found nothing — different from no read at all. #178: "any row the scrape
+  // cannot resolve is recorded as unresolved rather than defaulted to false", so the two must not
+  // collapse into one value.
+  assert.equal(dualWieldFrom("Winfield made, lever-action repeating rifle."), false);
+});
+
+test("dualWieldFrom: no description is null, which is not the same as false", () => {
+  assert.equal(dualWieldFrom(null), null);
+  assert.equal(dualWieldFrom(undefined), null);
+  assert.equal(dualWieldFrom(""), null);
+  assert.equal(dualWieldFrom("   "), null);
+});
+
+test("dualWieldFrom: does not fire on prose that merely mentions dual wielding", () => {
+  // The pattern is anchored on the claim, not the topic. A page discussing the mechanic — or naming a
+  // trait about it — is not asserting that THIS weapon can be paired.
+  assert.equal(dualWieldFrom("Ambidextrous reduces the reload penalty when dual wielding."), false);
+  assert.equal(dualWieldFrom("A dual-purpose tool."), false);
+});
+
+test("dualWieldFrom: distinguishes the Officer pistol from the Officer Carbine", () => {
+  // The trap #178 flags, and the reason extraction must be per page rather than by name or by
+  // description similarity: these two share their entire opening sentence and differ only in the last
+  // one. A name-similarity match would have marked the carbine dual-wieldable and been wrong.
+  const shared = "Nagant made, double-action revolver. High fire-rate, muzzle velocity, and capacity " +
+    "at the cost of damage and reload speed.";
+  assert.equal(dualWieldFrom(`${shared} Can be dual wielded.`), true, "the Officer pistol");
+  assert.equal(dualWieldFrom(shared), false, "the Officer Carbine, from the same prefix");
+});
+
+test("buildStatsRecord: carries dualWield beside the description it was lifted from", () => {
+  const base = {
+    item: "X", canonicalTitle: "X", url: "u", revision: "1", infoboxCount: 1,
+    selection: { index: 0, method: "canonical-title", title: "X" }, fields: {},
+  };
+  assert.equal(buildStatsRecord({ ...base, description: "Can be dual wielded." }, { now: () => "t" }).dualWield, true);
+  assert.equal(buildStatsRecord({ ...base, description: "A rifle." }, { now: () => "t" }).dualWield, false);
+  assert.equal(buildStatsRecord(base, { now: () => "t" }).dualWield, null, "no description, no verdict");
 });

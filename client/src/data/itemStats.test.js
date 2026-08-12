@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_STATS, STATS_GENERATED, descriptionFor, statFieldFor, statsFor } from "./itemStats.js";
+import { ITEM_STATS, STATS_GENERATED, descriptionFor, dualWieldFor, statFieldFor, statsFor } from "./itemStats.js";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "./catalog.js";
 
 // Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File)
@@ -275,5 +275,104 @@ describe("a zero cost is evidenced as unpurchasable", () => {
     const scarceTraits = TRAITS.filter((t) => (statsFor(t[0])?.acquisitionClasses ?? []).includes("Scarce"));
     expect(scarceTraits.length).toBeGreaterThan(0);
     expect(scarceTraits.filter((t) => t[2] !== 0).map((t) => t[0])).toEqual([]);
+  });
+});
+
+// Governing: #178 (the dual-wield attribute), SPEC-0007 REQ "Budget-Affecting Attributes Are Stored,
+// Never Inferred"
+describe("dualWieldFor", () => {
+  it("reads the scraped verdict for a covered weapon", () => {
+    // The Nagant M1895 is the row #178 confirmed by direct fetch, so it is the one to anchor on.
+    expect(dualWieldFor("nagant-m1895")).toBe(true);
+  });
+
+  it("returns null for an unknown id rather than false", () => {
+    // The distinction the whole field rests on: "no evidence" must not read as "denied".
+    expect(dualWieldFor("no-such-weapon")).toBeNull();
+    expect(dualWieldFor(undefined)).toBeNull();
+  });
+
+  it("marks exactly the weapons whose pages state it", () => {
+    // Eleven rows, all pistols. #178 listed nine candidates with seven marked [VERIFY]; every one is
+    // confirmed here from its own page, and #233 has since added the New Army and the Officer pistol.
+    const dual = WEAPONS.filter((w) => dualWieldFor(w[0]) === true).map((w) => w[1]).sort();
+    expect(dual).toEqual([
+      "Bornheim No. 3", "Conversion", "Dolch 96", "LeMat", "Nagant M1895", "New Army",
+      "Officer", "Pax", "Scottfield", "Sparks Pistol", "Uppercut",
+    ]);
+  });
+
+  it("does not mark the Officer Carbine, which is a different weapon from the Officer", () => {
+    // #178's named trap. These two share their entire opening sentence; only the pistol's description
+    // ends with the dual-wield claim, so anything matching on name or prose similarity gets it wrong.
+    expect(dualWieldFor("officer")).toBe(true);
+    expect(dualWieldFor("nagant-officer-carbine")).toBe(false);
+  });
+
+  it("excludes the Haymaker, the two-handed size-2 pistol", () => {
+    // #178's counterexample to deriving this from `size`: Haymaker, Uppercut and Dolch 96 are all size
+    // 2 and the split tracks hands, not slots. If this ever flips, the "size cannot derive it" argument
+    // needs revisiting rather than the data.
+    expect(dualWieldFor("haymaker")).toBe(false);
+    expect(WEAPONS.find((w) => w[0] === "haymaker")[2]).toBe(2);
+    expect(WEAPONS.find((w) => w[0] === "caldwell-conversion-uppercut")[2]).toBe(2);
+    expect(dualWieldFor("caldwell-conversion-uppercut")).toBe(true);
+  });
+
+  it("admits a silent pistol only through an explicit, justified allow-list", () => {
+    // The one place the class argument does not reach, and the reason this is a test rather than a
+    // comment. SPEC-0007's "Stored, Never Inferred", as amended 2026-08-12 by the review of #251,
+    // accepts a description that was read and stayed silent as a determination — but what makes it one
+    // is that the whole GROUP is silent, not the silence itself. That holds for Rifles (26 silent),
+    // Shotguns (9), Melee (7) and Bows (4): every single member is silent, which is an editorial
+    // convention the game agrees with, so those groups need no list and get none.
+    //
+    // Pistols are the asymmetry. Eleven of twelve state pairing outright, so silence there is NOT the
+    // convention and carries real information — a newly silent pistol is far likelier to be an unread
+    // page or a reworded wiki edit than a genuinely two-handed sidearm. It therefore has to be claimed
+    // by hand, with a ground, rather than absorbed by an argument that does not cover it.
+    const TWO_HANDED_PISTOLS = [
+      "haymaker", // Confirmed two-handed. SPEC-0007 and #178 both name it as correctly excluded.
+    ];
+    const silentPistols = WEAPONS.filter((w) => w[5] === "Pistols" && dualWieldFor(w[0]) === false).map((w) => w[0]);
+    expect(silentPistols).toEqual(TWO_HANDED_PISTOLS);
+  });
+
+  it("keeps the class corroboration true, since the pistol allow-list rests on it", () => {
+    // The premise the test above leans on, pinned so it cannot quietly stop being true. Every `true` in
+    // the dataset is a pistol; if a rifle, shotgun, melee weapon or bow ever comes back pairable, then
+    // "silent as a class" is no longer why those 46 rows are `false`, and the allow-list above stops
+    // being the only unguarded gap. Better to fail here and revisit the argument than to keep asserting
+    // a determination whose justification has expired.
+    const pairable = WEAPONS.filter((w) => dualWieldFor(w[0]) === true);
+    expect([...new Set(pairable.map((w) => w[5]))]).toEqual(["Pistols"]);
+    expect(pairable).toHaveLength(11);
+  });
+
+  it("resolves every weapon the dataset covers, leaving none merely unread", () => {
+    // Scoped to covered rows on purpose. A row with no record at all is the documented uncovered state
+    // `statsFor` already describes — `winfield-m1873c` has no wiki page of its own, so it can have no
+    // verdict, and #243 retires it. What this catches is the different failure: a row the scrape DID
+    // read and still could not resolve, which would mean the description landed without the sentence
+    // and without denying it.
+    const covered = WEAPONS.filter((w) => statsFor(w[0]) !== null);
+    expect(covered.length).toBeGreaterThan(WEAPONS.length - 3);
+    const unresolved = covered.filter((w) => dualWieldFor(w[0]) === null).map((w) => w[0]);
+    expect(unresolved).toEqual([]);
+  });
+
+  it("marks nothing outside the weapon roster", () => {
+    // Tools, consumables and traits are not wieldable in pairs, and the field must not imply otherwise
+    // just because their descriptions were read too.
+    const nonWeapons = [...TOOLS, ...CONS, ...TRAITS].filter((r) => dualWieldFor(r[0]) === true);
+    expect(nonWeapons.map((r) => r[0])).toEqual([]);
+  });
+
+  it("keeps the Sparks Pistol at size 1, which #178 predicted the rescrape would fix", () => {
+    // #178 recorded that audit §3.5 reached `size 2 -> 1` by the wrong reasoning and deferred. The
+    // rescrape corrected it, and the weapon being one-handed and dual-wieldable is consistent with 1 —
+    // so the "per-pistol or per-pair" tiebreak §3.5 worried about never had to be made.
+    expect(WEAPONS.find((w) => w[0] === "sparks-pistol")[2]).toBe(1);
+    expect(dualWieldFor("sparks-pistol")).toBe(true);
   });
 });
