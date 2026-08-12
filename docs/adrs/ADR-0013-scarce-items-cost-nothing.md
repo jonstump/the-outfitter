@@ -36,7 +36,7 @@ tuples that every consumer destructures by index?
 * Catalog rows are positional (`TRAITS` is `[id, name, cost, group]`; `WEAPONS` is
   `[id, name, size, cost, ammoClass, group]`). ADR-0010 already recorded that widening a tuple
   "touches every consumer that destructures them".
-* Rarity is a **set**, not a scalar: Relentless and Rampage are both Scarce and Burn, All Ears is
+* Rarity is a **set**, not a scalar: Relentless and Rampage are both Scarce and Burn, Blademancer is
   both Scarce and Event. Whatever holds it has to hold more than one value per item.
 
 ## Considered Options
@@ -210,8 +210,28 @@ graph TD
   means for the budget.
 * **Extends ADR-0012** (Cap a Loadout at Fifteen Traits). See "Consequence for ADR-0012" above. The
   cap is unchanged; what changes is that a trait filling a cell may now cost nothing.
-* **Scope.** In scope per the roster decision of 2026-08-11: Scarce (14 traits, 4 weapons) and Event
-  (18 traits). Out of scope: Tarot Cards, which remain the boundary #161 documents.
+* **Scope.** In scope per the roster decision of 2026-08-11: Scarce and Event traits, and the 4 Scarce
+  weapons. Out of scope: Tarot Cards, which remain the boundary #161 documents.
+
+  > **Roster corrected 2026-08-12.** This bullet read "Scarce (14 traits, 4 weapons) and Event (18
+  > traits)", and the first multi-index crawl (#231) falsified the trait counts the same way the
+  > Regular index's 58 was falsified: **the Scarce index contains a tombstone.** `Traits/All Ears`
+  > states "Update 2.7.0.3 All Ears removed from the game for being too strong" as its last
+  > availability statement, with no return, and its removal is confirmed in game. It is listed by both
+  > the Scarce and Event indexes and is not a trait to add.
+  >
+  > The de-duplicated union across the three trait indexes is **84 pages: 10 tombstones, 31 already in
+  > the catalog, and 43 to add** — not the 44 an earlier count gave. Of the 43: 18 Regular with costs
+  > of 1–6 points, Signee at 6, and 24 stating no cost at all (13 carrying `Scarce`, 11 Event-only).
+  >
+  > The lesson generalises and is the reason this is recorded rather than quietly edited: **every
+  > rarity index is an upper bound, not a roster.** Category membership is not evidence of liveness in
+  > any of them, which is exactly what #164 established for Regular and what nobody had yet checked
+  > for Scarce or Event.
+* **Event traits are not uniformly free, which answers an open question this ADR raised.** `Signee` is
+  an Event trait stating a cost of **6** upgrade points; the other 11 Event-only traits state no cost
+  at all. So Event is a genuinely different axis from Scarce, as this decision suspected, and cost
+  MUST be read per trait rather than inferred from the class. Only `Scarce` implies no cost.
 * **Burn needs no separate decision, and its count needs stating carefully.** Six pages carry `Burn`
   in their `Type` field, but one of them — Final Gasp, whose `Type` is `"Event , Burn"` — is
   event-gated, so **five Burn traits are permanently available**: Death Cheat, Necromancer, Rampage,
@@ -243,12 +263,13 @@ graph TD
   surfaces as something to explain rather than letting a guessed rarity endorse a zero.
 * **Burn does not imply free.** Necromancer is a Burn trait costing 4 points. Only Scarce implies no
   cost. Conflating the two would zero out a trait the player pays for.
-* **Discovery cannot yet see these items.** `CATEGORY_INDEX` maps `traits` to
-  `Category:Purchasable_Traits`, which the wiki redirects to `Category:Traits/Regular` — so the
-  crawl reads 58 Regular traits and is structurally blind to the 14 Scarce and 18 Event ones.
-  Implementing this decision requires `runDiscovery` to accept several index pages per catalog
-  category. That is a scraper change, tracked separately, and it is why the roster figures here come
-  from the MediaWiki category API rather than from a coverage run.
+* **Discovery can now see these items** *(resolved 2026-08-12, #231)*. This bullet previously read
+  "Discovery cannot yet see these items", and that was the blocker: `CATEGORY_INDEX` mapped `traits` to
+  `Category:Purchasable_Traits`, a redirect to `Category:Traits/Regular`, so the crawl read 58 Regular
+  traits and was structurally blind to the Scarce and Event ones. `runDiscovery` now takes a list of
+  indexes per catalog category and de-duplicates members across them — six traits are listed by both
+  the Scarce and Event indexes, so the de-duplication is load-bearing rather than defensive. The roster
+  figures above now come from a coverage run rather than from the MediaWiki category API.
 * **Related issues**: #157 (trait roster count — its "32 of 58" denominator is wrong in both
   directions), #161 (Scarce / Tarot Card scope boundary), #163 (unaccounted consumables, resolved as
   14 Tarot Cards plus 10 tombstones), #164 (tombstone classification).
