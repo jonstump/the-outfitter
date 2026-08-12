@@ -12,6 +12,11 @@ server/data/db.direct-test.json
 .DS_Store
 *.log
 .sdd/
+# Project-local qmd index. Deliberately local rather than the shared ~/.cache/qmd one:
+# a machine-wide index puts every indexed repo in reach of one unscoped `qmd query`,
+# including private ones. Scoping with `-c` is a convention; this is a boundary.
+# Rebuild with /sdd:index — it is a derived artifact, and index.sqlite is binary.
+.qmd/
 
 # Local environment overrides (copy of .env.example); never commit real values
 .env
