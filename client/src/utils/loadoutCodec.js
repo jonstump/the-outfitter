@@ -94,8 +94,11 @@ export function toData(loadout) {
 function fromV1(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
-    if (!w || !WEAPON_BY_ID.has(w[0])) return null;
-    const i = indexOfItem(WEAPONS, w[0]);
+    if (!w) return null;
+    // Aliased before the lookup, not after: the lookup is exactly what fails for a retired id. (#243)
+    const id = aliasWeaponId(w[0]);
+    if (!WEAPON_BY_ID.has(id)) return null;
+    const i = indexOfItem(WEAPONS, id);
     return { i, a: boundedAmmo(i, w[1]) };
   };
   const raw = (d.e || []).filter((e) => e && (e[0] === "T" || e[0] === "C"));
@@ -224,6 +227,36 @@ function legacyId(table, index) {
  * equipment through `TOOL_BY_ID`, so a CURRENT-format record carrying `["T","katana"]` would be
  * dropped just as silently as `LEGACY_TOOL_IDS[6]` would.
  */
+/**
+ * Retired weapon ids, mapped to the row that now carries the same gun.
+ *
+ * Governing: #243. `winfield-m1873c` was the pre-1896 name for the weapon the wiki now calls Frontier
+ * 73C, and `frontier-73c` already existed alongside it — two rows, one gun, and the stale one had no
+ * page of its own to scrape.
+ *
+ * Deleting a row is normally free, because both decoders resolve through stable ids rather than array
+ * positions. It was NOT free here: `LEGACY_WEAPON_IDS[16]` names this id, so removing the row would
+ * have made a pre-versioning loadout resolve it to nothing and drop the weapon — rather than landing
+ * on the identical gun sitting two rows away. That is the silent remap the frozen table exists to
+ * prevent, arriving through the other door.
+ *
+ * Applied in BOTH decoders, and #243 only asked for `fromLegacy`. `toData` writes
+ * `WEAPONS[w.i][0]`, so any loadout saved while the duplicate was still selectable carries
+ * `"winfield-m1873c"` in the CURRENT format too, and `fromV1` would have dropped it just as quietly.
+ * Same shape of miss as the Katana's (#156), one issue later.
+ *
+ * Safe as a pure id substitution because the two rows agree on everything a decoded weapon carries
+ * beyond identity: both are size 3, both draw from `compact`, so a stored ammo index stays in range
+ * and keeps meaning the same round. An alias between rows with different ammo pools would need the
+ * index remapped, not just the id — see the wire-format gate in catalog.js.
+ */
+export const RETIRED_WEAPON_ALIASES = Object.freeze({ "winfield-m1873c": "frontier-73c" });
+
+/** A stored weapon id resolved through the alias table above. Unknown ids pass through unchanged. */
+function aliasWeaponId(id) {
+  return Object.prototype.hasOwnProperty.call(RETIRED_WEAPON_ALIASES, id) ? RETIRED_WEAPON_ALIASES[id] : id;
+}
+
 export const PROMOTED_TO_WEAPON = new Set(["katana"]);
 
 /**
@@ -271,7 +304,10 @@ function fromLegacy(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
     if (!w) return null;
-    const id = legacyId(LEGACY_WEAPON_IDS, w[0]);
+    // Index -> frozen id -> alias, in that order. The frozen table records what the slot MEANT; the
+    // alias records where that item lives now. Collapsing the two would mean editing the frozen
+    // table, which is the one thing it must never be. (#243)
+    const id = aliasWeaponId(legacyId(LEGACY_WEAPON_IDS, w[0]));
     if (!id || !WEAPON_BY_ID.has(id)) return null;
     const i = indexOfItem(WEAPONS, id);
     return { i, a: boundedAmmo(i, w[1]) };
