@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
 import Picker from "./Picker.jsx";
 import { TRAITS } from "../../data/catalog.js";
+import * as itemStats from "../../data/itemStats.js";
+import { descriptionFor } from "../../data/itemStats.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 
 // Governing: #23 (the locally-reconstructed ui object passed to buildRows must
@@ -70,6 +72,12 @@ describe("Picker Traits-tab UP-budget gate (issue #23 regression)", () => {
 // the one place the number keeps a visible unit, because a trait row has no dollar cost beside
 // it, so the badge is the only thing on the row that says what the number counts.
 describe("Picker Traits-tab point badge", () => {
+  // In `afterEach` rather than at the end of the mocking test: a failed assertion there would
+  // return before the restore and leak the `descriptionFor` mock into everything after it.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const traitsTab = { tab: "Traits", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" };
 
   const rowFor = (buttons, name) => buttons.find((b) => b.textContent.includes(name));
@@ -94,5 +102,30 @@ describe("Picker Traits-tab point badge", () => {
     const { container } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
 
     expect(container.textContent).not.toMatch(/\bUP\b/);
+  });
+
+  it("shows each trait's scraped description, not its group with a word appended", () => {
+    // #228. Every trait row but Quartermaster read "<group> trait" — "Combat trait", "Medical trait"
+    // — which looked like a description and was the `group` field. Quartermaster's real prose was
+    // hand-written in this component, which also let it go stale: the wiki says "Gain +1 Weapon
+    // Capacity", not "Raises weapon capacity to 6".
+    const { getAllByRole, container } = renderPicker({
+      loadout: loadoutState({ traits: [] }),
+      ui: traitsTab,
+    });
+    const withDesc = TRAITS.find((t) => descriptionFor(t[0]));
+    const row = rowFor(getAllByRole("button"), withDesc[1]);
+    expect(row).toHaveTextContent(descriptionFor(withDesc[0]));
+    expect(container.textContent).not.toMatch(/Raises weapon capacity to 6/);
+    expect(container.textContent).not.toMatch(/\bCombat trait\b/);
+  });
+
+  it("falls back to the group label when the dataset has no description", () => {
+    // `descriptionFor` is specified to return null for a catalog row the dataset does not cover, and
+    // a row with no meta at all reads as a rendering fault rather than as missing data.
+    vi.spyOn(itemStats, "descriptionFor").mockReturnValue(null);
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
+    const def = TRAITS[0];
+    expect(rowFor(getAllByRole("button"), def[1])).toHaveTextContent(`${def[3]} trait`);
   });
 });

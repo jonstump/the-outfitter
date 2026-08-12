@@ -29,6 +29,7 @@ import {
   RobotsDisallowedError,
   acquisitionOf,
   acquisitionClassesFrom,
+  parseDescription,
   parsePageCategories,
   applyCatalogWrites,
   buildStatsRecord,
@@ -1350,6 +1351,120 @@ test("classifyPage: a page confirmed live in game overrides its own removal pros
   assert.equal(c.state, "live");
   assert.equal(c.evidence, "recorded in KNOWN_LIVE");
   assert.match(c.reason, /Scarce/, "the reason records what it came back as");
+});
+
+// The two real page shapes, trimmed. `headline` mirrors MediaWiki's own section markup, which is what
+// parseDescription anchors on.
+const headline = (id, text) => `<h2><span class="mw-headline" id="${id}">${text}</span></h2>`;
+const TRAIT_PAGE_SHAPE = (prose) =>
+  `<html><body><div class="mw-parser-output">${infobox(PRICE_ROW)}${prose}` +
+  `${headline("Update_History", "Update History")}<p>Update 1.0 added it.</p></div></body></html>`;
+const DESCRIBED_PAGE_SHAPE = (lead, described) =>
+  `<html><body><div class="mw-parser-output">${infobox(PRICE_ROW)}${lead}` +
+  `<h2 id="mw-toc-heading">Contents</h2>` +
+  `${headline("Description", "Description")}<p>${described}</p>` +
+  `${headline("Trivia", "Trivia")}<p>Named after a real rifle.</p></div></body></html>`;
+
+test("parseDescription: a trait's description is the lead prose above its first section", () => {
+  // Traits have no Description section — their headings are Information, Gallery, Update History — so
+  // the lead prose is the description. (#228)
+  const html = TRAIT_PAGE_SHAPE("<p>Your Hunter won't lose a Health Chunk when downed.</p>");
+  assert.equal(parseDescription(html), "Your Hunter won't lose a Health Chunk when downed.");
+});
+
+test("parseDescription: prose under a Description section wins over the lead", () => {
+  // Weapons, tools and consumables carry an explicit Description section. Preferring it means the page
+  // decides which prose is the description, rather than us inferring it from position.
+  const html = DESCRIBED_PAGE_SHAPE(
+    "<p><i>See also: Frontier 73C, Infantry 73L.</i></p>",
+    "Winfield made, lever-action repeating rifle. High fire-rate, large magazine."
+  );
+  assert.equal(
+    parseDescription(html),
+    "Winfield made, lever-action repeating rifle. High fire-rate, large magazine."
+  );
+});
+
+test("parseDescription: a See-also hatnote is navigation and never the description", () => {
+  // Without this, most of the catalog's `description` would have read "See also: ..." — a string that
+  // looks like data and is a table of contents.
+  const html = TRAIT_PAGE_SHAPE("<p><i>See also: Hellfire Bomb, Liquid Fire Bomb.</i></p>");
+  assert.equal(parseDescription(html), null, "a page whose only lead prose is a hatnote states none");
+});
+
+test("parseDescription: the table of contents is not a section boundary", () => {
+  // The TOC is `<h2 id="mw-toc-heading">Contents</h2>` with no mw-headline span. Anchoring on <h2>
+  // put the lead boundary above the description on every page that has a TOC, yielding null for all
+  // of them. Anchoring on the headline span is what makes the boundary mean "a real section".
+  const html =
+    `<html><body><div class="mw-parser-output">${infobox(PRICE_ROW)}` +
+    `<h2 id="mw-toc-heading">Contents</h2><p>This portable foothold trap clamps loudly shut.</p>` +
+    `${headline("Update_History", "Update History")}<p>changed</p></div></body></html>`;
+  assert.equal(parseDescription(html), "This portable foothold trap clamps loudly shut.");
+});
+
+test("parseDescription: several lead paragraphs are kept, newline-joined", () => {
+  // Necromancer's shape, and not only Necromancer's: 9 of the 32 traits carry a second paragraph,
+  // each a conditional rule (`SOLO:`, `CATALYST:`, `SOLO CATALYST:`) that replaces the base effect
+  // rather than restating it. Collapsing to the first paragraph would drop a mechanic from over a
+  // quarter of them.
+  const html = TRAIT_PAGE_SHAPE(
+    "<p>Using Dark Sight, revive a downed teammate from a distance. (25m)</p>" +
+      "<p>SOLO: You can revive your downed Hunter.</p>"
+  );
+  assert.equal(
+    parseDescription(html),
+    "Using Dark Sight, revive a downed teammate from a distance. (25m)\nSOLO: You can revive your downed Hunter."
+  );
+});
+
+test("parseDescription: prose after the description's own section is not absorbed", () => {
+  const html = DESCRIBED_PAGE_SHAPE("", "The description.");
+  assert.equal(parseDescription(html), "The description.", "Trivia below it is excluded");
+});
+
+test("parseDescription: markup is stripped and entities decoded, so the value is plain text", () => {
+  // SPEC-0003 requires descriptions be treated as untrusted and never inserted as markup. Stripping
+  // here does not relieve a consumer of rendering it as text, but it does mean the stored value is
+  // text rather than a fragment.
+  const html = TRAIT_PAGE_SHAPE(
+    '<p>Raises capacity to <a href="/wiki/Weapons">6</a> &amp; costs 8&#160;points.</p>'
+  );
+  assert.equal(parseDescription(html), "Raises capacity to 6 & costs 8 points.");
+});
+
+test("parseDescription: an inline link leaves no gap before punctuation", () => {
+  // Real output before this: "Doubles the amount of Health restored by First Aid Kit ." and
+  // "Using Dark Sight , revive" and "SOLO : You can revive". `textContent` turns every tag into a
+  // space, which is correct for infobox values and wrong mid-sentence.
+  const html = TRAIT_PAGE_SHAPE(
+    '<p>Doubles the Health restored by <a href="/wiki/x">First Aid Kit</a>.</p>' +
+      '<p><b>SOLO</b>: revive using <a href="/wiki/y">Dark Sight</a>, then heal.</p>'
+  );
+  assert.equal(
+    parseDescription(html),
+    "Doubles the Health restored by First Aid Kit.\nSOLO: revive using Dark Sight, then heal."
+  );
+});
+
+test("parseDescription: a parenthetical after a sentence keeps its space", () => {
+  // The punctuation fix must not chew up "distance. (25m)" into "distance.(25m)".
+  const html = TRAIT_PAGE_SHAPE("<p>Revive a teammate from a distance. (25m)</p>");
+  assert.equal(parseDescription(html), "Revive a teammate from a distance. (25m)");
+});
+
+test("parseDescription: a page with no prose at all yields null, not an empty string", () => {
+  assert.equal(parseDescription(`<html><body><div class="mw-parser-output">${infobox(PRICE_ROW)}</div></body></html>`), null);
+  assert.equal(parseDescription("<html><body>no parser output</body></html>"), null);
+});
+
+test("buildStatsRecord: carries the description, and null when the page stated none", () => {
+  const base = {
+    item: "X", canonicalTitle: "X", url: "u", revision: "1", infoboxCount: 1,
+    selection: { index: 0, method: "canonical-title", title: "X" }, fields: {},
+  };
+  assert.equal(buildStatsRecord({ ...base, description: "Prose." }, { now: () => "t" }).description, "Prose.");
+  assert.equal(buildStatsRecord(base, { now: () => "t" }).description, null, "absent becomes an explicit null");
 });
 
 test("parsePageCategories: reads the page's own category membership", () => {

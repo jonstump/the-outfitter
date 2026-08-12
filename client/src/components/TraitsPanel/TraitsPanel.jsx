@@ -1,5 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { TRAITS, traitThumb } from "../../data/catalog.js";
+import { descriptionFor } from "../../data/itemStats.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { TRAIT_MAX } from "../../utils/calc.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
@@ -29,6 +30,7 @@ function EmptyCell() {
 
 function TraitCell({ trait, onRemove }) {
   const [id, name, up] = trait;
+  const description = descriptionFor(id);
   // The tooltip is decorative duplication — the button's accessible name carries the same
   // facts, so a screen reader never depends on a hover surface it cannot reach.
   const label = `${name}, ${up} upgrade point${up === 1 ? "" : "s"}. Activate to remove.`;
@@ -43,11 +45,21 @@ function TraitCell({ trait, onRemove }) {
       <span className="trait-cell-up" aria-hidden="true">
         {up}
       </span>
-      {/* The tip carries the name only. The cost is already on the icon, and repeating it as
-          "8 UP" was saying the same thing twice in the same hover. The unit survives in the
-          accessible name above, where a bare "8" would mean nothing read aloud. */}
+      {/* Name, then the scraped description when there is one. The cost is still absent: it is
+          already on the icon, and repeating it as "8 UP" said the same thing twice in one hover.
+          The unit survives in the accessible name above, where a bare "8" would read as nothing.
+
+          Both lines are `aria-hidden` because the tip is decorative duplication — but the
+          description is NOT duplicated in the accessible name, and that is deliberate. `aria-label`
+          is announced whole, so appending prose would make every trait removal read out a paragraph
+          before saying "Activate to remove". A screen reader user gets the description on the picker
+          row instead, where it is the row's own text rather than a hover surface.
+
+          Rendered as {text}, never as markup: the value is untrusted wiki output, which SPEC-0003
+          states for the hunter descriptions and applies identically here. */}
       <span className="trait-cell-tip" aria-hidden="true">
-        {name}
+        <span className="trait-cell-tip-name">{name}</span>
+        {description ? <span className="trait-cell-tip-desc">{description}</span> : null}
       </span>
     </button>
   );

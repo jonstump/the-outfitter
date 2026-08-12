@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { fireEvent, render } from "@testing-library/react";
 import TraitsPanel from "./TraitsPanel.jsx";
 import { TRAITS, traitThumb } from "../../data/catalog.js";
+import * as itemStats from "../../data/itemStats.js";
+import { descriptionFor } from "../../data/itemStats.js";
 import { TRAIT_MAX } from "../../utils/calc.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
+import { effective } from "../../test/cssRules.js";
 import { slugify } from "../ItemThumb/ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -101,6 +104,10 @@ describe("TraitsPanel grid", () => {
 });
 
 describe("TraitsPanel cell detail", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("shows the upgrade-point cost on the icon", () => {
     const def = TRAITS.find((t) => t[2] > 0);
     const { container } = renderPanel([def[0]]);
@@ -126,6 +133,45 @@ describe("TraitsPanel cell detail", () => {
     const tip = container.querySelector(".trait-cell-tip");
     expect(tip).toHaveTextContent(def[1]);
     expect(tip.textContent).not.toMatch(/UP/);
+  });
+
+  it("puts the scraped description in the hover tip, below the name", () => {
+    // #228. Until the stats scrape captured prose, no description text existed anywhere in the repo,
+    // so the tip could carry only a name.
+    const def = TRAITS[0];
+    const { container } = renderPanel([def[0]]);
+    const tip = container.querySelector(".trait-cell-tip");
+    expect(tip.querySelector(".trait-cell-tip-name")).toHaveTextContent(def[1]);
+    expect(tip.querySelector(".trait-cell-tip-desc")).toHaveTextContent(descriptionFor(def[0]));
+  });
+
+  it("omits the description element entirely when the dataset has none", () => {
+    // `descriptionFor` is specified to return null — a catalog row can predate the dataset — and an
+    // empty element would render as a stray gap in the tip's column.
+    vi.spyOn(itemStats, "descriptionFor").mockReturnValue(null);
+    const def = TRAITS[0];
+    const { container } = renderPanel([def[0]]);
+    expect(container.querySelector(".trait-cell-tip-desc")).toBeNull();
+    expect(container.querySelector(".trait-cell-tip-name")).toHaveTextContent(def[1]);
+  });
+
+  it("clamps the tip description at the depth the dataset was measured against", () => {
+    // Pins the number, not the layout — jsdom lays nothing out, so this is evidence of a
+    // declaration and not of a rendered pixel (see cssRules.js). Worth pinning anyway: the clamp
+    // was six lines while Serpent needed eight, which dropped its `SOLO:` rule with no ellipsis to
+    // admit it. `itemStats.test.js` holds the other half — that no description outgrows ten lines.
+    expect(effective(".trait-cell-tip-desc", "-webkit-line-clamp")).toBe("10");
+    expect(effective(".trait-cell-tip-desc", "white-space")).toBe("pre-line");
+  });
+
+  it("keeps the description out of the accessible name", () => {
+    // `aria-label` is announced whole, so appending prose would make every removal read a paragraph
+    // before "Activate to remove". The description reaches a screen reader on the picker row instead.
+    const def = TRAITS[0];
+    const { container } = renderPanel([def[0]]);
+    const label = container.querySelector(".trait-cell-filled").getAttribute("aria-label");
+    expect(label).toMatch(def[1]);
+    expect(label).not.toMatch(descriptionFor(def[0]).slice(0, 20));
   });
 
   it("singularises a one-point cost in the accessible name", () => {

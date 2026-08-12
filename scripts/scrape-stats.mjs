@@ -468,6 +468,8 @@ export async function scrapeItemStats(target, deps) {
   // Whole-page, NOT per-infobox: catlinks describe the page, and a page's variant infoboxes share
   // its categories. Read here so the rarity set comes from the same fetch as the fields.
   const categories = parsePageCategories(html);
+  // Also whole-page. A page's description describes the base item; variant sub-pages have their own.
+  const description = parseDescription(html);
 
   return {
     status: "succeeded",
@@ -477,6 +479,7 @@ export async function scrapeItemStats(target, deps) {
     url: pageUrl,
     canonicalTitle,
     categories,
+    description,
     // SPEC-0007 REQ "Canonical Titles Are Read From the Page": an HTTP 200 does not confirm the
     // catalog's display name is current, because MediaWiki serves renamed pages through redirects.
     // Comparing what the page calls itself against what the catalog calls it turns a rename into a
@@ -505,6 +508,10 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     infoboxTitle: result.selection.title,
     selectedBy: result.selection.method,
     variantCount: result.infoboxCount,
+    // Prose, read from the page body rather than the infobox — see parseDescription. `null` when the
+    // page states none, which is a real outcome rather than a parse failure: some pages carry only a
+    // hatnote above their first section. Untrusted output; a consumer MUST render it as text.
+    description: result.description ?? null,
     // Scrape metadata, never a catalog field, and never `group` (SPEC-0007 REQ "Acquisition Class
     // Is Captured So Roster Membership Is Checkable"). This is what makes "should this item have a
     // row?" checkable instead of arguable.
@@ -831,6 +838,81 @@ export function acquisitionClassesFrom(categories = []) {
   // half of the wiki did not state one.
   const names = new Set(categories.map((c) => String(c).split("/").pop().trim()));
   return ACQUISITION_CLASS_CATEGORIES.filter((c) => names.has(c));
+}
+
+// A hatnote is navigation, not description: weapon and consumable pages open with an italicised
+// "See also: Frontier 73C, Infantry 73L, Vandal 73C". Taking the first paragraph blindly would have
+// written that string into `description` for most of the catalog, where it would read as data.
+const HATNOTE_PREFIXES = [/^see also\b/i, /^for (?:the|other)\b/i, /^not to be confused\b/i, /^this article\b/i];
+
+/**
+ * The item's description prose, as plain text, or null when the page states none.
+ *
+ * Realizes the half of ADR-0005's title — "Scrape Item Stats **and Descriptions**" — that was never
+ * built. `itemStats.json` carried 34 field names and not one of them was prose, because the scrape
+ * only ever read infobox rows and the description lives in the page body. (#228)
+ *
+ * The wiki puts it in two different places, so this reads both:
+ *
+ *   - **Weapons, tools and consumables** carry an explicit `Description` section. That is preferred
+ *     wherever it exists, because it is the page saying which prose is the description rather than
+ *     us inferring it from position.
+ *   - **Traits** have no such section — their headings are `Information`, `Gallery` and `Update
+ *     History` — and their description is the lead prose above the first one.
+ *
+ * Sections are located by MediaWiki's `mw-headline` span rather than by `<h2>`, which matters for
+ * more than tidiness: the table of contents is itself an `<h2 id="mw-toc-heading">Contents</h2>` with
+ * no headline span, so anchoring on `<h2>` put the lead boundary *before* the description on every
+ * page that has a TOC and reported no description at all.
+ *
+ * Multiple paragraphs are joined with a newline rather than collapsed, because the second one is
+ * load-bearing where it exists. 9 of the 32 traits carry one — beastface, conduit, frontiersman,
+ * kiteskin, magpie, necromancer, pain-sense, serpent, vigilant — and each is a conditional rule
+ * (`SOLO:`, `CATALYST:` or `SOLO CATALYST:`) that replaces the base effect rather than restating
+ * it. Collapsing to the first paragraph would drop a mechanic from more than a quarter of them.
+ *
+ * The result is plain text with tags stripped. SPEC-0003 already requires the hunter descriptions be
+ * treated as untrusted and never inserted as markup; the same applies here, and stripping at the
+ * scrape does not relieve a consumer of rendering it as text.
+ */
+export function parseDescription(html) {
+  const start = html.indexOf("mw-parser-output");
+  if (start === -1) return null;
+  const body = html.slice(start);
+
+  // The page's own answer, where it gives one.
+  const described = /<span\b[^>]*class="mw-headline"[^>]*id="Description"[^>]*>[\s\S]*?<\/span>\s*<\/h[23]>/i.exec(body);
+  let region;
+  if (described) {
+    const after = body.slice(described.index + described[0].length);
+    const nextHeading = after.search(/<h[23]\b/i);
+    region = nextHeading === -1 ? after : after.slice(0, nextHeading);
+  } else {
+    const firstHeadline = body.search(/<span\b[^>]*class="mw-headline"/i);
+    region = firstHeadline === -1 ? body : body.slice(0, firstHeadline);
+  }
+
+  const paragraphs = [];
+  for (const m of region.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const text = tidyProse(textContent(m[1]));
+    if (!text) continue;
+    if (HATNOTE_PREFIXES.some((rx) => rx.test(text))) continue;
+    paragraphs.push(text);
+  }
+  return paragraphs.length === 0 ? null : paragraphs.join("\n");
+}
+
+/**
+ * Close the gap an inline link leaves before punctuation.
+ *
+ * `textContent` replaces every tag with a space, which is right for infobox values — it keeps
+ * `<a>Compact</a><img>` from becoming one word — and wrong for prose, where wiki bodies link mid
+ * sentence: `restored by <a>First Aid Kit</a>.` reads back as "restored by First Aid Kit ." and
+ * `<b>SOLO</b>:` as "SOLO :". Applied here rather than in `textContent` because that helper is shared
+ * with the field parse, and loosening it there would rewrite stat values to fix a prose artifact.
+ */
+function tidyProse(text) {
+  return text.replace(/\s+([,;:.!?%])/g, "$1").trim();
 }
 
 /**
