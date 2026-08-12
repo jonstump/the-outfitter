@@ -136,17 +136,22 @@ export const WIKI_CATEGORY = {
 // "/wiki/Nagant_M1895"), so the default resolution is `${WIKI_CATEGORY[category]}/${title}`,
 // derived from the item's display name.
 //
-// Three things break that default and need the override table below:
+// Two things break that default and need the override table below:
 //
-//   1. Hunt's Update 2.0 ("1896") renamed most branded weapons — the catalog still carries a
-//      number of pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved to
-//      the post-rename titles ("Sparks", "Pax").
-//   2. Weapon *variants* live on subpages ("Sparks/Pistol", "Mosin-Nagant/Avtomat",
+//   1. Weapon *variants* live on subpages ("Sparks/Pistol", "Mosin-Nagant/Avtomat",
 //      "Officer/Carbine"), which a flat display name can't express. Note the wiki flattens
 //      compound variants into ONE segment — "Sparks/Pistol_Silencer", never
 //      "Sparks/Pistol/Silencer" — so a path is at most three segments deep.
-//   3. A few catalog items sit under a different wiki category than the catalog's own — the
+//   2. A few catalog items sit under a different wiki category than the catalog's own — the
 //      Katana is a Tool here but a Weapon on the wiki.
+//
+// THREE, until #232. Hunt's Update 2.0 ("1896") renamed most branded weapons, and the catalog kept
+// the pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved on ("Sparks",
+// "Pax") — so an override supplied the difference for seventeen items. #232 brought the names
+// current, which makes the default correct for all of them, and those entries are gone. Recorded
+// rather than deleted because "the catalog's names may be stale" is the assumption a reader would
+// otherwise carry into this table, and it is no longer true: a rename now shows up as a rename
+// candidate in the scrape's own report, not as a silent mismatch this table has to absorb.
 //
 // Values are paths relative to /wiki/ and INCLUDE the category segment, precisely so a cross-
 // category item can be expressed. A `null` value means "deliberately has no wiki page" — see
@@ -172,43 +177,41 @@ export const WIKI_CATEGORY = {
 // docs/audits/weapon-catalog-wiki-audit.md.
 // ---------------------------------------------------------------------------
 
+// SEVENTEEN ENTRIES REMOVED 2026-08-12 (#232), and the reason is worth reading before adding one
+// back. Most of this table existed to compensate for stale display names: the catalog said "Caldwell
+// Pax" while the wiki page was "Weapons/Pax", so an override supplied the difference. #232 brought
+// the names current, which makes the DEFAULT path correct for all of them — an override that merely
+// restates the default is dead weight that also cannot be told apart from a live mapping.
+//
+// What remains is only what the default genuinely cannot produce, and each is a different reason:
+// three variant SUB-PAGES (the default joins with `_`, the wiki nests with `/`) and one deliberate
+// null. The cross-namespace entry that used to sit alongside them — the Katana — went away with
+// #156, which fixed the classification the override had been papering over. `resolveWikiPathIsNeeded`
+// in the tests asserts every entry still differs from its default, so the table cannot silently
+// regrow redundant rows the next time names move.
 export const WIKI_TITLE_OVERRIDES = {
   weapons: {
-    "caldwell-conversion-pistol": "Weapons/Conversion",
-    "caldwell-conversion-uppercut": "Weapons/Uppercut",
-    "caldwell-pax": "Weapons/Pax",
-    "caldwell-rival-78": "Weapons/Rival_78",
-    "crown-king-auto-5": "Weapons/Auto-5",
-    "krag-m1894": "Weapons/Krag",
-    "lemat-mark-ii": "Weapons/LeMat",
-    "martini-henry-ic1": "Weapons/Martini-Henry",
+    // Variant sub-pages. The default would join the name with an underscore
+    // ("Weapons/Mosin-Nagant_Avtomat"); the wiki nests the variant under its base weapon.
     "mosin-nagant-avtomat": "Weapons/Mosin-Nagant/Avtomat",
-    "mosin-nagant-m1891": "Weapons/Mosin-Nagant",
     "nagant-officer-carbine": "Weapons/Officer/Carbine",
-    "scottfield-model-3": "Weapons/Scottfield",
-    "sparks-lrr": "Weapons/Sparks",
     "sparks-pistol": "Weapons/Sparks/Pistol",
-    "vetterli-71-karabiner": "Weapons/Vetterli_71",
-    "winfield-1876-centennial": "Weapons/Centennial",
-    // Not a duplicate: this IS the live weapon the wiki now calls "Ranger 73". It was mapped to
-    // null until the wiki audit, on the mistaken belief that a separate "Ranger 73" catalog row
-    // covered it — there is no such row, so the only entry for this weapon was being skipped
-    // outright. Per ADR-0005 the id stays `winfield-m1873`; only the display name is stale.
-    "winfield-m1873": "Weapons/Ranger_73",
-    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES.
+    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES. Not renamed by #232 and not deleted: it sits
+    // in loadoutCodec's frozen LEGACY_WEAPON_IDS at index 16, so removing the live row would drop
+    // this weapon from any pre-versioning saved loadout rather than resolving it to `frontier-73c`,
+    // which is the same gun. That remap is a migration decision and has its own issue.
     "winfield-m1873c": null,
   },
   tools: {
-    // The `katana: "Weapons/Katana"` cross-category override was removed by #156, which moved the row
-    // into WEAPONS where the DEFAULT resolves to that same path. It is worth recording why it was
-    // there: it made the scrape work while leaving the classification wrong, so every run reported
-    // success against a page that disagreed with the catalog about what kind of item this is. An
-    // override that silences a mismatch can hide one — the mismatch is the signal.
+    // Empty, and it emptied from both ends within a day. #232 removed the three trip-mine entries:
+    // the wiki pluralizes those pages and the catalog said the singular, so an override supplied the
+    // difference until the names were brought current and the default produced the same path.
     //
-    // The wiki pluralizes the placeable trap pages; the catalog uses the singular in-game label.
-    "alert-trip-mine": "Tools/Alert_Trip_Mines",
-    "concertina-trip-mine": "Tools/Concertina_Trip_Mines",
-    "poison-trip-mine": "Tools/Poison_Trip_Mines",
+    // #156 removed the last one, `katana: "Weapons/Katana"`, by moving the row into WEAPONS where the
+    // default resolves to that same path. Worth recording why it was there: it made the scrape work
+    // while leaving the classification wrong, so every run reported success against a page that
+    // disagreed with the catalog about what kind of item this is. An override that silences a
+    // mismatch can hide one — the mismatch is the signal.
   },
   traits: {},
   consumables: {},

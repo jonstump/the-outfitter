@@ -22,6 +22,7 @@ import {
   collectCatalogItems,
   resolveWikiPath,
   WIKI_TITLE_OVERRIDES,
+  WIKI_CATEGORY,
   KNOWN_CATALOG_DUPLICATES,
   CATEGORIES,
   scrapeItem,
@@ -107,13 +108,14 @@ test("resolveWikiPath: defaults to the item's own category namespace", () => {
   assert.equal(resolveWikiPath("traits", "bulletgrubber", "Bulletgrubber"), "Traits/Bulletgrubber");
 });
 
-test("resolveWikiPath: applies pre-1896 rename overrides", () => {
-  assert.equal(resolveWikiPath("weapons", "sparks-lrr", "Sparks LRR"), "Weapons/Sparks");
-  assert.equal(resolveWikiPath("weapons", "caldwell-pax", "Caldwell Pax"), "Weapons/Pax");
-  assert.equal(
-    resolveWikiPath("weapons", "winfield-1876-centennial", "Winfield 1876 Centennial"),
-    "Weapons/Centennial"
-  );
+test("resolveWikiPath: the 1896 names need no override at all", () => {
+  // These three had overrides until #232 brought the catalog's display names current. The resolved
+  // path is unchanged — it is now produced by the DEFAULT rather than by a table entry, which is why
+  // the entries were removed. Asserting the resolved path rather than the mechanism means this test
+  // states the contract that matters and does not care which half of resolveWikiPath satisfies it.
+  assert.equal(resolveWikiPath("weapons", "sparks-lrr", "Sparks"), "Weapons/Sparks");
+  assert.equal(resolveWikiPath("weapons", "caldwell-pax", "Pax"), "Weapons/Pax");
+  assert.equal(resolveWikiPath("weapons", "winfield-1876-centennial", "Centennial"), "Weapons/Centennial");
 });
 
 test("resolveWikiPath: maps weapon variants to their subpage", () => {
@@ -144,14 +146,10 @@ test("resolveWikiPath: the Katana resolves as the weapon it is, with no override
 });
 
 test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
-  assert.equal(
-    resolveWikiPath("tools", "alert-trip-mine", "Alert Trip Mine"),
-    "Tools/Alert_Trip_Mines"
-  );
-  assert.equal(
-    resolveWikiPath("tools", "poison-trip-mine", "Poison Trip Mine"),
-    "Tools/Poison_Trip_Mines"
-  );
+  // The catalog now carries the plural itself (#232), so this is the default's output rather than an
+  // override's. The page these resolve to has not moved.
+  assert.equal(resolveWikiPath("tools", "alert-trip-mine", "Alert Trip Mines"), "Tools/Alert_Trip_Mines");
+  assert.equal(resolveWikiPath("tools", "poison-trip-mine", "Poison Trip Mines"), "Tools/Poison_Trip_Mines");
 });
 
 test("resolveWikiPath: returns null for known catalog duplicates", () => {
@@ -170,8 +168,11 @@ test("resolveWikiPath: the retired Choke Bomb duplicate is gone, the tool resolv
 
 // Regression: "Winfield M1873" is the live weapon the wiki calls "Ranger 73", not a duplicate.
 // It was mapped to null, so the only catalog entry for that weapon was skipped by every run.
-test("resolveWikiPath: Winfield M1873 resolves to the renamed Ranger 73 page, not null", () => {
-  assert.equal(resolveWikiPath("weapons", "winfield-m1873", "Winfield M1873"), "Weapons/Ranger_73");
+test("resolveWikiPath: the Ranger 73 row resolves to its page, not null", () => {
+  // It was mapped to null on the mistaken belief a separate "Ranger 73" row covered it. Its id is
+  // still `winfield-m1873` per ADR-0005 — only the display name changed — so this asserts the id has
+  // not been re-keyed to match the name, which is the thing ADR-0005 forbids.
+  assert.equal(resolveWikiPath("weapons", "winfield-m1873", "Ranger 73"), "Weapons/Ranger_73");
 });
 
 // The override table is keyed by catalog id precisely so that ADR-0005's name write-through
@@ -708,6 +709,42 @@ test("sentinel errors carry item/url context and are distinguishable by class", 
   assert.equal(err.item, "Foo");
   assert.equal(err.url, "https://x/y");
   assert.equal(err.name, "ItemPageNotFoundError");
+});
+
+// Governing: #232. Seventeen of this table's twenty-two entries existed only to compensate for stale
+// display names, and once the names were current they restated what the default already produced. A
+// redundant entry is worse than useless: it is indistinguishable from a live mapping, so the next
+// person cannot tell which rows are load-bearing.
+test("WIKI_TITLE_OVERRIDES: every entry differs from the default it overrides", () => {
+  const rows = { weapons: WEAPONS, tools: TOOLS, traits: TRAITS, consumables: CONS };
+  const redundant = [];
+  for (const [category, overrides] of Object.entries(WIKI_TITLE_OVERRIDES)) {
+    for (const [id, override] of Object.entries(overrides)) {
+      const row = rows[category].find((r) => r[0] === id);
+      assert.ok(row, `${category}/${id} has an override but no catalog row`);
+      // A null override is a deliberate skip and can never equal a default path.
+      if (override === null) continue;
+      const fallback = `${WIKI_CATEGORY[category]}/${row[1].trim().replace(/\s+/g, "_")}`;
+      if (override === fallback) redundant.push(`${category}/${id} -> ${override}`);
+    }
+  }
+  assert.deepEqual(redundant, [], "an override equal to the default should be deleted, not kept");
+});
+
+test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express", () => {
+  // Stated as an explicit inventory so a new entry has to justify itself against these reasons
+  // rather than being added by reflex.
+  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.weapons).sort(), [
+    "mosin-nagant-avtomat", // variant sub-page: default joins with "_", the wiki nests with "/"
+    "nagant-officer-carbine",
+    "sparks-pistol",
+    "winfield-m1873c", // deliberate null; a duplicate row
+  ]);
+  // Empty since #156. The one cross-namespace entry, `katana`, existed because the catalog filed a
+  // weapon as a Tool; moving the row rather than keeping the override is what removed the need.
+  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.tools), []);
+  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.traits), []);
+  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.consumables), []);
 });
 
 // Governing: ADR-0002, SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback"
