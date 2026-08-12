@@ -28,6 +28,8 @@ import {
   RateLimiter,
   RobotsDisallowedError,
   acquisitionOf,
+  acquisitionClassesFrom,
+  parsePageCategories,
   applyCatalogWrites,
   buildStatsRecord,
   canonicalTitleFromPageName,
@@ -1306,6 +1308,116 @@ test("classifyPage: the never-shipped tombstone keeps its own state", () => {
   assert.equal(classifyPage("", { page: "Tools/Multitool" }).state, "never-shipped");
 });
 
+test("classifyPage: a removal the page later reverses is live, not a tombstone", () => {
+  // The real Shredder page, near-verbatim from the first live --discover run (2026-08-12), which
+  // filed it as removed while it was purchasable in game. Update-history prose is chronological, so
+  // the removal is a fact ABOUT THE PAST and the return supersedes it — reading only the first
+  // removal sentence buries a live Scarce weapon in `not-an-item`, where nobody looks again.
+  const c = classifyPage(
+    "<p>radius has been halved Update 2.2.2 Shredder removed from the game " +
+      "Post Malone's Murder Circus Encore Event Shredder returns as a Scarce weapon.</p>"
+  );
+  assert.equal(c.state, "live");
+  assert.match(c.reason, /removed and later returned/);
+  assert.match(c.evidence, /returns as a Scarce/, "the evidence quotes the return, not the removal");
+});
+
+test("classifyPage: a return stated BEFORE the removal does not rescue the page", () => {
+  // Ordering is the entire signal. An item that came back and was then cut again is removed, and a
+  // return-anywhere check would read the same page as live.
+  const c = classifyPage(
+    "<p>Update 1.9 The Cannon returns as a Scarce weapon. Update 2.4 The Cannon removed from the game.</p>"
+  );
+  assert.equal(c.state, "removed");
+});
+
+test("classifyPage: a page confirmed live in game overrides its own removal prose", () => {
+  const c = classifyPage("<p>Shredder removed from the game.</p>", { page: "Weapons/Shredder" });
+  assert.equal(c.state, "live");
+  assert.equal(c.evidence, "recorded in KNOWN_LIVE");
+  assert.match(c.reason, /Scarce/, "the reason records what it came back as");
+});
+
+test("parsePageCategories: reads the page's own category membership", () => {
+  // The real Relentless catlinks block, trimmed. It is both Scarce and Burn, which is the case a
+  // scalar cannot hold.
+  const html =
+    `<html><body><p>body</p><div id="catlinks" class="catlinks"><div id="mw-normal-catlinks">` +
+    `<a href="/wiki/Special:Categories" title="Special:Categories">Categories</a>: ` +
+    `<ul><li><a href="/wiki/Category:Traits/Supportive" title="Category:Traits/Supportive">Traits/Supportive</a></li>` +
+    `<li><a href="/wiki/Category:Traits/Burn" title="Category:Traits/Burn">Traits/Burn</a></li>` +
+    `<li><a href="/wiki/Category:Traits/Scarce" title="Category:Traits/Scarce">Traits/Scarce</a></li>` +
+    `<li><a href="/wiki/Category:Traits" title="Category:Traits">Traits</a></li></ul></div></div></body></html>`;
+  assert.deepEqual(parsePageCategories(html), [
+    "Traits/Supportive",
+    "Traits/Burn",
+    "Traits/Scarce",
+    "Traits",
+  ]);
+});
+
+test("parsePageCategories: category-shaped links outside catlinks are not membership", () => {
+  // SIZE_ROW's value links to Category:Weapons/Size_4. Reading the whole document would tag every
+  // weapon with its own size as though the page declared it.
+  const html = `<html><body>${infobox(SIZE_ROW)}<div id="catlinks"><ul><li>` +
+    `<a href="/wiki/Category:Weapons" title="Category:Weapons">Weapons</a></li></ul></div></body></html>`;
+  assert.deepEqual(parsePageCategories(html), ["Weapons"]);
+});
+
+test("parsePageCategories: a page with no catlinks block yields nothing", () => {
+  assert.deepEqual(parsePageCategories("<html><body>no categories</body></html>"), []);
+});
+
+test("acquisitionClassesFrom: a trait can hold several rarity classes at once", () => {
+  // Relentless and Rampage are Scarce AND Burn; All Ears is Scarce AND Event. The wiki's own data is
+  // a set, so this returns one.
+  assert.deepEqual(acquisitionClassesFrom(["Traits/Supportive", "Traits/Burn", "Traits/Scarce"]), [
+    "Scarce",
+    "Burn",
+  ]);
+  assert.deepEqual(acquisitionClassesFrom(["Traits/Scarce", "Traits/Event"]), ["Scarce", "Event"]);
+});
+
+test("acquisitionClassesFrom: order is stable regardless of the page's link order", () => {
+  // Two runs must produce the same array for the same trait, or the dataset churns on every scrape.
+  assert.deepEqual(
+    acquisitionClassesFrom(["Traits/Event", "Traits/Scarce", "Traits/Burn"]),
+    acquisitionClassesFrom(["Traits/Burn", "Traits/Event", "Traits/Scarce"])
+  );
+});
+
+test("acquisitionClassesFrom: the functional taxonomy is excluded, because it is `group`", () => {
+  // Traits/Supportive sits in the same catlinks block and is exactly the field SPEC-0007 forbids the
+  // scrape from deriving.
+  const classes = acquisitionClassesFrom(["Traits/Supportive", "Traits/Offensive", "Traits/Movement"]);
+  assert.deepEqual(classes, [], "no functional category becomes an acquisition class");
+});
+
+test("acquisitionClassesFrom: a Scarce weapon declares no rarity category, and gets no class", () => {
+  // Flame Rifle's real catlinks. Weapons state rarity as the literal Price string "Scarce" instead,
+  // so an empty set here is correct and NOT the same as "this item is Regular".
+  assert.deepEqual(
+    acquisitionClassesFrom(["Pages using duplicate arguments in template calls", "Weapons/Size 2", "Weapons"]),
+    [],
+    "and Weapons/Size 2 does not match on its last segment either"
+  );
+});
+
+test("acquisitionOf: a Scarce trait states no cost at all, and is still known to be Scarce", () => {
+  // The real shape: Scarce WEAPONS write the literal string "Scarce" as their Price, but Scarce
+  // TRAITS carry no Cost row whatsoever. Purchasability is genuinely unresolved from the infobox —
+  // the rarity class is the only thing that knows, which is why it is read from the categories.
+  const a = acquisitionOf({ Unlock: "Bloodline Rank 1" }, { categories: ["Traits/Scarce", "Traits/Burn"] });
+  assert.equal(a.priceStated, null);
+  assert.equal(a.purchasable, null, "absent is not a determination");
+  assert.deepEqual(a.acquisitionClasses, ["Scarce", "Burn"]);
+});
+
+test("acquisitionOf: with no categories passed, the classes key is absent rather than empty", () => {
+  // Callers that never read a page must not appear to have found a trait with no rarity.
+  assert.ok(!("acquisitionClasses" in acquisitionOf({ Price: "75" })));
+});
+
 test("acquisitionOf: a trait's Type is its acquisition class", () => {
   assert.equal(acquisitionOf({ Cost: "4", Type: "Burn" }).acquisition, "Burn");
   assert.equal(acquisitionOf({ Cost: "4", Type: "Regular" }).purchasable, true);
@@ -1469,6 +1581,76 @@ test("runDiscovery: an unfetchable page is reported as unreadable, not counted a
   const out = formatCoverage(report);
   assert.match(out, /unreadable\s+Tools\/Rate Limited — HTTP 429/);
   assert.match(out, /unreadable\s+Tools\/Exploding — socket hang up/, "one page's throw does not end the crawl");
+});
+
+test("runDiscovery: the unmatched log event carries the acquisition metadata it parsed", async () => {
+  // It was parsed into the report and dropped at the log boundary, so a finished run's durable
+  // record could not say which missing traits were Burn or which pages were Scarce — the first live
+  // run had to be reconstructed from raw JSON by hand to answer that.
+  const events = [];
+  const fetchFn = async (url) => {
+    if (decodeURIComponent(url).includes("Category:Tools")) return okResponse(categoryPage(["Tools/Brand New Thing"]));
+    return okResponse(ONE_INFOBOX_PAGE);
+  };
+  await runDiscovery(
+    { categories: ["tools"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: (e) => events.push(e) }
+  );
+  const unmatched = events.find((e) => e.event === "discovery-unmatched");
+  assert.equal(unmatched.purchasable, true);
+  assert.equal(unmatched.priceStated, "75");
+});
+
+test("runDiscovery: an unread page omits the acquisition keys rather than logging a null verdict", async () => {
+  // `purchasable: null` means "a page was read and stated no price" — three-valued on purpose. An
+  // absent key means no infobox was read at all, and collapsing the two logs a determination the
+  // run never made.
+  const events = [];
+  const fetchFn = async (url) => {
+    if (decodeURIComponent(url).includes("Category:Tools")) return okResponse(categoryPage(["Tools/Gone"]));
+    return errResponse(500);
+  };
+  await runDiscovery(
+    { categories: ["tools"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: (e) => events.push(e) }
+  );
+  const unmatched = events.find((e) => e.event === "discovery-unmatched");
+  assert.equal(unmatched.state, "unreadable");
+  assert.ok(!("purchasable" in unmatched), "no key, rather than a null that reads as a finding");
+});
+
+test("formatCoverage: the missing bucket names its pages, with price and acquisition class", () => {
+  // The one bucket that names real work was the only one with no detail line: the table reported 18
+  // missing traits and the names existed nowhere but the raw JSON log.
+  const out = formatCoverage({
+    traits: {
+      indexPage: "Category:Purchasable_Traits", wikiMembers: 58, catalogRows: 32, matched: 31,
+      missing: [
+        { page: "Traits/Scopesmith", priceStated: "4", acquisitionClasses: ["Regular"] },
+        { page: "Traits/Relentless", priceStated: null, acquisitionClasses: ["Scarce", "Burn"] },
+      ],
+      unpurchasable: [], unresolved: [], tombstones: [], failures: [],
+    },
+  });
+  assert.match(out, /missing\s+Traits\/Scopesmith — price "4", classes Regular/);
+  assert.match(
+    out,
+    /missing\s+Traits\/Relentless — price null, classes Scarce\+Burn/,
+    "a two-class trait reports both, rather than whichever the infobox named first"
+  );
+});
+
+test("formatCoverage: a page with no rarity class prints no class suffix", () => {
+  // Every weapon, tool and consumable is in this position. An empty bracket on ~105 lines would read
+  // as a finding about them.
+  const out = formatCoverage({
+    weapons: {
+      indexPage: "Category:Weapons", wikiMembers: 147, catalogRows: 39, matched: 38,
+      missing: [{ page: "Weapons/Terminus", priceStated: "168", acquisitionClasses: [] }],
+      unpurchasable: [], unresolved: [], tombstones: [], failures: [],
+    },
+  });
+  assert.match(out, /missing\s+Weapons\/Terminus — price "168"$/m);
 });
 
 test("formatCoverage: reports missing and not-an-item as separate columns", () => {
