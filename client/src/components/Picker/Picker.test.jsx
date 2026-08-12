@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
 import Picker from "./Picker.jsx";
@@ -72,6 +72,12 @@ describe("Picker Traits-tab UP-budget gate (issue #23 regression)", () => {
 // the one place the number keeps a visible unit, because a trait row has no dollar cost beside
 // it, so the badge is the only thing on the row that says what the number counts.
 describe("Picker Traits-tab point badge", () => {
+  // In `afterEach` rather than at the end of the mocking test: a failed assertion there would
+  // return before the restore and leak the `descriptionFor` mock into everything after it.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const traitsTab = { tab: "Traits", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" };
 
   const rowFor = (buttons, name) => buttons.find((b) => b.textContent.includes(name));
@@ -121,6 +127,5 @@ describe("Picker Traits-tab point badge", () => {
     const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
     const def = TRAITS[0];
     expect(rowFor(getAllByRole("button"), def[1])).toHaveTextContent(`${def[3]} trait`);
-    vi.restoreAllMocks();
   });
 });

@@ -7,6 +7,7 @@ import * as itemStats from "../../data/itemStats.js";
 import { descriptionFor } from "../../data/itemStats.js";
 import { TRAIT_MAX } from "../../utils/calc.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
+import { effective } from "../../test/cssRules.js";
 import { slugify } from "../ItemThumb/ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -152,6 +153,15 @@ describe("TraitsPanel cell detail", () => {
     const { container } = renderPanel([def[0]]);
     expect(container.querySelector(".trait-cell-tip-desc")).toBeNull();
     expect(container.querySelector(".trait-cell-tip-name")).toHaveTextContent(def[1]);
+  });
+
+  it("clamps the tip description at the depth the dataset was measured against", () => {
+    // Pins the number, not the layout — jsdom lays nothing out, so this is evidence of a
+    // declaration and not of a rendered pixel (see cssRules.js). Worth pinning anyway: the clamp
+    // was six lines while Serpent needed eight, which dropped its `SOLO:` rule with no ellipsis to
+    // admit it. `itemStats.test.js` holds the other half — that no description outgrows ten lines.
+    expect(effective(".trait-cell-tip-desc", "-webkit-line-clamp")).toBe("10");
+    expect(effective(".trait-cell-tip-desc", "white-space")).toBe("pre-line");
   });
 
   it("keeps the description out of the accessible name", () => {

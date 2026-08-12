@@ -871,8 +871,10 @@ button {
    than having been left standing on the chance one arrived.
 
    `white-space: pre-line` is load-bearing, not formatting taste. A description is the wiki's lead
-   paragraphs newline-joined, and the only trait with two is Necromancer, whose second is its SOLO
-   behaviour — a separate rule from its base effect. Collapsing that newline would run two distinct
+   paragraphs newline-joined, and 9 of the 32 traits carry a second one: beastface, conduit,
+   frontiersman, kiteskin, magpie, necromancer, pain-sense, serpent and vigilant. Each second
+   paragraph is a conditional rule — `SOLO:`, `CATALYST:` or `SOLO CATALYST:` — that applies instead
+   of the base effect rather than restating it. Collapsing the newline would run two distinct
    mechanics into one sentence. */
 .trait-cell-tip {
   position: absolute;
@@ -897,17 +899,26 @@ button {
 }
 /* Dimmer and smaller than the name, so the tip reads as "what this is" before "what it does".
 
-   Bounded at six lines because it is unbounded input: descriptions are scraped, the longest today
-   runs to about 150 characters, and nothing stops the wiki gaining a longer one. A 180px-wide tip
-   over a 98px cell would otherwise grow past the panel. `-webkit-line-clamp` is the only clamp with
-   real support; `max-height` backs it up so a browser without it still bounds the box rather than
-   letting the tip run. */
+   Bounded because this is unbounded input — descriptions are scraped, and nothing stops the wiki
+   gaining a longer one — but the bound must clear the real data, or it silently withholds a rule.
+   An earlier draft clamped at six lines against a stated "about 150 characters". The longest is
+   Serpent at 209, which wraps to eight lines at this width, so six clipped its `SOLO:` paragraph
+   with no ellipsis (`text-overflow` is `clip` inside a line clamp): the tip read as complete and
+   was not, losing exactly the conditional rule `white-space: pre-line` exists to keep.
+
+   Ten lines, so today's longest sits two clear of the bound. Nothing renders that tall now — the
+   clamp only engages on a description longer than any that exists, which is what a guard against
+   unbounded input should do. `itemStats.test.js` pins the length this was measured against, so a
+   longer description fails a test rather than quietly losing its tail.
+
+   `-webkit-line-clamp` is the only clamp with real support; `max-height` backs it up so a browser
+   without it still bounds the box rather than letting the tip run. */
 .trait-cell-tip-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
+  -webkit-line-clamp: 10;
   overflow: hidden;
-  max-height: 8.4em;
+  max-height: 13.8em;
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.35;

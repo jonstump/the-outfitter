@@ -1404,8 +1404,10 @@ test("parseDescription: the table of contents is not a section boundary", () => 
 });
 
 test("parseDescription: several lead paragraphs are kept, newline-joined", () => {
-  // Necromancer's second paragraph is its SOLO behaviour — a different rule from the base effect, not
-  // a restatement — so collapsing to the first paragraph would drop a mechanic.
+  // Necromancer's shape, and not only Necromancer's: 9 of the 32 traits carry a second paragraph,
+  // each a conditional rule (`SOLO:`, `CATALYST:`, `SOLO CATALYST:`) that replaces the base effect
+  // rather than restating it. Collapsing to the first paragraph would drop a mechanic from over a
+  // quarter of them.
   const html = TRAIT_PAGE_SHAPE(
     "<p>Using Dark Sight, revive a downed teammate from a distance. (25m)</p>" +
       "<p>SOLO: You can revive your downed Hunter.</p>"
