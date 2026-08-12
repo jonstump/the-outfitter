@@ -86,16 +86,21 @@ export default function ActionsPanel() {
           </button>
           {ui.upBudgetOn && (
             <span className="budget-input-wrap">
+              {/* No "UP" suffix — the toggle immediately to the left already says "Trait cap",
+                  the same reasoning that took the suffix off the header stat (issue #66) and the
+                  trait-cell hover. The dollar group keeps its "$" because "Budget" alone doesn't
+                  name a currency; "Trait cap" names its own unit. The accessible name carries
+                  the unit in words, where a bare number would be read out meaningless. */}
               <input
                 type="number"
                 min="0"
                 step="1"
                 className="number-input"
+                aria-label="Trait point cap"
                 style={{ width: 60, color: upLabelColor }}
                 value={ui.upBudget}
                 onChange={(e) => dispatch(uiActions.setUpBudget(parseInt(e.target.value, 10) || 0))}
               />
-              <span style={{ color: upLabelColor, fontSize: 15.5 }}>UP</span>
             </span>
           )}
         </span>

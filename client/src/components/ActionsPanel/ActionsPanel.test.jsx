@@ -95,6 +95,38 @@ describe("ActionsPanel status messaging", () => {
 });
 
 // ---------------------------------------------------------------------------------------
+// The trait cap states its unit as "Trait cap", not as a "UP" suffix on the input — the last
+// of the trait-point suffixes the header stat (#66) and the trait-cell hover already dropped.
+// The dollar group is asserted alongside because it is the reason the removal is safe to make
+// asymmetric: "$" stays, since "Budget" alone does not name a currency, while "Trait cap"
+// already names what its number counts.
+// ---------------------------------------------------------------------------------------
+
+const bothCapsOn = { tab: "Weapons", budgetOn: true, budget: 800, upBudgetOn: true, upBudget: 10, message: "" };
+
+describe("ActionsPanel trait cap", () => {
+  it("renders no UP suffix anywhere in the panel", () => {
+    const { container } = renderPanel(bothCapsOn);
+
+    expect(container.textContent).not.toMatch(/\bUP\b/);
+  });
+
+  it("names the cap input for a screen reader, which the visible suffix used to do", () => {
+    // A bare spinner beside a toggle is legible on screen and silent in speech, so the unit
+    // that left the surface has to survive in the accessible name.
+    renderPanel(bothCapsOn);
+
+    expect(screen.getByLabelText("Trait point cap")).toHaveValue(10);
+  });
+
+  it("keeps the $ marker on the dollar budget", () => {
+    const { container } = renderPanel(bothCapsOn);
+
+    expect(container.textContent).toContain("$");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
 // Issue #136 — the save control names where the save will land.
 //
 // Governing: SPEC-0003 REQ "The Selected List Is Client State" — "while a list is selected, a
