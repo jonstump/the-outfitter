@@ -741,15 +741,32 @@ test("WIKI_TITLE_OVERRIDES: every entry differs from the default it overrides", 
 });
 
 test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express", () => {
-  // Stated as an explicit inventory so a new entry has to justify itself against these reasons
-  // rather than being added by reflex.
-  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.weapons).sort(), [
-    "mosin-nagant-avtomat", // variant sub-page: default joins with "_", the wiki nests with "/"
-    "nagant-officer-carbine",
-    "sparks-pistol",
-  ]);
-  // `winfield-m1873c` was the fourth until #243 retired the row it pointed at. Its null override went
-  // with it — an override for an id no catalog row carries can never be consulted.
+  // This was a literal inventory, "so a new entry has to justify itself against these reasons rather
+  // than being added by reflex". #254 added 89 variant sub-pages, every one justified by the SAME
+  // reason the list's first entry already carried, and re-listing 92 ids would have kept the letter
+  // of that guard while destroying what made it readable.
+  //
+  // So the justification is asserted structurally instead: every weapons override is a variant
+  // sub-page the default provably cannot express, because the default builds `Weapons/{DisplayName}`
+  // and joins spaces with "_", so it can never produce a three-segment path. A reflex entry — an
+  // override whose path the default would have produced anyway — still fails, here and in the
+  // redundancy test above.
+  //
+  // Arity alone would not be enough: `Weapon/Dolch_96/Claw` and a `Tools/...` path misfiled under
+  // `weapons` are both three segments. The namespace is asserted too, so a typo cannot pass as a
+  // variant sub-page — that specificity is part of what the literal inventory used to provide.
+  const weapons = WIKI_TITLE_OVERRIDES.weapons;
+  const notVariantPaths = Object.entries(weapons)
+    .filter(([, path]) => path === null || path.split("/").length !== 3 || !path.startsWith("Weapons/"))
+    .map(([id, path]) => `${id} -> ${path}`);
+  assert.deepEqual(notVariantPaths, [], "a weapons override that is not a variant sub-page");
+  // The three that predate #254, named because they are the precedent the 89 followed.
+  for (const id of ["mosin-nagant-avtomat", "nagant-officer-carbine", "sparks-pistol"]) {
+    assert.ok(Object.hasOwn(weapons, id), `${id} is still overridden`);
+  }
+  // `winfield-m1873c` was a fourth entry and the only null, until #243 retired the row it pointed at.
+  // Its null override went with it — an override for an id no catalog row carries can never be
+  // consulted — which is why the check above admits no null at all rather than exempting one.
   // Empty since #156. The one cross-namespace entry, `katana`, existed because the catalog filed a
   // weapon as a Tool; moving the row rather than keeping the override is what removed the need.
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.tools), []);
