@@ -393,6 +393,23 @@ The defence half is the more interesting one, because the tempting move after en
 - *Retire the overflow rendering with its premise* — rejected for the reason above. Tidier, and it removes the only thing standing between a future decode regression and a visibly broken preview.
 - *Enforce in the reducer only, leave the wire bound at forty* — rejected in ADR-0012. It leaves two numbers in the codebase with neither being the answer to "what is the maximum", and the rule would be advisory in exactly the cases where a loadout came from somewhere untrusted.
 
+### Cost and occupancy are independent, so a free pick still fills its slot
+
+*(added 2026-08-12, per ADR-0013; specified in "A Scarce Pick Costs Nothing and Still Occupies Its Slot")*
+
+**Choice**: A Scarce item's cost is a stored `0` on its catalog row. Nothing in the budget, size, slot or cap arithmetic changes to accommodate it. The decision, with its four rejected alternatives, is ADR-0013; recorded here because this spec owns the arithmetic it lands in.
+
+**Rationale**: The arithmetic is already correct for a zero, and that is the argument for the shape rather than a happy accident. `upTotal` and `totalCost` **sum** cost across the picks, so a zero contributes nothing. `capUsed` reads size from a different tuple position, so a free weapon still charges full size. `TRAIT_MAX` counts array length, so a free trait still consumes a cell. Three functions, no edits, and the behaviour that falls out is the behaviour the game has.
+
+The load-bearing part is keeping cost and occupancy apart. Treating "free" as "unconstrained" would let a loadout carry more than a hunter can hold — a much stronger and simply false claim. A Scarce weapon is free *and* size-3; those facts live in different tuple positions and must keep doing so.
+
+Fifteen free traits being legal is accepted, and it is coherent with the seam the cap requirement already documents: the fifteen-trait ceiling is unconditional because nothing about fifteen varies with the hunter, while the upgrade-point ceiling is opt-in because it varies with a hunter level this application cannot know. A cost-free trait is bounded by the ceiling that does not vary and unbounded by the one that does — which is exactly what those two ceilings were always saying, tested for the first time by an item that costs nothing.
+
+**Alternatives considered**:
+- *Derive cost 0 at render time from a rarity flag* — rejected. It puts a game rule in the read path and makes the budgets' arithmetic disagree with the catalog they read, which SPEC-0007's "Stored, Never Inferred" requirement forbids for budget-affecting fields.
+- *Exclude Scarce items so no `$0` build exists* — rejected in ADR-0013. It keeps totals unambiguous at the cost of the app's purpose: a player who owns a Scarce item cannot build what they can field.
+- *Special-case the budget functions to skip Scarce picks* — rejected. It edits three correct functions to reproduce what a zero already does, and each edit is a place the size and cost paths could drift apart.
+
 ## Architecture
 
 ### The request boundary

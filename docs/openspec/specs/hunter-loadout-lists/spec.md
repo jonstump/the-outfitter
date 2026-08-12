@@ -1,7 +1,7 @@
 ---
 status: approved
 date: 2026-08-11
-implements: [ADR-0006, ADR-0011, ADR-0012]
+implements: [ADR-0006, ADR-0011, ADR-0012, ADR-0013]
 requires: [SPEC-0001, SPEC-0004]
 ---
 
@@ -947,6 +947,45 @@ Clamping loses the traits past the fifteenth, and this is accepted rather than o
 
 - **WHEN** a loadout is generated
 - **THEN** it SHALL hold at most fifteen traits, asserted against the bound rather than against the generator's current draw count
+
+### Requirement: A Scarce Pick Costs Nothing and Still Occupies Its Slot
+
+*(added 2026-08-12, per ADR-0013)*
+
+Scarce items are obtainable only from a match. They can be sold but never bought, so they have no purchase value, and a player who owns one can field it. This application SHALL let them be selected, and SHALL charge nothing for them.
+
+A Scarce pick SHALL contribute `0` to the Hunt Dollar total and `0` to the upgrade-point total. It SHALL nonetheless consume every **physical** allowance it occupies: a Scarce weapon consumes its equipment slot and its full size against the weapon size budget, and a Scarce trait consumes one of the fifteen trait cells.
+
+Cost and occupancy are therefore independent, and conflating them is the failure this requirement exists to prevent: a free weapon that also costs no size would let a loadout carry more than a hunter can hold, which is a stronger claim than "this item is free" and is wrong.
+
+**Fifteen free traits is a legal loadout, and this is accepted rather than overlooked.** It is coherent with why the two ceilings differ, as "A Loadout Holds At Most Fifteen Traits" already records: the fifteen-trait cap is unconditional because nothing about fifteen varies with the hunter, while the upgrade-point budget is opt-in because it varies with a hunter level this application cannot know. A cost-free trait is bounded by the ceiling that does not vary and unbounded by the one that does. No change to the cap, its number, or its enforcement at any write path follows from this requirement — the cap already counts the right thing, because it counts cells rather than cost.
+
+The zero SHALL be a stored cost on the catalog row, not a value derived at render time from a rarity flag. Deriving it would place a game rule in the read path and put the two budgets' arithmetic out of step with the catalog they read, and SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids it.
+
+#### Scenario: A Scarce trait consumes a cell and no points
+
+- **WHEN** a Scarce trait is added to a loadout holding fourteen traits
+- **THEN** the loadout SHALL hold fifteen traits, and the upgrade-point total SHALL be unchanged
+
+#### Scenario: Fifteen Scarce traits is legal and free
+
+- **WHEN** a loadout holds fifteen Scarce traits
+- **THEN** the upgrade-point total SHALL be `0`, a sixteenth SHALL still be refused, and the loadout SHALL save successfully
+
+#### Scenario: A Scarce weapon costs no money and full size
+
+- **WHEN** a Scarce weapon of size 3 is selected
+- **THEN** the Hunt Dollar total SHALL be unchanged, and the size budget SHALL be charged 3
+
+#### Scenario: A Scarce weapon cannot exceed the size budget by being free
+
+- **WHEN** Scarce weapons are selected whose combined size exceeds the weapon size budget
+- **THEN** the selection SHALL be constrained exactly as it would be for purchasable weapons of the same sizes
+
+#### Scenario: The opt-in budget is unaffected by free traits
+
+- **WHEN** the upgrade-point budget is enabled and a loadout's traits are all Scarce
+- **THEN** the budget SHALL report zero points spent, and SHALL NOT report the loadout as over budget
 
 ### Requirement: Forwarded Request Origin Is Believed Only From a Configured Peer
 

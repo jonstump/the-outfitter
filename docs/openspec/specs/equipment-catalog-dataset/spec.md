@@ -1,7 +1,7 @@
 ---
 status: draft
 date: 2026-08-10
-implements: [ADR-0005]
+implements: [ADR-0005, ADR-0013]
 requires: [SPEC-0001]
 ---
 
@@ -209,18 +209,41 @@ The canonical title SHALL be read from the fetched page and compared against the
 
 ### Requirement: Acquisition Class Is Captured So Roster Membership Is Checkable
 
-Whether an item can be bought decides whether it belongs in the catalog at all, and nothing currently records it. Tarot Cards, 14 Scarce traits, and 18 Event traits are excluded because they cannot be purchased with Hunt Dollars or Upgrade Points — the same judgment already hand-encoded in `AMMO.special`. Because it is nowhere machine-readable, every roster diff re-litigates it.
+Whether an item can be bought decides ~~whether it belongs in the catalog at all~~ **what it costs**, and nothing currently records it. Because it is nowhere machine-readable, every roster diff re-litigates it.
 
-Every scraped trait record SHALL carry its acquisition class (Regular, Burn, Scarce, or Event). Every scraped consumable record SHALL carry whether it is purchasable with Hunt Dollars. These SHALL live in `itemStats.json`; they are scrape metadata, not catalog fields, and MUST NOT be written into `group`.
+> **Amended 2026-08-12 per ADR-0013.** This requirement previously read: "Tarot Cards, 14 Scarce traits, and 18 Event traits are excluded because they cannot be purchased with Hunt Dollars or Upgrade Points." That is reversed for Scarce and Event, and the reversal is marked rather than rewritten because it inverts what a reader was told the boundary meant. Unpurchasable is no longer grounds for exclusion: a Scarce item comes only from a match, and a player who owns one can field it, so ADR-0013 admits Scarce and Event items as catalog rows costing zero. **Tarot Cards remain out of scope** — a scope decision, no longer justified by unpurchasability, since that ground now applies to items that are in scope.
+
+Every scraped trait record SHALL carry the **set** of acquisition classes its wiki page declares, drawn from `Regular`, `Scarce`, `Burn` and `Event`. It MUST NOT be recorded as a single value: the wiki's own data is a set, and Relentless, Rampage, Remedy and Death Cheat are each both Scarce and Burn while All Ears, Blademancer, Bruiser, Communion, Corpse Seer and Gunrunner are each both Scarce and Event. The infobox `Type` field states multiple classes as one comma-joined string (`"Burn , Scarce"`), which equals neither class, so a membership test against that string SHALL NOT be treated as recording the class.
+
+The set SHALL be read from the page's own category membership rather than from the infobox, because a Scarce trait page omits `Type` and carries no cost row at all, while still declaring `Category:Traits/Scarce`.
+
+Only the acquisition axis SHALL be read as acquisition. The functional axis — `Offensive`, `Defensive`, `Movement`, `Supportive`, `Solo` and `Catalyst` — appears in the same category block and is `group`, which this spec's "Fields the Scraper Must Not Derive" requirement forbids the scrape supplying. A category on neither axis, of which `Category:Traits/Pact` is the only present example, SHALL yield no acquisition class rather than a guessed one.
+
+Every scraped consumable record SHALL carry whether it is purchasable with Hunt Dollars. All of this SHALL live in `itemStats.json`; it is scrape metadata, not catalog fields, and MUST NOT be written into `group`.
 
 The exclusion boundary SHALL be stated in `catalog.js` in terms of purchasability rather than in terms of any event's duration, since a limited-time item can become permanent while remaining unpurchasable.
 
 Purchasability SHALL be recorded three ways, not two: purchasable, stated-unpurchasable, and unresolved. "Stated-unpurchasable" requires that a price was actually read and refused — a Tarot Card's literal `Scarce`. An item whose page carries no price field at all SHALL be recorded as unresolved and reported in its own column, since defaulting it to either determination is the inference this spec's "Stored, Never Inferred" requirement forbids.
 
-#### Scenario: A Scarce item is identified as out of scope, not as missing
+#### Scenario: A Tarot Card is identified as out of scope, not as missing
 
 - **WHEN** a discovery run encounters a Tarot Card page with no catalog row
-- **THEN** it SHALL be reported as out of scope on the recorded ground that it is not purchasable with Hunt Dollars, not as a missing item
+- **THEN** it SHALL be reported as out of scope on the recorded ground that it is a scope boundary, not as a missing item
+
+#### Scenario: A trait in two rarity categories records both
+
+- **WHEN** a trait page declares membership of both `Category:Traits/Scarce` and `Category:Traits/Burn`
+- **THEN** its record SHALL carry both classes, and MUST NOT carry only whichever the infobox named first
+
+#### Scenario: A functional category is never recorded as an acquisition class
+
+- **WHEN** a trait page declares membership of `Category:Traits/Catalyst` or `Category:Traits/Solo`
+- **THEN** no acquisition class SHALL be recorded from it, and the class set SHALL contain only the acquisition-axis categories the page also declares
+
+#### Scenario: A Scarce trait states no cost and is still known to be Scarce
+
+- **WHEN** a trait page carries no `Price` or `Cost` field but declares `Category:Traits/Scarce`
+- **THEN** purchasability SHALL be recorded as unresolved, AND the class set SHALL record `Scarce`, so the reason it has no price is recoverable without re-fetching the page
 
 #### Scenario: An unreadable price is not an exclusion
 
@@ -234,14 +257,62 @@ Purchasability SHALL be recorded three ways, not two: purchasable, stated-unpurc
 
 ### Requirement: Roster Coverage Is Reported Against the Wiki's Own Categories
 
-The run summary SHALL state coverage against `Category:Weapons`, `Category:Purchasable_Traits`, and `Category:Consumables` — the wiki's own membership counts against the catalog's row counts, per category.
+The run summary SHALL state coverage against the wiki's own category indexes — the wiki's membership counts against the catalog's row counts, per catalog category.
 
-Coverage of a category MUST NOT be inferred from the correctness of a field within it. The `TRAITS` comment's claim that UP costs were re-verified is scoped to costs, is well defended, and holds; the roster it describes is nonetheless 32 of 58 purchasable traits. A summary that reports field correctness without reporting membership permits exactly that confusion.
+A catalog category MAY map to more than one wiki index, and traits SHALL map to every index that enumerates an in-scope rarity: `Category:Traits/Regular`, `Category:Traits/Scarce` and `Category:Traits/Event`. A single index per category SHALL NOT be relied on where several exist.
+
+> **Amended 2026-08-12 per ADR-0013.** This requirement previously named `Category:Purchasable_Traits` as the trait index. That page is a **redirect to `Category:Traits/Regular`**, so a crawl of it enumerates the Regular traits and nothing else, while reporting a coverage figure that looks complete. Fourteen Scarce, eighteen Event, six Burn and five Catalyst members sat outside the frame, and a Scarce trait could therefore not appear as missing, as unpurchasable, or as a tombstone. The redirect is why the gap survived review: the name reads as "every trait you can obtain" and means "the Regular ones".
+
+Where several indexes are crawled for one catalog category, membership SHALL be de-duplicated by page path before any coverage arithmetic, because a page can be enumerated by more than one index — six traits are members of both the Scarce and Event indexes. `matched` SHALL be computed from the de-duplicated set, so distinct pages are counted rather than summed memberships.
+
+Coverage of a category MUST NOT be inferred from the correctness of a field within it. The `TRAITS` comment's claim that UP costs were re-verified is scoped to costs, is well defended, and holds; the roster it describes is nonetheless **32 rows against roughly 76 live traits** — a figure this spec previously recorded as "32 of 58 purchasable traits", which was wrong in both directions: the denominator omitted 27 traits outside the crawled index and counted 9 tombstones still listed inside it. A summary that reports field correctness without reporting membership permits exactly that confusion.
+
+Every bucket the coverage table reports and that names candidate work SHALL identify its pages, not only count them. A count that cannot be read back page by page is the coverage claim this requirement exists to refuse.
 
 #### Scenario: Coverage is reported per category
 
 - **WHEN** a discovery run completes
-- **THEN** it SHALL report, for each of the three categories, the wiki's member count, the catalog's row count, and the unmatched members classified per the discovery requirement
+- **THEN** it SHALL report, for each catalog category, the wiki's de-duplicated member count, the catalog's row count, and the unmatched members classified per the discovery requirement
+
+#### Scenario: A trait enumerated by two indexes is counted once
+
+- **WHEN** a trait is a member of both the Scarce and the Event index and both are crawled
+- **THEN** it SHALL be counted once in the member total, and SHALL NOT inflate the unmatched count by appearing twice
+
+#### Scenario: The missing bucket names its pages
+
+- **WHEN** a discovery run reports a non-zero count of catalog gaps
+- **THEN** each gap SHALL be listed with its page path and the price the run read, so the count is checkable item by item
+
+### Requirement: A Zero Cost Is Evidenced as Unpurchasable
+
+Realizes ADR-0013. A Scarce item is modelled as an ordinary catalog row costing zero, which makes `0` a load-bearing value that looks exactly like a value nobody supplied. A dropped price, a mis-parsed infobox and a deliberate Scarce row are indistinguishable by inspection, and the failure is silent in the direction that matters: a free item that should cost money understates every budget it appears in.
+
+The zero SHALL be authored by a human applying ADR-0013 and MUST NOT be written by the scrape. The scrape SHALL record only what it observed — the stated price, the three-valued purchasability, and the acquisition class set — because mapping "Scarce" to a cost is a game rule, and ADR-0005 keeps game rules out of the generated dataset.
+
+The correspondence SHALL be asserted in both directions by an automated test:
+
+- Every catalog row whose cost is `0` SHALL be evidenced as unpurchasable by `itemStats.json` — carrying `Scarce` in its acquisition class set, or a stated price this project's strict parser refuses.
+- Every item `itemStats.json` evidences as Scarce SHALL carry a cost of `0` in the catalog.
+
+The second direction is REQUIRED and is not redundant: without it, a re-scrape that reclassifies an item leaves a stale non-zero cost that no test objects to. The check SHALL run offline against the committed dataset, consistent with this spec's offline posture.
+
+Rarity SHALL NOT be added to the catalog's positional tuples. A single field cannot hold a set — a trait may be both Scarce and Burn — and a cost derived at read time from a rarity flag is the inference this spec's "Budget-Affecting Attributes Are Stored, Never Inferred" requirement forbids.
+
+#### Scenario: A zero cost with no supporting evidence fails the suite
+
+- **WHEN** a catalog row carries a cost of `0` and `itemStats.json` records neither a Scarce class nor a refused price for that id
+- **THEN** the test suite SHALL fail, naming the row, rather than accepting the row as a free item
+
+#### Scenario: A Scarce item carrying a price fails the suite
+
+- **WHEN** `itemStats.json` records an item as Scarce and the catalog carries a non-zero cost for it
+- **THEN** the test suite SHALL fail, so a reclassification surfaces instead of leaving a stale price in budget math
+
+#### Scenario: The scrape never writes the zero
+
+- **WHEN** a scrape run reads a page whose price is the literal string `Scarce`, or a trait page carrying no cost row and a Scarce category
+- **THEN** it SHALL record the observation and MUST NOT write a cost of `0` into the catalog, with or without the write-through flag
 
 ### Requirement: Error Handling Standards
 
