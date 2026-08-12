@@ -245,7 +245,67 @@ export const CONS = [
 
 export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 
-// UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1).
+// ROSTER BOUNDARY — why this table is 58 rows against the 75 live traits we can evidence.
+//
+// Read the 58 carefully: it is NOT the wiki's `Category:Traits/Regular`, which also reports 58.
+// Those are two different 58s and the coincidence is a trap. This table is 49 Regular + 8 Scarce
+// + 1 Burn (Necromancer); the Regular index is 58 Regular pages, of which some are tombstones and
+// one — Necromancer — is not in it at all. Hitting 58 here does not mean that index is covered.
+// #157 was opened on the reading that it would ("32 of 58, so 26 missing"), and ADR-0013's coverage
+// run found that denominator wrong in both directions.
+//
+// The de-duplicated union of the Regular, Scarce and Event indexes is 84 pages (ADR-0013, roster
+// corrected 2026-08-12; six traits are listed by two indexes, so the de-duplication is load-bearing).
+// That union resolves as:
+//
+//   10  tombstones        — pages that outlive the item. `Traits/All Ears` is listed by BOTH the
+//                           Scarce and Event indexes and states its own removal in 2.7.0.3.
+//   31  already carried   — plus Necromancer, which is Burn-only and therefore in none of the three
+//                           indexes: that is the 32 this table held before #157, and it is why the
+//                           union's "already carried" count reads one short of the table.
+//   26  added by #157     — 18 Regular at their stated 1–6 points, 8 Scarce at zero (ADR-0013).
+//   17  HELD BACK         —  1  Signee, the only Event trait stating a cost (6 points)
+//                           11  Event-only traits, none of which states a cost at all
+//                            5  Scarce traits also listed by the Event index (Blademancer, Bruiser,
+//                               Communion, Corpse Seer, Gunrunner)
+//
+// The ground for holding those 17 is DATA CONFIDENCE, not availability and not purchasability.
+// Both of the framings that suggest themselves here are wrong, and each is wrong for a recorded
+// reason:
+//
+//   - NOT "event content is not currently live". SPEC-0007 REQ "Acquisition Class Is Captured So
+//     Roster Membership Is Checkable" forbids stating a boundary in terms of an event's duration,
+//     because a limited-time item can become permanent while its data stays unreliable. Update
+//     2.8.1 already fired that trigger once, on Tarot Cards. See the CONS boundary above.
+//   - NOT "these cannot be purchased". ADR-0013 retired unpurchasability as grounds for exclusion
+//     outright: a Scarce item a player owns can be fielded, so it belongs here at zero cost. That
+//     is why 8 Scarce traits are IN this table. Reusing that ground would contradict the row above.
+//
+// What actually disqualifies them: the Event index cannot be trusted to describe the live roster.
+// `Traits/Shadow Crush` appears to have been replaced by `Traits/Shadow Leap` with neither page
+// saying so — and a silent replacement is exactly what the tombstone classifier (#164) cannot
+// detect, because it reads pages for stated removals. All Ears is the same shape caught only
+// because its page happens to state its removal outright. So the classifier's silence over an
+// Event page is not evidence the trait is real.
+//
+// The 11 Event-only traits state no cost anywhere, so adding them would also mean inventing budget
+// data that SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids. Signee
+// is excluded despite stating 6 points, because a trustworthy cost on an untrustworthy roster entry
+// is still an untrustworthy row. The useful consequence of drawing the line here rather than around
+// cost: every row below is either priced-Regular or zero-cost-Scarce, so "Event with no stated
+// cost" does not exist in this data at all, and the cost-0 invariant test has no ambiguous case.
+//
+// REVISIT WHEN: a page-level liveness signal exists for Event traits that does not depend on a page
+// stating its own removal — or when Shadow Crush is resolved either way, since it is the concrete
+// case this boundary was drawn around. Growing this table is append-only (see below).
+//
+// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ "Acquisition
+// Class Is Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored,
+// Never Inferred". Refs #157, #164, #231.
+
+// UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1). This paragraph
+// is about COSTS ONLY and has never claimed roster completeness — the boundary block above is what
+// states coverage. Conflating the two is what #157 was filed about.
 // Update 2.8 changed exactly three costs (Quartermaster 6->8, Frontiersman 5->6,
 // Hundred Hands 2->3); the rest of the old table was stale from the 1.x/2.0 era.
 // "Iron Repeater" was removed from the game (merged into Iron Eye, 3 UP, Update 1.15)
