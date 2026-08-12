@@ -196,11 +196,6 @@ export const WIKI_TITLE_OVERRIDES = {
     "mosin-nagant-avtomat": "Weapons/Mosin-Nagant/Avtomat",
     "nagant-officer-carbine": "Weapons/Officer/Carbine",
     "sparks-pistol": "Weapons/Sparks/Pistol",
-    // Genuine duplicate — see KNOWN_CATALOG_DUPLICATES. Not renamed by #232 and not deleted: it sits
-    // in loadoutCodec's frozen LEGACY_WEAPON_IDS at index 16, so removing the live row would drop
-    // this weapon from any pre-versioning saved loadout rather than resolving it to `frontier-73c`,
-    // which is the same gun. That remap is a migration decision and has its own issue.
-    "winfield-m1873c": null,
   },
   tools: {
     // Empty, and it emptied from both ends within a day. #232 removed the three trip-mine entries:
@@ -224,18 +219,23 @@ export const WIKI_TITLE_OVERRIDES = {
  *
  * Keyed by catalog id, for the same reason WIKI_TITLE_OVERRIDES is.
  *
- * Skipping a duplicate here is a stopgap, not the fix — the entry still shows up in the picker
- * with a fallback thumb. Deleting the row from catalog.js is the real remedy and is now safe to
- * do: loadoutCodec.js pins the pre-versioning catalog order in its own frozen table (issue #68),
- * so a mid-array delete no longer shifts what a legacy record resolves to. This used to warn the
- * opposite, because the legacy decoder read the live arrays positionally and a splice silently
- * remapped old saved loadouts. "Choke Bomb" was the first entry retired that way (issue #67).
+ * EMPTY as of #243, which retired the last entry — and the paragraph that used to sit here was wrong
+ * in a way worth recording, because it invited exactly the mistake it was warning about.
+ *
+ * It said deleting a duplicate row "is now safe to do: loadoutCodec.js pins the pre-versioning
+ * catalog order in its own frozen table (issue #68), so a mid-array delete no longer shifts what a
+ * legacy record resolves to." The first half is right and the conclusion did not follow. A delete no
+ * longer SHIFTS anything — the frozen table still maps index 16 to the id `winfield-m1873c` — but
+ * `fromLegacy` then resolves that id against the LIVE catalog, and with the row gone it resolved to
+ * nothing. Deleting on the strength of this note would have dropped the weapon from the oldest
+ * records in the wild rather than landing it on `frontier-73c`, the identical gun.
+ *
+ * So the real remedy is an ALIAS, not a delete: see RETIRED_WEAPON_ALIASES in loadoutCodec.js, which
+ * both decoders route through. A duplicate added here in future is still a stopgap — the row shows in
+ * the picker with a fallback thumb — but retiring it means giving the old id somewhere to land first.
+ * "Choke Bomb" was the first entry retired (issue #67), before the frozen tables existed.
  */
-export const KNOWN_CATALOG_DUPLICATES = {
-  "winfield-m1873c":
-    'stale pre-1896 name; duplicates the "Frontier 73C" entry, which is already in the catalog ' +
-    "and maps to Weapons/Frontier_73C",
-};
+export const KNOWN_CATALOG_DUPLICATES = {};
 
 /**
  * Resolve a catalog item to its wiki page path (relative to /wiki/, category segment included),

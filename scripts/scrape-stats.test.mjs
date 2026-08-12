@@ -396,8 +396,10 @@ test("scrapeItemStats: a known duplicate is skipped without spending a request",
   assert.equal(result.status, "skipped");
   assert.equal(fetched, 0);
   assert.match(result.reason, /no wiki page/);
-  // The recorded reason names the duplication rather than leaving it as a bare skip.
-  assert.match(result.reason, /Frontier 73C/);
+  // The reason used to quote KNOWN_CATALOG_DUPLICATES' explanation, which named the Frontier 73C. That
+  // table is empty since #243 retired its last entry, so an unmapped item gets the generic reason —
+  // still explained, still not a silent skip, which is the property this asserts.
+  assert.match(result.reason, /no wiki page mapped for this catalog entry/);
 });
 
 test("scrapeItemStats: a robots-disallowed path throws before fetching", async () => {
