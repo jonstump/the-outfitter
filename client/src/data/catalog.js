@@ -548,6 +548,52 @@ export const TRAITS = [
   ["shadow-leap", "Shadow Leap", 0, "Mobility"],
 ];
 
+// WHY NOT THE WIKI'S OWN SCHEME (#162, closing #42; audit §D.2).
+//
+// The wiki does classify traits functionally, so the question #42 asked — is that an in-game grouping
+// the app should mirror? — is a fair one. The answer is no, and measuring it is more useful than
+// asserting it. Three reasons, in order of how much they decide:
+//
+//   1. IT HAS FOUR VALUES AND WE NEED FIVE. The infobox `Category` field holds exactly one of
+//      Offensive / Defensive / Movement / Supportive. There is no Stealth bucket and no Medical
+//      bucket, which are two of the five distinctions this UI is built on. Adopting the scheme does
+//      not re-sort the roster; it deletes two sections and leaves their contents homeless.
+//   2. ADOPTING IT WOULD BE FAR MORE LOPSIDED, NOT LESS. Measured across all 58 rows:
+//         Supportive 30 (52%) · Offensive 12 (21%) · Defensive 10 (17%) · Movement 6 (10%)
+//      A bucket holding over half the roster is a worse affordance than anything below — the app's
+//      largest is Medical at 16 (28%). `Supportive` is the wiki's catch-all, and it absorbs traits as
+//      unrelated as Relentless, Decoy Supply, Poltergeist, Witness and Necromancer.
+//   3. IT IS MULTI-VALUED, THOUGH NOT IN THE WAY #162 ASSUMED. Across the 43 of 58 traits (74%)
+//      whose page categories were probed while writing this, none was both Offensive and Defensive
+//      — so on that sample the primary function reads as single-valued. That NARROWS audit §D.2's
+//      HIGH-confidence "multi-valued" verdict rather than overturning it, and the qualifier is load-
+//      bearing because THE REPO CANNOT CHECK THE CLAIM: `scrape-stats.mjs` parses whole-page
+//      categories but persists only `acquisitionClasses`, filtered to the acquisition axis, so
+//      itemStats.json carries no functional category SET at all. The one committed piece of evidence
+//      is the infobox `Category` string, which is single-valued by construction and therefore
+//      structurally incapable of falsifying the claim — a test written against it could only ever
+//      pass. The probe is not reproducible from committed data; persisting the full category sets is
+//      what would make it so, and that is its own change.
+//      The multi-valuedness that IS checkable, and is checked: `Solo` and `Catalyst` sit on the same
+//      functional axis (SPEC-0007 names all six there) but arrive in a separate infobox field, so
+//      Beastface and Vigilant are Supportive AND Catalyst, while Necromancer and Conduit are
+//      Supportive AND Solo. A `group` field renders one section header per item and cannot hold two.
+//
+// The SECOND wiki scheme — Regular / Burn / Scarce / Event — is about acquisition rather than
+// function, and #162 noted it was "genuinely missing". It is not missing any more: the scrape records
+// it per item as `acquisitionClasses` in itemStats.json (#230), where it decides what a row COSTS
+// rather than which section it renders under. NOT whether the row exists at all: ADR-0013 retired
+// unpurchasability as grounds for exclusion, and SPEC-0007 REQ "Acquisition Class Is Captured So
+// Roster Membership Is Checkable" strikes that framing in its 2026-08-12 amendment, replacing
+// "whether it belongs in the catalog at all" with "what it costs". Which is why the 8 Scarce traits
+// thirty lines up are IN this table, at zero — the same correction the boundary block above makes at
+// length. That is the right home for it, and it is genuinely multi-valued — Relentless is Scarce AND
+// Burn.
+//
+// So these five names are a UI affordance this project authors, which is exactly what SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive" already concludes: "None is a single-valued UI category. A new
+// row's `group` SHALL be hand-assigned."
+//
 // Five buckets, RECONSIDERED AND KEPT at 58 rows (#157, closing the carve-out #42 left here).
 // The question was whether ~12-per-bucket wants splitting once the roster nearly doubled. It does
 // not: the distribution is Combat 15, Medical 16, Mobility 5, Stealth 8, Utility 14 — a 3.2x spread
@@ -567,6 +613,12 @@ export const TRAITS = [
 // REVISIT WHEN: a bucket passes ~20 rows, or the picker's grid (#227) stops fitting a group on one
 // screen. Renaming or splitting a group is UI-only: `group` is never persisted — a saved loadout
 // stores trait ids (`loadoutCodec.js` `toData`) — so regrouping cannot invalidate one.
+//
+// Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File — every wiki number
+// argued above is read through `statFieldFor` off the generated itemStats.json, and reason 3's limits
+// are that file's shape), ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive", REQ "Acquisition Class Is Captured So Roster Membership Is
+// Checkable". Refs #42, #157, #162, #230.
 export const TRAIT_GROUPS = ["Combat", "Medical", "Mobility", "Stealth", "Utility"];
 
 const THUMBS = {
