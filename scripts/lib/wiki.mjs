@@ -184,10 +184,11 @@ export const WIKI_CATEGORY = {
 // restates the default is dead weight that also cannot be told apart from a live mapping.
 //
 // What remains is only what the default genuinely cannot produce, and each is a different reason:
-// three variant SUB-PAGES (the default joins with `_`, the wiki nests with `/`), one cross-namespace
-// page, and one deliberate null. `resolveWikiPathIsNeeded` in the tests asserts every entry still
-// differs from its default, so the table cannot silently regrow redundant rows the next time names
-// move.
+// three variant SUB-PAGES (the default joins with `_`, the wiki nests with `/`) and one deliberate
+// null. The cross-namespace entry that used to sit alongside them — the Katana — went away with
+// #156, which fixed the classification the override had been papering over. `resolveWikiPathIsNeeded`
+// in the tests asserts every entry still differs from its default, so the table cannot silently
+// regrow redundant rows the next time names move.
 export const WIKI_TITLE_OVERRIDES = {
   weapons: {
     // Variant sub-pages. The default would join the name with an underscore
@@ -202,9 +203,15 @@ export const WIKI_TITLE_OVERRIDES = {
     "winfield-m1873c": null,
   },
   tools: {
-    // The wiki files the Katana under Weapons even though the catalog treats it as a Tool. The only
-    // entry here whose namespace differs from its category, which is why the default cannot reach it.
-    katana: "Weapons/Katana",
+    // Empty, and it emptied from both ends within a day. #232 removed the three trip-mine entries:
+    // the wiki pluralizes those pages and the catalog said the singular, so an override supplied the
+    // difference until the names were brought current and the default produced the same path.
+    //
+    // #156 removed the last one, `katana: "Weapons/Katana"`, by moving the row into WEAPONS where the
+    // default resolves to that same path. Worth recording why it was there: it made the scrape work
+    // while leaving the classification wrong, so every run reported success against a page that
+    // disagreed with the catalog about what kind of item this is. An override that silences a
+    // mismatch can hide one — the mismatch is the signal.
   },
   traits: {},
   consumables: {},

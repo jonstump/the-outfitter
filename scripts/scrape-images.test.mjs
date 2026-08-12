@@ -130,8 +130,19 @@ test("resolveWikiPath: maps weapon variants to their subpage", () => {
   );
 });
 
-test("resolveWikiPath: can cross categories (the Katana is a Tool here, a Weapon on the wiki)", () => {
-  assert.equal(resolveWikiPath("tools", "katana", "Katana"), "Weapons/Katana");
+test("resolveWikiPath: the Katana resolves as the weapon it is, with no override", () => {
+  // This asserted the cross-category override `tools.katana -> "Weapons/Katana"`, which #156 deleted
+  // by moving the row into WEAPONS. The resolved path is unchanged; what changed is that the DEFAULT
+  // produces it, because the catalog and the wiki finally agree on what kind of item this is.
+  //
+  // The override is worth remembering as a caution rather than a pattern: it made the scrape work
+  // while leaving the classification wrong, so every run reported success against a page that
+  // disagreed with the catalog. An override that silences a mismatch can hide one.
+  assert.equal(resolveWikiPath("weapons", "katana", "Katana"), "Weapons/Katana");
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(WIKI_TITLE_OVERRIDES.tools, "katana"),
+    "the Katana is not a tool, so a tools override for it can never be consulted"
+  );
 });
 
 test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
@@ -721,7 +732,7 @@ test("WIKI_TITLE_OVERRIDES: every entry differs from the default it overrides", 
 });
 
 test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express", () => {
-  // Stated as an explicit inventory so a new entry has to justify itself against these four reasons
+  // Stated as an explicit inventory so a new entry has to justify itself against these reasons
   // rather than being added by reflex.
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.weapons).sort(), [
     "mosin-nagant-avtomat", // variant sub-page: default joins with "_", the wiki nests with "/"
@@ -729,7 +740,9 @@ test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express
     "sparks-pistol",
     "winfield-m1873c", // deliberate null; a duplicate row
   ]);
-  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.tools), ["katana"]); // cross-namespace
+  // Empty since #156. The one cross-namespace entry, `katana`, existed because the catalog filed a
+  // weapon as a Tool; moving the row rather than keeping the override is what removed the need.
+  assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.tools), []);
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.traits), []);
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.consumables), []);
 });

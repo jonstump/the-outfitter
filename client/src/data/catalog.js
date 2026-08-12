@@ -151,13 +151,14 @@ export const WEAPONS = [
   // encodings keep resolving to the same items they did before (issue #35/#36).
   ["haymaker", "Haymaker", 2, 279, "long", "Pistols"],
   ["1890-cavalry", "1890 Cavalry", 3, 56, "long", "Rifles"],
+
   // ---------------------------------------------------------------------------
   // Appended 2026-08-12 (#233), never inserted — same reason as the Update 2.8 block above.
   //
   // `Category:Weapons` listed 20 base pages the catalog did not model. These are 19 of them; the
-  // Katana is the twentieth and stays in TOOLS until #156 handles it, because moving an existing row
-  // between arrays changes what a saved `{t:"T", i:n}` resolves to and is a migration, not an
-  // addition.
+  // Katana is the twentieth and follows immediately below, moved out of TOOLS by #156 — moving an
+  // existing row between arrays changes what a saved `{t:"T", i:n}` resolves to, so it needed a
+  // decoder migration rather than an addition.
   //
   // `size` and `cost` are read from each page, never guessed: `capUsed` reads position 2 for the
   // size budget, so a wrong size corrupts loadout arithmetic exactly the way a wrong price does.
@@ -197,6 +198,23 @@ export const WEAPONS = [
   ["homestead-78", "Homestead 78", 4, 0, "shotgun", "Shotguns"],
   ["shredder", "Shredder", 4, 0, "special", "Rifles"],
   ["wildland", "Wildland", 4, 0, "medium", "Rifles"],
+
+  // ---------------------------------------------------------------------------
+  // Moved out of TOOLS 2026-08-12 (#156) — the twentieth base page from the block above, arriving as
+  // a move rather than an addition. The wiki files it at /wiki/Weapons/Katana as a two-handed melee
+  // weapon — "Two-handed, single-edged sword" — and modelling it as a Tool was a live budget error in
+  // both directions: it cost none of capMax()'s weapon size while consuming one of the eight
+  // equipment cells it should never touch.
+  //
+  // Size 2, and the wiki's history is chronological rather than contradictory: Update 1.16 reduced it
+  // "from Medium Slot to Small Slot", then Update 2.8 changed it "from Small to 2". The infobox and
+  // Category:Weapons/Size 2 both agree with the later change, so 2 is current. #156 flagged this as
+  // an inconsistency the scraper would have to resolve; it is simply a sequence.
+  //
+  // Appended, so no existing weapon index moves. The saved-loadout migration this needs lives in
+  // loadoutCodec.js — see PROMOTED_TO_WEAPON, which covers both the current format's ["T","katana"]
+  // and LEGACY_TOOL_IDS[6].
+  ["katana", "Katana", 2, 115, "none", "Melee"],
 ];
 
 export const WEAPON_GROUPS = ["Pistols", "Rifles", "Shotguns", "Melee", "Bows"];
@@ -208,7 +226,6 @@ export const TOOLS = [
   ["dusters", "Dusters", 30, "Melee"],
   ["throwing-knives", "Throwing Knives", 30, "Throwing"],
   ["throwing-axes", "Throwing Axes", 50, "Throwing"],
-  ["katana", "Katana", 115, "Melee"],
   ["flare-pistol", "Flare Pistol", 36, "Utility"],
   ["fusees", "Fusees", 10, "Utility"],
   ["spyglass", "Spyglass", 8, "Utility"],

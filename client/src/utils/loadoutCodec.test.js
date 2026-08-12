@@ -6,6 +6,7 @@ import {
   LEGACY_TOOL_IDS,
   LEGACY_TRAIT_IDS,
   LEGACY_WEAPON_IDS,
+  PROMOTED_TO_WEAPON,
   emptyLoadout,
   fromData,
   toData,
@@ -226,6 +227,8 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
 // This is the guard the old "positions still line up" comment could not be. A catalog row
 // that a legacy slot names cannot be deleted without failing here, which forces the person
 // deleting it to say what the legacy slot should do — repoint it, or set it to null.
+const WEAPON_BY_ID_TEST = new Set(WEAPONS.map((w) => w[0]));
+
 describe("frozen legacy catalog tables", () => {
   const cases = [
     ["weapons", LEGACY_WEAPON_IDS, [WEAPONS], 37],
@@ -235,9 +238,21 @@ describe("frozen legacy catalog tables", () => {
   ];
 
   it.each(cases)("%s: every non-null legacy id still resolves", (_name, table, catalogs) => {
+    // A promoted id resolves into WEAPONS rather than the equipment pool (#156, the Katana). It has
+    // to be DECLARED in PROMOTED_TO_WEAPON to count as resolved — adding WEAPONS to every case's
+    // catalog list would let any tool id that happens to match a weapon id pass silently, which is
+    // the opposite of what this guard is for.
     const known = new Set(catalogs.flat().map((t) => t[0]));
-    const unresolved = table.filter((id) => id !== null && !known.has(id));
+    const unresolved = table.filter(
+      (id) => id !== null && !known.has(id) && !(PROMOTED_TO_WEAPON.has(id) && WEAPON_BY_ID_TEST.has(id))
+    );
     expect(unresolved).toEqual([]);
+  });
+
+  it("declares every promoted id as a real weapon", () => {
+    // The other half: a declaration is only meaningful if the destination exists.
+    const missing = [...PROMOTED_TO_WEAPON].filter((id) => !WEAPON_BY_ID_TEST.has(id));
+    expect(missing).toEqual([]);
   });
 
   it.each(cases)("%s: the table keeps its pre-versioning length", (_n, table, _c, length) => {
@@ -306,5 +321,99 @@ describe("every decoder clamps a trait list to the cap", () => {
     // clamps rather than throwing (a decoded loadout is persisted before it is rendered).
     const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
     expect(toData(dec).tr).toHaveLength(TRAIT_MAX);
+  });
+});
+
+// Governing: #156 (the Katana moved TOOLS -> WEAPONS), SPEC-0006 (the saved-loadout wire format)
+//
+// The migration is the reason #156 was not a one-line data edit. `fromV1` filters equipment through
+// TOOL_BY_ID and `resolveLegacyEquip` consults TOOLS/CONS only, so BOTH decoders would have dropped a
+// stored Katana silently — this is not a legacy-only hazard, which is the part that is easy to miss.
+describe("the Katana's promotion from equipment to weapon", () => {
+  const KATANA_WEAPON = WEAPONS.findIndex((w) => w[0] === "katana");
+  const weaponIds = (lo) => lo.weapons.map((w) => (w ? WEAPONS[w.i][0] : null));
+  const equipIds = (lo) => lo.equip.map((e) => (e.t === "T" ? TOOLS[e.i][0] : CONS[e.i][0]));
+
+  it("is a weapon and no longer a tool", () => {
+    expect(KATANA_WEAPON).toBeGreaterThan(-1);
+    expect(TOOLS.some((t) => t[0] === "katana")).toBe(false);
+    expect(WEAPONS[KATANA_WEAPON][2], "size 2, per the infobox and Category:Weapons/Size 2").toBe(2);
+  });
+
+  it("moves a current-format ['T','katana'] into a free weapon slot", () => {
+    const decoded = fromData({ v: FORMAT_VERSION, w: [null, null], e: [["T", "katana"]], tr: [], n: "", b: 0 });
+    expect(weaponIds(decoded)).toEqual(["katana", null]);
+    expect(equipIds(decoded)).toEqual([]);
+  });
+
+  it("stops the Katana consuming an equipment cell it should never have used", () => {
+    // The budget error this issue is about, in the direction a user would notice: the Katana used to
+    // occupy one of the eight equipment cells while costing nothing against capMax.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [null, null],
+      e: [["T", "katana"], ["T", "first-aid-kit"]], tr: [], n: "", b: 0,
+    });
+    expect(equipIds(decoded)).toEqual(["first-aid-kit"]);
+    expect(decoded.equip).toHaveLength(1);
+  });
+
+  it("keeps the second weapon slot free rather than filling both", () => {
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["nagant-m1895", -1], null], e: [["T", "katana"]], tr: [], n: "", b: 0,
+    });
+    expect(weaponIds(decoded)).toEqual(["nagant-m1895", "katana"]);
+  });
+
+  it("drops it when both weapon slots are taken, because no encoding can hold a third", () => {
+    // Best-effort by necessity, and the same outcome as before the migration existed rather than a
+    // regression. Asserted so the loss is a stated behaviour instead of a surprise.
+    const decoded = fromData({
+      v: FORMAT_VERSION,
+      w: [["nagant-m1895", -1], ["romero-77", -1]],
+      e: [["T", "katana"]], tr: [], n: "", b: 0,
+    });
+    expect(weaponIds(decoded)).toEqual(["nagant-m1895", "romero-77"]);
+    expect(equipIds(decoded)).toEqual([]);
+  });
+
+  it("does not duplicate a Katana already carried as a weapon", () => {
+    // A record saved after the migration whose stale equipment entry survived alongside it.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["katana", -1], null], e: [["T", "katana"]], tr: [], n: "", b: 0,
+    });
+    expect(weaponIds(decoded)).toEqual(["katana", null]);
+    expect(equipIds(decoded)).toEqual([]);
+  });
+
+  it("promotes a LEGACY tool slot too, which resolveLegacyEquip alone could not", () => {
+    // LEGACY_TOOL_IDS[6] is "katana". A legacy record has no `v`, and its equipment is a raw index.
+    expect(LEGACY_TOOL_IDS[6]).toBe("katana");
+    const decoded = fromData({ w: [null, null], e: [["T", 6]], tr: [], n: "", b: 0 });
+    expect(weaponIds(decoded)).toEqual(["katana", null]);
+    expect(equipIds(decoded)).toEqual([]);
+  });
+
+  it("leaves the legacy tool slots around it untouched", () => {
+    // Index 6 is the Katana; 5 and 7 are its neighbours. A promotion must not perturb the frozen
+    // table's other positions — the failure mode #68 was about.
+    const decoded = fromData({ w: [null, null], e: [["T", 5], ["T", 6], ["T", 7]], tr: [], n: "", b: 0 });
+    expect(equipIds(decoded)).toEqual(["throwing-axes", "flare-pistol"]);
+    expect(weaponIds(decoded)).toEqual(["katana", null]);
+  });
+
+  it("carries no ammo variant, since a melee weapon has no pool", () => {
+    const decoded = fromData({ v: FORMAT_VERSION, w: [null, null], e: [["T", "katana"]], tr: [], n: "", b: 0 });
+    expect(decoded.weapons[0].a).toBe(-1);
+    expect(WEAPONS[KATANA_WEAPON][4]).toBe("none");
+  });
+
+  it("round-trips as a weapon once re-encoded", () => {
+    // The migration is one-way by design: the next save writes the Katana as a weapon, so the
+    // promotion runs once per record rather than on every load.
+    const decoded = fromData({ v: FORMAT_VERSION, w: [null, null], e: [["T", "katana"]], tr: [], n: "", b: 0 });
+    const re = toData(decoded);
+    expect(re.w[0]).toEqual(["katana", -1]);
+    expect(re.e).toEqual([]);
+    expect(weaponIds(fromData(re))).toEqual(["katana", null]);
   });
 });
