@@ -136,17 +136,22 @@ export const WIKI_CATEGORY = {
 // "/wiki/Nagant_M1895"), so the default resolution is `${WIKI_CATEGORY[category]}/${title}`,
 // derived from the item's display name.
 //
-// Three things break that default and need the override table below:
+// Two things break that default and need the override table below:
 //
-//   1. Hunt's Update 2.0 ("1896") renamed most branded weapons — the catalog still carries a
-//      number of pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved to
-//      the post-rename titles ("Sparks", "Pax").
-//   2. Weapon *variants* live on subpages ("Sparks/Pistol", "Mosin-Nagant/Avtomat",
+//   1. Weapon *variants* live on subpages ("Sparks/Pistol", "Mosin-Nagant/Avtomat",
 //      "Officer/Carbine"), which a flat display name can't express. Note the wiki flattens
 //      compound variants into ONE segment — "Sparks/Pistol_Silencer", never
 //      "Sparks/Pistol/Silencer" — so a path is at most three segments deep.
-//   3. A few catalog items sit under a different wiki category than the catalog's own — the
+//   2. A few catalog items sit under a different wiki category than the catalog's own — the
 //      Katana is a Tool here but a Weapon on the wiki.
+//
+// THREE, until #232. Hunt's Update 2.0 ("1896") renamed most branded weapons, and the catalog kept
+// the pre-rename display names ("Sparks LRR", "Caldwell Pax") while the wiki moved on ("Sparks",
+// "Pax") — so an override supplied the difference for seventeen items. #232 brought the names
+// current, which makes the default correct for all of them, and those entries are gone. Recorded
+// rather than deleted because "the catalog's names may be stale" is the assumption a reader would
+// otherwise carry into this table, and it is no longer true: a rename now shows up as a rename
+// candidate in the scrape's own report, not as a silent mismatch this table has to absorb.
 //
 // Values are paths relative to /wiki/ and INCLUDE the category segment, precisely so a cross-
 // category item can be expressed. A `null` value means "deliberately has no wiki page" — see
