@@ -64,3 +64,35 @@ describe("Picker Traits-tab UP-budget gate (issue #23 regression)", () => {
     expect(expensiveRow).not.toHaveClass("disabled");
   });
 });
+
+// The trait-point unit is spelled "pts" in the UI, never "UP" — the same cleanup that took the
+// suffix off the header stat (#66), the trait-cell hover, and the trait-cap input. The badge is
+// the one place the number keeps a visible unit, because a trait row has no dollar cost beside
+// it, so the badge is the only thing on the row that says what the number counts.
+describe("Picker Traits-tab point badge", () => {
+  const traitsTab = { tab: "Traits", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" };
+
+  const rowFor = (buttons, name) => buttons.find((b) => b.textContent.includes(name));
+
+  it("badges a multi-point trait as pts, not UP", () => {
+    const expensive = TRAITS.find((t) => t[2] === 8);
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
+
+    const row = rowFor(getAllByRole("button"), expensive[1]);
+    expect(row.querySelector(".picker-row-badge")).toHaveTextContent("8 pts");
+  });
+
+  it("uses the singular at one point", () => {
+    const cheap = TRAITS.find((t) => t[2] === 1);
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
+
+    const row = rowFor(getAllByRole("button"), cheap[1]);
+    expect(row.querySelector(".picker-row-badge")).toHaveTextContent(/^1 pt$/);
+  });
+
+  it("renders no trait row carrying the word UP", () => {
+    const { container } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
+
+    expect(container.textContent).not.toMatch(/\bUP\b/);
+  });
+});

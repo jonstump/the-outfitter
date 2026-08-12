@@ -111,7 +111,12 @@ function buildRows(tab, ui, loadout, dispatch) {
         key: x.i,
         name: x.t[1],
         meta: x.t[0] === QM ? "Raises weapon capacity to 6" : x.t[3] + " trait",
-        badge: x.t[2] + " UP",
+        // "pts", not "UP" — the app names this unit "Trait points" in the header, and the
+        // badge is the only cost signal on a trait row (traits have no dollar cost, so
+        // `costStr` is empty), so unlike the header stat and the trait-cell hover the number
+        // can't simply lose its unit here. Singular at 1 so the cheapest traits don't read
+        // "1 pts".
+        badge: x.t[2] + (x.t[2] === 1 ? " pt" : " pts"),
         badgeColor: "#c4a05e",
         category: "traits",
         thumb: traitThumb(x.t),
