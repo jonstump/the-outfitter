@@ -16,6 +16,7 @@ import {
   traitThumb,
   weaponThumb,
 } from "./catalog.js";
+import { descriptionFor } from "./itemStats.js";
 
 // Governing: data-accuracy review issues #35-#40 (UP costs, missing weapons,
 // ammo classes, Tools/Consumables rosters). These tests lock in the verified
@@ -295,9 +296,13 @@ describe("the tool group balance", () => {
   it("no longer lets Utility hold the largest share", () => {
     // The specific regression: Utility was the catch-all at 9 of 22. It is a remainder now, and if it
     // ever becomes the biggest bucket again that is the signal the accretion has restarted.
+    // Compare against the other buckets, not against all of them: a max taken over `Utility` itself
+    // is a tautology, and the assertion would pass for every dataset it exists to catch.
     const counts = tally(TOOLS, 3);
-    const largest = Math.max(...Object.values(counts));
-    expect(counts.Utility).toBeLessThanOrEqual(largest);
+    const largestOther = Math.max(
+      ...Object.entries(counts).filter(([g]) => g !== "Utility").map(([, n]) => n),
+    );
+    expect(counts.Utility, "#166's regression — Utility is the catch-all again").toBeLessThanOrEqual(largestOther);
     expect(counts.Utility).toBeLessThan(9);
   });
 
@@ -323,10 +328,16 @@ describe("the tool group balance", () => {
   });
 
   it("keeps Throwing to retrievable projectile weapons", () => {
-    // Why Choke Bombs stayed in Utility: every Throwing member's description ends "Can be retrieved
-    // and reused", and that rule is what the group means.
-    const throwing = TOOLS.filter((t) => t[3] === "Throwing").map((t) => t[1]);
-    expect(throwing).toEqual(["Throwing Knives", "Throwing Axes", "Throwing Spear"]);
+    // Why Choke Bombs stayed in Utility: every Throwing member's description carries "can be retrieved
+    // and reused", and that rule — not today's three names — is what the group means. Asserted against
+    // the scraped descriptions so a fourth genuinely retrievable weapon can join without failing, and
+    // so an unretrievable one fails with a message that says which rule it broke.
+    const throwing = TOOLS.filter((t) => t[3] === "Throwing");
+    expect(throwing.length).toBeGreaterThanOrEqual(3);
+    const unretrievable = throwing
+      .filter((t) => !/can be retrieved and reused/i.test(descriptionFor(t[0]) ?? ""))
+      .map((t) => t[1]);
+    expect(unretrievable, "Throwing means retrievable — the group's rule, not its roster").toEqual([]);
     expect(entry(TOOLS, "Choke Bombs")[3]).toBe("Utility");
   });
 });
