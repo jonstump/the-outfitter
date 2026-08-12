@@ -201,3 +201,65 @@ describe("descriptionFor", () => {
     expect(longest).toBeLessThanOrEqual(240);
   });
 });
+
+// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost)
+// Covers: SPEC-0007 REQ "A Zero Cost Is Evidenced as Unpurchasable"
+//
+// The invariant a hand-authored `0` rests on. ADR-0013 admits Scarce items as ordinary catalog rows
+// costing nothing, which makes `0` a load-bearing value that is visually indistinguishable from a
+// price nobody supplied — and the failure is silent in the expensive direction, because a free item
+// that should cost money understates every budget it appears in.
+//
+// Asserted in BOTH directions on purpose. The forward check catches a dropped price. The reverse
+// check catches the case the forward one cannot see: a re-scrape that reclassifies an item leaves a
+// stale non-zero cost that nothing else objects to.
+describe("a zero cost is evidenced as unpurchasable", () => {
+  // Cost lives at a different tuple position per category — SPEC-0007's "Budget-Affecting Attributes
+  // Are Stored, Never Inferred" is about the value, not its index, so the index is read from the same
+  // place `calc.js` reads it: WEAPONS[3], TOOLS[2], CONS[2], TRAITS[2].
+  const rows = [
+    ...WEAPONS.map((r) => ({ id: r[0], name: r[1], cost: r[3] })),
+    ...TOOLS.map((r) => ({ id: r[0], name: r[1], cost: r[2] })),
+    ...CONS.map((r) => ({ id: r[0], name: r[1], cost: r[2] })),
+    ...TRAITS.map((r) => ({ id: r[0], name: r[1], cost: r[2] })),
+  ];
+
+  // Two forms of evidence, because the wiki states unpurchasability two different ways: a Scarce
+  // TRAIT declares `Category:Traits/Scarce` and omits its cost row entirely, while a Scarce WEAPON
+  // writes the literal string "Scarce" where a price goes, which the strict parser refuses and
+  // records as `purchasable: false`.
+  const evidencedUnpurchasable = (record) =>
+    Boolean(record) &&
+    ((record.acquisitionClasses ?? []).includes("Scarce") || record.purchasable === false);
+
+  it("has cost-0 rows to check, so neither direction can pass vacuously", () => {
+    expect(rows.filter((r) => r.cost === 0).length).toBeGreaterThan(0);
+  });
+
+  it("evidences every cost-0 catalog row as Scarce or stated-unpurchasable", () => {
+    const unevidenced = rows
+      .filter((r) => r.cost === 0)
+      .filter((r) => !evidencedUnpurchasable(statsFor(r.id)))
+      .map((r) => r.id);
+    expect(unevidenced).toEqual([]);
+  });
+
+  it("prices every scrape-evidenced Scarce item at 0", () => {
+    // The direction that catches a reclassification. Without it, an item the wiki stops calling Scarce
+    // keeps whatever cost it had, and no test disagrees.
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const mispriced = Object.keys(ITEM_STATS)
+      .filter((id) => evidencedUnpurchasable(ITEM_STATS[id]))
+      .filter((id) => byId.has(id) && byId.get(id).cost !== 0)
+      .map((id) => `${id} costs ${byId.get(id).cost}`);
+    expect(mispriced).toEqual([]);
+  });
+
+  it("never charges upgrade points for a Scarce trait", () => {
+    // The consequence that reaches the budget: `upTotal` sums TRAITS[2], so a non-zero cost here is
+    // spent points for an item the player could not have bought.
+    const scarceTraits = TRAITS.filter((t) => (statsFor(t[0])?.acquisitionClasses ?? []).includes("Scarce"));
+    expect(scarceTraits.length).toBeGreaterThan(0);
+    expect(scarceTraits.filter((t) => t[2] !== 0).map((t) => t[0])).toEqual([]);
+  });
+});

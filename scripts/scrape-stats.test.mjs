@@ -1711,10 +1711,15 @@ test("CATEGORY_INDEX: traits are enumerated by every in-scope rarity index, not 
 });
 
 test("runDiscovery: members are unioned across a category's indexes", async () => {
+  // Member names are deliberately synthetic. An earlier version of this test used real Scarce and
+  // Event trait names and asserted they landed in `unmatched` — which held only while the catalog
+  // lacked them, so #157 adding Relentless broke a test about union behaviour for a reason that had
+  // nothing to do with unions. What is under test is that a page from a non-Regular index is
+  // enumerated at all, and that does not need a real roster gap to demonstrate.
   const perIndex = {
-    "Category:Traits/Regular": ["Traits/Quartermaster", "Traits/Doctor"],
-    "Category:Traits/Scarce": ["Traits/Relentless"],
-    "Category:Traits/Event": ["Traits/Mariner"],
+    "Category:Traits/Regular": ["Traits/Not In Catalog Regular"],
+    "Category:Traits/Scarce": ["Traits/Not In Catalog Scarce"],
+    "Category:Traits/Event": ["Traits/Not In Catalog Event"],
   };
   const fetchFn = async (url) => {
     const decoded = decodeURIComponent(url);
@@ -1730,8 +1735,9 @@ test("runDiscovery: members are unioned across a category's indexes", async () =
     { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
   );
   const pages = report.traits.unmatched.map((u) => u.page).sort();
-  assert.ok(pages.includes("Traits/Relentless"), "a Scarce trait is now enumerated at all");
-  assert.ok(pages.includes("Traits/Mariner"), "and so is an Event trait");
+  assert.ok(pages.includes("Traits/Not In Catalog Scarce"), "a page from the Scarce index is enumerated");
+  assert.ok(pages.includes("Traits/Not In Catalog Event"), "and so is one from the Event index");
+  assert.equal(report.traits.wikiMembers, 3, "all three indexes contributed");
 });
 
 test("runDiscovery: a page listed by two indexes is one member and one gap, not two", async () => {

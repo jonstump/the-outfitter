@@ -245,13 +245,77 @@ export const CONS = [
 
 export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 
-// UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1).
+// ROSTER BOUNDARY — why this table is 58 rows against the 75 live traits we can evidence.
+//
+// Read the 58 carefully: it is NOT the wiki's `Category:Traits/Regular`, which also reports 58.
+// Those are two different 58s and the coincidence is a trap. This table is 49 Regular + 8 Scarce
+// + 1 Burn (Necromancer); the Regular index is 58 Regular pages, of which some are tombstones and
+// one — Necromancer — is not in it at all. Hitting 58 here does not mean that index is covered.
+// #157 was opened on the reading that it would ("32 of 58, so 26 missing"), and ADR-0013's coverage
+// run found that denominator wrong in both directions.
+//
+// The de-duplicated union of the Regular, Scarce and Event indexes is 84 pages (ADR-0013, roster
+// corrected 2026-08-12; six traits are listed by two indexes, so the de-duplication is load-bearing).
+// That union resolves as:
+//
+//   10  tombstones        — pages that outlive the item. `Traits/All Ears` is listed by BOTH the
+//                           Scarce and Event indexes and states its own removal in 2.7.0.3.
+//   31  already carried   — plus Necromancer, which is Burn-only and therefore in none of the three
+//                           indexes: that is the 32 this table held before #157, and it is why the
+//                           union's "already carried" count reads one short of the table.
+//   26  added by #157     — 18 Regular at their stated 1–6 points, 8 Scarce at zero (ADR-0013).
+//   17  HELD BACK         —  1  Signee, the only Event trait stating a cost (6 points)
+//                           11  Event-only traits, none of which states a cost at all
+//                            5  Scarce traits also listed by the Event index (Blademancer, Bruiser,
+//                               Communion, Corpse Seer, Gunrunner)
+//
+// The ground for holding those 17 is DATA CONFIDENCE, not availability and not purchasability.
+// Both of the framings that suggest themselves here are wrong, and each is wrong for a recorded
+// reason:
+//
+//   - NOT "event content is not currently live". SPEC-0007 REQ "Acquisition Class Is Captured So
+//     Roster Membership Is Checkable" forbids stating a boundary in terms of an event's duration,
+//     because a limited-time item can become permanent while its data stays unreliable. Update
+//     2.8.1 already fired that trigger once, on Tarot Cards. See the CONS boundary above.
+//   - NOT "these cannot be purchased". ADR-0013 retired unpurchasability as grounds for exclusion
+//     outright: a Scarce item a player owns can be fielded, so it belongs here at zero cost. That
+//     is why 8 Scarce traits are IN this table. Reusing that ground would contradict the row above.
+//
+// What actually disqualifies them: the Event index cannot be trusted to describe the live roster.
+// `Traits/Shadow Crush` appears to have been replaced by `Traits/Shadow Leap` with neither page
+// saying so — and a silent replacement is exactly what the tombstone classifier (#164) cannot
+// detect, because it reads pages for stated removals. All Ears is the same shape caught only
+// because its page happens to state its removal outright. So the classifier's silence over an
+// Event page is not evidence the trait is real.
+//
+// The 11 Event-only traits state no cost anywhere, so adding them would also mean inventing budget
+// data that SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids. Signee
+// is excluded despite stating 6 points, because a trustworthy cost on an untrustworthy roster entry
+// is still an untrustworthy row. The useful consequence of drawing the line here rather than around
+// cost: every row below is either priced-Regular or zero-cost-Scarce, so "Event with no stated
+// cost" does not exist in this data at all, and the cost-0 invariant test has no ambiguous case.
+//
+// REVISIT WHEN: a page-level liveness signal exists for Event traits that does not depend on a page
+// stating its own removal — or when Shadow Crush is resolved either way, since it is the concrete
+// case this boundary was drawn around. New rows go on the end (see the note above the additions).
+//
+// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ "Acquisition
+// Class Is Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored,
+// Never Inferred". Refs #157, #164, #231.
+
+// UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1). This paragraph
+// is about COSTS ONLY and has never claimed roster completeness — the boundary block above is what
+// states coverage. Conflating the two is what #157 was filed about.
 // Update 2.8 changed exactly three costs (Quartermaster 6->8, Frontiersman 5->6,
 // Hundred Hands 2->3); the rest of the old table was stale from the 1.x/2.0 era.
 // "Iron Repeater" was removed from the game (merged into Iron Eye, 3 UP, Update 1.15)
-// and "Poison Sense" was renamed to "Pain Sense" (3 UP, Update 2.1). Entries are
-// edited in place, never reordered, so legacy index-based encodings keep
-// resolving to the same traits they did before.
+// and "Poison Sense" was renamed to "Pain Sense" (3 UP, Update 2.1).
+//
+// This paragraph used to end "entries are edited in place, never reordered, so legacy index-based
+// encodings keep resolving to the same traits they did before." That stopped being the reason in
+// #68: legacy encodings now resolve through the frozen LEGACY_TRAIT_IDS table in loadoutCodec.js,
+// not through this array's live order. Corrected rather than deleted because it is the same stale
+// belief the note above the #157 additions corrects — see there for what is actually load-bearing.
 export const TRAITS = [
   ["quartermaster", "Quartermaster", 8, "Utility"],
   ["fanning", "Fanning", 8, "Combat"],
@@ -285,8 +349,86 @@ export const TRAITS = [
   ["ambidextrous", "Ambidextrous", 3, "Combat"],
   ["dauntless", "Dauntless", 1, "Combat"],
   ["vigilant", "Vigilant", 1, "Utility"],
+  // ---------------------------------------------------------------------------
+  // Appended 2026-08-12 (#157), and appended rather than merged in alphabetically for reviewability
+  // — the diff shows 26 new rows instead of 26 insertions scattered through an existing table.
+  //
+  // NOT for wire-format safety, which is worth stating because the opposite is the intuitive guess
+  // and it is wrong here: a trait pick persists as a stable id, not as a position. `toData` writes
+  // `tr: loadout.traits` and those are ids (`thunks.js` stores `trait[0]`); `fromV1` resolves them
+  // through `TRAIT_BY_ID`; and pre-versioning records go through the frozen `LEGACY_TRAIT_IDS`
+  // table rather than through this array. Inserting or reordering rows here is therefore free, as
+  // `loadoutCodec.js` says in as many words and as the CONS boundary above already records for its
+  // own table (#68). What is NOT free is changing or reusing an `id` — that is the value saved
+  // loadouts and share links actually carry.
+  //
+  // Costs are the wiki's own, read by `node scripts/scrape-stats.mjs --discover --only=traits` after
+  // #231 taught discovery to crawl all three rarity indexes. `group` is hand-assigned, per SPEC-0007
+  // REQ "Fields the Scraper Must Not Derive" — the wiki's functional axis is
+  // Offensive/Defensive/Movement/Supportive and has no bucket matching `Stealth` or `Medical`, so no
+  // mechanical mapping exists. Calibrated against rows already here: `salveskin` (fire mitigation)
+  // and `determination` (stamina) are Medical, so mitigation and stamina are Medical; `pain-sense`
+  // (senses Hunters) is Stealth while `vigilant` (highlights traps) is Utility, which is what splits
+  // Blast Sense from Blade Seer and Witness; `beastface` (animals ignore you) is Stealth, which is
+  // why Shadow is.
+
+  // Regular traits, purchasable, costs as stated on the wiki.
+  ["adrenaline", "Adrenaline", 1, "Medical"],
+  ["assailant", "Assailant", 1, "Combat"],
+  ["blade-seer", "Blade Seer", 1, "Utility"],
+  ["blast-sense", "Blast Sense", 2, "Stealth"],
+  ["bloodless", "Bloodless", 3, "Medical"],
+  ["bulwark", "Bulwark", 2, "Medical"],
+  ["decoy-supply", "Decoy Supply", 1, "Utility"],
+  ["fast-fingers", "Fast Fingers", 4, "Combat"],
+  ["gator-legs", "Gator Legs", 3, "Mobility"],
+  ["hornskin", "Hornskin", 3, "Medical"],
+  ["martialist", "Martialist", 2, "Combat"],
+  ["mithridatist", "Mithridatist", 3, "Medical"],
+  ["poacher", "Poacher", 1, "Stealth"],
+  ["poltergeist", "Poltergeist", 2, "Utility"],
+  ["scopesmith", "Scopesmith", 2, "Combat"],
+  ["surefoot", "Surefoot", 6, "Mobility"],
+  ["vigor", "Vigor", 3, "Medical"],
+  ["witness", "Witness", 4, "Utility"],
+
+  // Scarce traits. Cost 0 per ADR-0013: they come only from a match, so they can be sold but never
+  // bought, and they have no purchase value. The zero is authored here by a human applying that
+  // decision — the scrape records `priceStated: null` and `acquisitionClasses: ["Scarce", ...]` and
+  // never writes a cost, because mapping "Scarce" to a number is a game rule.
+  //
+  // Each of these is asserted against the scrape in both directions by `itemStats.test.js`: a cost of
+  // 0 here requires Scarce evidence there, and Scarce evidence there requires a 0 here. That check is
+  // the whole reason a hand-authored 0 — which looks exactly like a price nobody supplied — is safe.
+  ["berserker", "Berserker", 0, "Combat"],
+  ["catalyst", "Catalyst", 0, "Utility"],
+  ["death-cheat", "Death Cheat", 0, "Utility"],
+  ["rampage", "Rampage", 0, "Medical"],
+  ["relentless", "Relentless", 0, "Medical"],
+  ["remedy", "Remedy", 0, "Medical"],
+  ["shadow", "Shadow", 0, "Stealth"],
+  ["shadow-leap", "Shadow Leap", 0, "Mobility"],
 ];
 
+// Five buckets, RECONSIDERED AND KEPT at 58 rows (#157, closing the carve-out #42 left here).
+// The question was whether ~12-per-bucket wants splitting once the roster nearly doubled. It does
+// not: the distribution is Combat 15, Medical 16, Mobility 5, Stealth 8, Utility 14 — a 3.2x spread
+// that is uneven but not unusable, and the two crowded buckets are crowded because the game really
+// does concentrate traits there, not because the buckets are miscut. Splitting to even them out
+// would invent distinctions the wiki does not make, which is the same objection SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive" raises against deriving `group` at all — these names are a
+// UI affordance this project authors, and the cost of a bad cut is paid by every future hand
+// assignment having a less obvious home.
+//
+// Medical at 16 is the one to watch, and it is worth naming why rather than just noting the count:
+// a third of it arrived in #157 under the `salveskin` precedent (mitigation and stamina read as
+// Medical). If that precedent is wrong, Bulwark, Hornskin, Bloodless and Mithridatist are the rows
+// that move, and Medical drops to 12 — which would resolve the imbalance without any split at all.
+// So the bucket count is not the thing under strain here; one classification precedent is.
+//
+// REVISIT WHEN: a bucket passes ~20 rows, or the picker's grid (#227) stops fitting a group on one
+// screen. Renaming or splitting a group is UI-only: `group` is never persisted — a saved loadout
+// stores trait ids (`loadoutCodec.js` `toData`) — so regrouping cannot invalidate one.
 export const TRAIT_GROUPS = ["Combat", "Medical", "Mobility", "Stealth", "Utility"];
 
 const THUMBS = {
