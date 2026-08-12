@@ -310,14 +310,15 @@ describe("the Tarot Card roster boundary", () => {
     // The assertion that keeps the retired rationale from creeping back. If "unpurchasable" were the
     // criterion, these twelve rows could not exist — they are Scarce items carried at cost 0 under
     // ADR-0013, and itemStats.test.js asserts that pairing in both directions.
-    const scarceAtZero = [
-      ...WEAPONS.filter((w) => w[3] === 0),
-      ...TRAITS.filter((t) => t[2] === 0),
-    ];
-    expect(scarceAtZero.length).toBeGreaterThan(0);
-    expect(
-      scarceAtZero.every((row) => row[0]),
-      "unpurchasable items ARE in the catalog, so exclusion rests on scope alone"
-    ).toBe(true);
+    const weaponsAtZero = WEAPONS.filter((w) => w[3] === 0);
+    const traitsAtZero = TRAITS.filter((t) => t[2] === 0);
+    // Counted, not merely non-empty. The claim the boundary comment rests on is that unpurchasable
+    // items ARE in this file, so the numbers it quotes have to be the numbers the data holds — a
+    // shrinking count is the shape of the retired rationale returning one row at a time. The split is
+    // pinned too, because the twelve arrived on two different axes (#233 for weapons, #157 for
+    // traits) and either could be undone alone.
+    expect(weaponsAtZero).toHaveLength(4);
+    expect(traitsAtZero).toHaveLength(8);
+    expect(weaponsAtZero.length + traitsAtZero.length).toBe(12);
   });
 });

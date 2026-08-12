@@ -2016,16 +2016,20 @@ test("runDiscovery: a live page the catalog excludes on purpose is not reported 
 });
 
 test("catalog.js states the roster boundary as a scope decision, not a purchasability rule", async () => {
-  // SPEC-0007 REQ "Acquisition Class Is Captured": the boundary must be recorded where an editor sees
-  // it. What it must SAY has changed twice, and this assertion tracked the second version.
+  // Governing: SPEC-0007 REQ "Acquisition Class Is Captured", **as amended 2026-08-12 per ADR-0013** —
+  // the boundary is stated in `catalog.js` "as the scope decision it is, and never in terms of any
+  // event's duration". This test enforces that post-ADR-0013 phrasing, and nothing else.
   //
-  // It required the comment to be "phrased on purchasability", which was right until ADR-0013 made
-  // unpurchasability a cost of ZERO rather than a ground for exclusion — twelve Scarce rows now sit in
-  // the catalog. A test demanding the retired rationale is worse than no test, because it fails the
-  // correct comment and passes the wrong one. (#161)
+  // It is deliberately the inverse of what it asserted before. The un-amended paragraph required the
+  // comment to be "phrased on purchasability", which was right until ADR-0013 made unpurchasability a
+  // cost of ZERO rather than a ground for exclusion — twelve Scarce rows now sit in the catalog, so a
+  // comment claiming purchasability as the criterion states something the same file falsifies. The
+  // spec paragraph carries that reversal marked rather than rewritten; so does this header, because a
+  // test whose stated authority contradicts its assertions is how the old rationale creeps back. (#161)
   //
   // Asserted on the two things that stay true: the boundary names Tarot Cards as the excluded set, and
-  // it does NOT claim unpurchasability as the criterion.
+  // it does NOT claim unpurchasability as the criterion. The duration half of the requirement is
+  // untouched by the amendment, and is still checked below.
   const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
   const anchor = src.indexOf("export const CONS");
   const boundary = src.slice(Math.max(0, anchor - 3200), anchor);
