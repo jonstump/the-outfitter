@@ -512,6 +512,10 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     // page states none, which is a real outcome rather than a parse failure: some pages carry only a
     // hatnote above their first section. Untrusted output; a consumer MUST render it as text.
     description: result.description ?? null,
+    // Lifted OUT of the description string, which is the point of #178: "a scraper that captures the
+    // description string satisfies §3.0 while leaving dual-wieldability locked inside a blob of text —
+    // it must be lifted to its own boolean to be queryable." Three-valued; see dualWieldFrom.
+    dualWield: dualWieldFrom(result.description),
     // Scrape metadata, never a catalog field, and never `group` (SPEC-0007 REQ "Acquisition Class
     // Is Captured So Roster Membership Is Checkable"). This is what makes "should this item have a
     // row?" checkable instead of arguable.
@@ -826,6 +830,47 @@ export const UNASSIGNED_AXIS_CATEGORIES = ["Pact"];
  * SPEC-0007 asks for. Category membership is preferred because it survives an infobox that omits
  * `Type` entirely, which Scarce trait pages do: they carry no `Cost` row at all.
  */
+// The literal sentence the wiki uses, anchored rather than loosened. Every dual-wieldable page states
+// it the same way, so a tight pattern is both sufficient and the thing that keeps this honest: a looser
+// match on "dual" would hit prose about the concept rather than a claim about this weapon.
+const DUAL_WIELD_SIGNAL = /can be dual[-\s]?wielded/i;
+
+/**
+ * Whether the page says this weapon can be dual wielded, or null when it says nothing either way.
+ *
+ * Governing: #178. THREE-VALUED, on the same reasoning as `purchasable`, and the asymmetry matters
+ * more here than anywhere else in this file:
+ *
+ *   true   the description states it outright — "Can be dual wielded." A read, not a guess.
+ *   false  a description WAS read and does not state it. That is an inference from absence, and it is
+ *          weaker than the `true` case: the wiki asserts dual-wieldability positively and never denies
+ *          it, so an editorial omission is indistinguishable from a two-handed weapon.
+ *   null   no description was read at all. No evidence in either direction.
+ *
+ * Recording `false` and `null` separately is what #178 asks for — "any row the scrape cannot resolve
+ * is recorded as unresolved rather than defaulted to false" — and the distinction is load-bearing
+ * because #178 also notes this attribute "feeds the budget math the same way `size` and `cost` do". A
+ * wrong `false` becomes a slot-cost error once #179 consumes it, so a consumer must treat `false` as
+ * "not stated" rather than as "denied".
+ *
+ * Read from the page's OWN description, which is what defuses the trap #178 flags. `Officer` (a
+ * dual-wieldable pistol) and `Officer Carbine` (a rifle) share a near-identical description prefix —
+ * both open "Nagant made, double-action revolver. High fire-rate, muzzle velocity" — and differ only
+ * in that one ends with the dual-wield sentence. Any match on name or description SIMILARITY would
+ * conflate them; matching per page cannot.
+ *
+ * What the wiki does NOT give us, recorded because #178 asks the right question and the answer is
+ * negative: there is no `hands` field in any weapon infobox, and no infobox field mentions hands,
+ * wielding, or dual anything. #178 argues `hands` is the real discriminator — Haymaker and Uppercut
+ * are both size 2 and split on it — and it is not scrapable. Only five weapons state hands anywhere,
+ * all melee, all in prose. So a stored boolean here cannot be backed by `hands` yet; that is a gap in
+ * the source, not in the extraction.
+ */
+export function dualWieldFrom(description) {
+  if (description === null || description === undefined || String(description).trim() === "") return null;
+  return DUAL_WIELD_SIGNAL.test(String(description));
+}
+
 export function acquisitionClassesFrom(categories = []) {
   // Matched on the last path segment rather than a `Traits/` prefix, so a rarity category added under
   // another tree is picked up without an edit here. Today there is none: a Scarce WEAPON carries no

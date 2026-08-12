@@ -37,6 +37,25 @@ export function statsFor(id) {
 }
 
 /**
+ * Whether the wiki says this weapon can be dual wielded — `true`, `false`, or `null` for not stated.
+ *
+ * Governing: #178. Added with the scrape's `dualWield` field.
+ *
+ * THREE-VALUED, and a caller must not collapse it. `true` is read from the page's own words; `false`
+ * means a description was read and did not say it, which is an inference from ABSENCE because the wiki
+ * asserts dual-wieldability positively and never denies it; `null` means nothing was read.
+ *
+ * That matters because #178 notes the attribute "feeds the budget math the same way `size` and `cost`
+ * do" — a dual-wielded pair costs more slots than one pistol. So `if (dualWieldFor(id))` is safe for
+ * offering an affordance, and `if (dualWieldFor(id) === false)` is NOT safe as proof a weapon cannot
+ * be paired. Consuming this in the builder is #179, and it needs the catalog schema work first.
+ */
+export function dualWieldFor(id) {
+  const value = statsFor(id)?.dualWield;
+  return value === undefined ? null : value;
+}
+
+/**
  * The scraped description for a catalog id, or null.
  *
  * Governing: ADR-0005 (the "and Descriptions" half of its title), SPEC-0007 REQ "Generated,
