@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { consCount } from "../utils/calc.js";
+import { statFieldFor } from "./itemStats.js";
 import {
   CONS,
   CONS_GROUPS,
@@ -274,5 +275,49 @@ describe("consumable type", () => {
       expect(consCount(loadout, x.i)).toBe(4);
     }
     expect(equip.length).toBeGreaterThan(4);
+  });
+});
+
+// Governing: #162 (closing #42), audit §D.2, SPEC-0007 REQ "Fields the Scraper Must Not Derive"
+//
+// The TRAIT_GROUPS rationale, pinned to the measurements it rests on rather than left as prose. The
+// comment above TRAIT_GROUPS argues the wiki's functional scheme would be a WORSE affordance than the
+// app's own five buckets, and that is a claim about data — so it should fail if the data stops
+// supporting it, instead of aging quietly into a confident-sounding paragraph.
+describe("the TRAIT_GROUPS taxonomy rationale", () => {
+  const share = (counts) => {
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return Math.max(...Object.values(counts)) / total;
+  };
+  const tally = (values) => values.reduce((acc, v) => ({ ...acc, [v]: (acc[v] ?? 0) + 1 }), {});
+
+  // The wiki's single-valued primary function, as scraped. Read from the dataset rather than restated,
+  // so this measures the wiki rather than a transcription of it.
+  const wikiCategories = TRAITS.map((t) => statFieldFor(t[0], "Category")).filter(Boolean);
+
+  it("has a wiki category for every trait, so the comparison is not made on a subset", () => {
+    expect(wikiCategories).toHaveLength(TRAITS.length);
+  });
+
+  it("offers four values where the UI needs five", () => {
+    // Reason 1 in the comment: no Stealth bucket and no Medical bucket exist upstream, so adopting the
+    // scheme deletes two sections rather than re-sorting the roster.
+    const distinct = [...new Set(wikiCategories)].sort();
+    expect(distinct).toEqual(["Defensive", "Movement", "Offensive", "Supportive"]);
+    expect(distinct.length).toBeLessThan(TRAIT_GROUPS.length);
+  });
+
+  it("would concentrate the roster far more than the app's own buckets do", () => {
+    // Reason 2, and the one that decides it. `Supportive` is the wiki's catch-all; if it ever stops
+    // being lopsided, the argument for hand-authoring these names weakens and this should be revisited.
+    const wikiShare = share(tally(wikiCategories));
+    const appShare = share(tally(TRAITS.map((t) => t[3])));
+    expect(wikiShare).toBeGreaterThan(0.5);
+    expect(appShare).toBeLessThan(wikiShare);
+  });
+
+  it("assigns every trait to a declared group", () => {
+    const undeclared = TRAITS.filter((t) => !TRAIT_GROUPS.includes(t[3])).map((t) => t[0]);
+    expect(undeclared).toEqual([]);
   });
 });

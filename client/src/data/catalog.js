@@ -526,6 +526,37 @@ export const TRAITS = [
   ["shadow-leap", "Shadow Leap", 0, "Mobility"],
 ];
 
+// WHY NOT THE WIKI'S OWN SCHEME (#162, closing #42; audit §D.2).
+//
+// The wiki does classify traits functionally, so the question #42 asked — is that an in-game grouping
+// the app should mirror? — is a fair one. The answer is no, and measuring it is more useful than
+// asserting it. Three reasons, in order of how much they decide:
+//
+//   1. IT HAS FOUR VALUES AND WE NEED FIVE. The infobox `Category` field holds exactly one of
+//      Offensive / Defensive / Movement / Supportive. There is no Stealth bucket and no Medical
+//      bucket, which are two of the five distinctions this UI is built on. Adopting the scheme does
+//      not re-sort the roster; it deletes two sections and leaves their contents homeless.
+//   2. ADOPTING IT WOULD BE FAR MORE LOPSIDED, NOT LESS. Measured across all 58 rows:
+//         Supportive 30 (52%) · Offensive 12 (21%) · Defensive 10 (17%) · Movement 6 (10%)
+//      A bucket holding over half the roster is a worse affordance than anything below — the app's
+//      largest is Medical at 16 (28%). `Supportive` is the wiki's catch-all, and it absorbs traits as
+//      unrelated as Relentless, Decoy Supply, Poltergeist, Witness and Necromancer.
+//   3. IT IS MULTI-VALUED, THOUGH NOT IN THE WAY #162 ASSUMED. No trait is both Offensive and
+//      Defensive — the primary function really is single-valued. But `Solo` and `Catalyst` sit on the
+//      same axis (SPEC-0007 names them there), so Beastface and Vigilant are Supportive AND Catalyst,
+//      while Necromancer and Conduit are Supportive AND Solo. A `group` field renders one section
+//      header per item and cannot hold two.
+//
+// The SECOND wiki scheme — Regular / Burn / Scarce / Event — is about acquisition rather than
+// function, and #162 noted it was "genuinely missing". It is not missing any more: the scrape records
+// it per item as `acquisitionClasses` in itemStats.json (#230), where it decides which rows belong in
+// the catalog at all (ADR-0013) rather than which section they render under. That is the right home
+// for it, and it is genuinely multi-valued — Relentless is Scarce AND Burn.
+//
+// So these five names are a UI affordance this project authors, which is exactly what SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive" already concludes: "None is a single-valued UI category. A new
+// row's `group` SHALL be hand-assigned."
+//
 // Five buckets, RECONSIDERED AND KEPT at 58 rows (#157, closing the carve-out #42 left here).
 // The question was whether ~12-per-bucket wants splitting once the roster nearly doubled. It does
 // not: the distribution is Combat 15, Medical 16, Mobility 5, Stealth 8, Utility 14 — a 3.2x spread
