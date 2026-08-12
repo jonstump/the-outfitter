@@ -25,6 +25,7 @@ SPEC-0006 carries the requirements; ADR-0009 carries the decision and its reject
 - Let a player mark any cell blocked, not just cells at the tail.
 - Render repeated adjacent consumables as one tile with an honest quantity badge.
 - Provide one move operation with two entry points — pointer and keyboard — that cannot diverge.
+- Draw the eight cells as two fixed ranks of four at every width — rotated when the panel is narrow, never reflowed to a different track count — so a cell is a place the player can recognise and not only an index the payload records.
 - Migrate every existing record, including pre-versioning ones, without relocating a single item.
 
 ### Non-Goals
@@ -45,6 +46,36 @@ SPEC-0006 carries the requirements; ADR-0009 carries the decision and its reject
 **Rationale**: It is the only representation in which the three corrupt states — an item with no cell, a cell with no item that is nonetheless claimed, and two items claiming one cell — are unrepresentable rather than merely invalid. The full argument, including the packed-plus-position-map and quantity-field alternatives, is in ADR-0009.
 
 **Alternatives considered**: See ADR-0009 § "Pros and Cons of the Options".
+
+### The tracks are pinned in CSS, and the narrow arrangement is a transpose
+
+**Choice**: `.equip-grid` gets two rule blocks and no third. Wide is `grid-template-columns: repeat(4, minmax(0, 1fr))` in normal row flow; narrow is `grid-template-rows: repeat(4, minmax(0, 1fr))` with `grid-auto-flow: column`, which fills cells 1–4 down the first column and 5–8 down the second. Both replace today's `repeat(auto-fill, minmax(140px, 1fr))`.
+
+`grid-auto-flow: column` is what makes this a transpose with **no DOM reordering**: the elements stay in document order 1–8 and the layout walks them down the columns instead of along the rows. Tab order therefore matches the visual reading order in both arrangements for free, with no `order` property and no `tabindex` juggling — the two things that usually make a responsive grid an accessibility defect.
+
+**Rationale**: ADR-0009's amendment of 2026-08-12 carries the argument for two ranks; what it means for the code is that the arrow-key sensor computes `target ± 1` along a rank and `target ± 4` across ranks with an edge clamp, and needs exactly one bit — which arrangement is current — rather than a measurement. The stack renderer knows where the rank break falls without asking the DOM anything at all, since the break is between cells 4 and 5 in both.
+
+The track shape is `minmax(0, 1fr)` rather than `minmax(min, 1fr)` deliberately: a non-zero minimum on a fixed track count is what forces overflow, and horizontal scroll on the grid would trade a WCAG 1.4.10 pass for a layout that never gets small. `.trait-grid` already resolved this the same way, and its `--trait-art-scale` percentage — an icon sized as a share of its tile rather than in pixels — is the pattern the equipment tile should follow at the small end.
+
+**The threshold is a container query, not a media query, and this is where the measurement matters.** The panel sits in `.left-column` (`flex: 1 1 400px; min-width: 320px`) beside `.right-column` (`flex: 1.25 1 440px; min-width: 320px`), inside `.app-main` with a 20px gap and 28px side padding, and `.panel` adds 20px of its own. That makes panel width a piecewise function of viewport width, not a proportional one:
+
+| Viewport | Layout | Panel content | Four across |
+|---|---|---|---|
+| 1440px | side by side | ~593px | ~141px/cell |
+| 1024px | side by side | ~408px | ~94px/cell |
+| 760px | side by side, both at `min-width` | ~286px | ~64px/cell |
+| 716px | just stacked | ~620px | ~147px/cell |
+
+The narrowest panel in the app is at a *tablet* viewport, and it is more than twice as wide 44px further down. A media query keyed to the viewport would transpose the phone, where four across is comfortable, and leave the tablet at 64px cells. `@container` on `.panel` (`container-type: inline-size`) asks the question that actually determines the answer.
+
+The cost is that the keyboard sensor cannot use `matchMedia`; it needs a `ResizeObserver` on the panel. That is not the thing rejected below — the sensor compares an observed width against the *same declared threshold constant* the stylesheet uses, so the threshold remains one value in one place and the layout is never the source of truth. Reading back `getComputedStyle(grid).gridTemplateColumns` would be the opposite: the layout answering for itself.
+
+**Alternatives considered**:
+- *A single fixed axis — four columns at every width*: this was the first draft of the amendment and the table above is why it was dropped. Shrinking alone runs out well before 64px, and it makes the tightest case the one with no relief.
+- *A media query that reflows to two columns on phones*: rejected, and not the same proposal as the transpose. Four rows of two makes cell 5 a neighbour of cell 6 and no longer of cell 1, so it is a different arrangement of the same payload rather than a rotation of it — the "cell 5 is somewhere else now" problem the fixed grid exists to remove, at discrete widths instead of continuously. The transpose is admissible precisely because it preserves the adjacency graph; nothing weaker than that is.
+- *Keep auto-fill and derive the arrow step from the rendered track count* (`getComputedStyle`): technically workable and the reason to reject it is not difficulty. It makes a keyboard operation's meaning a function of layout, so the pointer and keyboard routes stop being two callers of one thing — the property this design is built around. Observing a width to pick between two declared arrangements does not have that property; asking the grid what it did does.
+
+**Testing note**: `cssRules.js` deliberately throws when a conditional at-rule restates a property the same selector declares unconditionally, and the two arrangements necessarily do exactly that for the grid template properties. The orientation assertions therefore cannot go through `effective()`/`resting()`; they need to read the two rule blocks and the threshold constant directly. Worth knowing before the test is written rather than after it throws.
 
 ### Stacking is a view function, not a state field
 
@@ -105,7 +136,7 @@ The change is concentrated in the client store and codec; the server contributes
 ```mermaid
 graph TD
     subgraph UI["UI — client/src/components"]
-        EP["EquipmentPanel.jsx<br/>renders 8 cells<br/><i>+ drag context, live region</i>"]
+        EP["EquipmentPanel.jsx<br/>renders 8 cells<br/><i>+ drag context, live region,<br/>2 ranks of 4, transposed<br/>on a narrow panel</i>"]
         ES["EquipmentSlot.jsx<br/><i>rewritten: cell states,<br/>stack anchor vs held,<br/>pointer + keyboard sensors</i>"]
         PK["Picker.jsx<br/><i>capacity predicate replaces<br/>equip.length &lt; slotMax</i>"]
     end
@@ -199,6 +230,10 @@ Both branches end by moving focus deliberately and announcing the outcome. That 
 
 - **Non-adjacent duplicates render as two tiles with no badge.** A player with Vitality Shots in cells 1 and 6 sees no indication they hold two. → Accepted, and arguably correct under free placement, since the player chose those cells. Revisit only if it is reported as confusing; the fix would be a non-positional "you hold 2" summary in the panel header rather than a change to the stacking model.
 
+- **The equipment tile does not survive four-across, and `auto-fill` has been hiding that.** A slot carries an image, a name, a category, and a cost in a `min-height: 92px` box with a 140px-minimum column. The grid only ever reaches four columns above a ~1434px viewport; below that `auto-fill` quietly drops to three and then two, so the panel has never had to draw a four-across tile at a real desktop width. Pinning the tracks removes that escape and makes the tile the gating work, at ~141px per cell on a 1440px display and ~94px at 1024px. → The tile's internal layout absorbs it, not the grid: the artwork scales as a share of the tile (`.trait-cell-thumb`'s `--trait-art-scale` is the precedent), and the text elements give way first. Transposition covers the narrow end — two across the same panel is roughly 138px per cell where four across is 64px — so the design target is a tile that works from about 94px up, not from 64px up. This is the one part of the change with no existing pattern to copy wholesale, and it is worth designing before the CSS is written rather than after.
+
+- **Two arrangements double what a reviewer has to check.** Every rendering and interaction requirement is now true-of-both or broken, and an assertion written against the wide arrangement alone passes while the narrow one is wrong. The likeliest specific miss is the arrow-key sensor, where the wide mapping (Up/Down = ±4) is the intuitive one and the narrow mapping is its transpose. → Every orientation-sensitive scenario in SPEC-0006 names its arrangement explicitly, and the two edge-clamp scenarios are deliberately the same move in both. The sensor takes the arrangement from one declared threshold, so the narrow path cannot be reached by one consumer and not another.
+
 - **Hand-written drag and keyboard sensors are a known source of subtle accessibility bugs.** Focus loss on removal, announcements that fire twice, and grabs that survive an unmount are all classic. → SPEC-0006 names the focus destination for every outcome, and the sensor is one component rather than one per cell. `dnd-kit` remains the escape hatch if the hand-written version proves fragile.
 
 - **SPEC-0003's loadout preview reads equipment in slot order.** Its "shed later slots before earlier ones" rule assumes a dense list. → It is unimplemented, so there is no regression to cause — but it must be amended in the same commit that lands the sparse model, not left to be discovered by whoever implements it.
@@ -209,7 +244,7 @@ Both branches end by moving focus deliberately and announcing the outcome. That 
 2. **Pure helpers.** Add `placement.js`. Make `calc.js` and `randomize.js` hole-tolerant. Both steps are behaviour-preserving against a dense array, so the existing suite is the guard.
 3. **Codec.** Raise `FORMAT_VERSION` to 2, add `fromV2`, and rewrite `fromV1` to lift into cells. Keep the legacy branch and its frozen tables untouched. This is the step that needs the densest round-trip tests.
 4. **Store.** Change `equip` to eight elements and `blocked` to an index array; rewrite `removeEquip` to null in place; add `moveEquip`; tighten `setLoadout`'s shape check.
-5. **UI.** Rewrite `EquipmentSlot` for the new cell states and the stack anchor/held distinction; add the pointer and keyboard sensors and the live region to `EquipmentPanel`; replace `Picker.jsx`'s capacity comparison.
+5. **UI.** Pin `.equip-grid` to two ranks of four, add the container-query transpose, and rework the tile for narrow cells — this lands first within the step, because the drag and keyboard sensors are written against a declared arrangement rather than a measured one. Then rewrite `EquipmentSlot` for the new cell states and the stack anchor/held distinction; add the pointer and keyboard sensors and the live region to `EquipmentPanel`; replace `Picker.jsx`'s capacity comparison.
 6. **Amend SPEC-0003.** Update "Filed Loadouts Preview Their Contents" to skip holes when shedding by slot.
 
 **Rollback**: Steps 3–5 revert together as one client change; the server's v2 branch is additive and can be left in place, since a server that accepts a shape no client sends is inert. Records already written as v2 would not decode against a reverted client — so if a rollback is needed after v2 records exist, the reverted client must retain `fromV2` as a read-only decoder. Keeping `fromV2` on the rollback path is cheaper than the alternative, which is data loss.
@@ -217,6 +252,8 @@ Both branches end by moving focus deliberately and announcing the outcome. That 
 ## Open Questions
 
 - **Should dragging a *held* cell peel one copy off the stack rather than moving the whole run?** It is the natural gesture for splitting and would remove the "remove copies then re-add" workaround, at the cost of making the drag semantics depend on which cell of a stack was grabbed. Deferred until the whole-run behaviour has been used.
+- **What is the transpose threshold's numeric value?** SPEC-0006 requires it to be declared once and consumed by both the stylesheet and the sensor, and deliberately does not fix the number, because it is "the panel width below which the redesigned tile stops working four across" and the tile does not exist yet. The measurements above bound it: above ~593px of panel content four across is at least as roomy as today's widest case, and at ~286px it is 64px per cell and plainly past the point. Set it when the tile is designed, not before.
+- **Should the saved-loadout preview transpose too?** Currently no, and SPEC-0006 says so: its cells are floored thumbnails that fit four across at any width, and its container is a card that can be narrow at any viewport, so a container-keyed threshold would rotate some cards and not others in the same list. The cost is that on a phone the builder is portrait and the preview is landscape. Revisit if that reads as two different loadouts rather than one loadout twice.
 - **Should the panel header summarise total quantity per item?** It would close the non-adjacent-duplicates legibility gap without touching the stacking model. Cheap, but adds a second place equipment is described.
 - **Should a blocked cell be expressible mid-drag** — that is, should the user be able to block cells while an item is grabbed? Current answer is no, and there is no evident reason to want it.
 - **Does the randomizer have a placement preference worth expressing?** It currently fills whatever cells it finds. Whether a random loadout should cluster items at the front, spread them, or reproduce a previous arrangement is a product question this design does not answer.

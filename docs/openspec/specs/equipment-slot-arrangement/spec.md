@@ -13,11 +13,12 @@ The Equipment panel renders eight cells but does not have eight slots. `state.eq
 
 This capability makes cell position a stored, user-controlled property of the loadout. It realizes [ADR-0009](../../../adrs/ADR-0009-equipment-slot-grid-model.md), which chose a fixed sparse eight-cell array — index is the cell, `null` is an empty cell — over reorder-only drag on the packed array, a packed array with a parallel position map, and an explicit quantity field on entries.
 
-Three changes follow from that one decision, and they are not separable:
+Four changes follow from that one decision, and they are not separable:
 
 - **Free placement.** Any item may sit in any cell, and gaps between items are legal. Removal writes `null` in place rather than splicing, so nothing moves that the user did not move.
 - **Per-cell blocking.** `blocked` stops being a count and becomes a set of cell indices. The current model infers blockedness from `index >= slotMax`, which is simply wrong once an item can legitimately sit in cell 8 with four empty cells in front of it.
 - **Wire format v2.** Cell position that is not in the payload does not survive a save, a share link, or a reload. `FORMAT_VERSION` goes to 2.
+- **Fixed two-rank geometry** *(added 2026-08-12 with ADR-0009's amendment of the same date)*. `.equip-grid` is `repeat(auto-fill, minmax(140px, 1fr))` today, so the panel's track count is whatever fits its width — four columns only above roughly a 1434px viewport, three through most of the desktop range, two around 1024px. A stored cell position only buys recognition if it names a stable place, arrow-key movement needs a known track count to define "the cell below this one", and derived stacking renders an adjacency a reflowing grid breaks and reforms at different widths. The grid becomes two ranks of four, transposed on a narrow panel — a rotation that preserves every cell's neighbours, not a reflow to a different track count.
 
 **Stacking is derived, not stored.** Repeated consumables in adjacent cells render as one tile with a quantity badge; the cells behind the anchor render as held by that stack. There is no stored quantity, so the badge cannot disagree with the cell count. Duplicate *tools* remain forbidden by the existing `addEquip` guard, which is why a run of length ≥ 2 can only ever be consumables — the consumables-only property falls out of a rule that is already enforced and already tested, rather than being restated here as a special case.
 
@@ -57,6 +58,47 @@ Every consumer that iterates, counts, or encodes `state.equip` SHALL tolerate ho
 
 - **WHEN** a loadout holds two items with six empty cells between and around them
 - **THEN** the equipment count SHALL be 2, and the total cost SHALL be the sum of exactly those two items' costs
+
+### Requirement: The Grid Renders as Two Ranks of Four
+
+The equipment grid SHALL render as exactly **two ranks of four cells**. Cells 1 through 4 SHALL form the first rank and cells 5 through 8 the second, so cell *n* (zero-indexed) occupies position `n % 4` along its rank and rank `floor(n / 4)`. The track counts MUST NOT be derived from the available width, from the number of equipped items, or from `slotMax()`.
+
+The grid SHALL have exactly two arrangements and no others:
+
+- **Wide** — ranks are rows. Four columns by two rows, cell 1 top-left, cell 5 directly below cell 1.
+- **Narrow** — ranks are columns. Two columns by four rows, cells 1 through 4 running down the first column and 5 through 8 down the second, cell 5 directly right of cell 1.
+
+The narrow arrangement SHALL be the **transpose** of the wide one. Every cell SHALL keep the same neighbours in both, and the rank break SHALL fall between cells 4 and 5 in both. The system MUST NOT render the eight cells at any other track count — four rows of two is a different arrangement of the same payload, not a rotation of it, and is forbidden.
+
+Cells SHALL be laid out in DOM order in both arrangements, so the visual reading order is left-to-right then down when wide and top-to-bottom then across when narrow, and matches DOM order in both without reordering elements.
+
+**The arrangement SHALL be selected by the width of the equipment panel, not by the width of the viewport.** The panel sits in a flex column beside a wider one, so the two are not proportional: the panel is at its narrowest at viewports just above the point where the columns stack, and becomes markedly wider once they do. A viewport-keyed threshold would select the narrow arrangement at widths where the wide one fits and the wide arrangement at widths where it does not.
+
+The threshold SHALL be declared in exactly one place and consumed by both the stylesheet and the keyboard sensor. Neither the sensor nor any other consumer MAY determine the current arrangement by measuring rendered geometry or reading back a computed track count.
+
+Where the grid is too narrow to draw cells at their preferred size in its current arrangement, the cells SHALL shrink. The grid MUST NOT scroll horizontally and MUST NOT hide a cell. A blocked cell and an empty cell each occupy their position like any other; the grid's arrangement SHALL NOT vary with how many cells are occupied or blocked.
+
+The saved-loadout preview's equipment grid (`.ll-lp-equip`) SHALL keep its four-across shape at all widths and SHALL NOT transpose, because its cells are floored thumbnails that fit four across at any width and it sits in a card that may be narrow at any viewport. The parity SPEC-0003 REQ "Filed Loadouts Preview Their Contents" asks for SHALL be read as parity of ranks and cell counts, which both honour; on a narrow panel the builder and the preview differ by a rotation, and that is accepted.
+
+#### Scenario: A narrow panel transposes rather than reflowing
+
+- **WHEN** the equipment panel is narrower than the declared threshold
+- **THEN** the grid SHALL render as two columns of four, with cells 1 through 4 down the first column, and it MUST NOT render as four rows of two
+
+#### Scenario: Transposition preserves every cell's neighbours
+
+- **WHEN** the same loadout is rendered in the wide arrangement and in the narrow one
+- **THEN** each cell SHALL have the same set of adjacent cells in both, and the rank break SHALL fall between cells 4 and 5 in both
+
+#### Scenario: The arrangement follows the panel, not the viewport
+
+- **WHEN** the viewport is wide enough that the builder's two columns sit side by side, and the equipment panel is consequently narrower than the declared threshold
+- **THEN** the grid SHALL render in the narrow arrangement, even though the viewport is not narrow
+
+#### Scenario: Occupancy does not change the grid's arrangement
+
+- **WHEN** a loadout holds one item and blocks two cells
+- **THEN** the grid SHALL render eight cells as two ranks of four, identically in arrangement to a full grid
 
 ### Requirement: Cells Are Individually Blockable
 
@@ -365,6 +407,17 @@ Every rearrangement expressible by pointer drag SHALL be expressible by keyboard
 
 The keyboard route SHALL be a grab-and-place model: a focused cell is grabbed with Enter or Space, arrow keys move the placement target among cells, Enter or Space commits the move, and Escape cancels and restores the origin. While a cell is grabbed, the grid SHALL communicate the grabbed item and the current target through an `aria-live="polite"` region, and SHALL announce the outcome — moved, swapped, or rejected — on commit.
 
+Arrow-key movement SHALL be spatial: an arrow SHALL move the target to the cell the user sees in that direction, in whichever arrangement "The Grid Renders as Two Ranks of Four" has selected. Movement along a rank SHALL be a step of one cell and movement across ranks SHALL be a step of four, so in the wide arrangement Left/Right step by one and Up/Down step by four, and in the narrow arrangement Up/Down step by one and Left/Right step by four.
+
+Movement SHALL be clamped at the grid's edges: an arrow that would leave the grid SHALL be a no-op that leaves the target where it is, in both axes and both arrangements. The target MUST NOT wrap from the end of one rank to the start of the next, because a target that leaves in a direction other than the one it was sent is the same defect as a grid that changes shape.
+
+The sensor SHALL take the current arrangement from the same declared threshold the stylesheet uses, and MUST NOT infer it by measuring the rendered grid. The underlying move operation SHALL be identical in both arrangements: only the mapping from arrow key to step size differs, and that mapping SHALL exist in one place.
+
+#### Scenario: The vertical arrow's step follows the arrangement
+
+- **WHEN** a keyboard user grabs the item in cell 2 and presses Down once
+- **THEN** the placement target SHALL be cell 6 in the wide arrangement and cell 3 in the narrow one, in each case the cell directly below cell 2 as drawn
+
 Unequipping SHALL likewise have a keyboard route that does not require dragging off the grid; the existing activation-to-remove behaviour satisfies this and SHALL be retained.
 
 Cells SHALL be reachable in a tab order that follows the visual layout, and a grabbed stack SHALL be announced with its quantity so a screen-reader user knows how many cells the pending move will consume.
@@ -375,6 +428,16 @@ Focus SHALL follow the item rather than the cell. After a completed move, focus 
 
 - **WHEN** a keyboard user focuses the cell holding an item, presses Enter, presses the arrow keys to reach an empty cell, and presses Enter again
 - **THEN** the item SHALL be in the destination cell and the origin cell SHALL be empty, identically to the same move performed by drag
+
+#### Scenario: An arrow at the grid's edge is a no-op
+
+- **WHEN** a keyboard user grabs an item in the wide arrangement, moves the target to cell 4, and presses Right
+- **THEN** the target SHALL remain on cell 4, and it MUST NOT move to cell 5
+
+#### Scenario: The edge no-op holds in the narrow arrangement too
+
+- **WHEN** a keyboard user grabs an item in the narrow arrangement, moves the target to cell 4, and presses Down
+- **THEN** the target SHALL remain on cell 4, and it MUST NOT move to cell 5
 
 #### Scenario: Escape cancels a grab
 
@@ -400,9 +463,13 @@ Focus SHALL follow the item rather than the cell. After a completed move, focus 
 
 All UI produced by this capability SHALL meet WCAG 2.1 Level AA as the minimum conformance target. The states this capability introduces — empty, occupied, blocked, held-by-stack, grabbed, valid drop target, invalid drop target — SHALL each meet the AA contrast minimum against their background, and MUST NOT be distinguished by colour alone; each SHALL carry a non-colour cue such as a border treatment, an icon, or text.
 
+The fixed grid interacts with two criteria and SHALL be implemented against both. **1.4.10 Reflow (AA)** requires no two-dimensional scrolling at 320 CSS pixels: the grid satisfies it by transposing and then by shrinking its cells, which is why "The Grid Renders as Two Ranks of Four" forbids horizontal scroll rather than permitting it as the narrow-panel escape. **2.5.5 Target Size** is AAA in WCAG 2.1 and therefore outside this capability's conformance target, but four cells across a narrow panel produces the smallest pointer targets in the app; the cell SHALL remain the full hit area of its grid track, so the target is as large as the arrangement allows rather than being inset to the artwork. Transposition is what keeps the narrow case from being the smallest target the app can produce, and is the reason it is preferred over shrinking alone.
+
 ### ARIA Landmarks
 
 The equipment grid sits inside the page's existing `role="main"` content area and SHALL NOT introduce a competing landmark. The grid itself SHALL be exposed with an accessible name identifying it as the equipment slots, and its cells SHALL be exposed as a positional set so assistive technology can report "cell 3 of 8".
+
+The position a cell exposes SHALL be its index in the eight-cell set — "cell 3 of 8" — and SHALL be identical in both arrangements, because transposition moves where a cell is drawn and not which cell it is. Where the exposed position carries a row and column, they SHALL be the ones the current arrangement draws, taken from the declared threshold rather than read back from rendered geometry.
 
 ### Icon-Only Controls
 
@@ -414,7 +481,7 @@ The quantity badge, the slot counter in the panel header, and the grab/drop anno
 
 ### Keyboard Navigation
 
-Every cell SHALL be focusable and operable by keyboard. Tab order SHALL follow the visual grid order. Enter and Space SHALL activate a cell's primary action, arrow keys SHALL move among cells, and Escape SHALL cancel an in-progress grab. Keyboard focus MUST NOT be trapped in the grid outside an active grab.
+Every cell SHALL be focusable and operable by keyboard. Tab order SHALL follow the visual grid order, which the fixed arrangement makes unambiguous in both orientations: cells 1 through 8 in DOM order, which is the visual reading order when wide and when narrow alike. Enter and Space SHALL activate a cell's primary action, arrow keys SHALL move among cells with the arrangement-relative semantics required by "Keyboard Equivalence for Every Pointer Gesture", and Escape SHALL cancel an in-progress grab. Keyboard focus MUST NOT be trapped in the grid outside an active grab.
 
 ### Focus Management
 
