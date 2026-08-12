@@ -3,6 +3,7 @@ status: proposed
 date: 2026-08-11
 decision-makers: Jon Stump
 extends: [ADR-0005, ADR-0012]
+related: [ADR-0010]
 ---
 
 # ADR-0013: Model Scarce Items as Selectable at Zero Cost, and Keep Rarity Out of the Cost Field
@@ -212,8 +213,20 @@ graph TD
 * **Scope.** In scope per the roster decision of 2026-08-11: Scarce (14 traits, 4 weapons) and Event
   (18 traits). Out of scope: Tarot Cards, which remain the boundary #161 documents. Burn needs no
   separate decision — five of its six members arrive via Scarce or Event, and Necromancer is already
-  modelled. Catalyst needs none either: all five of its members are already in the catalog as
-  Regular traits that also carry the Catalyst tag.
+  modelled.
+* **Catalyst is a function, not a rarity, and so is Solo.** SPEC-0007 REQ "Fields the Scraper Must Not
+  Derive" places both on the functional axis, and the wiki's data agrees: all five Catalyst traits
+  state `Type: "Regular"` and nothing else, where a genuinely two-rarity trait lists both of its
+  classes in that field (Relentless is `"Burn , Scarce"`). So Catalyst raises no roster question — its
+  five members are already in the catalog as Regular traits, and the Catalyst tag is `group`-adjacent
+  information this decision does not touch. An earlier cut of the scrape listed Catalyst on the
+  acquisition axis and reported `Regular + Catalyst` as two rarities; that was one rarity plus one
+  function, and it is corrected.
+* **`Pact` sits on neither axis, by evidence rather than by preference.** `Category:Traits/Pact`
+  exists, has zero members, and its category page states no axis — only a display title and a pointer
+  back to `Category:Traits`. SPEC-0007 lists it on neither axis either. It is therefore in neither
+  list in the scrape, so a Pact trait appearing carries no rarity class, which the Confirmation test
+  surfaces as something to explain rather than letting a guessed rarity endorse a zero.
 * **Burn does not imply free.** Necromancer is a Burn trait costing 4 points. Only Scarce implies no
   cost. Conflating the two would zero out a trait the player pays for.
 * **Discovery cannot yet see these items.** `CATEGORY_INDEX` maps `traits` to
@@ -225,5 +238,6 @@ graph TD
 * **Related issues**: #157 (trait roster count — its "32 of 58" denominator is wrong in both
   directions), #161 (Scarce / Tarot Card scope boundary), #163 (unaccounted consumables, resolved as
   14 Tarot Cards plus 10 tombstones), #164 (tombstone classification).
-* Rarity classes observed on the wiki: `Regular`, `Scarce`, `Burn`, `Event`, `Catalyst`, `Pact`
-  (`Pact` currently has no members).
+* Rarity classes read by the scrape: `Regular`, `Scarce`, `Burn`, `Event` — exactly the four
+  SPEC-0007 names on the acquisition axis. `Offensive`, `Defensive`, `Movement`, `Supportive`, `Solo`
+  and `Catalyst` are the functional axis and are excluded by name. `Pact` is on neither, per above.

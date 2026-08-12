@@ -1331,6 +1331,19 @@ test("classifyPage: a return stated BEFORE the removal does not rescue the page"
   assert.equal(c.state, "removed");
 });
 
+test("classifyPage: a removal AFTER a return wins, even phrased with a different pattern", () => {
+  // removed -> returned -> removed again. The earlier version returned on the first matching PATTERN
+  // in array order and anchored the return-check there, so the trailing removal — matching a later
+  // pattern — was never consulted and the page read as live. Latest-statement-wins is what the
+  // chronological argument actually implies. (Review of #230.)
+  const c = classifyPage(
+    "<p>Update 1.0 The Cannon removed from the game. Update 1.5 The Cannon returns as a Scarce " +
+      "weapon. Update 2.0 The Cannon is no longer available.</p>"
+  );
+  assert.equal(c.state, "removed");
+  assert.match(c.evidence, /no longer available/, "and the evidence quotes the statement that decided it");
+});
+
 test("classifyPage: a page confirmed live in game overrides its own removal prose", () => {
   const c = classifyPage("<p>Shredder removed from the game.</p>", { page: "Weapons/Shredder" });
   assert.equal(c.state, "live");
@@ -1364,6 +1377,34 @@ test("parsePageCategories: category-shaped links outside catlinks are not member
   assert.deepEqual(parsePageCategories(html), ["Weapons"]);
 });
 
+test("parsePageCategories: category-shaped links AFTER the block are not membership either", () => {
+  // The mirror of the test above, and the direction the first cut got wrong: the block was ended at a
+  // fixed run of three closing divs and fell through to the whole document when that did not match.
+  // Two divs close the real block (#catlinks wraps #mw-normal-catlinks), so a page laid out like this
+  // tagged a Regular trait Scarce off a later nav link. (Review of #230.)
+  const html =
+    `<div id="catlinks" class="catlinks"><div id="mw-normal-catlinks"><ul>` +
+    `<li><a href="/wiki/Category:Traits/Regular">Traits/Regular</a></li></ul></div></div>` +
+    `<nav class="related"><a href="/wiki/Category:Traits/Scarce">Scarce traits</a>` +
+    `<a href="/wiki/Category:Traits/Event">Event traits</a></nav>`;
+  assert.deepEqual(parsePageCategories(html), ["Traits/Regular"]);
+  assert.deepEqual(
+    acquisitionClassesFrom(parsePageCategories(html)),
+    ["Regular"],
+    "a Regular trait does not acquire Scarce from markup outside the block"
+  );
+});
+
+test("parsePageCategories: unbalanced markup fails closed rather than reading the document", () => {
+  // No categories is incomplete data, which ADR-0013's bidirectional cost-0 test catches. A false
+  // Scarce would instead make the rarity table endorse a wrong zero, which is the direction that
+  // check exists to prevent.
+  const html = `<div id="catlinks"><div id="mw-normal-catlinks"><ul><li>` +
+    `<a href="/wiki/Category:Traits/Regular">Traits/Regular</a></li></ul>` +
+    `<a href="/wiki/Category:Traits/Scarce">Scarce</a>`;
+  assert.deepEqual(parsePageCategories(html), []);
+});
+
 test("parsePageCategories: a page with no catlinks block yields nothing", () => {
   assert.deepEqual(parsePageCategories("<html><body>no categories</body></html>"), []);
 });
@@ -1388,9 +1429,29 @@ test("acquisitionClassesFrom: order is stable regardless of the page's link orde
 
 test("acquisitionClassesFrom: the functional taxonomy is excluded, because it is `group`", () => {
   // Traits/Supportive sits in the same catlinks block and is exactly the field SPEC-0007 forbids the
-  // scrape from deriving.
-  const classes = acquisitionClassesFrom(["Traits/Supportive", "Traits/Offensive", "Traits/Movement"]);
+  // scrape from deriving. Solo and Catalyst are on that same axis per SPEC-0007's taxonomy sentence.
+  const classes = acquisitionClassesFrom([
+    "Traits/Supportive",
+    "Traits/Offensive",
+    "Traits/Movement",
+    "Traits/Solo",
+    "Traits/Catalyst",
+  ]);
   assert.deepEqual(classes, [], "no functional category becomes an acquisition class");
+});
+
+test("acquisitionClassesFrom: Catalyst is a function, not a rarity", () => {
+  // Beastface's real membership. It was reported as ["Regular","Catalyst"] — two rarities on one
+  // trait — when it is one rarity plus one function. The wiki's own infobox settles it: all five
+  // Catalyst traits state Type "Regular" and nothing else, where a two-rarity trait lists both
+  // (Relentless is "Burn , Scarce"). (Review of #230.)
+  assert.deepEqual(acquisitionClassesFrom(["Traits/Stealth", "Traits/Catalyst", "Traits/Regular"]), ["Regular"]);
+});
+
+test("acquisitionClassesFrom: Pact is on neither axis, so it yields no class", () => {
+  // Category:Traits/Pact exists with zero members and states no axis, and SPEC-0007 lists it on
+  // neither. A guessed rarity would be endorsed by ADR-0013's cost-0 check; no class is caught by it.
+  assert.deepEqual(acquisitionClassesFrom(["Traits/Pact"]), []);
 });
 
 test("acquisitionClassesFrom: a Scarce weapon declares no rarity category, and gets no class", () => {
