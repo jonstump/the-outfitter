@@ -7,6 +7,7 @@ import {
   LEGACY_TRAIT_IDS,
   LEGACY_WEAPON_IDS,
   PROMOTED_TO_WEAPON,
+  RETIRED_WEAPON_ALIASES,
   emptyLoadout,
   fromData,
   toData,
@@ -19,13 +20,17 @@ import { TRAIT_MAX } from "./calc.js";
 // (immune to array reorders), and the legacy pre-versioning index-based encoding still decodes
 // against the catalog's current order. Both must round-trip to the same in-memory loadout.
 
-// Weapon 16 is the Winfield M1873C, which draws from the five-variant `medium` pool, so
-// `a: 2` names a variant it really has. The sample used to pair `a: 2` with the Dolch 96 —
-// a `special`-pool weapon whose purchasable variant list is EMPTY — which is the exact
-// unrenderable shape issue #201 is about, asserted as if it round-tripped.
+// Weapon 19 is the Frontier 73C, which draws from the five-variant `compact` pool, so `a: 2` names a
+// variant it really has. The sample used to pair `a: 2` with the Dolch 96 — a `special`-pool weapon
+// whose purchasable variant list is EMPTY — which is the exact unrenderable shape issue #201 is about,
+// asserted as if it round-tripped.
+//
+// It named live index 16 until #243 retired the Winfield M1873C, a duplicate of this very weapon; the
+// delete shifted every later live index down one. In-memory loadouts are index-based, so a fixture
+// like this has to move with the array — which is why the wire format stores ids instead.
 function sampleLoadout() {
   const lo = emptyLoadout();
-  lo.weapons = [{ i: 0, a: -1 }, { i: 16, a: 2 }]; // Nagant M1895, Winfield M1873C + ammo variant
+  lo.weapons = [{ i: 0, a: -1 }, { i: 19, a: 2 }]; // Nagant M1895, Frontier 73C + ammo variant
   lo.equip = [{ t: "T", i: 0 }, { t: "C", i: 3 }]; // First Aid Kit, Antidote Shot
   lo.traits = ["quartermaster"];
   lo.name = "Test build";
@@ -44,7 +49,7 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     const dec = fromData(toData(lo));
     expect(dec.name).toBe("Test build");
     expect(dec.blocked).toBe(1);
-    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 16, a: 2 }]);
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 19, a: 2 }]);
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
     expect(dec.traits).toEqual(["quartermaster"]);
   });
@@ -84,7 +89,9 @@ describe("toData / fromData (v1 id-based wire format)", () => {
 // Express) has no purchasable variants at all, so 5 still admitted a crashing value there.
 describe("out-of-range ammo indices decode to no variant selected", () => {
   const DOLCH = WEAPONS.findIndex((t) => t[0] === "dolch-96"); // `special` pool: zero variants
-  const WINFIELD = WEAPONS.findIndex((t) => t[0] === "winfield-m1873c"); // `compact`: five
+  // Frontier 73C, after #243 retired its duplicate. Any five-variant `compact` weapon serves here;
+  // what the test needs is a pool with enough variants that index 2 is legitimately in range.
+  const WINFIELD = WEAPONS.findIndex((t) => t[0] === "frontier-73c"); // `compact`: five
 
   const v1 = (weaponIndex, a) =>
     fromData({ v: FORMAT_VERSION, w: [[WEAPONS[weaponIndex][0], a], null], e: [], tr: [], n: "", b: 0 });
@@ -126,11 +133,14 @@ describe("fromData (legacy index-based wire format)", () => {
       b: 0,
     };
     const dec = fromData(legacy);
-    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 16, a: 2 }]);
+    // Legacy position 16 named the Winfield M1873C, retired by #243; it now resolves through
+    // RETIRED_WEAPON_ALIASES to the Frontier 73C at live index 19 — the same gun, kept rather than
+    // dropped. The ammo index survives because both rows draw from the five-variant `compact` pool.
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 19, a: 2 }]);
     // Resolved identity, not just raw index pass-through: appends to the catalog
     // must never shift what a legacy position refers to (data-accuracy update).
     expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nagant M1895");
-    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Winfield M1873C");
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Frontier 73C");
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
     expect(TOOLS[dec.equip[0].i][1]).toBe("First Aid Kit");
     expect(CONS[dec.equip[1].i][1]).toBe("Antidote Shot");
@@ -220,7 +230,8 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
   it("resolves the last legacy weapon position, unshifted by later appends", () => {
     const dec = fromData({ w: [[36, -1], [16, 1]], e: [], tr: [] });
     expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nitro Express");
-    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Winfield M1873C");
+    // Was "Winfield M1873C" until #243 retired that duplicate row; the alias lands it on its twin.
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Frontier 73C");
   });
 });
 
@@ -238,14 +249,17 @@ describe("frozen legacy catalog tables", () => {
   ];
 
   it.each(cases)("%s: every non-null legacy id still resolves", (_name, table, catalogs) => {
-    // A promoted id resolves into WEAPONS rather than the equipment pool (#156, the Katana). It has
-    // to be DECLARED in PROMOTED_TO_WEAPON to count as resolved — adding WEAPONS to every case's
-    // catalog list would let any tool id that happens to match a weapon id pass silently, which is
-    // the opposite of what this guard is for.
+    // Two escape hatches, and both require a DECLARATION rather than a coincidence. Adding WEAPONS to
+    // every case's catalog list would let any tool id that happens to match a weapon id pass
+    // silently, which is the opposite of what this guard is for.
+    //
+    //   PROMOTED_TO_WEAPON      the id moved category and resolves into WEAPONS (#156, the Katana)
+    //   RETIRED_WEAPON_ALIASES  the row was deleted and another id carries the same item (#243)
     const known = new Set(catalogs.flat().map((t) => t[0]));
-    const unresolved = table.filter(
-      (id) => id !== null && !known.has(id) && !(PROMOTED_TO_WEAPON.has(id) && WEAPON_BY_ID_TEST.has(id))
-    );
+    const resolvesElsewhere = (id) =>
+      (PROMOTED_TO_WEAPON.has(id) && WEAPON_BY_ID_TEST.has(id)) ||
+      WEAPON_BY_ID_TEST.has(RETIRED_WEAPON_ALIASES[id]);
+    const unresolved = table.filter((id) => id !== null && !known.has(id) && !resolvesElsewhere(id));
     expect(unresolved).toEqual([]);
   });
 
@@ -253,6 +267,24 @@ describe("frozen legacy catalog tables", () => {
     // The other half: a declaration is only meaningful if the destination exists.
     const missing = [...PROMOTED_TO_WEAPON].filter((id) => !WEAPON_BY_ID_TEST.has(id));
     expect(missing).toEqual([]);
+  });
+
+  it("points every retired alias at a row that exists, and never at another retired id", () => {
+    // Same argument as above, plus the chain case: an alias whose target is itself retired would
+    // resolve to nothing after one hop, and neither decoder follows a second.
+    const targets = Object.entries(RETIRED_WEAPON_ALIASES);
+    expect(targets.length).toBeGreaterThan(0);
+    const dangling = targets.filter(([, to]) => !WEAPON_BY_ID_TEST.has(to)).map(([from, to]) => `${from} -> ${to}`);
+    expect(dangling).toEqual([]);
+    const chained = targets.filter(([, to]) => to in RETIRED_WEAPON_ALIASES).map(([from]) => from);
+    expect(chained, "aliases are resolved in one hop").toEqual([]);
+  });
+
+  it("retires the alias source from the live catalog", () => {
+    // The point of the alias: the old id must be GONE. If it still resolves, the duplicate is back and
+    // the alias is dead code hiding it.
+    const stillLive = Object.keys(RETIRED_WEAPON_ALIASES).filter((id) => WEAPON_BY_ID_TEST.has(id));
+    expect(stillLive).toEqual([]);
   });
 
   it.each(cases)("%s: the table keeps its pre-versioning length", (_n, table, _c, length) => {
@@ -415,5 +447,80 @@ describe("the Katana's promotion from equipment to weapon", () => {
     expect(re.w[0]).toEqual(["katana", -1]);
     expect(re.e).toEqual([]);
     expect(weaponIds(fromData(re))).toEqual(["katana", null]);
+  });
+});
+
+// Governing: #243 (retiring the `winfield-m1873c` duplicate), SPEC-0006 (the wire format)
+//
+// Deleting a catalog row is normally free — both decoders resolve stable ids, not array positions. It
+// was not free here, and the note in wiki.mjs that said it was is corrected by this change: the frozen
+// LEGACY_WEAPON_IDS still names index 16 `winfield-m1873c`, so a delete without an alias left that
+// position resolving to nothing and dropped the weapon instead of landing it on its twin.
+describe("the retired Winfield M1873C alias", () => {
+  const FRONTIER = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
+  const nameOf = (lo, slot) => (lo.weapons[slot] ? WEAPONS[lo.weapons[slot].i][1] : null);
+
+  it("removes the duplicate row and keeps its twin", () => {
+    expect(WEAPONS.some((w) => w[0] === "winfield-m1873c")).toBe(false);
+    expect(FRONTIER).toBeGreaterThan(-1);
+    expect(RETIRED_WEAPON_ALIASES["winfield-m1873c"]).toBe("frontier-73c");
+  });
+
+  it("resolves a LEGACY record's index 16 to the surviving row", () => {
+    expect(LEGACY_WEAPON_IDS[16]).toBe("winfield-m1873c");
+    const decoded = fromData({ w: [[16, -1], null], e: [], tr: [], n: "", b: 0 });
+    expect(nameOf(decoded, 0)).toBe("Frontier 73C");
+  });
+
+  it("resolves a CURRENT-format record too, which #243 did not ask for", () => {
+    // `toData` writes `WEAPONS[w.i][0]`, so any loadout saved while the duplicate was still selectable
+    // carries this id in the v1 format. Without the alias in `fromV1` as well, those records would
+    // have lost the weapon just as quietly as the legacy ones.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["winfield-m1873c", -1], null], e: [], tr: [], n: "", b: 0,
+    });
+    expect(nameOf(decoded, 0)).toBe("Frontier 73C");
+  });
+
+  it("carries the stored ammo index across, unchanged and still in range", () => {
+    // The two rows agree on ammo class (`compact`, five variants) and size, which is what makes a bare
+    // id substitution safe. An alias between different pools would need the index remapped.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["winfield-m1873c", 3], null], e: [], tr: [], n: "", b: 0,
+    });
+    expect(decoded.weapons[0]).toEqual({ i: FRONTIER, a: 3 });
+    expect(WEAPONS[FRONTIER][4]).toBe("compact");
+  });
+
+  it("still bounds an out-of-range ammo index after aliasing", () => {
+    // The alias must not slip past `boundedAmmo` — #201's crash came from an index the pool lacks.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["winfield-m1873c", 99], null], e: [], tr: [], n: "", b: 0,
+    });
+    expect(decoded.weapons[0]).toEqual({ i: FRONTIER, a: -1 });
+  });
+
+  it("re-encodes under the surviving id, so the alias applies once per record", () => {
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["winfield-m1873c", 2], null], e: [], tr: [], n: "", b: 0,
+    });
+    const re = toData(decoded);
+    expect(re.w[0]).toEqual(["frontier-73c", 2]);
+    expect(nameOf(fromData(re), 0)).toBe("Frontier 73C");
+  });
+
+  it("does not disturb the legacy positions on either side of 16", () => {
+    // The #68 failure mode: an edit that shifts what a neighbouring legacy slot resolves to.
+    const decoded = fromData({ w: [[15, -1], [17, -1]], e: [], tr: [], n: "", b: 0 });
+    expect(nameOf(decoded, 0)).toBe("Springfield 1866");
+    expect(nameOf(decoded, 1)).toBe("Ranger 73");
+  });
+
+  it("leaves an unaliased unknown id resolving to nothing", () => {
+    // The alias table is a lookup, not a catch-all: an id nobody declared still drops.
+    const decoded = fromData({
+      v: FORMAT_VERSION, w: [["no-such-weapon", -1], null], e: [], tr: [], n: "", b: 0,
+    });
+    expect(decoded.weapons).toEqual([null, null]);
   });
 });

@@ -112,7 +112,6 @@ export const WEAPONS = [
   ["hunting-bow", "Hunting Bow", 3, 57, "bow", "Bows"],
   ["dolch-96", "Dolch 96", 2, 690, "special", "Pistols"],
   ["springfield-1866", "Springfield 1866", 4, 38, "medium", "Rifles"],
-  ["winfield-m1873c", "Winfield M1873C", 3, 44, "compact", "Rifles"],
   ["winfield-m1873", "Ranger 73", 4, 75, "compact", "Rifles"],
   ["romero-77", "Romero 77", 4, 66, "shotgun", "Shotguns"],
   ["crossbow", "Crossbow", 4, 50, "xbow", "Bows"],

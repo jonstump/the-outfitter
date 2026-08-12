@@ -152,8 +152,15 @@ test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
   assert.equal(resolveWikiPath("tools", "poison-trip-mine", "Poison Trip Mines"), "Tools/Poison_Trip_Mines");
 });
 
-test("resolveWikiPath: returns null for known catalog duplicates", () => {
-  assert.equal(resolveWikiPath("weapons", "winfield-m1873c", "Winfield M1873C"), null);
+test("KNOWN_CATALOG_DUPLICATES is empty, and the skip path is still tested without it", () => {
+  // #243 retired the last entry (`winfield-m1873c`, a duplicate of `frontier-73c`), so no live catalog
+  // row is a known duplicate. The MECHANISM is deliberately kept — a future duplicate is likely — and
+  // it stays covered by the scrapeItem/scrapeItemStats tests below, which pass `wikiPath: null`
+  // directly rather than relying on this table having an entry. That is the difference between testing
+  // the capability and testing the current data.
+  assert.deepEqual(Object.keys(KNOWN_CATALOG_DUPLICATES), []);
+  // And the retired id resolves like any other unknown id now: by its display name, not to null.
+  assert.equal(resolveWikiPath("weapons", "winfield-m1873c", "Winfield M1873C"), "Weapons/Winfield_M1873C");
 });
 
 // Issue #67: the "Choke Bomb" consumable duplicated the "Choke Bombs" tool and was skipped
@@ -527,7 +534,9 @@ test("scrapeItem: skips a known catalog duplicate without spending a request", a
   );
   assert.equal(result.status, "skipped");
   assert.match(result.reason, /no wiki page/);
-  assert.match(result.reason, /Frontier 73C/);
+  // The reason used to quote KNOWN_CATALOG_DUPLICATES' explanation. That table is empty since #243, so
+  // an unmapped item falls back to the generic reason — still explained, still not a silent skip.
+  assert.match(result.reason, /no wiki page mapped for this catalog entry/);
   assert.equal(fs.written.length, 0);
 });
 
@@ -738,8 +747,9 @@ test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express
     "mosin-nagant-avtomat", // variant sub-page: default joins with "_", the wiki nests with "/"
     "nagant-officer-carbine",
     "sparks-pistol",
-    "winfield-m1873c", // deliberate null; a duplicate row
   ]);
+  // `winfield-m1873c` was the fourth until #243 retired the row it pointed at. Its null override went
+  // with it — an override for an id no catalog row carries can never be consulted.
   // Empty since #156. The one cross-namespace entry, `katana`, existed because the catalog filed a
   // weapon as a Tool; moving the row rather than keeping the override is what removed the need.
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.tools), []);
