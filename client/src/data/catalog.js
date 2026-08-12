@@ -229,13 +229,13 @@ export const TOOLS = [
   ["flare-pistol", "Flare Pistol", 36, "Utility"],
   ["fusees", "Fusees", 10, "Utility"],
   ["spyglass", "Spyglass", 8, "Utility"],
-  ["decoys", "Decoys", 6, "Utility"],
-  ["blank-fire-decoys", "Blank Fire Decoys", 45, "Utility"],
-  ["decoy-fuses", "Decoy Fuses", 30, "Utility"],
+  ["decoys", "Decoys", 6, "Decoys"],
+  ["blank-fire-decoys", "Blank Fire Decoys", 45, "Decoys"],
+  ["decoy-fuses", "Decoy Fuses", 30, "Decoys"],
   ["alert-trip-mine", "Alert Trip Mines", 30, "Traps"],
   ["concertina-trip-mine", "Concertina Trip Mines", 90, "Traps"],
   ["poison-trip-mine", "Poison Trip Mines", 30, "Traps"],
-  ["quad-derringer", "Quad Derringer", 30, "Utility"],
+  ["quad-derringer", "Quad Derringer", 30, "Sidearms"],
   // Update 2.8 additions — appended (never inserted) so legacy index-based
   // encodings keep resolving to the same items they did before (issue #35/#38).
   // Choke Beetle / Stalker Beetle moved to CONS below; loadoutCodec.js's legacy
@@ -244,11 +244,47 @@ export const TOOLS = [
   ["throwing-spear", "Throwing Spear", 80, "Throwing"],
   ["knuckle-knife", "Knuckle Knife", 50, "Melee"],
   ["choke-bombs", "Choke Bombs", 25, "Utility"],
-  ["derringer-pennyshot", "Derringer Pennyshot", 63, "Utility"],
+  ["derringer-pennyshot", "Derringer Pennyshot", 63, "Sidearms"],
   ["bear-traps", "Bear Traps", 70, "Traps"],
 ];
 
-export const TOOL_GROUPS = ["Medical", "Melee", "Throwing", "Traps", "Utility"];
+// SEVEN buckets since #166, which split a `Utility` holding 9 of 22 tools — the picker's catch-all
+// rather than a category. The distribution is now Melee 4, Traps 4, Utility 4, Decoys 3, Throwing 3,
+// Sidearms 2, Medical 1: largest bucket 4 of 21, where it was 9.
+//
+// The two new names are cut on what the tools DO, read from their own wiki descriptions rather than
+// from the shape of the leftovers:
+//
+//   Decoys    Decoys, Blank Fire Decoys, Decoy Fuses — all three are named Decoy and all three
+//             distract by sound ("the noise can be effectively used to distract", "imitates the
+//             sound of a gunshot"). The most self-evident group in the file.
+//   Sidearms  Quad Derringer, Derringer Pennyshot — each description opens "A small, light pistol",
+//             which is a different thing from every other tool here.
+//
+// WHY NOT MORE. #166 also suggested a light/vision split and moving Choke Bombs to `Throwing`. Both
+// were declined, and the reason is the same one #166 itself uses to reject the wiki's scheme: its 11
+// tool subcategories "average under two members each across 21 live tools — a worse picker, not a
+// better one." Cutting Flare Pistol + Fusees + Spyglass into one or two more buckets pushes this file
+// toward that same failure, and 7 groups over 21 rows is already 3 per group.
+//
+// Choke Bombs stays out of `Throwing` deliberately. That group means retrievable projectile weapons —
+// every member's description ends "Can be retrieved and reused" — and a gas device that extinguishes
+// flames is thrown without being that. Diluting a group with a clear rule to relocate one item costs
+// more than the item gains.
+//
+// So `Utility` survives as a genuine remainder of 4 rather than a catch-all of 9: Flare Pistol and
+// Fusees (light, and both ignite flammables), Spyglass (vision), Choke Bombs (gas). Loose, but each
+// is there for a reason a reader can check.
+//
+// `Medical` at 1 is deliberate and not an oversight of this split. First Aid Kit is the only healing
+// tool in the game, and the group is load-bearing beyond the picker — `FIRST_AID_KIT` is exported
+// symbolically and the randomizer always includes it (SPEC-0008). Merging it into `Utility` to even
+// out counts would hide the one tool every loadout carries.
+//
+// No rules impact, on the same terms the TRAIT_GROUPS note records: `group` feeds picker section
+// headers and icon dispatch only. It is never persisted — a saved loadout stores tool ids — so
+// regrouping cannot invalidate a saved loadout or a share link.
+export const TOOL_GROUPS = ["Decoys", "Medical", "Melee", "Sidearms", "Throwing", "Traps", "Utility"];
 
 // ROSTER BOUNDARY — why this table is 30 rows against the wiki's 54.
 //
@@ -619,6 +655,12 @@ export function weaponThumb(w) {
 // visual language — this is now a fallback tier behind scraped photos, not primary art (see
 // docs/openspec/specs/equipment-iconography/design.md).
 const TOOL_THUMBS = {
+  // A thrown noise-maker with sound trailing off it, and a compact break-action derringer. Both drawn
+  // in the same 96x40 space as their siblings and centred on x=48, so a group filter's icons keep one
+  // optical weight. Added with #166's split — catalog.test.js asserts one DISTINCT icon per declared
+  // group, so a new group without a path here fails rather than silently inheriting Utility's.
+  Decoys: "M48 12a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM24 18h10v4H24zM27 26h7v4h-7zM62 18h10v4H62zM62 26h7v4h-7z",
+  Sidearms: "M32 14h32v6H50l-3 12H36l3-12h-7z",
   Medical: "M41 4h14v9h17v14H55v9H41v-9H24V13h17z",
   Melee: "M6 30L66 6l5 8L11 38zM70 2h14v10H70z",
   Throwing: "M10 34L34 6l6 4-24 28zM50 34L74 6l6 4-24 28z",

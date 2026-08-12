@@ -75,7 +75,7 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
     expect(entry(TOOLS, "Bear Traps")).toEqual(["bear-traps", "Bear Traps", 70, "Traps"]);
     expect(entry(TOOLS, "Knuckle Knife")).toEqual(["knuckle-knife", "Knuckle Knife", 50, "Melee"]);
     expect(entry(TOOLS, "Throwing Spear")).toEqual(["throwing-spear", "Throwing Spear", 80, "Throwing"]);
-    expect(entry(TOOLS, "Derringer Pennyshot")).toEqual(["derringer-pennyshot", "Derringer Pennyshot", 63, "Utility"]);
+    expect(entry(TOOLS, "Derringer Pennyshot")).toEqual(["derringer-pennyshot", "Derringer Pennyshot", 63, "Sidearms"]);
   });
 
   it("adds the missing consumables and Weak-shot variants (#37)", () => {
@@ -274,5 +274,59 @@ describe("consumable type", () => {
       expect(consCount(loadout, x.i)).toBe(4);
     }
     expect(equip.length).toBeGreaterThan(4);
+  });
+});
+
+// Governing: #166 (splitting TOOL_GROUPS' Utility bucket), audit §D.2
+//
+// The split's own success condition, kept as a standing check. #166's "Done means" was "no
+// TOOL_GROUPS bucket exceeds ~5 members", and a one-time reassignment satisfies that for exactly as
+// long as nobody adds a tool. `Utility` reached 9 of 22 by accretion, one defensible addition at a
+// time, which is how a category becomes a catch-all without any single edit looking wrong.
+describe("the tool group balance", () => {
+  const tally = (rows, index) => rows.reduce((acc, r) => ({ ...acc, [r[index]]: (acc[r[index]] ?? 0) + 1 }), {});
+
+  it("keeps every bucket at or under five members", () => {
+    const counts = tally(TOOLS, 3);
+    const oversized = Object.entries(counts).filter(([, n]) => n > 5).map(([g, n]) => `${g} (${n})`);
+    expect(oversized, "#166's threshold — split the bucket or justify raising this").toEqual([]);
+  });
+
+  it("no longer lets Utility hold the largest share", () => {
+    // The specific regression: Utility was the catch-all at 9 of 22. It is a remainder now, and if it
+    // ever becomes the biggest bucket again that is the signal the accretion has restarted.
+    const counts = tally(TOOLS, 3);
+    const largest = Math.max(...Object.values(counts));
+    expect(counts.Utility).toBeLessThanOrEqual(largest);
+    expect(counts.Utility).toBeLessThan(9);
+  });
+
+  it("assigns every tool to a declared group", () => {
+    const undeclared = TOOLS.filter((t) => !TOOL_GROUPS.includes(t[3])).map((t) => t[0]);
+    expect(undeclared).toEqual([]);
+  });
+
+  it("leaves no declared group empty", () => {
+    // A name with no members is a filter button that shows nothing — the opposite failure from a
+    // catch-all, and just as easy to create while splitting.
+    const counts = tally(TOOLS, 3);
+    const empty = TOOL_GROUPS.filter((g) => !counts[g]);
+    expect(empty).toEqual([]);
+  });
+
+  it("groups the three Decoys together and the two derringers together", () => {
+    // The two cuts are meant to be self-evident from the names; asserted so a later edit has to
+    // disagree on purpose.
+    const groupOf = (name) => entry(TOOLS, name)[3];
+    expect(["Decoys", "Blank Fire Decoys", "Decoy Fuses"].map(groupOf)).toEqual(["Decoys", "Decoys", "Decoys"]);
+    expect(["Quad Derringer", "Derringer Pennyshot"].map(groupOf)).toEqual(["Sidearms", "Sidearms"]);
+  });
+
+  it("keeps Throwing to retrievable projectile weapons", () => {
+    // Why Choke Bombs stayed in Utility: every Throwing member's description ends "Can be retrieved
+    // and reused", and that rule is what the group means.
+    const throwing = TOOLS.filter((t) => t[3] === "Throwing").map((t) => t[1]);
+    expect(throwing).toEqual(["Throwing Knives", "Throwing Axes", "Throwing Spear"]);
+    expect(entry(TOOLS, "Choke Bombs")[3]).toBe("Utility");
   });
 });
