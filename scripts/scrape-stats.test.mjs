@@ -37,6 +37,7 @@ import {
   categoryLineRange,
   CATEGORY_INDEX,
   classifyPage,
+  dualWieldFrom,
   classifyPageFetchError,
   createSummary,
   extractInfoboxTitle,
@@ -2048,4 +2049,53 @@ test("catalog.js states the roster boundary as a scope decision, not a purchasab
     /excluded on that ground and no other|reason is purchasability/i,
     "twelve unpurchasable rows are IN the catalog, so that claim would be false"
   );
+});
+
+// Governing: #178 (weapons carry no dual-wield attribute), SPEC-0007 REQ "Budget-Affecting Attributes
+// Are Stored, Never Inferred"
+test("dualWieldFrom: reads the wiki's own sentence", () => {
+  assert.equal(dualWieldFrom("Nagant made, double-action revolver. Can be dual wielded."), true);
+  // Both spellings the wiki uses in practice.
+  assert.equal(dualWieldFrom("Can be dual-wielded."), true);
+});
+
+test("dualWieldFrom: a description that does not say it is false, not null", () => {
+  // A read happened and found nothing — different from no read at all. #178: "any row the scrape
+  // cannot resolve is recorded as unresolved rather than defaulted to false", so the two must not
+  // collapse into one value.
+  assert.equal(dualWieldFrom("Winfield made, lever-action repeating rifle."), false);
+});
+
+test("dualWieldFrom: no description is null, which is not the same as false", () => {
+  assert.equal(dualWieldFrom(null), null);
+  assert.equal(dualWieldFrom(undefined), null);
+  assert.equal(dualWieldFrom(""), null);
+  assert.equal(dualWieldFrom("   "), null);
+});
+
+test("dualWieldFrom: does not fire on prose that merely mentions dual wielding", () => {
+  // The pattern is anchored on the claim, not the topic. A page discussing the mechanic — or naming a
+  // trait about it — is not asserting that THIS weapon can be paired.
+  assert.equal(dualWieldFrom("Ambidextrous reduces the reload penalty when dual wielding."), false);
+  assert.equal(dualWieldFrom("A dual-purpose tool."), false);
+});
+
+test("dualWieldFrom: distinguishes the Officer pistol from the Officer Carbine", () => {
+  // The trap #178 flags, and the reason extraction must be per page rather than by name or by
+  // description similarity: these two share their entire opening sentence and differ only in the last
+  // one. A name-similarity match would have marked the carbine dual-wieldable and been wrong.
+  const shared = "Nagant made, double-action revolver. High fire-rate, muzzle velocity, and capacity " +
+    "at the cost of damage and reload speed.";
+  assert.equal(dualWieldFrom(`${shared} Can be dual wielded.`), true, "the Officer pistol");
+  assert.equal(dualWieldFrom(shared), false, "the Officer Carbine, from the same prefix");
+});
+
+test("buildStatsRecord: carries dualWield beside the description it was lifted from", () => {
+  const base = {
+    item: "X", canonicalTitle: "X", url: "u", revision: "1", infoboxCount: 1,
+    selection: { index: 0, method: "canonical-title", title: "X" }, fields: {},
+  };
+  assert.equal(buildStatsRecord({ ...base, description: "Can be dual wielded." }, { now: () => "t" }).dualWield, true);
+  assert.equal(buildStatsRecord({ ...base, description: "A rifle." }, { now: () => "t" }).dualWield, false);
+  assert.equal(buildStatsRecord(base, { now: () => "t" }).dualWield, null, "no description, no verdict");
 });
