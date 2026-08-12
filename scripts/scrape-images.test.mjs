@@ -733,3 +733,35 @@ test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.traits), []);
   assert.deepEqual(Object.keys(WIKI_TITLE_OVERRIDES.consumables), []);
 });
+
+// Governing: ADR-0002, SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback"
+//
+// The on-disk contract, asserted rather than eyeballed. It has been broken twice in quick succession
+// and neither break produced an error: #157 added 26 trait rows with no art, so eight Stealth traits
+// shared one group-keyed SVG; #232 renamed 18 items, and because `slugify(name)` IS the image path,
+// every one of them would have pointed at a file that no longer existed. Both were caught by hand.
+//
+// Read from disk on purpose. The failure mode is a missing or misnamed FILE, so a fixture would test
+// the wrong thing — this is the one place where touching the filesystem is the point.
+test("image coverage: every catalog row has art, and no file is orphaned", async () => {
+  const { readdirSync } = await import("node:fs");
+  const rows = { weapons: WEAPONS, tools: TOOLS, traits: TRAITS, consumables: CONS };
+  const missing = [];
+  const orphaned = [];
+  for (const [category, items] of Object.entries(rows)) {
+    const dir = new URL(`../client/public/images/${category}/`, import.meta.url);
+    const onDisk = new Set(readdirSync(dir).map((f) => f.replace(/\.[a-z0-9]+$/i, "")));
+    for (const row of items) {
+      // A known duplicate has no wiki page of its own, so it has no art to fetch. That is the same
+      // list the scrape skips against, so the exemption cannot drift from the reason for it.
+      if (Object.prototype.hasOwnProperty.call(KNOWN_CATALOG_DUPLICATES, row[0])) continue;
+      if (!onDisk.has(slugify(row[1]))) missing.push(`${category}/${slugify(row[1])} (${row[0]})`);
+    }
+    const wanted = new Set(items.map((r) => slugify(r[1])));
+    for (const file of onDisk) if (!wanted.has(file)) orphaned.push(`${category}/${file}`);
+  }
+  assert.deepEqual(missing, [], "a row with no art falls back to its GROUP's icon, so items share a glyph");
+  // Orphans are the rename half: a file left behind under an old slug is dead weight, and its
+  // presence means nothing is pointing at it.
+  assert.deepEqual(orphaned, [], "an image no catalog row resolves to should be deleted or renamed");
+});

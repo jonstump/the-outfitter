@@ -52,9 +52,15 @@ export const AMMO = {
   xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
   hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
   bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
-  // "Special" pool (Dolch 96 / Nitro Express). Both weapons' custom ammo (Dumdum /
-  // Explosive / Shredder) has been Scarce since Update 2.8 and can't be bought with
-  // Hunt Dollars, so no purchasable variants are listed here.
+  // "Special" pool, empty by fact rather than by omission. Six weapons draw from it as of #233 —
+  // Dolch 96, Nitro Express, Bomb Launcher, Chu Ko Nu, Flame Rifle and Shredder — and none of their
+  // custom rounds can be bought with Hunt Dollars, so there is nothing purchasable to list.
+  //
+  // The Dolch's and Nitro's ammo (Dumdum / Explosive / Shredder) has been Scarce since Update 2.8.
+  // The four added by #233 are the same shape: each page states an ammo type the game does not sell
+  // per-variant. Chu Ko Nu is the one worth flagging — its infobox says "Special" while its prose
+  // says "fires Compact Bolts", and the infobox is what this pool follows, because offering it the
+  // `xbow` pool's three bolts would price rounds the wiki does not list for it.
   special: [],
   none: [],
 };
@@ -145,6 +151,52 @@ export const WEAPONS = [
   // encodings keep resolving to the same items they did before (issue #35/#36).
   ["haymaker", "Haymaker", 2, 279, "long", "Pistols"],
   ["1890-cavalry", "1890 Cavalry", 3, 56, "long", "Rifles"],
+  // ---------------------------------------------------------------------------
+  // Appended 2026-08-12 (#233), never inserted — same reason as the Update 2.8 block above.
+  //
+  // `Category:Weapons` listed 20 base pages the catalog did not model. These are 19 of them; the
+  // Katana is the twentieth and stays in TOOLS until #156 handles it, because moving an existing row
+  // between arrays changes what a saved `{t:"T", i:n}` resolves to and is a migration, not an
+  // addition.
+  //
+  // `size` and `cost` are read from each page, never guessed: `capUsed` reads position 2 for the
+  // size budget, so a wrong size corrupts loadout arithmetic exactly the way a wrong price does.
+  // `ammoClass` and `group` are hand-authored per this file's header — the wiki states an ammo TYPE
+  // ("Medium", "Shells", "Special Long"), not one of our pool keys, and states no group at all.
+  //
+  // Group came from each page's own description where it names the class outright — "repeating
+  // rifle", "semi-automatic shotgun", "double-action revolver", "Repeating Crossbow". Two did not:
+  // the Bomb Launcher ("compact launcher fires spring-loaded projectiles") and the Shredder
+  // ("Experimental weapon that shoots sawblades") are neither pistol, rifle, shotgun, melee, nor
+  // bow. Both are filed as Rifles because they are shouldered long guns, which is the least wrong
+  // of five options rather than a good one. A sixth WEAPON_GROUPS entry is the alternative and would
+  // touch the picker's group filter.
+
+  // Purchasable.
+  ["1865-carbine", "1865 Carbine", 3, 70, "medium", "Rifles"],
+  ["auto-4-shorty", "Auto-4 Shorty", 3, 300, "shotgun", "Shotguns"],
+  ["baseball-bat", "Baseball Bat", 1, 40, "none", "Melee"],
+  ["bomb-launcher", "Bomb Launcher", 2, 110, "special", "Rifles"],
+  ["chu-ko-nu", "Chu Ko Nu", 2, 75, "special", "Bows"],
+  ["infantry-73l", "Infantry 73L", 4, 78, "compact", "Rifles"],
+  ["machete", "Machete", 1, 30, "none", "Melee"],
+  ["mako-1895", "Mako 1895", 4, 360, "long", "Rifles"],
+  ["marathon", "Marathon", 4, 68, "compact", "Rifles"],
+  ["maynard-sniper", "Maynard Sniper", 4, 139, "medium", "Rifles"],
+  ["mosin-obrez", "Mosin Obrez", 2, 290, "slong", "Rifles"],
+  ["new-army", "New Army", 1, 90, "compact", "Pistols"],
+  ["officer", "Officer", 1, 96, "compact", "Pistols"],
+  ["terminus", "Terminus", 4, 168, "shotgun", "Shotguns"],
+  ["vandal-73c", "Vandal 73C", 2, 35, "compact", "Rifles"],
+
+  // Scarce. Cost 0 per ADR-0013 — obtainable only from a match, sellable but never buyable, so they
+  // have no purchase value. Each page states `Price: "Scarce"`, which the strict parser refuses and
+  // records as `purchasable: false`; the 0 here is authored by a human applying that decision, and
+  // `itemStats.test.js` asserts the pairing in both directions.
+  ["flame-rifle", "Flame Rifle", 2, 0, "special", "Rifles"],
+  ["homestead-78", "Homestead 78", 4, 0, "shotgun", "Shotguns"],
+  ["shredder", "Shredder", 4, 0, "special", "Rifles"],
+  ["wildland", "Wildland", 4, 0, "medium", "Rifles"],
 ];
 
 export const WEAPON_GROUPS = ["Pistols", "Rifles", "Shotguns", "Melee", "Bows"];
