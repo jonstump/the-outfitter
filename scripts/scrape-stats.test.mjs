@@ -2015,15 +2015,31 @@ test("runDiscovery: a live page the catalog excludes on purpose is not reported 
   assert.equal(cons.unpurchasable[0].priceStated, "Scarce");
 });
 
-test("catalog.js states the roster boundary in terms of purchasability", async () => {
-  // SPEC-0007 REQ "Acquisition Class Is Captured": the boundary must be recorded where an editor
-  // sees it, and phrased on purchasability rather than on any event's duration — the earlier
-  // "limited-time event item" framing carried a revisit trigger that Update 2.8.1 has already fired.
+test("catalog.js states the roster boundary as a scope decision, not a purchasability rule", async () => {
+  // SPEC-0007 REQ "Acquisition Class Is Captured": the boundary must be recorded where an editor sees
+  // it. What it must SAY has changed twice, and this assertion tracked the second version.
+  //
+  // It required the comment to be "phrased on purchasability", which was right until ADR-0013 made
+  // unpurchasability a cost of ZERO rather than a ground for exclusion — twelve Scarce rows now sit in
+  // the catalog. A test demanding the retired rationale is worse than no test, because it fails the
+  // correct comment and passes the wrong one. (#161)
+  //
+  // Asserted on the two things that stay true: the boundary names Tarot Cards as the excluded set, and
+  // it does NOT claim unpurchasability as the criterion.
   const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
-  const boundary = src.slice(Math.max(0, src.indexOf("export const CONS") - 1600), src.indexOf("export const CONS"));
-  assert.match(boundary, /hunt dollars/i);
-  assert.match(boundary, /Scarce/);
-  assert.match(boundary, /purchasab/i);
-  // And phrased on purchasability rather than on an event's duration.
-  assert.match(boundary, /permanence was never the criterion|not "limited-time|NOT "limited-time/i);
+  const anchor = src.indexOf("export const CONS");
+  const boundary = src.slice(Math.max(0, anchor - 3200), anchor);
+  assert.match(boundary, /Tarot Card/i, "the excluded set is named");
+  assert.match(boundary, /Scarce/, "and the wiki's own word for their price is quoted");
+  assert.match(boundary, /scope decision/i, "the current reason is recorded as a choice");
+  // Both retired rationales are kept as history rather than deleted, so a reader learns the boundary
+  // has outlived two reasons instead of trusting whichever one they find.
+  assert.match(boundary, /permanence was never the criterion|limited-time/i);
+  assert.match(boundary, /ADR-0013/, "and the decision that retired the second one is cited");
+  // The load-bearing negative: the comment must not reassert purchasability as the criterion.
+  assert.doesNotMatch(
+    boundary,
+    /excluded on that ground and no other|reason is purchasability/i,
+    "twelve unpurchasable rows are IN the catalog, so that claim would be false"
+  );
 });
