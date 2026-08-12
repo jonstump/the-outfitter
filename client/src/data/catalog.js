@@ -297,7 +297,7 @@ export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 //
 // REVISIT WHEN: a page-level liveness signal exists for Event traits that does not depend on a page
 // stating its own removal — or when Shadow Crush is resolved either way, since it is the concrete
-// case this boundary was drawn around. Growing this table is append-only (see below).
+// case this boundary was drawn around. New rows go on the end (see the note above the additions).
 //
 // Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ "Acquisition
 // Class Is Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored,
@@ -309,9 +309,13 @@ export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 // Update 2.8 changed exactly three costs (Quartermaster 6->8, Frontiersman 5->6,
 // Hundred Hands 2->3); the rest of the old table was stale from the 1.x/2.0 era.
 // "Iron Repeater" was removed from the game (merged into Iron Eye, 3 UP, Update 1.15)
-// and "Poison Sense" was renamed to "Pain Sense" (3 UP, Update 2.1). Entries are
-// edited in place, never reordered, so legacy index-based encodings keep
-// resolving to the same traits they did before.
+// and "Poison Sense" was renamed to "Pain Sense" (3 UP, Update 2.1).
+//
+// This paragraph used to end "entries are edited in place, never reordered, so legacy index-based
+// encodings keep resolving to the same traits they did before." That stopped being the reason in
+// #68: legacy encodings now resolve through the frozen LEGACY_TRAIT_IDS table in loadoutCodec.js,
+// not through this array's live order. Corrected rather than deleted because it is the same stale
+// belief the note above the #157 additions corrects — see there for what is actually load-bearing.
 export const TRAITS = [
   ["quartermaster", "Quartermaster", 8, "Utility"],
   ["fanning", "Fanning", 8, "Combat"],
@@ -346,9 +350,17 @@ export const TRAITS = [
   ["dauntless", "Dauntless", 1, "Combat"],
   ["vigilant", "Vigilant", 1, "Utility"],
   // ---------------------------------------------------------------------------
-  // Appended 2026-08-12 (#157). APPENDED, never inserted: the wire format encodes a trait pick as
-  // an index into this array, so inserting a row would shift every saved loadout and share link
-  // written before it.
+  // Appended 2026-08-12 (#157), and appended rather than merged in alphabetically for reviewability
+  // — the diff shows 26 new rows instead of 26 insertions scattered through an existing table.
+  //
+  // NOT for wire-format safety, which is worth stating because the opposite is the intuitive guess
+  // and it is wrong here: a trait pick persists as a stable id, not as a position. `toData` writes
+  // `tr: loadout.traits` and those are ids (`thunks.js` stores `trait[0]`); `fromV1` resolves them
+  // through `TRAIT_BY_ID`; and pre-versioning records go through the frozen `LEGACY_TRAIT_IDS`
+  // table rather than through this array. Inserting or reordering rows here is therefore free, as
+  // `loadoutCodec.js` says in as many words and as the CONS boundary above already records for its
+  // own table (#68). What is NOT free is changing or reusing an `id` — that is the value saved
+  // loadouts and share links actually carry.
   //
   // Costs are the wiki's own, read by `node scripts/scrape-stats.mjs --discover --only=traits` after
   // #231 taught discovery to crawl all three rarity indexes. `group` is hand-assigned, per SPEC-0007
@@ -398,6 +410,25 @@ export const TRAITS = [
   ["shadow-leap", "Shadow Leap", 0, "Mobility"],
 ];
 
+// Five buckets, RECONSIDERED AND KEPT at 58 rows (#157, closing the carve-out #42 left here).
+// The question was whether ~12-per-bucket wants splitting once the roster nearly doubled. It does
+// not: the distribution is Combat 15, Medical 16, Mobility 5, Stealth 8, Utility 14 — a 3.2x spread
+// that is uneven but not unusable, and the two crowded buckets are crowded because the game really
+// does concentrate traits there, not because the buckets are miscut. Splitting to even them out
+// would invent distinctions the wiki does not make, which is the same objection SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive" raises against deriving `group` at all — these names are a
+// UI affordance this project authors, and the cost of a bad cut is paid by every future hand
+// assignment having a less obvious home.
+//
+// Medical at 16 is the one to watch, and it is worth naming why rather than just noting the count:
+// a third of it arrived in #157 under the `salveskin` precedent (mitigation and stamina read as
+// Medical). If that precedent is wrong, Bulwark, Hornskin, Bloodless and Mithridatist are the rows
+// that move, and Medical drops to 12 — which would resolve the imbalance without any split at all.
+// So the bucket count is not the thing under strain here; one classification precedent is.
+//
+// REVISIT WHEN: a bucket passes ~20 rows, or the picker's grid (#227) stops fitting a group on one
+// screen. Renaming or splitting a group is UI-only: `group` is never persisted — a saved loadout
+// stores trait ids (`loadoutCodec.js` `toData`) — so regrouping cannot invalidate one.
 export const TRAIT_GROUPS = ["Combat", "Medical", "Mobility", "Stealth", "Utility"];
 
 const THUMBS = {
