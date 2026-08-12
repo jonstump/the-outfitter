@@ -462,6 +462,9 @@ export async function scrapeItemStats(target, deps) {
   }
 
   const fields = parseInfoboxFields(infoboxes[selection.index]);
+  // Whole-page, NOT per-infobox: catlinks describe the page, and a page's variant infoboxes share
+  // its categories. Read here so the rarity set comes from the same fetch as the fields.
+  const categories = parsePageCategories(html);
 
   return {
     status: "succeeded",
@@ -470,6 +473,7 @@ export async function scrapeItemStats(target, deps) {
     item,
     url: pageUrl,
     canonicalTitle,
+    categories,
     // SPEC-0007 REQ "Canonical Titles Are Read From the Page": an HTTP 200 does not confirm the
     // catalog's display name is current, because MediaWiki serves renamed pages through redirects.
     // Comparing what the page calls itself against what the catalog calls it turns a rename into a
@@ -501,7 +505,12 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     // Scrape metadata, never a catalog field, and never `group` (SPEC-0007 REQ "Acquisition Class
     // Is Captured So Roster Membership Is Checkable"). This is what makes "should this item have a
     // row?" checkable instead of arguable.
-    ...acquisitionOf(result.fields),
+    //
+    // `acquisitionClasses` is the authoritative set; `acquisition` is retained as the infobox's own
+    // single-string answer, because the two can disagree and the disagreement is worth seeing. Both
+    // are observation. Neither says what a Scarce item COSTS — that mapping is a game rule, and
+    // ADR-0005 keeps game rules out of this file.
+    ...acquisitionOf(result.fields, { categories: result.categories ?? [] }),
     fields: result.fields,
     sourceRevision: result.revision,
     ingestedAt: now(),
@@ -552,10 +561,43 @@ export const KNOWN_TOMBSTONES = {
   },
 };
 
+/**
+ * The mirror of KNOWN_TOMBSTONES: pages whose removal language is historical, and whose item is in
+ * the game today.
+ *
+ * It exists because Hunt takes items out and later brings them back. Shredder was removed in Update
+ * 2.2.2 and returned as a Scarce weapon in the Murder Circus Encore event, so its page states both
+ * — and the first live `--discover` run (2026-08-12) filed it as a tombstone, because a whole-page
+ * scan for removal language reads whichever sentence comes first. That is the hazard #164 exists to
+ * fix, pointing the other way: the classifier hid a live item instead of proposing a dead one.
+ *
+ * Recorded from the live game rather than inferred from the page. In-game state is the authority
+ * that a page's update history is merely evidence about, and when the two disagree the game wins.
+ *
+ * Unlike tombstones these are NOT short-circuited before the fetch: a returned item is a real item
+ * with a real price, and whether it lands in `unpurchasable` or `missing` turns on reading it.
+ */
+export const KNOWN_LIVE = {
+  "Weapons/Shredder": {
+    reason:
+      "removed in Update 2.2.2, then returned as a Scarce weapon in the Murder Circus Encore event; " +
+      "confirmed present in game 2026-08-11",
+  },
+};
+
 const REMOVED_SIGNALS = [
   /removed from the game/i,
   /was removed in update/i,
   /no longer (?:available|obtainable|in the game)/i,
+];
+// Checked only AFTER a removal signal hits, and only later in the text than that hit — see
+// classifyPage. On their own these match ordinary prose ("the event returns as a seasonal mode"),
+// so they are a supersedes-check on a removal claim, never a verdict of their own.
+const RETURN_SIGNALS = [
+  /returns? as a/i,
+  /returned to the game/i,
+  /re-?(?:added|introduced|released)/i,
+  /brought back/i,
 ];
 const NEVER_SHIPPED_SIGNALS = [/\bprototype\b/i, /early alpha/i, /never (?:released|implemented|shipped)/i];
 
@@ -569,12 +611,34 @@ const NEVER_SHIPPED_SIGNALS = [/\bprototype\b/i, /early alpha/i, /never (?:relea
 export function classifyPage(html, { page } = {}) {
   const known = page ? KNOWN_TOMBSTONES[page] : null;
   if (known) return { ...known, evidence: "recorded in KNOWN_TOMBSTONES" };
+  const confirmedLive = page ? KNOWN_LIVE[page] : null;
+  if (confirmedLive) return { state: "live", reason: confirmedLive.reason, evidence: "recorded in KNOWN_LIVE" };
   const text = textContent(html);
-  for (const rx of REMOVED_SIGNALS) {
-    const hit = rx.exec(text);
-    if (hit) {
-      return { state: "removed", reason: "the page states it was removed", evidence: excerptAround(text, hit.index) };
+  // Update-history prose runs chronologically, so the LAST thing the page says about availability is
+  // the operative one. Compared as latest-removal against latest-return across every pattern, not
+  // first-pattern-that-matches: the earlier version returned on the first matching PATTERN in array
+  // order and anchored the return-check at that index, so a later removal phrased with a different
+  // pattern was never consulted — "removed ... returns ... no longer available" read as live.
+  // (Review of #230.)
+  //
+  // Leaning live on a tie is deliberate and matches this module's stated default: a live item wrongly
+  // proposed is a suggestion a human rejects, while a live item wrongly buried is information nobody
+  // sees again.
+  const lastRemoval = lastMatchOf(text, REMOVED_SIGNALS);
+  if (lastRemoval) {
+    const lastReturn = lastMatchOf(text, RETURN_SIGNALS);
+    if (lastReturn && lastReturn.index > lastRemoval.index) {
+      return {
+        state: "live",
+        reason: "the page states it was removed and later returned",
+        evidence: excerptAround(text, lastReturn.index),
+      };
     }
+    return {
+      state: "removed",
+      reason: "the page states it was removed",
+      evidence: excerptAround(text, lastRemoval.index),
+    };
   }
   for (const rx of NEVER_SHIPPED_SIGNALS) {
     const hit = rx.exec(text);
@@ -591,6 +655,27 @@ export function classifyPage(html, { page } = {}) {
 
 function excerptAround(text, index, span = 90) {
   return text.slice(Math.max(0, index - span / 2), index + span).trim();
+}
+
+/**
+ * The LATEST match of any pattern anywhere in `text`, or null. Patterns must be non-global.
+ *
+ * Every occurrence of every pattern is considered, not the first of each: "which statement comes
+ * last" cannot be answered by a per-pattern first-match, and answering it wrongly is what let a
+ * re-removal read as a return.
+ */
+function lastMatchOf(text, patterns) {
+  let best = null;
+  for (const rx of patterns) {
+    const scan = new RegExp(rx.source, rx.flags.includes("g") ? rx.flags : `${rx.flags}g`);
+    let hit;
+    while ((hit = scan.exec(text)) !== null) {
+      if (best === null || hit.index > best.index) best = { index: hit.index, match: hit[0] };
+      // A zero-width match would spin forever on the same index.
+      if (hit.index === scan.lastIndex) scan.lastIndex += 1;
+    }
+  }
+  return best;
 }
 
 /**
@@ -641,7 +726,7 @@ export function parseCategoryMembers(html) {
  * attribute the scrape cannot resolve is recorded as unresolved, never defaulted to a value that
  * reads as a determination. (Review of #186.)
  */
-export function acquisitionOf(fields = {}) {
+export function acquisitionOf(fields = {}, { categories = null } = {}) {
   const acquisition = fields.Type ?? null;
   const priceRaw = fields.Price ?? fields.Cost ?? null;
   const priceValue = parseNumeric(priceRaw);
@@ -650,7 +735,112 @@ export function acquisitionOf(fields = {}) {
   if (priceValue !== null && priceValue > 0) purchasable = true;
   else if (priceRaw !== null && String(priceRaw).trim() !== "") purchasable = false;
 
-  return { acquisition, priceStated: priceRaw, purchasable };
+  return {
+    acquisition,
+    ...(categories === null ? {} : { acquisitionClasses: acquisitionClassesFrom(categories) }),
+    priceStated: priceRaw,
+    purchasable,
+  };
+}
+
+/**
+ * The rarity axis of the wiki's trait category tree — exactly the four classes SPEC-0007 names.
+ *
+ * Order is the reported order, deliberately not alphabetical: `Regular` first because it is the
+ * common case, then the rest in a fixed sequence. A stable order means two runs produce the same
+ * array for the same trait, so the dataset diffs cleanly.
+ *
+ * `Catalyst` was wrongly listed here and is now on the functional axis below, where SPEC-0007 REQ
+ * "Fields the Scraper Must Not Derive" always put it. The data agrees and is what settles it: all
+ * five Catalyst traits carry `Type: "Regular"` and nothing else, where a genuinely two-rarity trait
+ * lists both of its classes in that field (Relentless is `"Burn , Scarce"`). Catalyst never appears
+ * on the acquisition axis, so `Regular + Catalyst` was one rarity plus one function reported as two
+ * rarities. (Review of #230.)
+ */
+export const ACQUISITION_CLASS_CATEGORIES = ["Regular", "Scarce", "Burn", "Event"];
+
+/**
+ * The FUNCTIONAL axis, listed here only so it is visibly excluded — and matching SPEC-0007's
+ * taxonomy sentence term for term, including `Solo` and `Catalyst`.
+ *
+ * `Traits/Supportive` sits in the same `#catlinks` block as `Traits/Scarce` and is the wiki's
+ * functional taxonomy — which is exactly `group`, and SPEC-0007 REQ "Fields the Scraper Must Not
+ * Derive" forbids the scrape writing it. Naming the axis is how that exclusion stays deliberate
+ * rather than looking like an oversight in the filter above.
+ */
+export const FUNCTIONAL_CLASS_CATEGORIES = [
+  "Offensive",
+  "Defensive",
+  "Movement",
+  "Supportive",
+  "Solo",
+  "Catalyst",
+];
+
+/**
+ * `Category:Traits/Pact` exists on the wiki, has ZERO members as of 2026-08-11, and states no axis:
+ * its category page carries a display title and a pointer back to `Category:Traits`, nothing more.
+ * SPEC-0007's taxonomy sentence does not list it on either axis either.
+ *
+ * So it is deliberately in neither list above. A Pact trait appearing would come back with no rarity
+ * class rather than a guessed one, which under ADR-0013's bidirectional test surfaces as a failure
+ * to explain rather than as a silently-endorsed zero. Assigning it an axis is a decision to make
+ * when there is something to look at.
+ */
+export const UNASSIGNED_AXIS_CATEGORIES = ["Pact"];
+
+/**
+ * Which rarity classes a page's own category membership puts it in.
+ *
+ * A SET, not a scalar, because the wiki's own data is a set: Relentless and Rampage are both Scarce
+ * and Burn, and All Ears is both Scarce and Event. The infobox `Type` field carries the same truth
+ * as a comma-joined string ("Burn , Scarce"), so reading it as one value collapsed a two-element set
+ * into an opaque label that neither equals "Scarce" nor "Burn" — unusable for the membership check
+ * SPEC-0007 asks for. Category membership is preferred because it survives an infobox that omits
+ * `Type` entirely, which Scarce trait pages do: they carry no `Cost` row at all.
+ */
+export function acquisitionClassesFrom(categories = []) {
+  // Matched on the last path segment rather than a `Traits/` prefix, so a rarity category added under
+  // another tree is picked up without an edit here. Today there is none: a Scarce WEAPON carries no
+  // rarity category whatsoever — Flame Rifle's catlinks are `Weapons/Size 2`, `Weapons` and two
+  // maintenance categories — and states its rarity only as the literal Price string "Scarce".
+  //
+  // That asymmetry is the wiki's, and both halves are recorded rather than reconciled here:
+  // `acquisitionClasses` answers for traits, `priceStated`/`purchasable` answers for everything else.
+  // Collapsing them into one synthesised "rarity" field would mean inventing a value for whichever
+  // half of the wiki did not state one.
+  const names = new Set(categories.map((c) => String(c).split("/").pop().trim()));
+  return ACQUISITION_CLASS_CATEGORIES.filter((c) => names.has(c));
+}
+
+/**
+ * The categories a page declares itself a member of, read from MediaWiki's own `#catlinks` block.
+ *
+ * Free: this is on every page the scrape already fetches, so the full rarity set costs no extra
+ * request. Scoped to the catlinks block rather than the whole document because category-shaped links
+ * appear in body prose and infobox rows too — `SIZE_ROW`'s value links to `Category:Weapons/Size_4`,
+ * and reading that as membership would tag every weapon with its own size. That reasoning applies in
+ * BOTH directions, which the first cut got wrong: it ended the block at a fixed run of three closing
+ * divs and, on no match, fell through to the entire rest of the document. Three was already the
+ * wrong number — `#catlinks` wraps `#mw-normal-catlinks`, so two closes the block and the third was
+ * the page wrapper — and any page not closing three deep tagged a Regular trait with whatever
+ * category-shaped link appeared later in the DOM. (Review of #230.)
+ *
+ * Depth-counted now, through the same helper `parseInfoboxFields` uses. Unbalanced markup fails
+ * CLOSED, returning no categories: a missing class is incomplete data that ADR-0013's bidirectional
+ * test catches, where a false `Scarce` would make the side table endorse a wrong zero instead.
+ */
+export function parsePageCategories(html) {
+  const anchor = html.search(/<div\b[^>]*\bid="catlinks"/i);
+  if (anchor === -1) return [];
+  const block = sliceBalancedDiv(html, anchor);
+  if (block === null) return [];
+  const found = [];
+  for (const m of block.matchAll(/href="\/wiki\/Category:([^"?#]+)"/g)) {
+    const name = decodeURIComponent(m[1]).replace(/_/g, " ");
+    if (!found.includes(name)) found.push(name);
+  }
+  return found;
 }
 
 /**
@@ -756,9 +946,11 @@ export async function runDiscovery(options, deps) {
                 const canonicalTitle = canonicalTitleFromPageName(readRlconf(html, "wgPageName"));
                 const selection = selectBaseInfobox(boxes, { canonicalTitle, displayName: page });
                 const box = selection.index === -1 ? boxes[0] : boxes[selection.index];
-                Object.assign(classification, acquisitionOf(parseInfoboxFields(box)), {
-                  infoboxMethod: selection.method,
-                });
+                Object.assign(
+                  classification,
+                  acquisitionOf(parseInfoboxFields(box), { categories: parsePageCategories(html) }),
+                  { infoboxMethod: selection.method }
+                );
               }
             } else {
               classification = { state: "unreadable", reason: `HTTP ${pageRes.status}`, evidence: null };
@@ -778,6 +970,19 @@ export async function runDiscovery(options, deps) {
         page,
         state: classification.state,
         ...(classification.reason ? { reason: classification.reason } : {}),
+        // Parsed twenty lines up and then dropped here, which meant a completed run's own log could
+        // not answer "which of the missing traits are Burn" or "which pages are Scarce" — the report
+        // object held it, the durable record did not, and the first live run had to be reconstructed
+        // from the raw JSON by hand. `purchasable` is absent (not null) when no infobox was read at
+        // all, so a missing key and a three-valued `null` stay distinguishable.
+        ...(classification.purchasable === undefined
+          ? {}
+          : {
+              acquisition: classification.acquisition,
+              acquisitionClasses: classification.acquisitionClasses,
+              priceStated: classification.priceStated,
+              purchasable: classification.purchasable,
+            }),
       });
     }
 
@@ -822,6 +1027,17 @@ export async function runDiscovery(options, deps) {
  * of them — Iron Repeater — is a tombstone sitting in `Category:Purchasable_Traits`. A single
  * "delta" number invites that reading; two columns do not.
  */
+/**
+ * The rarity set, printed only when the page declared one.
+ *
+ * An empty array is printed as nothing rather than "[]": no rarity category means the page is not a
+ * trait, which is true of every weapon, tool and consumable, and a bracket on all ~105 of those
+ * lines would read as a finding.
+ */
+function classSuffix(u) {
+  return u?.acquisitionClasses?.length ? `, classes ${u.acquisitionClasses.join("+")}` : "";
+}
+
 export function formatCoverage(report) {
   const lines = ["coverage against the wiki's own category indexes:"];
   for (const [category, r] of Object.entries(report)) {
@@ -837,13 +1053,27 @@ export function formatCoverage(report) {
         `  not-an-item ${String(r.tombstones.length).padStart(3)}` +
         `  unreadable ${String((r.failures ?? []).length).padStart(3)}`
     );
+    // `missing` is the only bucket that names real work, and it was the only one with no detail
+    // line: the table said 18 traits and 105 weapons, and the names lived nowhere but the raw JSON
+    // log. Verbose by design — 105 weapon lines, most of them variant sub-pages — because a count
+    // that cannot be read back item by item is the coverage claim this table exists to refuse.
+    for (const u of r.missing ?? []) {
+      lines.push(`      missing       ${u.page} — price ${JSON.stringify(u.priceStated ?? null)}${classSuffix(u)}`);
+    }
     for (const u of r.unpurchasable ?? []) {
-      lines.push(`      unpurchasable ${u.page} — price stated as ${JSON.stringify(u.priceStated)}`);
+      lines.push(`      unpurchasable ${u.page} — price stated as ${JSON.stringify(u.priceStated)}${classSuffix(u)}`);
     }
     // Reported, not silently folded into `missing`: "no price field was found" is not a finding
     // about the item, it is a finding about the parse, and the two must not read the same.
+    //
+    // The class suffix matters most here. A Scarce TRAIT states no cost at all — no `Price`, no
+    // `Cost` row — so it lands in this bucket looking identical to a parse failure, while a Scarce
+    // WEAPON writes the literal string "Scarce" and lands in `unpurchasable`. Printing the classes
+    // is what separates "the wiki says this cannot be bought" from "this parser found nothing".
     for (const u of r.unresolved ?? []) {
-      lines.push(`      unresolved    ${u.page} — no Price or Cost field found; purchasability unknown`);
+      lines.push(
+        `      unresolved    ${u.page} — no Price or Cost field found; purchasability unknown${classSuffix(u)}`
+      );
     }
     // The excerpt is why the verdict is checkable. `classifyPage` collects it precisely so a summary
     // can be audited without re-fetching, and printing only the generic reason threw that away —
