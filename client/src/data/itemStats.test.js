@@ -293,12 +293,21 @@ describe("dualWieldFor", () => {
   });
 
   it("marks exactly the weapons whose pages state it", () => {
-    // Eleven rows, all pistols. #178 listed nine candidates with seven marked [VERIFY]; every one is
-    // confirmed here from its own page, and #233 has since added the New Army and the Officer pistol.
+    // Was eleven rows, all pistols. #254 imported the weapon variants, and a variant of a pairable
+    // pistol states pairing on its own page just as its parent does — so the Dolch 96 Claw is here
+    // for the same reason the Dolch 96 is, read from its own description rather than inherited.
+    //
+    // Still all pistols; the corroboration test below pins that.
     const dual = WEAPONS.filter((w) => dualWieldFor(w[0]) === true).map((w) => w[1]).sort();
     expect(dual).toEqual([
-      "Bornheim No. 3", "Conversion", "Dolch 96", "LeMat", "Nagant M1895", "New Army",
-      "Officer", "Pax", "Scottfield", "Sparks Pistol", "Uppercut",
+      "Bornheim No. 3", "Bornheim No. 3 Extended", "Bornheim No. 3 Silencer",
+      "Conversion", "Conversion Chain Pistol",
+      "Dolch 96", "Dolch 96 Bullseye", "Dolch 96 Claw",
+      "LeMat", "Nagant M1895", "Nagant M1895 Silencer",
+      "New Army", "New Army Swift", "Officer", "Officer Brawler",
+      "Pax", "Pax Claw", "Pax Trueshot",
+      "Scottfield", "Scottfield Brawler", "Scottfield Spitfire", "Scottfield Swift",
+      "Sparks Pistol", "Sparks Pistol Silencer", "Uppercut",
     ]);
   });
 
@@ -331,11 +340,44 @@ describe("dualWieldFor", () => {
     // convention and carries real information — a newly silent pistol is far likelier to be an unread
     // page or a reworded wiki edit than a genuinely two-handed sidearm. It therefore has to be claimed
     // by hand, with a ground, rather than absorbed by an argument that does not cover it.
+    // #254 added seven more silent pistols, and they are NOT a weakening of the argument above —
+    // they are a second, sharper instance of it. Every one is a SCOPED variant, and a scoped pistol
+    // cannot be paired. The wiki states this by omission with no exceptions: across the pistol
+    // variants, Deadeye (0 of 2), Precision (0 of 4) and Match (0 of 1) never claim pairing, while
+    // every other variant suffix — Brawler, Bullseye, Claw, Extended, Silencer, Spitfire, Swift,
+    // Trueshot, Chain Pistol — claims it in every instance. Not one suffix is mixed.
+    //
+    // That unanimity is the ground, and it is asserted rather than described, immediately below. A
+    // scoped pistol that starts claiming pairing, or an unscoped variant that stops, breaks the
+    // pattern and lands here for a human rather than being absorbed.
     const TWO_HANDED_PISTOLS = [
       "haymaker", // Confirmed two-handed. SPEC-0007 and #178 both name it as correctly excluded.
+      // Scoped variants (#254). Each read from its own page, each silent, none contradicted.
+      "bornheim-no-3-match",
+      "dolch-96-precision",
+      "nagant-m1895-deadeye",
+      "nagant-m1895-precision",
+      "scottfield-precision",
+      "uppercut-deadeye",
+      "uppercut-precision",
     ];
     const silentPistols = WEAPONS.filter((w) => w[5] === "Pistols" && dualWieldFor(w[0]) === false).map((w) => w[0]);
-    expect(silentPistols).toEqual(TWO_HANDED_PISTOLS);
+    expect(silentPistols.sort()).toEqual([...TWO_HANDED_PISTOLS].sort());
+
+    // The pattern the seven rest on, checked rather than asserted in prose: every scoped pistol
+    // variant is silent, and no unscoped one is.
+    const SCOPED = /\/(Deadeye|Precision|Match)$/;
+    const pistolVariants = WEAPONS.filter((w) => w[5] === "Pistols").map((w) => ({
+      id: w[0],
+      page: statsFor(w[0])?.wikiUrl?.split("/wiki/")[1] ?? "",
+      dual: dualWieldFor(w[0]),
+    }));
+    const scopedThatPair = pistolVariants.filter((p) => SCOPED.test(p.page) && p.dual === true);
+    const unscopedVariantsThatDoNot = pistolVariants.filter(
+      (p) => p.page.split("/").length === 3 && !SCOPED.test(p.page) && p.dual !== true
+    );
+    expect(scopedThatPair.map((p) => p.id)).toEqual([]);
+    expect(unscopedVariantsThatDoNot.map((p) => p.id)).toEqual([]);
   });
 
   it("keeps the class corroboration true, since the pistol allow-list rests on it", () => {
@@ -344,9 +386,14 @@ describe("dualWieldFor", () => {
     // "silent as a class" is no longer why those 46 rows are `false`, and the allow-list above stops
     // being the only unguarded gap. Better to fail here and revisit the argument than to keep asserting
     // a determination whose justification has expired.
+    //
+    // #254 took this from 11 to 25 and the class claim survived unchanged, which is a real check on
+    // that import rather than a formality: `sparks-pistol-silencer` is a pistol whose wiki path sits
+    // under the Sparks LRR *rifle*, and filing it by its page family rather than its true parent
+    // would have put a `true` in Rifles and failed this line.
     const pairable = WEAPONS.filter((w) => dualWieldFor(w[0]) === true);
     expect([...new Set(pairable.map((w) => w[5]))]).toEqual(["Pistols"]);
-    expect(pairable).toHaveLength(11);
+    expect(pairable).toHaveLength(25);
   });
 
   it("resolves every weapon the dataset covers, leaving none merely unread", () => {

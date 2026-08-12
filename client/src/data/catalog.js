@@ -214,6 +214,147 @@ export const WEAPONS = [
   // loadoutCodec.js — see PROMOTED_TO_WEAPON, which covers both the current format's ["T","katana"]
   // and LEGACY_TOOL_IDS[6].
   ["katana", "Katana", 2, 115, "none", "Melee"],
+
+  // ---------------------------------------------------------------------------
+  // Appended 2026-08-12 (#254), never inserted — same reason as every block above.
+  //
+  // The 89 weapon VARIANTS `Category:Weapons` lists as subpages (`Weapons/{Family}/{Variant}`):
+  // Dolch 96 Claw, Centennial Shorty, Springfield 1866 Bayonet, and so on. Each is a separately
+  // purchasable weapon with its own price and its own slot size, so each is an ordinary row. The
+  // catalog already carried three of them — `sparks-pistol`, `nagant-officer-carbine` and
+  // `mosin-nagant-avtomat` — and this is that same shape 89 more times.
+  //
+  // No `variantOf` field, and no family/parent relationship is modelled. SPEC-0007's non-goals and
+  // ADR-0005 both said a variant needed one before it could be imported; it does not. Nothing in the
+  // app relates one weapon to another, and the picker lists weapons. The real cost the ADR was
+  // pointing at is picker LENGTH — see the WEAPON_GROUPS note below.
+  //
+  // `size` and `cost` are each variant's OWN scraped values, never the parent's: a Shorty is
+  // smaller and cheaper than the gun it is cut down from, and `capUsed` reads position 2 for the
+  // size budget. Range-asserted on the way in — size within 1..5, cost > 0.
+  //
+  // `ammoClass` is INHERITED from the parent row, and that is evidenced rather than assumed: all 89
+  // variants' wiki `AmmoType` equals their parent's, checked against itemStats.json before these
+  // rows were written. It is not read off the wiki directly because `AmmoType` is not one of our
+  // pool keys and does not map onto them 1:1 — the wiki's "Special" covers `hxbow`, `bow`, `xbow`,
+  // `special` AND `none` across existing rows, and "Medium" covers both `medium` and `shotgun`
+  // (the Drilling). A direct mapping would produce a well-formed wrong value on exactly the rows
+  // whose ammo is unusual.
+  //
+  // `group` is hand-assigned from the variant's TRUE parent — the longest matching path prefix, not
+  // the base family. The distinction is load-bearing and got this wrong on the first pass: the true
+  // parent of `Sparks/Pistol_Silencer` is `Sparks/Pistol` (a pistol), NOT `Sparks` (the LRR rifle),
+  // and taking the family would have filed a pistol under Rifles. Four rows were wrong that way.
+  //
+  // Three variants change weapon class outright, so no parent states the answer and each is assigned
+  // by hand: `sparks-pistol` (a pistol cut from a rifle) and `nagant-officer-carbine` (a carbine on a
+  // revolver) both predate this block, and `lemat-carbine` is the same case — a shouldered long gun
+  // built on a LeMat revolver, size 3, filed as Rifles on the Officer Carbine's precedent.
+  // `lemat-carbine-marksman` then inherits Rifles from it through the prefix rule.
+  //
+  // SPEC-0007 REQ "Fields the Scraper Must Not Derive" forbids a scrape supplying `group`, and the
+  // weapon infobox has no class field to supply it from — checked, not assumed. A human applying
+  // "a variant is filed where its true parent is" is not a derivation, and all 35 variant families
+  // have a parent row in this file, so no group was invented.
+  //
+  // Every row also needs a `WIKI_TITLE_OVERRIDES.weapons` entry in scripts/lib/wiki.mjs:
+  // `resolveWikiPath` builds `Weapons/{DisplayName}`, and these pages live two segments deep.
+  //
+  // These have no images yet. ItemThumb falls back to its SVG icon, which is the specified posture
+  // (SPEC-0001); `scripts/scrape-images.mjs` is what fills them in.
+  //
+  // WEAPON_GROUPS now buckets 148 weapons into five, and Rifles holds 79 of them. That is #248, and
+  // this block is what makes it load-bearing rather than cosmetic.
+
+  ["1865-carbine-aperture", "1865 Carbine Aperture", 3, 74, "medium", "Rifles"],
+  ["1865-carbine-silencer", "1865 Carbine Silencer", 3, 80, "medium", "Rifles"],
+  ["berthier-1892-deadeye", "Berthier 1892 Deadeye", 3, 397, "slong", "Rifles"],
+  ["berthier-1892-marksman", "Berthier 1892 Marksman", 3, 413, "slong", "Rifles"],
+  ["berthier-1892-riposte", "Berthier 1892 Riposte", 3, 390, "slong", "Rifles"],
+  ["bornheim-no-3-extended", "Bornheim No. 3 Extended", 1, 203, "compact", "Pistols"],
+  ["bornheim-no-3-match", "Bornheim No. 3 Match", 2, 180, "compact", "Pistols"],
+  ["bornheim-no-3-silencer", "Bornheim No. 3 Silencer", 1, 174, "compact", "Pistols"],
+  ["centennial-pointman", "Centennial Pointman", 2, 114, "medium", "Rifles"],
+  ["centennial-shorty", "Centennial Shorty", 2, 103, "medium", "Rifles"],
+  ["centennial-shorty-silencer", "Centennial Shorty Silencer", 2, 137, "medium", "Rifles"],
+  ["centennial-sniper", "Centennial Sniper", 4, 181, "medium", "Rifles"],
+  ["centennial-trauma", "Centennial Trauma", 4, 167, "medium", "Rifles"],
+  ["conversion-chain-pistol", "Conversion Chain Pistol", 1, 84, "medium", "Pistols"],
+  ["crossbow-deadeye", "Crossbow Deadeye", 4, 53, "xbow", "Bows"],
+  ["dolch-96-bullseye", "Dolch 96 Bullseye", 2, 725, "special", "Pistols"],
+  ["dolch-96-claw", "Dolch 96 Claw", 2, 700, "special", "Pistols"],
+  ["dolch-96-precision", "Dolch 96 Precision", 3, 730, "special", "Pistols"],
+  ["drilling-hatchet", "Drilling Hatchet", 2, 340, "shotgun", "Shotguns"],
+  ["drilling-shorty", "Drilling Shorty", 2, 330, "shotgun", "Shotguns"],
+  ["frontier-73c-marksman", "Frontier 73C Marksman", 3, 45, "compact", "Rifles"],
+  ["frontier-73c-silencer", "Frontier 73C Silencer", 3, 55, "compact", "Rifles"],
+  ["infantry-73l-bayonet", "Infantry 73L Bayonet", 4, 88, "compact", "Rifles"],
+  ["infantry-73l-sniper", "Infantry 73L Sniper", 4, 90, "compact", "Rifles"],
+  ["krag-bayonet", "Krag Bayonet", 4, 460, "slong", "Rifles"],
+  ["krag-silencer", "Krag Silencer", 4, 517, "slong", "Rifles"],
+  ["krag-sniper", "Krag Sniper", 4, 517, "slong", "Rifles"],
+  ["lebel-1886-aperture", "Lebel 1886 Aperture", 4, 417, "slong", "Rifles"],
+  ["lebel-1886-marksman", "Lebel 1886 Marksman", 4, 437, "slong", "Rifles"],
+  ["lebel-1886-talon", "Lebel 1886 Talon", 4, 407, "slong", "Rifles"],
+  ["lemat-carbine", "LeMat Carbine", 3, 115, "compact", "Rifles"],
+  ["lemat-carbine-marksman", "LeMat Carbine Marksman", 3, 127, "compact", "Rifles"],
+  ["mako-1895-aperture", "Mako 1895 Aperture", 4, 378, "long", "Rifles"],
+  ["mako-1895-claw", "Mako 1895 Claw", 4, 370, "long", "Rifles"],
+  ["marathon-swift", "Marathon Swift", 4, 95, "compact", "Rifles"],
+  ["martini-henry-deadeye", "Martini-Henry Deadeye", 4, 128, "long", "Rifles"],
+  ["martini-henry-ironside", "Martini-Henry Ironside", 4, 159, "long", "Rifles"],
+  ["martini-henry-marksman", "Martini-Henry Marksman", 4, 134, "long", "Rifles"],
+  ["martini-henry-riposte", "Martini-Henry Riposte", 4, 132, "long", "Rifles"],
+  ["maynard-sniper-silencer", "Maynard Sniper Silencer", 5, 159, "medium", "Rifles"],
+  ["mosin-obrez-extended", "Mosin Obrez Extended", 2, 350, "slong", "Rifles"],
+  ["mosin-obrez-mace", "Mosin Obrez Mace", 2, 300, "slong", "Rifles"],
+  ["mosin-obrez-match", "Mosin Obrez Match", 3, 345, "slong", "Rifles"],
+  ["mosin-obrez-sharpeye", "Mosin Obrez Sharpeye", 3, 362, "slong", "Rifles"],
+  ["mosin-nagant-bayonet", "Mosin-Nagant Bayonet", 4, 630, "slong", "Rifles"],
+  ["mosin-nagant-sniper", "Mosin-Nagant Sniper", 4, 713, "slong", "Rifles"],
+  ["nagant-m1895-deadeye", "Nagant M1895 Deadeye", 2, 30, "compact", "Pistols"],
+  ["nagant-m1895-precision", "Nagant M1895 Precision", 2, 29, "compact", "Pistols"],
+  ["nagant-m1895-silencer", "Nagant M1895 Silencer", 1, 27, "compact", "Pistols"],
+  ["new-army-swift", "New Army Swift", 1, 108, "compact", "Pistols"],
+  ["officer-brawler", "Officer Brawler", 1, 106, "compact", "Pistols"],
+  ["officer-carbine-deadeye", "Officer Carbine Deadeye", 3, 192, "compact", "Rifles"],
+  ["pax-claw", "Pax Claw", 1, 90, "medium", "Pistols"],
+  ["pax-trueshot", "Pax Trueshot", 1, 141, "medium", "Pistols"],
+  ["ranger-73-aperture", "Ranger 73 Aperture", 4, 79, "compact", "Rifles"],
+  ["ranger-73-swift", "Ranger 73 Swift", 4, 128, "compact", "Rifles"],
+  ["ranger-73-talon", "Ranger 73 Talon", 4, 85, "compact", "Rifles"],
+  ["rival-78-mace", "Rival 78 Mace", 2, 155, "shotgun", "Shotguns"],
+  ["rival-78-shorty", "Rival 78 Shorty", 2, 145, "shotgun", "Shotguns"],
+  ["rival-78-trauma", "Rival 78 Trauma", 4, 180, "shotgun", "Shotguns"],
+  ["romero-77-alamo", "Romero 77 Alamo", 4, 98, "shotgun", "Shotguns"],
+  ["romero-77-hatchet", "Romero 77 Hatchet", 2, 56, "shotgun", "Shotguns"],
+  ["romero-77-shorty", "Romero 77 Shorty", 2, 46, "shotgun", "Shotguns"],
+  ["romero-77-talon", "Romero 77 Talon", 4, 76, "shotgun", "Shotguns"],
+  ["scottfield-brawler", "Scottfield Brawler", 1, 87, "medium", "Pistols"],
+  ["scottfield-precision", "Scottfield Precision", 2, 85, "medium", "Pistols"],
+  ["scottfield-spitfire", "Scottfield Spitfire", 1, 108, "medium", "Pistols"],
+  ["scottfield-swift", "Scottfield Swift", 1, 95, "medium", "Pistols"],
+  ["slate-riposte", "Slate Riposte", 4, 323, "shotgun", "Shotguns"],
+  ["sparks-pistol-silencer", "Sparks Pistol Silencer", 1, 178, "long", "Pistols"],
+  ["sparks-silencer", "Sparks Silencer", 4, 150, "long", "Rifles"],
+  ["sparks-sniper", "Sparks Sniper", 4, 150, "long", "Rifles"],
+  ["specter-1882-bayonet", "Specter 1882 Bayonet", 4, 198, "shotgun", "Shotguns"],
+  ["specter-1882-shorty", "Specter 1882 Shorty", 2, 164, "shotgun", "Shotguns"],
+  ["springfield-1866-bayonet", "Springfield 1866 Bayonet", 4, 48, "medium", "Rifles"],
+  ["springfield-1866-bullseye", "Springfield 1866 Bullseye", 2, 35, "medium", "Rifles"],
+  ["springfield-1866-marksman", "Springfield 1866 Marksman", 4, 42, "medium", "Rifles"],
+  ["springfield-1866-shorty", "Springfield 1866 Shorty", 2, 33, "medium", "Rifles"],
+  ["springfield-1866-striker", "Springfield 1866 Striker", 2, 43, "medium", "Rifles"],
+  ["terminus-shorty", "Terminus Shorty", 2, 148, "shotgun", "Shotguns"],
+  ["uppercut-deadeye", "Uppercut Deadeye", 3, 337, "long", "Pistols"],
+  ["uppercut-precision", "Uppercut Precision", 3, 321, "long", "Pistols"],
+  ["vandal-73c-bullseye", "Vandal 73C Bullseye", 2, 37, "compact", "Rifles"],
+  ["vandal-73c-striker", "Vandal 73C Striker", 2, 45, "compact", "Rifles"],
+  ["vetterli-71-bayonet", "Vetterli 71 Bayonet", 3, 115, "medium", "Rifles"],
+  ["vetterli-71-cyclone", "Vetterli 71 Cyclone", 4, 280, "medium", "Rifles"],
+  ["vetterli-71-deadeye", "Vetterli 71 Deadeye", 3, 110, "medium", "Rifles"],
+  ["vetterli-71-marksman", "Vetterli 71 Marksman", 3, 116, "medium", "Rifles"],
+  ["vetterli-71-silencer", "Vetterli 71 Silencer", 3, 150, "medium", "Rifles"],
 ];
 
 export const WEAPON_GROUPS = ["Pistols", "Rifles", "Shotguns", "Melee", "Bows"];
