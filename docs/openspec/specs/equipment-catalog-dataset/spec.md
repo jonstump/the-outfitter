@@ -221,7 +221,9 @@ Only the acquisition axis SHALL be read as acquisition. The functional axis — 
 
 Every scraped consumable record SHALL carry whether it is purchasable with Hunt Dollars. All of this SHALL live in `itemStats.json`; it is scrape metadata, not catalog fields, and MUST NOT be written into `group`.
 
-The exclusion boundary SHALL be stated in `catalog.js` in terms of purchasability rather than in terms of any event's duration, since a limited-time item can become permanent while remaining unpurchasable.
+The exclusion boundary SHALL be stated in `catalog.js` ~~in terms of purchasability rather than~~ **as the scope decision it is, and never** in terms of any event's duration, since a limited-time item can become permanent while remaining unpurchasable.
+
+> **Amended 2026-08-12 per ADR-0013.** This paragraph previously required the boundary to be phrased "in terms of purchasability rather than in terms of any event's duration". The purchasability half is retired, and marked rather than rewritten for the same reason as the amendment above: it is the second rationale this one boundary has outlived, and a reader who was told the boundary *meant* unpurchasability needs to see that change rather than find a clean document that never said it. Unpurchasability can no longer be the stated ground for excluding anything, because ADR-0013 makes it a cost of zero and admits such items — twelve Scarce rows sit in `catalog.js` today. The duration half stands unamended: a limited-time item can become permanent, Update 2.8.1 made Tarot Cards exactly that, and a boundary resting on an event's duration would have expired with it.
 
 Purchasability SHALL be recorded three ways, not two: purchasable, stated-unpurchasable, and unresolved. "Stated-unpurchasable" requires that a price was actually read and refused — a Tarot Card's literal `Scarce`. An item whose page carries no price field at all SHALL be recorded as unresolved and reported in its own column, since defaulting it to either determination is the inference this spec's "Stored, Never Inferred" requirement forbids.
 

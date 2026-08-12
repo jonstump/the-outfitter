@@ -276,3 +276,49 @@ describe("consumable type", () => {
     expect(equip.length).toBeGreaterThan(4);
   });
 });
+
+// Governing: ADR-0013 (Scarce items are selectable at zero cost), SPEC-0007 REQ "Roster Coverage Is
+// Reported Against the Wiki's Own Categories". Closes the documentation half of #161 and #37.
+//
+// The roster boundary above CONS, made checkable. Prose alone has already failed twice here: the
+// exclusion was first justified as "a limited-time event item" (077e747), whose own revisit trigger
+// fired at Update 2.8.1, and then as "unpurchasable with Hunt Dollars", which ADR-0013 turned into a
+// cost of zero. A comment cannot notice when its reason expires; a test can at least make the
+// decision visible to whoever changes the data.
+describe("the Tarot Card roster boundary", () => {
+  // The fourteen, from a discovery crawl rather than from memory. Each states its price as the
+  // literal word "Scarce", which is why they land in the coverage report's `unpurchasable` bucket.
+  const TAROT_CARDS = [
+    "The Chariot", "The Devil", "The Empress", "The Fool", "The Garden", "The Hanged Man",
+    "The High Priestess", "The Judgement", "The Magician", "The Moon", "The Pathfinder",
+    "The Sun", "The Tower", "The World",
+  ];
+
+  it("keeps all fourteen out of CONS", () => {
+    const present = TAROT_CARDS.filter((name) => CONS.some((c) => c[1] === name));
+    expect(present, "adding a Tarot Card means revisiting the boundary comment above CONS").toEqual([]);
+  });
+
+  it("accounts for the full gap against the wiki's 54 consumable pages", () => {
+    // 30 rows + 14 Tarot Cards + 10 tombstones = 54, and 0 actually missing. Pinning the row count
+    // means a future addition has to restate the arithmetic rather than quietly breaking it.
+    expect(CONS).toHaveLength(30);
+    expect(CONS.length + TAROT_CARDS.length + 10).toBe(54);
+  });
+
+  it("is a scope decision, not an unpurchasability rule", () => {
+    // The assertion that keeps the retired rationale from creeping back. If "unpurchasable" were the
+    // criterion, these twelve rows could not exist — they are Scarce items carried at cost 0 under
+    // ADR-0013, and itemStats.test.js asserts that pairing in both directions.
+    const weaponsAtZero = WEAPONS.filter((w) => w[3] === 0);
+    const traitsAtZero = TRAITS.filter((t) => t[2] === 0);
+    // Counted, not merely non-empty. The claim the boundary comment rests on is that unpurchasable
+    // items ARE in this file, so the numbers it quotes have to be the numbers the data holds — a
+    // shrinking count is the shape of the retired rationale returning one row at a time. The split is
+    // pinned too, because the twelve arrived on two different axes (#233 for weapons, #157 for
+    // traits) and either could be undone alone.
+    expect(weaponsAtZero).toHaveLength(4);
+    expect(traitsAtZero).toHaveLength(8);
+    expect(weaponsAtZero.length + traitsAtZero.length).toBe(12);
+  });
+});

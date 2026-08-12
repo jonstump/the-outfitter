@@ -252,25 +252,48 @@ export const TOOL_GROUPS = ["Medical", "Melee", "Throwing", "Traps", "Utility"];
 
 // ROSTER BOUNDARY — why this table is 30 rows against the wiki's 54.
 //
-// The catalog carries what a player can BUY WITH HUNT DOLLARS, because that is what a dollar-cost
-// planner can price. Everything excluded is excluded on that ground and no other. A discovery crawl
-// (`node scripts/scrape-stats.mjs --discover`) resolves the 24-page difference exactly:
+// The accounting, from a discovery crawl (`node scripts/scrape-stats.mjs --discover`), which resolves
+// the 24-page difference exactly:
 //
-//   14  Tarot Cards       — live pages, but each states its price as the literal word "Scarce".
-//                           Found in-world at Bileweaver compounds, Postal Supply, Clockmaker's
-//                           Supply and Sealed Hoards; they have no Hunt Dollar price to plan with.
+//   14  Tarot Cards       — live pages, each stating its price as the literal word "Scarce". Found
+//                           in-world at Bileweaver compounds, Postal Supply, Clockmaker's Supply and
+//                           Sealed Hoards.
 //   10  removed items     — Proof Vapours, Wormseed Shots, Reliquaries. Pages still exist; the
 //                           items do not.
-//    0  actually missing  — the purchasable consumable roster is COMPLETE.
+//    0  actually missing  — the consumable roster is COMPLETE. (#163)
 //
-// Note the reason is purchasability, NOT "limited-time event item". That earlier framing (077e747)
-// carried its own revisit trigger and Update 2.8.1 fired it: Tarot Cards are permanent now. They
-// stay out anyway, because permanence was never the criterion. This is the same judgment already
-// recorded for AMMO.special, where Dolch and Nitro custom ammo is excluded for being Scarce.
+// TAROT CARDS ARE OUT BY A SCOPE DECISION, AND NOT BECAUSE THEY CANNOT BE BOUGHT. That distinction is
+// the whole point of this comment, because the obvious reason is now the wrong one:
 //
-// The accepted limit: Tarot Cards occupy equipment slots and have their own 4-per-loadout cap
-// category, so a loadout built here can never be quite the loadout a player fields. That is a
-// stated limit of a dollar-cost planner rather than a defect to fix.
+// ADR-0013 admits Scarce items as catalog rows costing zero — a Scarce item comes only from a match,
+// so a player who owns one can field it, and a builder that cannot represent it is wrong about what
+// the player can take. Twelve such rows are in this file today: four weapons (Flame Rifle, Homestead
+// 78, Shredder, Wildland) and eight traits (Berserker, Catalyst, Death Cheat, Rampage, Relentless,
+// Remedy, Shadow, Shadow Leap). So "unpurchasable with Hunt Dollars" cannot be why anything is
+// excluded — twelve unpurchasable items are included, and `itemStats.test.js` asserts each pairs a
+// cost of 0 with the scrape's own Scarce evidence, in both directions.
+//
+// This boundary has now outlived TWO rationales, which is the reason it is written down rather than
+// re-derived:
+//
+//   1. "A limited-time event item rather than a permanent roster addition" (077e747). That framing
+//      carried its own revisit trigger and Update 2.8.1 fired it — Tarot Cards are permanent.
+//   2. "Unpurchasable with Hunt Dollars", correct until ADR-0013 (2026-08-12) made unpurchasability
+//      a cost of zero rather than a ground for exclusion. SPEC-0007 marks that reversal rather than
+//      rewriting it, for the same reason this comment does.
+//
+// What remains is a scope choice, made deliberately and dated: Tarot Cards stay out for now. If that
+// is revisited they are ordinary rows costing 0, exactly like the twelve above, and the per-item
+// consumable cap (#155, SPEC-0008) means their own 4-per-loadout cap category needs no new modelling
+// — what is capped is the specific item, so a fourth Tarot Card is bounded by the same rule as a
+// fourth Frag Bomb.
+//
+// The accepted limit while they are out: a loadout built here cannot be quite the loadout a player
+// fields, because Tarot Cards occupy equipment cells this table cannot fill. That is a stated
+// consequence of the choice, not a defect.
+//
+// `catalog.test.js` names the fourteen, so adding one fails a test until whoever adds it revisits the
+// decision above rather than inheriting it by accident.
 export const CONS = [
   ["vitality-shot", "Vitality Shot", 85, "Shot", "Shots"],
   ["regeneration-shot", "Regeneration Shot", 105, "Shot", "Shots"],
