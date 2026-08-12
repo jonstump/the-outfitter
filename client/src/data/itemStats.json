@@ -37,7 +37,29 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16387",
-      "ingestedAt": "2026-08-12T03:13:49.224Z"
+      "ingestedAt": "2026-08-12T04:07:13.687Z"
+    },
+    "adrenaline": {
+      "name": "Adrenaline",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Adrenaline",
+      "infoboxTitle": "Adrenaline",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "When you enter critical health, you will receive a small Stamina boost.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "1",
+      "purchasable": true,
+      "fields": {
+        "Cost": "1",
+        "Unlock": "Bloodline Rank 1",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15618",
+      "ingestedAt": "2026-08-12T04:08:36.252Z"
     },
     "alert-trip-mine": {
       "name": "Alert Trip Mines",
@@ -60,7 +82,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16057",
-      "ingestedAt": "2026-08-12T03:14:10.220Z"
+      "ingestedAt": "2026-08-12T04:07:34.707Z"
     },
     "ambidextrous": {
       "name": "Ambidextrous",
@@ -82,7 +104,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15632",
-      "ingestedAt": "2026-08-12T03:15:07.306Z"
+      "ingestedAt": "2026-08-12T04:08:31.760Z"
     },
     "ammo-box": {
       "name": "Ammo Box",
@@ -103,7 +125,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15275",
-      "ingestedAt": "2026-08-12T03:15:49.352Z"
+      "ingestedAt": "2026-08-12T04:09:52.810Z"
     },
     "antidote-shot": {
       "name": "Antidote Shot",
@@ -125,7 +147,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15190",
-      "ingestedAt": "2026-08-12T03:15:16.316Z"
+      "ingestedAt": "2026-08-12T04:09:19.787Z"
     },
     "antidote-shot-weak": {
       "name": "Antidote Shot (Weak)",
@@ -147,7 +169,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15191",
-      "ingestedAt": "2026-08-12T03:15:38.826Z"
+      "ingestedAt": "2026-08-12T04:09:42.312Z"
+    },
+    "assailant": {
+      "name": "Assailant",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Assailant",
+      "infoboxTitle": "Assailant",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Increases melee effectiveness of Throwing Knives and Throwing Axes.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "1",
+      "purchasable": true,
+      "fields": {
+        "Cost": "1",
+        "Unlock": "Bloodline Rank 18",
+        "Category": "Offensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15464",
+      "ingestedAt": "2026-08-12T04:08:37.792Z"
     },
     "bear-traps": {
       "name": "Bear Traps",
@@ -171,7 +215,7 @@
         "HeavyMeleeDamage": "67"
       },
       "sourceRevision": "15182",
-      "ingestedAt": "2026-08-12T03:14:22.229Z"
+      "ingestedAt": "2026-08-12T04:07:46.736Z"
     },
     "beastface": {
       "name": "Beastface",
@@ -194,7 +238,27 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15705",
-      "ingestedAt": "2026-08-12T03:14:53.774Z"
+      "ingestedAt": "2026-08-12T04:08:18.228Z"
+    },
+    "berserker": {
+      "name": "Berserker",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Berserker",
+      "infoboxTitle": "Berserker",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "All melee attacks do double damage.",
+      "acquisition": "Scarce",
+      "acquisitionClasses": [
+        "Scarce"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Offensive",
+        "Type": "Scarce"
+      },
+      "sourceRevision": "15616",
+      "ingestedAt": "2026-08-12T04:09:03.280Z"
     },
     "berthier-1892": {
       "name": "Berthier 1892",
@@ -228,7 +292,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15765",
-      "ingestedAt": "2026-08-12T03:13:35.676Z"
+      "ingestedAt": "2026-08-12T04:07:00.165Z"
     },
     "big-dynamite-bundle": {
       "name": "Big Dynamite Bundle",
@@ -253,7 +317,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16069",
-      "ingestedAt": "2026-08-12T03:15:20.819Z"
+      "ingestedAt": "2026-08-12T04:09:24.303Z"
+    },
+    "blade-seer": {
+      "name": "Blade Seer",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Blade_Seer",
+      "infoboxTitle": "Blade Seer",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "While using Dark Sight, increases distance of highlighted Bolts, Arrows, Harpoon, Throwing Axes, and Throwing Knives to 75m. Also applies to Beetle View.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "1",
+      "purchasable": true,
+      "fields": {
+        "Cost": "1",
+        "Unlock": "Bloodline Rank 54",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15634",
+      "ingestedAt": "2026-08-12T04:08:39.261Z"
     },
     "blank-fire-decoys": {
       "name": "Blank Fire Decoys",
@@ -277,7 +363,51 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13984",
-      "ingestedAt": "2026-08-12T03:14:07.237Z"
+      "ingestedAt": "2026-08-12T04:07:31.720Z"
+    },
+    "blast-sense": {
+      "name": "Blast Sense",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Blast_Sense",
+      "infoboxTitle": "Blast Sense",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Loud sounds such as gunshots and explosions are highlighted while in Dark Sight. Gunshots from Silenced Weapons with Subsonic Ammo cannot be seen. (200m)",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "2",
+      "purchasable": true,
+      "fields": {
+        "Cost": "2",
+        "Unlock": "Bloodline Rank 1",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15635",
+      "ingestedAt": "2026-08-12T04:08:40.796Z"
+    },
+    "bloodless": {
+      "name": "Bloodless",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Bloodless",
+      "infoboxTitle": "Bloodless",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Bleeding will not escalate from lignt to medium or intense bleeding.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "3",
+      "purchasable": true,
+      "fields": {
+        "Cost": "3",
+        "Unlock": "Bloodline Rank 1",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15607",
+      "ingestedAt": "2026-08-12T04:08:42.264Z"
     },
     "bolt-thrower": {
       "name": "Bolt Thrower",
@@ -299,7 +429,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15465",
-      "ingestedAt": "2026-08-12T03:14:43.252Z"
+      "ingestedAt": "2026-08-12T04:08:07.720Z"
     },
     "bomb-lance": {
       "name": "Bomb Lance",
@@ -332,7 +462,7 @@
         "HeavyStaminaConsumption": "50"
       },
       "sourceRevision": "15026",
-      "ingestedAt": "2026-08-12T03:13:23.669Z"
+      "ingestedAt": "2026-08-12T04:06:48.143Z"
     },
     "bornheim-no-3": {
       "name": "Bornheim No. 3",
@@ -366,7 +496,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16283",
-      "ingestedAt": "2026-08-12T03:12:58.175Z"
+      "ingestedAt": "2026-08-12T04:06:22.651Z"
     },
     "bulletgrubber": {
       "name": "Bulletgrubber",
@@ -388,7 +518,29 @@
         "Type": "Regular"
       },
       "sourceRevision": "15636",
-      "ingestedAt": "2026-08-12T03:14:40.256Z"
+      "ingestedAt": "2026-08-12T04:08:04.743Z"
+    },
+    "bulwark": {
+      "name": "Bulwark",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Bulwark",
+      "infoboxTitle": "Bulwark",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Reduce the damage from explosions by 50%. Vastly reduces the duration of being fully blinded by a Flash Bomb.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "2",
+      "purchasable": true,
+      "fields": {
+        "Cost": "2",
+        "Unlock": "Bloodline Rank 1",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15608",
+      "ingestedAt": "2026-08-12T04:08:43.798Z"
     },
     "caldwell-conversion-pistol": {
       "name": "Conversion",
@@ -422,7 +574,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16153",
-      "ingestedAt": "2026-08-12T03:12:55.170Z"
+      "ingestedAt": "2026-08-12T04:06:19.658Z"
     },
     "caldwell-conversion-uppercut": {
       "name": "Uppercut",
@@ -456,7 +608,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16179",
-      "ingestedAt": "2026-08-12T03:13:10.155Z"
+      "ingestedAt": "2026-08-12T04:06:34.644Z"
     },
     "caldwell-pax": {
       "name": "Pax",
@@ -490,7 +642,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16266",
-      "ingestedAt": "2026-08-12T03:12:59.659Z"
+      "ingestedAt": "2026-08-12T04:06:24.134Z"
     },
     "caldwell-rival-78": {
       "name": "Rival 78",
@@ -524,7 +676,27 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15751",
-      "ingestedAt": "2026-08-12T03:13:25.178Z"
+      "ingestedAt": "2026-08-12T04:06:49.667Z"
+    },
+    "catalyst": {
+      "name": "Catalyst",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Catalyst",
+      "infoboxTitle": "Catalyst",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Unlock Conditional Trait Effects on the Beastface, Kiteskin, Vigilant, Pain Sense, and Frontiersman Traits. Conditional Effects activate when their base Trait is equipped.",
+      "acquisition": "Scarce",
+      "acquisitionClasses": [
+        "Scarce"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Supportive",
+        "Type": "Scarce"
+      },
+      "sourceRevision": "15637",
+      "ingestedAt": "2026-08-12T04:09:04.777Z"
     },
     "cavalry-saber": {
       "name": "Cavalry Saber",
@@ -547,7 +719,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15966",
-      "ingestedAt": "2026-08-12T03:13:02.653Z"
+      "ingestedAt": "2026-08-12T04:06:27.128Z"
     },
     "chaos-bomb": {
       "name": "Chaos Bomb",
@@ -571,7 +743,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10096",
-      "ingestedAt": "2026-08-12T03:15:29.824Z"
+      "ingestedAt": "2026-08-12T04:09:33.319Z"
     },
     "choke-beetle": {
       "name": "Choke Beetle",
@@ -597,7 +769,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14806",
-      "ingestedAt": "2026-08-12T03:15:52.365Z"
+      "ingestedAt": "2026-08-12T04:09:55.811Z"
     },
     "choke-bombs": {
       "name": "Choke Bombs",
@@ -623,7 +795,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16047",
-      "ingestedAt": "2026-08-12T03:14:19.246Z"
+      "ingestedAt": "2026-08-12T04:07:43.722Z"
     },
     "combat-axe": {
       "name": "Combat Axe",
@@ -646,7 +818,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15042",
-      "ingestedAt": "2026-08-12T03:13:04.163Z"
+      "ingestedAt": "2026-08-12T04:06:28.664Z"
     },
     "concertina-bomb": {
       "name": "Concertina Bomb",
@@ -670,7 +842,7 @@
         "HeavyMeleeDamage": "112"
       },
       "sourceRevision": "15277",
-      "ingestedAt": "2026-08-12T03:15:32.820Z"
+      "ingestedAt": "2026-08-12T04:09:36.319Z"
     },
     "concertina-trip-mine": {
       "name": "Concertina Trip Mines",
@@ -694,7 +866,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16058",
-      "ingestedAt": "2026-08-12T03:14:11.726Z"
+      "ingestedAt": "2026-08-12T04:07:36.197Z"
     },
     "conduit": {
       "name": "Conduit",
@@ -717,7 +889,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15706",
-      "ingestedAt": "2026-08-12T03:15:04.277Z"
+      "ingestedAt": "2026-08-12T04:08:28.735Z"
     },
     "crossbow": {
       "name": "Crossbow",
@@ -751,7 +923,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15045",
-      "ingestedAt": "2026-08-12T03:13:20.666Z"
+      "ingestedAt": "2026-08-12T04:06:45.142Z"
     },
     "crown-king-auto-5": {
       "name": "Auto-5",
@@ -785,7 +957,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16186",
-      "ingestedAt": "2026-08-12T03:13:43.185Z"
+      "ingestedAt": "2026-08-12T04:07:07.687Z"
     },
     "dark-dynamite-satchel": {
       "name": "Dark Dynamite Satchel",
@@ -809,7 +981,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16070",
-      "ingestedAt": "2026-08-12T03:15:44.832Z"
+      "ingestedAt": "2026-08-12T04:09:48.317Z"
     },
     "dauntless": {
       "name": "Dauntless",
@@ -831,7 +1003,29 @@
         "Type": "Regular"
       },
       "sourceRevision": "15609",
-      "ingestedAt": "2026-08-12T03:15:08.799Z"
+      "ingestedAt": "2026-08-12T04:08:33.240Z"
+    },
+    "death-cheat": {
+      "name": "Death Cheat",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Death_Cheat",
+      "infoboxTitle": "Death Cheat",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "You will not lose your Hunter if you fail to extract, but equipment and missing Health Chunks will be lost.",
+      "acquisition": "Burn , Scarce",
+      "acquisitionClasses": [
+        "Scarce",
+        "Burn"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "StackLimit": "1",
+        "Category": "Supportive",
+        "Type": "Burn , Scarce"
+      },
+      "sourceRevision": "15641",
+      "ingestedAt": "2026-08-12T04:09:06.291Z"
     },
     "decoy-fuses": {
       "name": "Decoy Fuses",
@@ -856,7 +1050,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15183",
-      "ingestedAt": "2026-08-12T03:14:08.722Z"
+      "ingestedAt": "2026-08-12T04:07:33.193Z"
+    },
+    "decoy-supply": {
+      "name": "Decoy Supply",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Decoy_Supply",
+      "infoboxTitle": "Decoy Supply",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Restock all types of Decoys from Ammo Crates.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "1",
+      "purchasable": true,
+      "fields": {
+        "Cost": "1",
+        "Unlock": "Bloodline Rank 53",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15642",
+      "ingestedAt": "2026-08-12T04:08:45.266Z"
     },
     "decoys": {
       "name": "Decoys",
@@ -880,7 +1096,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10076",
-      "ingestedAt": "2026-08-12T03:14:05.723Z"
+      "ingestedAt": "2026-08-12T04:07:30.197Z"
     },
     "derringer-pennyshot": {
       "name": "Derringer Pennyshot",
@@ -913,7 +1129,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16044",
-      "ingestedAt": "2026-08-12T03:14:20.732Z"
+      "ingestedAt": "2026-08-12T04:07:45.216Z"
     },
     "determination": {
       "name": "Determination",
@@ -935,7 +1151,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15643",
-      "ingestedAt": "2026-08-12T03:14:47.764Z"
+      "ingestedAt": "2026-08-12T04:08:12.217Z"
     },
     "doctor": {
       "name": "Doctor",
@@ -957,7 +1173,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15610",
-      "ingestedAt": "2026-08-12T03:14:28.239Z"
+      "ingestedAt": "2026-08-12T04:07:52.711Z"
     },
     "dolch-96": {
       "name": "Dolch 96",
@@ -991,7 +1207,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15217",
-      "ingestedAt": "2026-08-12T03:13:14.661Z"
+      "ingestedAt": "2026-08-12T04:06:39.132Z"
     },
     "drilling": {
       "name": "Drilling",
@@ -1025,7 +1241,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16155",
-      "ingestedAt": "2026-08-12T03:13:37.178Z"
+      "ingestedAt": "2026-08-12T04:07:01.677Z"
     },
     "dusters": {
       "name": "Dusters",
@@ -1048,7 +1264,7 @@
         "HeavyStaminaConsumption": "10"
       },
       "sourceRevision": "16066",
-      "ingestedAt": "2026-08-12T03:13:55.207Z"
+      "ingestedAt": "2026-08-12T04:07:19.706Z"
     },
     "dynamite-bundle": {
       "name": "Dynamite Bundle",
@@ -1073,7 +1289,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16068",
-      "ingestedAt": "2026-08-12T03:15:19.308Z"
+      "ingestedAt": "2026-08-12T04:09:22.783Z"
     },
     "dynamite-stick": {
       "name": "Dynamite Stick",
@@ -1098,7 +1314,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14715",
-      "ingestedAt": "2026-08-12T03:15:17.808Z"
+      "ingestedAt": "2026-08-12T04:09:21.321Z"
     },
     "fanning": {
       "name": "Fanning",
@@ -1120,7 +1336,29 @@
         "Type": "Regular"
       },
       "sourceRevision": "15466",
-      "ingestedAt": "2026-08-12T03:14:25.249Z"
+      "ingestedAt": "2026-08-12T04:07:49.738Z"
+    },
+    "fast-fingers": {
+      "name": "Fast Fingers",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Fast_Fingers",
+      "infoboxTitle": "Fast Fingers",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Prepare some bullets in hand to reload single-shot rifles, and their non-pistol variants, faster.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "4",
+      "purchasable": true,
+      "fields": {
+        "Cost": "4",
+        "Unlock": "Bloodline Rank 11",
+        "Category": "Offensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15644",
+      "ingestedAt": "2026-08-12T04:08:46.775Z"
     },
     "fire-beetle": {
       "name": "Fire Beetle",
@@ -1145,7 +1383,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14807",
-      "ingestedAt": "2026-08-12T03:15:55.342Z"
+      "ingestedAt": "2026-08-12T04:09:58.816Z"
     },
     "fire-bomb": {
       "name": "Fire Bomb",
@@ -1170,7 +1408,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15394",
-      "ingestedAt": "2026-08-12T03:15:25.311Z"
+      "ingestedAt": "2026-08-12T04:09:28.791Z"
     },
     "first-aid-kit": {
       "name": "First Aid Kit",
@@ -1192,7 +1430,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15293",
-      "ingestedAt": "2026-08-12T03:13:50.704Z"
+      "ingestedAt": "2026-08-12T04:07:15.181Z"
     },
     "flare-pistol": {
       "name": "Flare Pistol",
@@ -1225,7 +1463,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16048",
-      "ingestedAt": "2026-08-12T03:14:01.214Z"
+      "ingestedAt": "2026-08-12T04:07:25.696Z"
     },
     "flash-bomb": {
       "name": "Flash Bomb",
@@ -1249,7 +1487,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10105",
-      "ingestedAt": "2026-08-12T03:15:31.326Z"
+      "ingestedAt": "2026-08-12T04:09:34.800Z"
     },
     "frag-bomb": {
       "name": "Frag Bomb",
@@ -1274,7 +1512,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14717",
-      "ingestedAt": "2026-08-12T03:15:22.325Z"
+      "ingestedAt": "2026-08-12T04:09:25.794Z"
     },
     "frontier-73c": {
       "name": "Frontier 73C",
@@ -1308,7 +1546,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16291",
-      "ingestedAt": "2026-08-12T03:13:22.178Z"
+      "ingestedAt": "2026-08-12T04:06:46.651Z"
     },
     "frontiersman": {
       "name": "Frontiersman",
@@ -1331,7 +1569,7 @@
         "ConditionalEffect": "Solo , Catalyst"
       },
       "sourceRevision": "15707",
-      "ingestedAt": "2026-08-12T03:14:32.758Z"
+      "ingestedAt": "2026-08-12T04:07:57.209Z"
     },
     "fusees": {
       "name": "Fusees",
@@ -1356,7 +1594,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14698",
-      "ingestedAt": "2026-08-12T03:14:02.714Z"
+      "ingestedAt": "2026-08-12T04:07:27.181Z"
+    },
+    "gator-legs": {
+      "name": "Gator Legs",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Gator_Legs",
+      "infoboxTitle": "Gator Legs",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Walk and sprint faster in deep water. Also make less noise while crouched in water.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "3",
+      "purchasable": true,
+      "fields": {
+        "Cost": "3",
+        "Unlock": "Bloodline Rank 56",
+        "Category": "Movement",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15619",
+      "ingestedAt": "2026-08-12T04:08:48.277Z"
     },
     "ghoul": {
       "name": "Ghoul",
@@ -1378,7 +1638,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15647",
-      "ingestedAt": "2026-08-12T03:14:46.256Z"
+      "ingestedAt": "2026-08-12T04:08:10.736Z"
     },
     "greyhound": {
       "name": "Greyhound",
@@ -1400,7 +1660,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15620",
-      "ingestedAt": "2026-08-12T03:14:34.267Z"
+      "ingestedAt": "2026-08-12T04:07:58.748Z"
     },
     "hand-crossbow": {
       "name": "Hand Crossbow",
@@ -1434,7 +1694,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "16235",
-      "ingestedAt": "2026-08-12T03:13:01.143Z"
+      "ingestedAt": "2026-08-12T04:06:25.649Z"
     },
     "haymaker": {
       "name": "Haymaker",
@@ -1468,7 +1728,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16189",
-      "ingestedAt": "2026-08-12T03:13:47.695Z"
+      "ingestedAt": "2026-08-12T04:07:12.162Z"
     },
     "heavy-knife": {
       "name": "Heavy Knife",
@@ -1491,7 +1751,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16046",
-      "ingestedAt": "2026-08-12T03:13:53.702Z"
+      "ingestedAt": "2026-08-12T04:07:18.177Z"
     },
     "hellfire-bomb": {
       "name": "Hellfire Bomb",
@@ -1515,7 +1775,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15398",
-      "ingestedAt": "2026-08-12T03:15:46.365Z"
+      "ingestedAt": "2026-08-12T04:09:49.808Z"
     },
     "hive-bomb": {
       "name": "Hive Bomb",
@@ -1539,7 +1799,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16074",
-      "ingestedAt": "2026-08-12T03:15:28.323Z"
+      "ingestedAt": "2026-08-12T04:09:31.794Z"
+    },
+    "hornskin": {
+      "name": "Hornskin",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Hornskin",
+      "infoboxTitle": "Hornskin",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Reduce damage taken from blunt damage by 25%.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "3",
+      "purchasable": true,
+      "fields": {
+        "Cost": "3",
+        "Unlock": "Bloodline Rank 1",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15611",
+      "ingestedAt": "2026-08-12T04:08:49.803Z"
     },
     "hundred-hands": {
       "name": "Hundred Hands",
@@ -1561,7 +1843,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15468",
-      "ingestedAt": "2026-08-12T03:14:55.273Z"
+      "ingestedAt": "2026-08-12T04:08:19.727Z"
     },
     "hunting-bow": {
       "name": "Hunting Bow",
@@ -1595,7 +1877,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16269",
-      "ingestedAt": "2026-08-12T03:13:13.151Z"
+      "ingestedAt": "2026-08-12T04:06:37.674Z"
     },
     "iron-eye": {
       "name": "Iron Eye",
@@ -1617,7 +1899,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15591",
-      "ingestedAt": "2026-08-12T03:14:41.758Z"
+      "ingestedAt": "2026-08-12T04:08:06.218Z"
     },
     "katana": {
       "name": "Katana",
@@ -1640,7 +1922,7 @@
         "HeavyStaminaConsumption": "35"
       },
       "sourceRevision": "15067",
-      "ingestedAt": "2026-08-12T03:13:59.714Z"
+      "ingestedAt": "2026-08-12T04:07:24.178Z"
     },
     "kiteskin": {
       "name": "Kiteskin",
@@ -1663,7 +1945,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15704",
-      "ingestedAt": "2026-08-12T03:14:35.746Z"
+      "ingestedAt": "2026-08-12T04:08:00.214Z"
     },
     "knife": {
       "name": "Knife",
@@ -1686,7 +1968,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16218",
-      "ingestedAt": "2026-08-12T03:13:52.223Z"
+      "ingestedAt": "2026-08-12T04:07:16.704Z"
     },
     "knuckle-knife": {
       "name": "Knuckle Knife",
@@ -1709,7 +1991,7 @@
         "HeavyStaminaConsumption": "21"
       },
       "sourceRevision": "16045",
-      "ingestedAt": "2026-08-12T03:14:17.735Z"
+      "ingestedAt": "2026-08-12T04:07:42.214Z"
     },
     "krag-m1894": {
       "name": "Krag",
@@ -1743,7 +2025,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15566",
-      "ingestedAt": "2026-08-12T03:13:38.685Z"
+      "ingestedAt": "2026-08-12T04:07:03.157Z"
     },
     "lebel-1886": {
       "name": "Lebel 1886",
@@ -1777,7 +2059,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15570",
-      "ingestedAt": "2026-08-12T03:13:41.694Z"
+      "ingestedAt": "2026-08-12T04:07:06.167Z"
     },
     "lemat-mark-ii": {
       "name": "LeMat",
@@ -1811,7 +2093,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16190",
-      "ingestedAt": "2026-08-12T03:13:07.167Z"
+      "ingestedAt": "2026-08-12T04:06:31.647Z"
     },
     "levering": {
       "name": "Levering",
@@ -1833,7 +2115,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15592",
-      "ingestedAt": "2026-08-12T03:14:26.740Z"
+      "ingestedAt": "2026-08-12T04:07:51.203Z"
     },
     "lightfoot": {
       "name": "Lightfoot",
@@ -1855,7 +2137,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15622",
-      "ingestedAt": "2026-08-12T03:14:37.258Z"
+      "ingestedAt": "2026-08-12T04:08:01.751Z"
     },
     "liquid-fire-bomb": {
       "name": "Liquid Fire Bomb",
@@ -1880,7 +2162,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15396",
-      "ingestedAt": "2026-08-12T03:15:26.805Z"
+      "ingestedAt": "2026-08-12T04:09:30.310Z"
     },
     "magpie": {
       "name": "Magpie",
@@ -1903,7 +2185,29 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15708",
-      "ingestedAt": "2026-08-12T03:15:05.792Z"
+      "ingestedAt": "2026-08-12T04:08:30.236Z"
+    },
+    "martialist": {
+      "name": "Martialist",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Martialist",
+      "infoboxTitle": "Martialist",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Allows a Katana to be sheathed, which enables a first strike attack that does extra damage.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "2",
+      "purchasable": true,
+      "fields": {
+        "Cost": "2",
+        "Unlock": "Bloodline Rank 28",
+        "Category": "Offensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15602",
+      "ingestedAt": "2026-08-12T04:08:51.262Z"
     },
     "martini-henry-ic1": {
       "name": "Martini-Henry",
@@ -1937,7 +2241,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16388",
-      "ingestedAt": "2026-08-12T03:13:32.681Z"
+      "ingestedAt": "2026-08-12T04:06:57.146Z"
     },
     "medical-pack": {
       "name": "Medical Pack",
@@ -1958,7 +2262,29 @@
         "HeavyMeleeDamage": "31"
       },
       "sourceRevision": "15196",
-      "ingestedAt": "2026-08-12T03:15:41.822Z"
+      "ingestedAt": "2026-08-12T04:09:45.322Z"
+    },
+    "mithridatist": {
+      "name": "Mithridatist",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Mithridatist",
+      "infoboxTitle": "Mithridatist",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Drastically reduces the time needed to recover from poisoning.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "3",
+      "purchasable": true,
+      "fields": {
+        "Cost": "3",
+        "Unlock": "Bloodline Rank 40",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15612",
+      "ingestedAt": "2026-08-12T04:08:52.769Z"
     },
     "mosin-nagant-avtomat": {
       "name": "Mosin-Nagant Avtomat",
@@ -1992,7 +2318,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15582",
-      "ingestedAt": "2026-08-12T03:13:44.698Z"
+      "ingestedAt": "2026-08-12T04:07:09.171Z"
     },
     "mosin-nagant-m1891": {
       "name": "Mosin-Nagant",
@@ -2026,7 +2352,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15579",
-      "ingestedAt": "2026-08-12T03:13:40.196Z"
+      "ingestedAt": "2026-08-12T04:07:04.696Z"
     },
     "nagant-m1895": {
       "name": "Nagant M1895",
@@ -2060,7 +2386,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16192",
-      "ingestedAt": "2026-08-12T03:12:53.649Z"
+      "ingestedAt": "2026-08-12T04:06:18.145Z"
     },
     "nagant-officer-carbine": {
       "name": "Officer Carbine",
@@ -2094,7 +2420,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15385",
-      "ingestedAt": "2026-08-12T03:13:11.655Z"
+      "ingestedAt": "2026-08-12T04:06:36.139Z"
     },
     "necromancer": {
       "name": "Necromancer",
@@ -2118,7 +2444,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15709",
-      "ingestedAt": "2026-08-12T03:14:52.256Z"
+      "ingestedAt": "2026-08-12T04:08:16.727Z"
     },
     "nitro-express": {
       "name": "Nitro Express",
@@ -2152,7 +2478,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15976",
-      "ingestedAt": "2026-08-12T03:13:46.184Z"
+      "ingestedAt": "2026-08-12T04:07:10.703Z"
     },
     "packmule": {
       "name": "Packmule",
@@ -2174,7 +2500,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15651",
-      "ingestedAt": "2026-08-12T03:14:31.258Z"
+      "ingestedAt": "2026-08-12T04:07:55.715Z"
     },
     "pain-sense": {
       "name": "Pain Sense",
@@ -2197,7 +2523,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15710",
-      "ingestedAt": "2026-08-12T03:15:02.783Z"
+      "ingestedAt": "2026-08-12T04:08:27.234Z"
     },
     "physician": {
       "name": "Physician",
@@ -2219,7 +2545,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15613",
-      "ingestedAt": "2026-08-12T03:14:29.750Z"
+      "ingestedAt": "2026-08-12T04:07:54.213Z"
     },
     "pitcher": {
       "name": "Pitcher",
@@ -2241,7 +2567,29 @@
         "Type": "Regular"
       },
       "sourceRevision": "15603",
-      "ingestedAt": "2026-08-12T03:14:38.769Z"
+      "ingestedAt": "2026-08-12T04:08:03.220Z"
+    },
+    "poacher": {
+      "name": "Poacher",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Poacher",
+      "infoboxTitle": "Poacher",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Place and disarm Traps quietly.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "1",
+      "purchasable": true,
+      "fields": {
+        "Cost": "1",
+        "Unlock": "Bloodline Rank 36",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15653",
+      "ingestedAt": "2026-08-12T04:08:54.268Z"
     },
     "poison-bomb": {
       "name": "Poison Bomb",
@@ -2266,7 +2614,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16236",
-      "ingestedAt": "2026-08-12T03:15:47.834Z"
+      "ingestedAt": "2026-08-12T04:09:51.327Z"
     },
     "poison-trip-mine": {
       "name": "Poison Trip Mines",
@@ -2291,7 +2639,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16056",
-      "ingestedAt": "2026-08-12T03:14:13.225Z"
+      "ingestedAt": "2026-08-12T04:07:37.706Z"
+    },
+    "poltergeist": {
+      "name": "Poltergeist",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Poltergeist",
+      "infoboxTitle": "Poltergeist",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "While using Dark Sight, remotely manipulate, interact with, and agitate in-world objects and animals. (50m) Also applies to Beetle View.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "2",
+      "purchasable": true,
+      "fields": {
+        "Cost": "2",
+        "Unlock": "Bloodline Rank 62",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15654",
+      "ingestedAt": "2026-08-12T04:08:55.774Z"
     },
     "quad-derringer": {
       "name": "Quad Derringer",
@@ -2324,7 +2694,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15187",
-      "ingestedAt": "2026-08-12T03:14:14.730Z"
+      "ingestedAt": "2026-08-12T04:07:39.200Z"
     },
     "quartermaster": {
       "name": "Quartermaster",
@@ -2346,7 +2716,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15655",
-      "ingestedAt": "2026-08-12T03:14:23.742Z"
+      "ingestedAt": "2026-08-12T04:07:48.207Z"
     },
     "railroad-hammer": {
       "name": "Railroad Hammer",
@@ -2369,7 +2739,28 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15119",
-      "ingestedAt": "2026-08-12T03:13:05.651Z"
+      "ingestedAt": "2026-08-12T04:06:30.134Z"
+    },
+    "rampage": {
+      "name": "Rampage",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Rampage",
+      "infoboxTitle": "Rampage",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Killing an enemy Hunter while at least one Health Chunk is empty triggers a Restoration for your Hunter.",
+      "acquisition": "Burn , Scarce",
+      "acquisitionClasses": [
+        "Scarce",
+        "Burn"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Supportive",
+        "Type": "Burn , Scarce"
+      },
+      "sourceRevision": "15656",
+      "ingestedAt": "2026-08-12T04:09:07.788Z"
     },
     "recovery-shot": {
       "name": "Recovery Shot",
@@ -2390,7 +2781,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16075",
-      "ingestedAt": "2026-08-12T03:15:40.327Z"
+      "ingestedAt": "2026-08-12T04:09:43.803Z"
     },
     "regeneration-shot": {
       "name": "Regeneration Shot",
@@ -2412,7 +2803,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15288",
-      "ingestedAt": "2026-08-12T03:15:13.312Z"
+      "ingestedAt": "2026-08-12T04:09:16.788Z"
     },
     "regeneration-shot-weak": {
       "name": "Regeneration Shot (Weak)",
@@ -2434,7 +2825,49 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15286",
-      "ingestedAt": "2026-08-12T03:15:35.831Z"
+      "ingestedAt": "2026-08-12T04:09:39.330Z"
+    },
+    "relentless": {
+      "name": "Relentless",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Relentless",
+      "infoboxTitle": "Relentless",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Your Hunter won't lose a Health Chunk when downed.",
+      "acquisition": "Burn , Scarce",
+      "acquisitionClasses": [
+        "Scarce",
+        "Burn"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Supportive",
+        "Type": "Burn , Scarce"
+      },
+      "sourceRevision": "15658",
+      "ingestedAt": "2026-08-12T04:09:09.316Z"
+    },
+    "remedy": {
+      "name": "Remedy",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Remedy",
+      "infoboxTitle": "Remedy",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "While using Dark Sight, interact with a Trait Spur within range to trigger a Restoration effect for your team. (25m) Also applies to Beetle view.",
+      "acquisition": "Burn , Scarce",
+      "acquisitionClasses": [
+        "Scarce",
+        "Burn"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Supportive",
+        "Type": "Burn , Scarce"
+      },
+      "sourceRevision": "15659",
+      "ingestedAt": "2026-08-12T04:09:10.788Z"
     },
     "resilience": {
       "name": "Resilience",
@@ -2456,7 +2889,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15660",
-      "ingestedAt": "2026-08-12T03:14:49.265Z"
+      "ingestedAt": "2026-08-12T04:08:13.731Z"
     },
     "romero-77": {
       "name": "Romero 77",
@@ -2490,7 +2923,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16173",
-      "ingestedAt": "2026-08-12T03:13:19.198Z"
+      "ingestedAt": "2026-08-12T04:06:43.660Z"
     },
     "salveskin": {
       "name": "Salveskin",
@@ -2512,7 +2945,29 @@
         "Type": "Regular"
       },
       "sourceRevision": "15614",
-      "ingestedAt": "2026-08-12T03:14:50.864Z"
+      "ingestedAt": "2026-08-12T04:08:15.221Z"
+    },
+    "scopesmith": {
+      "name": "Scopesmith",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Scopesmith",
+      "infoboxTitle": "Scopesmith",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Remain in scope view after firing a shot while using any weapon with a scope.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "2",
+      "purchasable": true,
+      "fields": {
+        "Cost": "2",
+        "Unlock": "Bloodline Rank 22",
+        "Category": "Offensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15604",
+      "ingestedAt": "2026-08-12T04:08:57.270Z"
     },
     "scottfield-model-3": {
       "name": "Scottfield",
@@ -2546,7 +3001,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16261",
-      "ingestedAt": "2026-08-12T03:12:56.649Z"
+      "ingestedAt": "2026-08-12T04:06:21.140Z"
     },
     "serpent": {
       "name": "Serpent",
@@ -2569,7 +3024,47 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15711",
-      "ingestedAt": "2026-08-12T03:14:44.756Z"
+      "ingestedAt": "2026-08-12T04:08:09.224Z"
+    },
+    "shadow": {
+      "name": "Shadow",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Shadow",
+      "infoboxTitle": "Shadow",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Monsters can't see and won't attack you, but they can still hear you.",
+      "acquisition": "Scarce",
+      "acquisitionClasses": [
+        "Scarce"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Supportive",
+        "Type": "Scarce"
+      },
+      "sourceRevision": "15663",
+      "ingestedAt": "2026-08-12T04:09:12.298Z"
+    },
+    "shadow-leap": {
+      "name": "Shadow Leap",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Shadow_Leap",
+      "infoboxTitle": "Shadow Leap",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "Using Dark Sight, channel a Monster within range to jump to its location and kill it instantly. Excludes Targets. (50m)",
+      "acquisition": "Scarce",
+      "acquisitionClasses": [
+        "Scarce"
+      ],
+      "priceStated": null,
+      "purchasable": null,
+      "fields": {
+        "Category": "Movement",
+        "Type": "Scarce"
+      },
+      "sourceRevision": "15772",
+      "ingestedAt": "2026-08-12T04:09:13.787Z"
     },
     "silent-killer": {
       "name": "Silent Killer",
@@ -2591,7 +3086,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15664",
-      "ingestedAt": "2026-08-12T03:14:58.272Z"
+      "ingestedAt": "2026-08-12T04:08:22.727Z"
     },
     "slate": {
       "name": "Slate",
@@ -2625,7 +3120,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15749",
-      "ingestedAt": "2026-08-12T03:13:29.676Z"
+      "ingestedAt": "2026-08-12T04:06:54.146Z"
     },
     "sparks-lrr": {
       "name": "Sparks",
@@ -2659,7 +3154,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16389",
-      "ingestedAt": "2026-08-12T03:13:31.182Z"
+      "ingestedAt": "2026-08-12T04:06:55.669Z"
     },
     "sparks-pistol": {
       "name": "Sparks Pistol",
@@ -2693,7 +3188,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15448",
-      "ingestedAt": "2026-08-12T03:13:08.660Z"
+      "ingestedAt": "2026-08-12T04:06:33.141Z"
     },
     "specter-1882": {
       "name": "Specter 1882",
@@ -2727,7 +3222,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16208",
-      "ingestedAt": "2026-08-12T03:13:28.174Z"
+      "ingestedAt": "2026-08-12T04:06:52.671Z"
     },
     "springfield-1866": {
       "name": "Springfield 1866",
@@ -2761,7 +3256,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16390",
-      "ingestedAt": "2026-08-12T03:13:16.171Z"
+      "ingestedAt": "2026-08-12T04:06:40.653Z"
     },
     "spyglass": {
       "name": "Spyglass",
@@ -2783,7 +3278,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14704",
-      "ingestedAt": "2026-08-12T03:14:04.221Z"
+      "ingestedAt": "2026-08-12T04:07:28.688Z"
     },
     "stalker-beetle": {
       "name": "Stalker Beetle",
@@ -2808,7 +3303,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15340",
-      "ingestedAt": "2026-08-12T03:15:53.844Z"
+      "ingestedAt": "2026-08-12T04:09:57.326Z"
     },
     "stamina-shot": {
       "name": "Stamina Shot",
@@ -2830,7 +3325,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15201",
-      "ingestedAt": "2026-08-12T03:15:14.804Z"
+      "ingestedAt": "2026-08-12T04:09:18.298Z"
     },
     "stamina-shot-weak": {
       "name": "Stamina Shot (Weak)",
@@ -2852,7 +3347,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15202",
-      "ingestedAt": "2026-08-12T03:15:37.332Z"
+      "ingestedAt": "2026-08-12T04:09:40.805Z"
     },
     "steady-aim": {
       "name": "Steady Aim",
@@ -2874,7 +3369,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15697",
-      "ingestedAt": "2026-08-12T03:14:56.782Z"
+      "ingestedAt": "2026-08-12T04:08:21.228Z"
     },
     "sticky-bomb": {
       "name": "Sticky Bomb",
@@ -2899,7 +3394,29 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15432",
-      "ingestedAt": "2026-08-12T03:15:23.819Z"
+      "ingestedAt": "2026-08-12T04:09:27.317Z"
+    },
+    "surefoot": {
+      "name": "Surefoot",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Surefoot",
+      "infoboxTitle": "Surefoot",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "You can sprint while holding primed Throwables, First Aid Kits, and Consumable Shots.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "6",
+      "purchasable": true,
+      "fields": {
+        "Cost": "6",
+        "Unlock": "Bloodline Rank 20",
+        "Category": "Movement",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15624",
+      "ingestedAt": "2026-08-12T04:08:58.770Z"
     },
     "throwing-axes": {
       "name": "Throwing Axes",
@@ -2929,7 +3446,7 @@
         "ThrowStaminaConsumption": "20"
       },
       "sourceRevision": "16051",
-      "ingestedAt": "2026-08-12T03:13:58.210Z"
+      "ingestedAt": "2026-08-12T04:07:22.699Z"
     },
     "throwing-knives": {
       "name": "Throwing Knives",
@@ -2959,7 +3476,7 @@
         "ThrowStaminaConsumption": "15"
       },
       "sourceRevision": "14706",
-      "ingestedAt": "2026-08-12T03:13:56.715Z"
+      "ingestedAt": "2026-08-12T04:07:21.175Z"
     },
     "throwing-spear": {
       "name": "Throwing Spear",
@@ -2989,7 +3506,7 @@
         "ThrowStaminaConsumption": "34"
       },
       "sourceRevision": "15986",
-      "ingestedAt": "2026-08-12T03:14:16.242Z"
+      "ingestedAt": "2026-08-12T04:07:40.727Z"
     },
     "tool-box": {
       "name": "Tool Box",
@@ -3010,7 +3527,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15116",
-      "ingestedAt": "2026-08-12T03:15:50.834Z"
+      "ingestedAt": "2026-08-12T04:09:54.312Z"
     },
     "vetterli-71-karabiner": {
       "name": "Vetterli 71",
@@ -3044,7 +3561,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15170",
-      "ingestedAt": "2026-08-12T03:13:26.680Z"
+      "ingestedAt": "2026-08-12T04:06:51.147Z"
     },
     "vigilant": {
       "name": "Vigilant",
@@ -3067,7 +3584,29 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15712",
-      "ingestedAt": "2026-08-12T03:15:10.292Z"
+      "ingestedAt": "2026-08-12T04:08:34.780Z"
+    },
+    "vigor": {
+      "name": "Vigor",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Vigor",
+      "infoboxTitle": "Vigor",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "While in Dark Sight, doubles the rate at which Health and Stamina regenerate.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "3",
+      "purchasable": true,
+      "fields": {
+        "Cost": "3",
+        "Unlock": "Bloodline Rank 57",
+        "Category": "Defensive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15615",
+      "ingestedAt": "2026-08-12T04:09:00.297Z"
     },
     "vitality-shot": {
       "name": "Vitality Shot",
@@ -3088,7 +3627,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15290",
-      "ingestedAt": "2026-08-12T03:15:11.802Z"
+      "ingestedAt": "2026-08-12T04:09:15.322Z"
     },
     "vitality-shot-weak": {
       "name": "Vitality Shot (Weak)",
@@ -3109,7 +3648,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15418",
-      "ingestedAt": "2026-08-12T03:15:34.333Z"
+      "ingestedAt": "2026-08-12T04:09:37.798Z"
     },
     "vulture": {
       "name": "Vulture",
@@ -3131,7 +3670,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15666",
-      "ingestedAt": "2026-08-12T03:14:59.788Z"
+      "ingestedAt": "2026-08-12T04:08:24.223Z"
     },
     "waxed-dynamite-stick": {
       "name": "Waxed Dynamite Stick",
@@ -3156,7 +3695,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14732",
-      "ingestedAt": "2026-08-12T03:15:43.330Z"
+      "ingestedAt": "2026-08-12T04:09:46.807Z"
     },
     "whispersmith": {
       "name": "Whispersmith",
@@ -3178,7 +3717,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15667",
-      "ingestedAt": "2026-08-12T03:15:01.281Z"
+      "ingestedAt": "2026-08-12T04:08:25.735Z"
     },
     "winfield-1876-centennial": {
       "name": "Centennial",
@@ -3212,7 +3751,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16150",
-      "ingestedAt": "2026-08-12T03:13:34.198Z"
+      "ingestedAt": "2026-08-12T04:06:58.684Z"
     },
     "winfield-m1873": {
       "name": "Ranger 73",
@@ -3246,7 +3785,29 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15379",
-      "ingestedAt": "2026-08-12T03:13:17.671Z"
+      "ingestedAt": "2026-08-12T04:06:42.143Z"
+    },
+    "witness": {
+      "name": "Witness",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Traits/Witness",
+      "infoboxTitle": "Witness",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "While using Dark Sight, dead Hunters and Monsters are visible. Also applies to Beetle View.",
+      "acquisition": "Regular",
+      "acquisitionClasses": [
+        "Regular"
+      ],
+      "priceStated": "4",
+      "purchasable": true,
+      "fields": {
+        "Cost": "4",
+        "Unlock": "Bloodline Rank 44",
+        "Category": "Supportive",
+        "Type": "Regular"
+      },
+      "sourceRevision": "15668",
+      "ingestedAt": "2026-08-12T04:09:01.775Z"
     }
   }
 }

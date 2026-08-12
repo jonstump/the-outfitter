@@ -285,6 +285,57 @@ export const TRAITS = [
   ["ambidextrous", "Ambidextrous", 3, "Combat"],
   ["dauntless", "Dauntless", 1, "Combat"],
   ["vigilant", "Vigilant", 1, "Utility"],
+  // ---------------------------------------------------------------------------
+  // Appended 2026-08-12 (#157). APPENDED, never inserted: the wire format encodes a trait pick as
+  // an index into this array, so inserting a row would shift every saved loadout and share link
+  // written before it.
+  //
+  // Costs are the wiki's own, read by `node scripts/scrape-stats.mjs --discover --only=traits` after
+  // #231 taught discovery to crawl all three rarity indexes. `group` is hand-assigned, per SPEC-0007
+  // REQ "Fields the Scraper Must Not Derive" — the wiki's functional axis is
+  // Offensive/Defensive/Movement/Supportive and has no bucket matching `Stealth` or `Medical`, so no
+  // mechanical mapping exists. Calibrated against rows already here: `salveskin` (fire mitigation)
+  // and `determination` (stamina) are Medical, so mitigation and stamina are Medical; `pain-sense`
+  // (senses Hunters) is Stealth while `vigilant` (highlights traps) is Utility, which is what splits
+  // Blast Sense from Blade Seer and Witness; `beastface` (animals ignore you) is Stealth, which is
+  // why Shadow is.
+
+  // Regular traits, purchasable, costs as stated on the wiki.
+  ["adrenaline", "Adrenaline", 1, "Medical"],
+  ["assailant", "Assailant", 1, "Combat"],
+  ["blade-seer", "Blade Seer", 1, "Utility"],
+  ["blast-sense", "Blast Sense", 2, "Stealth"],
+  ["bloodless", "Bloodless", 3, "Medical"],
+  ["bulwark", "Bulwark", 2, "Medical"],
+  ["decoy-supply", "Decoy Supply", 1, "Utility"],
+  ["fast-fingers", "Fast Fingers", 4, "Combat"],
+  ["gator-legs", "Gator Legs", 3, "Mobility"],
+  ["hornskin", "Hornskin", 3, "Medical"],
+  ["martialist", "Martialist", 2, "Combat"],
+  ["mithridatist", "Mithridatist", 3, "Medical"],
+  ["poacher", "Poacher", 1, "Stealth"],
+  ["poltergeist", "Poltergeist", 2, "Utility"],
+  ["scopesmith", "Scopesmith", 2, "Combat"],
+  ["surefoot", "Surefoot", 6, "Mobility"],
+  ["vigor", "Vigor", 3, "Medical"],
+  ["witness", "Witness", 4, "Utility"],
+
+  // Scarce traits. Cost 0 per ADR-0013: they come only from a match, so they can be sold but never
+  // bought, and they have no purchase value. The zero is authored here by a human applying that
+  // decision — the scrape records `priceStated: null` and `acquisitionClasses: ["Scarce", ...]` and
+  // never writes a cost, because mapping "Scarce" to a number is a game rule.
+  //
+  // Each of these is asserted against the scrape in both directions by `itemStats.test.js`: a cost of
+  // 0 here requires Scarce evidence there, and Scarce evidence there requires a 0 here. That check is
+  // the whole reason a hand-authored 0 — which looks exactly like a price nobody supplied — is safe.
+  ["berserker", "Berserker", 0, "Combat"],
+  ["catalyst", "Catalyst", 0, "Utility"],
+  ["death-cheat", "Death Cheat", 0, "Utility"],
+  ["rampage", "Rampage", 0, "Medical"],
+  ["relentless", "Relentless", 0, "Medical"],
+  ["remedy", "Remedy", 0, "Medical"],
+  ["shadow", "Shadow", 0, "Stealth"],
+  ["shadow-leap", "Shadow Leap", 0, "Mobility"],
 ];
 
 export const TRAIT_GROUPS = ["Combat", "Medical", "Mobility", "Stealth", "Utility"];
