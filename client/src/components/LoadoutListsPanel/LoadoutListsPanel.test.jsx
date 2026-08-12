@@ -1105,8 +1105,8 @@ const drawn = (id) => [...previewOf(id).querySelectorAll("img")].map((img) => im
 // only place the tool/consumable split is observable from outside, so pinning it is what
 // stops TOOLS/toolThumb being substituted for CONS/consThumb without a test noticing
 // (SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback").
-const SPARKS = `/images/weapons/${slugify("Sparks LRR")}.jpg`;
-const CONVERSION = `/images/weapons/${slugify("Caldwell Conversion Pistol")}.jpg`;
+const SPARKS = `/images/weapons/${slugify("Sparks")}.jpg`;
+const CONVERSION = `/images/weapons/${slugify("Conversion")}.jpg`;
 const FIRST_AID = `/images/tools/${slugify("First Aid Kit")}.jpg`;
 const KNIFE = `/images/tools/${slugify("Knife")}.jpg`;
 const VITALITY = `/images/consumables/${slugify("Vitality Shot")}.jpg`;
@@ -1278,7 +1278,7 @@ describe("the categorised loadout preview", () => {
 
     // fromData already dropped the unknown ids; the preview neither re-checks nor back-fills.
     expect(drawn("1")).toEqual([SPARKS, FIRST_AID, QUARTERMASTER]);
-    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks LRR, 1 tool, 1 trait");
+    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks, 1 tool, 1 trait");
     expect(screen.getByRole("button", { name: "stale" })).toBeInTheDocument();
   });
 
@@ -1290,7 +1290,7 @@ describe("the categorised loadout preview", () => {
     // tool names in one label is not a summary.
     expect(
       screen.getByRole("img", {
-        name: "Holds Sparks LRR, Caldwell Conversion Pistol, 3 tools, 2 consumables, 1 trait",
+        name: "Holds Sparks, Conversion, 3 tools, 2 consumables, 1 trait",
       })
     ).toBe(previewOf("1"));
     expect(within(cardOf("1")).getAllByRole("img")).toHaveLength(1);
@@ -1332,7 +1332,7 @@ describe("the categorised loadout preview", () => {
     // The label still states what the LOADOUT holds rather than the grid's capacity — the two
     // simply coincide now, because the eighteen-trait record reaches the card as fifteen
     // (ADR-0012). Announcing eighteen here would describe traits the app has dropped.
-    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks LRR, 15 traits");
+    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks, 15 traits");
     expect(filledIn("preview-traits-1")).toHaveLength(15);
   });
 
