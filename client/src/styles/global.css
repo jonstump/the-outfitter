@@ -864,12 +864,16 @@ button {
    requirement. `pointer-events: none` keeps the tip from eating the click that removes the
    trait.
 
-   ONE line, and the CSS says so. It carries the trait name and nothing else — the cost is
-   badged on the icon, so repeating it here said the same thing twice in one hover. An earlier
-   draft stacked name over cost and left behind a flex column plus `.trait-cell-tip-name` /
-   `.trait-cell-tip-up` rules that no element ever carried; those are gone rather than kept
-   against a second line that may never come. Adding a description line (#228) means wrapping
-   the name in its own element and restoring the column here — a real edit, not a free slot. */
+   TWO lines now: the trait name, then its scraped description (#228). The cost is still absent —
+   it is badged on the icon, so repeating it here said the same thing twice in one hover. This is
+   the edit the previous revision of this comment said would be needed: the flex column and the
+   `.trait-cell-tip-name` rule are restored deliberately, against a real second element, rather
+   than having been left standing on the chance one arrived.
+
+   `white-space: pre-line` is load-bearing, not formatting taste. A description is the wiki's lead
+   paragraphs newline-joined, and the only trait with two is Necromancer, whose second is its SOLO
+   behaviour — a separate rule from its base effect. Collapsing that newline would run two distinct
+   mechanics into one sentence. */
 .trait-cell-tip {
   position: absolute;
   left: 50%;
@@ -877,6 +881,8 @@ button {
   transform: translateX(-50%);
   z-index: 5;
   display: none;
+  flex-direction: column;
+  gap: 2px;
   width: max-content;
   max-width: 180px;
   padding: 5px 8px;
@@ -886,9 +892,30 @@ button {
   border: 1px solid var(--border);
   pointer-events: none;
 }
+.trait-cell-tip-name {
+  font-weight: 600;
+}
+/* Dimmer and smaller than the name, so the tip reads as "what this is" before "what it does".
+
+   Bounded at six lines because it is unbounded input: descriptions are scraped, the longest today
+   runs to about 150 characters, and nothing stops the wiki gaining a longer one. A 180px-wide tip
+   over a 98px cell would otherwise grow past the panel. `-webkit-line-clamp` is the only clamp with
+   real support; `max-height` backs it up so a browser without it still bounds the box rather than
+   letting the tip run. */
+.trait-cell-tip-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+  max-height: 8.4em;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  white-space: pre-line;
+}
 .trait-cell-filled:hover .trait-cell-tip,
 .trait-cell-filled:focus-visible .trait-cell-tip {
-  display: block;
+  display: flex;
 }
 
 /* The top row's tip opens downward instead.

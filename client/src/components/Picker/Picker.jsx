@@ -4,7 +4,6 @@ import {
   AMMO_LABEL,
   CONS,
   CONS_GROUPS,
-  QM,
   TOOLS,
   TOOL_GROUPS,
   TRAITS,
@@ -16,6 +15,7 @@ import {
   traitThumb,
   weaponThumb,
 } from "../../data/catalog.js";
+import { descriptionFor } from "../../data/itemStats.js";
 import { capMax, consCount, slotMax, upTotal } from "../../utils/calc.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
@@ -110,7 +110,15 @@ function buildRows(tab, ui, loadout, dispatch) {
       return {
         key: x.i,
         name: x.t[1],
-        meta: x.t[0] === QM ? "Raises weapon capacity to 6" : x.t[3] + " trait",
+        // The scraped description, falling back to the group label. Until #228 this row showed
+        // `x.t[3] + " trait"` for every trait but Quartermaster, so "Combat trait" and "Medical trait"
+        // read as descriptions while being the `group` field with a word appended — and
+        // Quartermaster's real prose was hand-written here, which also meant it went stale: the wiki
+        // says "Gain +1 Weapon Capacity", not "Raises weapon capacity to 6".
+        //
+        // The fallback stays because `descriptionFor` is specified to return null (a catalog row can
+        // predate the dataset), and a row with no meta at all reads as a rendering fault.
+        meta: descriptionFor(x.t[0]) ?? x.t[3] + " trait",
         // "pts", not "UP" — the app names this unit "Trait points" in the header, and the
         // badge is the only cost signal on a trait row (traits have no dollar cost, so
         // `costStr` is empty), so unlike the header stat and the trait-cell hover the number

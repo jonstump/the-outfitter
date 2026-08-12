@@ -11,6 +11,7 @@
       "infoboxTitle": "1890 Cavalry",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "Springfield made, breech-loading trapdoor cavalry carbine. Fires single shots at medium range with high damage.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "56",
@@ -36,7 +37,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16387",
-      "ingestedAt": "2026-08-12T01:09:10.476Z"
+      "ingestedAt": "2026-08-12T03:13:49.224Z"
     },
     "alert-trip-mine": {
       "name": "Alert Trip Mines",
@@ -44,6 +45,7 @@
       "infoboxTitle": "Alert Trip Mines",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "This portable tripwire mine releases firecrackers and a small flare, alerting others to its location. Comes in a pack of four.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -58,7 +60,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16057",
-      "ingestedAt": "2026-08-12T01:09:31.483Z"
+      "ingestedAt": "2026-08-12T03:14:10.220Z"
     },
     "ambidextrous": {
       "name": "Ambidextrous",
@@ -66,6 +68,7 @@
       "infoboxTitle": "Ambidextrous",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Quicker reloading of matched pairs, and custom clip reloads for semi-auto pistol sets.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -79,7 +82,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15632",
-      "ingestedAt": "2026-08-12T01:10:28.536Z"
+      "ingestedAt": "2026-08-12T03:15:07.306Z"
     },
     "ammo-box": {
       "name": "Ammo Box",
@@ -87,6 +90,7 @@
       "infoboxTitle": "Ammo Box",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "This small portable Ammo Box partially refills your weapons' extra ammunition, including special ammunition types.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "65",
@@ -99,7 +103,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15275",
-      "ingestedAt": "2026-08-12T01:11:10.581Z"
+      "ingestedAt": "2026-08-12T03:15:49.352Z"
     },
     "antidote-shot": {
       "name": "Antidote Shot",
@@ -107,6 +111,7 @@
       "infoboxTitle": "Antidote Shot",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Instantly cures and prevents all poison effects for a long duration. Physical damage associated with poison attacks still applies.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "55",
@@ -120,7 +125,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15190",
-      "ingestedAt": "2026-08-12T01:10:37.561Z"
+      "ingestedAt": "2026-08-12T03:15:16.316Z"
     },
     "antidote-shot-weak": {
       "name": "Antidote Shot (Weak)",
@@ -128,6 +133,7 @@
       "infoboxTitle": "Antidote Shot (Weak)",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "Instantly cures and prevents all poison effects for a short duration. Physical damage associated with poison attacks still applies.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -141,7 +147,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15191",
-      "ingestedAt": "2026-08-12T01:11:00.068Z"
+      "ingestedAt": "2026-08-12T03:15:38.826Z"
     },
     "bear-traps": {
       "name": "Bear Traps",
@@ -149,6 +155,7 @@
       "infoboxTitle": "Bear Traps",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "This portable foothold trap clamps loudly shut when its trigger plate is touched, inflicting bleeding damage on its victim. Comes in a pack of three.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "70",
@@ -164,7 +171,7 @@
         "HeavyMeleeDamage": "67"
       },
       "sourceRevision": "15182",
-      "ingestedAt": "2026-08-12T01:09:43.496Z"
+      "ingestedAt": "2026-08-12T03:14:22.229Z"
     },
     "beastface": {
       "name": "Beastface",
@@ -172,6 +179,7 @@
       "infoboxTitle": "Beastface",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Reduce reaction range of animals (doesn't affect Monsters like Hellhounds ).\nCATALYST: Your Hunter will not be noticed at all by animals, and won't break Branches.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -186,7 +194,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15705",
-      "ingestedAt": "2026-08-12T01:10:15.032Z"
+      "ingestedAt": "2026-08-12T03:14:53.774Z"
     },
     "berthier-1892": {
       "name": "Berthier 1892",
@@ -194,6 +202,7 @@
       "infoboxTitle": "Berthier 1892",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "French made, bolt-action carbine. High power for its light barrel. Partial reloads are punishing.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "380",
@@ -219,7 +228,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15765",
-      "ingestedAt": "2026-08-12T01:08:56.973Z"
+      "ingestedAt": "2026-08-12T03:13:35.676Z"
     },
     "big-dynamite-bundle": {
       "name": "Big Dynamite Bundle",
@@ -227,6 +236,7 @@
       "infoboxTitle": "Big Dynamite Bundle",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "A bundle of seven dynamite sticks, for when something really needs to be blown up.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "110",
@@ -243,7 +253,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16069",
-      "ingestedAt": "2026-08-12T01:10:42.057Z"
+      "ingestedAt": "2026-08-12T03:15:20.819Z"
     },
     "blank-fire-decoys": {
       "name": "Blank Fire Decoys",
@@ -251,6 +261,7 @@
       "infoboxTitle": "Blank Fire Decoys",
       "selectedBy": "canonical-title",
       "variantCount": 2,
+      "description": "A decoy that imitates the sound of a gunshot on impact. Useful to distract and confuse enemies. Comes in a pack of six.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "45",
@@ -266,7 +277,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13984",
-      "ingestedAt": "2026-08-12T01:09:28.478Z"
+      "ingestedAt": "2026-08-12T03:14:07.237Z"
     },
     "bolt-thrower": {
       "name": "Bolt Thrower",
@@ -274,6 +285,7 @@
       "infoboxTitle": "Bolt Thrower",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Reduced reload time for Crossbows, Bomb Launchers, and Bomb Lances.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -287,7 +299,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15465",
-      "ingestedAt": "2026-08-12T01:10:04.515Z"
+      "ingestedAt": "2026-08-12T03:14:43.252Z"
     },
     "bomb-lance": {
       "name": "Bomb Lance",
@@ -295,6 +307,7 @@
       "infoboxTitle": "Bomb Lance",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Bladed harpoon launcher, adapted to fire projectiles with a delayed explosive. Lethal at short range but cumbersome to reload.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "199",
@@ -319,7 +332,7 @@
         "HeavyStaminaConsumption": "50"
       },
       "sourceRevision": "15026",
-      "ingestedAt": "2026-08-12T01:08:44.969Z"
+      "ingestedAt": "2026-08-12T03:13:23.669Z"
     },
     "bornheim-no-3": {
       "name": "Bornheim No. 3",
@@ -327,6 +340,7 @@
       "infoboxTitle": "Bornheim No. 3",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "German made, semi-automatic pistol. High fire-rate and velocity, and low recoil. Balanced by low power and wasteful reloads. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "146",
@@ -352,7 +366,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16283",
-      "ingestedAt": "2026-08-12T01:08:19.428Z"
+      "ingestedAt": "2026-08-12T03:12:58.175Z"
     },
     "bulletgrubber": {
       "name": "Bulletgrubber",
@@ -360,6 +374,7 @@
       "infoboxTitle": "Bulletgrubber",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Recover unfired round when performing partial reloads.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -373,7 +388,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15636",
-      "ingestedAt": "2026-08-12T01:10:01.513Z"
+      "ingestedAt": "2026-08-12T03:14:40.256Z"
     },
     "caldwell-conversion-pistol": {
       "name": "Conversion",
@@ -381,6 +396,7 @@
       "infoboxTitle": "Conversion",
       "selectedBy": "canonical-title",
       "variantCount": 12,
+      "description": "Caldwell made, single-action revolver. Slow to reload, but reliable and accurate. Converted to fire cartridges. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "55",
@@ -406,7 +422,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16153",
-      "ingestedAt": "2026-08-12T01:08:16.446Z"
+      "ingestedAt": "2026-08-12T03:12:55.170Z"
     },
     "caldwell-conversion-uppercut": {
       "name": "Uppercut",
@@ -414,6 +430,7 @@
       "infoboxTitle": "Uppercut",
       "selectedBy": "canonical-title",
       "variantCount": 11,
+      "description": "Caldwell made, single-action revolver. Based on the Conversion, this fires Long Ammo for more damage, but kicks like a mule. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "310",
@@ -439,7 +456,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16179",
-      "ingestedAt": "2026-08-12T01:08:31.447Z"
+      "ingestedAt": "2026-08-12T03:13:10.155Z"
     },
     "caldwell-pax": {
       "name": "Pax",
@@ -447,6 +464,7 @@
       "infoboxTitle": "Pax",
       "selectedBy": "canonical-title",
       "variantCount": 11,
+      "description": "Caldwell made, single-action revolver. Reliable, accurate, and sturdy. Once brought peace to the lawless west. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "80",
@@ -472,7 +490,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16266",
-      "ingestedAt": "2026-08-12T01:08:20.947Z"
+      "ingestedAt": "2026-08-12T03:12:59.659Z"
     },
     "caldwell-rival-78": {
       "name": "Rival 78",
@@ -480,6 +498,7 @@
       "infoboxTitle": "Rival 78",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "Caldwell made, break-action shotgun with two barrels. High damage but high pellet spread, two-tapping gives it an edge.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "170",
@@ -505,7 +524,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15751",
-      "ingestedAt": "2026-08-12T01:08:46.455Z"
+      "ingestedAt": "2026-08-12T03:13:25.178Z"
     },
     "cavalry-saber": {
       "name": "Cavalry Saber",
@@ -513,6 +532,7 @@
       "infoboxTitle": "Cavalry Saber",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "One-handed saber in use since the Civil War. Lightweight with good reach.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "50",
@@ -527,7 +547,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15966",
-      "ingestedAt": "2026-08-12T01:08:23.968Z"
+      "ingestedAt": "2026-08-12T03:13:02.653Z"
     },
     "chaos-bomb": {
       "name": "Chaos Bomb",
@@ -535,6 +555,7 @@
       "infoboxTitle": "Chaos Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Set of firecrackers that can be used to temporarily distract nearby enemies. Duration of about 30 seconds.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "15",
@@ -550,7 +571,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10096",
-      "ingestedAt": "2026-08-12T01:10:51.057Z"
+      "ingestedAt": "2026-08-12T03:15:29.824Z"
     },
     "choke-beetle": {
       "name": "Choke Beetle",
@@ -558,6 +579,7 @@
       "infoboxTitle": "Choke Beetle",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Choke Beetles are bred to find and track prey, giving Hunters a view from above. They have also evolved to explode into a cloud of suffocating gas, which they themselves are immune to.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "22",
@@ -575,7 +597,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14806",
-      "ingestedAt": "2026-08-12T01:11:13.584Z"
+      "ingestedAt": "2026-08-12T03:15:52.365Z"
     },
     "choke-bombs": {
       "name": "Choke Bombs",
@@ -583,6 +605,7 @@
       "infoboxTitle": "Choke Bombs",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "The Choke Bomb exudes a gas that extinguishes any flames within its radius while active–as well as preventing new fires form being lit–and induces heavy coughing. Comes in a pack of two.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "25",
@@ -600,7 +623,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16047",
-      "ingestedAt": "2026-08-12T01:09:40.493Z"
+      "ingestedAt": "2026-08-12T03:14:19.246Z"
     },
     "combat-axe": {
       "name": "Combat Axe",
@@ -608,6 +631,7 @@
       "infoboxTitle": "Combat Axe",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "Two-handed axe that swings slowly but splits skulls.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "40",
@@ -622,7 +646,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15042",
-      "ingestedAt": "2026-08-12T01:08:25.433Z"
+      "ingestedAt": "2026-08-12T03:13:04.163Z"
     },
     "concertina-bomb": {
       "name": "Concertina Bomb",
@@ -630,6 +654,7 @@
       "infoboxTitle": "Concertina Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "Spring-loaded razorwire coil that unfolded violently when thrown. Shreds and entangles anything that tries to move through.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "38",
@@ -645,7 +670,7 @@
         "HeavyMeleeDamage": "112"
       },
       "sourceRevision": "15277",
-      "ingestedAt": "2026-08-12T01:10:54.061Z"
+      "ingestedAt": "2026-08-12T03:15:32.820Z"
     },
     "concertina-trip-mine": {
       "name": "Concertina Trip Mines",
@@ -653,6 +678,7 @@
       "infoboxTitle": "Concertina Trip Mines",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "This portable tripwire mine deploys a small concertina bundle perfect for blocking doors and windows. Comes in a pack of two.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "90",
@@ -668,7 +694,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16058",
-      "ingestedAt": "2026-08-12T01:09:32.997Z"
+      "ingestedAt": "2026-08-12T03:14:11.726Z"
     },
     "conduit": {
       "name": "Conduit",
@@ -676,6 +702,7 @@
       "infoboxTitle": "Conduit",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Get a Health and Stamina boost when your team picks up a Clue or closes a Rift.\nSOLO: Doubles the effects of investigating a Clue.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -690,7 +717,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15706",
-      "ingestedAt": "2026-08-12T01:10:25.529Z"
+      "ingestedAt": "2026-08-12T03:15:04.277Z"
     },
     "crossbow": {
       "name": "Crossbow",
@@ -698,6 +725,7 @@
       "infoboxTitle": "Crossbow",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "Crossbow that fires powerful bolts. Quiet at range, but cumbersome with a long reload. Bolts can be recovered and reused.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "50",
@@ -723,7 +751,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15045",
-      "ingestedAt": "2026-08-12T01:08:41.972Z"
+      "ingestedAt": "2026-08-12T03:13:20.666Z"
     },
     "crown-king-auto-5": {
       "name": "Auto-5",
@@ -731,6 +759,7 @@
       "infoboxTitle": "Auto-5",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Crown & King made, semi-automatic shotgun. Dominates close range with high power and fire-rate, but has a strong recoil.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "600",
@@ -756,7 +785,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16186",
-      "ingestedAt": "2026-08-12T01:09:04.480Z"
+      "ingestedAt": "2026-08-12T03:13:43.185Z"
     },
     "dark-dynamite-satchel": {
       "name": "Dark Dynamite Satchel",
@@ -764,6 +793,7 @@
       "infoboxTitle": "Dark Dynamite Satchel",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "A deployable bundle of dynamite sticks that are detonated remotely via Dark Sight. Can be attached to walls and floors.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "100",
@@ -779,7 +809,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16070",
-      "ingestedAt": "2026-08-12T01:11:06.087Z"
+      "ingestedAt": "2026-08-12T03:15:44.832Z"
     },
     "dauntless": {
       "name": "Dauntless",
@@ -787,6 +817,7 @@
       "infoboxTitle": "Dauntless",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Thrown explosives can be defused when interacting with them.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -800,7 +831,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15609",
-      "ingestedAt": "2026-08-12T01:10:30.058Z"
+      "ingestedAt": "2026-08-12T03:15:08.799Z"
     },
     "decoy-fuses": {
       "name": "Decoy Fuses",
@@ -808,6 +839,7 @@
       "infoboxTitle": "Decoy Fuses",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Pack of Decoy Fuses that can be used to breach closed doors and window shutters. It can also imitate the behavior of a lit bomb and can fool your enemies into clearing a space. Comes in a pack of three.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -824,7 +856,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15183",
-      "ingestedAt": "2026-08-12T01:09:29.993Z"
+      "ingestedAt": "2026-08-12T03:14:08.722Z"
     },
     "decoys": {
       "name": "Decoys",
@@ -832,6 +864,7 @@
       "infoboxTitle": "Decoys",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "A bag of scrap metal and glass. When thrown the noise can be effectively used to distract or divert enemies. Comes in a pack of twelve.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "6",
@@ -847,7 +880,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10076",
-      "ingestedAt": "2026-08-12T01:09:27.009Z"
+      "ingestedAt": "2026-08-12T03:14:05.723Z"
     },
     "derringer-pennyshot": {
       "name": "Derringer Pennyshot",
@@ -855,6 +888,7 @@
       "infoboxTitle": "Derringer Pennyshot",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "A small, light pistol tool that holds two Penny Shot Ammo rounds. Perfect in a pinch.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "63",
@@ -879,7 +913,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16044",
-      "ingestedAt": "2026-08-12T01:09:42.018Z"
+      "ingestedAt": "2026-08-12T03:14:20.732Z"
     },
     "determination": {
       "name": "Determination",
@@ -887,6 +921,7 @@
       "infoboxTitle": "Determination",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Stamina recovery starts sooner.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -900,7 +935,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15643",
-      "ingestedAt": "2026-08-12T01:10:09.029Z"
+      "ingestedAt": "2026-08-12T03:14:47.764Z"
     },
     "doctor": {
       "name": "Doctor",
@@ -908,6 +943,7 @@
       "infoboxTitle": "Doctor",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Doubles the amount of Health restored by First Aid Kit.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -921,7 +957,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15610",
-      "ingestedAt": "2026-08-12T01:09:49.502Z"
+      "ingestedAt": "2026-08-12T03:14:28.239Z"
     },
     "dolch-96": {
       "name": "Dolch 96",
@@ -929,6 +965,7 @@
       "infoboxTitle": "Dolch 96",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Ludwig Arms made, semi-automatic pistol. High power and fire-rate. When empty, can be reloaded with a stripper clip. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "690",
@@ -954,7 +991,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15217",
-      "ingestedAt": "2026-08-12T01:08:35.946Z"
+      "ingestedAt": "2026-08-12T03:13:14.661Z"
     },
     "drilling": {
       "name": "Drilling",
@@ -962,6 +999,7 @@
       "infoboxTitle": "Drilling",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "German made, break-action combination firearm with two rifle barrels and single shotgun underbarrel. Highly flexible.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "510",
@@ -987,7 +1025,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16155",
-      "ingestedAt": "2026-08-12T01:08:58.461Z"
+      "ingestedAt": "2026-08-12T03:13:37.178Z"
     },
     "dusters": {
       "name": "Dusters",
@@ -995,6 +1033,7 @@
       "infoboxTitle": "Dusters",
       "selectedBy": "canonical-title",
       "variantCount": 11,
+      "description": "Brass knuckles worn on the hand for blunt and brutal punches.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -1009,7 +1048,7 @@
         "HeavyStaminaConsumption": "10"
       },
       "sourceRevision": "16066",
-      "ingestedAt": "2026-08-12T01:09:16.471Z"
+      "ingestedAt": "2026-08-12T03:13:55.207Z"
     },
     "dynamite-bundle": {
       "name": "Dynamite Bundle",
@@ -1017,6 +1056,7 @@
       "infoboxTitle": "Dynamite Bundle",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A bundle of several dynamite sticks. Why only bring one?",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "75",
@@ -1033,7 +1073,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16068",
-      "ingestedAt": "2026-08-12T01:10:40.548Z"
+      "ingestedAt": "2026-08-12T03:15:19.308Z"
     },
     "dynamite-stick": {
       "name": "Dynamite Stick",
@@ -1041,6 +1081,7 @@
       "infoboxTitle": "Dynamite Stick",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A dynamite stick that detonates with a massive blast after four seconds.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "18",
@@ -1057,7 +1098,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14715",
-      "ingestedAt": "2026-08-12T01:10:39.058Z"
+      "ingestedAt": "2026-08-12T03:15:17.808Z"
     },
     "fanning": {
       "name": "Fanning",
@@ -1065,6 +1106,7 @@
       "infoboxTitle": "Fanning",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Faster rate of fire when using one-handed or two-handed single-action pistols.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1078,7 +1120,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15466",
-      "ingestedAt": "2026-08-12T01:09:46.493Z"
+      "ingestedAt": "2026-08-12T03:14:25.249Z"
     },
     "fire-beetle": {
       "name": "Fire Beetle",
@@ -1086,6 +1128,7 @@
       "infoboxTitle": "Fire Beetle",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Fire Beetles are bred to find and track prey, giving Hunters a view from above. Upon death or command, they will burst into flames that burn everything they touch.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "57",
@@ -1102,7 +1145,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14807",
-      "ingestedAt": "2026-08-12T01:11:16.578Z"
+      "ingestedAt": "2026-08-12T03:15:55.342Z"
     },
     "fire-bomb": {
       "name": "Fire Bomb",
@@ -1110,6 +1153,7 @@
       "infoboxTitle": "Fire Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Flammable liquid in a glass container that bursts on impact. Spreads burning liquid over a large area",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -1126,7 +1170,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15394",
-      "ingestedAt": "2026-08-12T01:10:46.558Z"
+      "ingestedAt": "2026-08-12T03:15:25.311Z"
     },
     "first-aid-kit": {
       "name": "First Aid Kit",
@@ -1134,6 +1178,7 @@
       "infoboxTitle": "First Aid Kit",
       "selectedBy": "canonical-title",
       "variantCount": 15,
+      "description": "A bag of medical supplies that heal 50 health and stop bleeding. Can be used three times.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -1147,7 +1192,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15293",
-      "ingestedAt": "2026-08-12T01:09:12.001Z"
+      "ingestedAt": "2026-08-12T03:13:50.704Z"
     },
     "flare-pistol": {
       "name": "Flare Pistol",
@@ -1155,6 +1200,7 @@
       "infoboxTitle": "Flare Pistol",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "A small pistol for firing flares into the air, illuminating the area. Can ignite flammable materials.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "36",
@@ -1179,7 +1225,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16048",
-      "ingestedAt": "2026-08-12T01:09:22.487Z"
+      "ingestedAt": "2026-08-12T03:14:01.214Z"
     },
     "flash-bomb": {
       "name": "Flash Bomb",
@@ -1187,6 +1233,7 @@
       "infoboxTitle": "Flash Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Light bomb that requires a short priming for its mercury-based chemical reaction. The explosion is capable of blinding all in close proximity, even if their eyes are shielded or averted. Needs a short time to be prepared.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "25",
@@ -1202,7 +1249,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10105",
-      "ingestedAt": "2026-08-12T01:10:52.567Z"
+      "ingestedAt": "2026-08-12T03:15:31.326Z"
     },
     "frag-bomb": {
       "name": "Frag Bomb",
@@ -1210,6 +1257,7 @@
       "infoboxTitle": "Frag Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Frag bombs send lethal shrapnel over a large area, lacerating nearby enemies. However, unlike Dynamite, the blast is not strong enough to destroy doors or concertina wire.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "103",
@@ -1226,7 +1274,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14717",
-      "ingestedAt": "2026-08-12T01:10:43.545Z"
+      "ingestedAt": "2026-08-12T03:15:22.325Z"
     },
     "frontier-73c": {
       "name": "Frontier 73C",
@@ -1234,6 +1282,7 @@
       "infoboxTitle": "Frontier 73C",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "Winfield made, lever-action repeating rifle. A lightened Ranger 73, this trades convenience for a slightly reduced capacity.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "41",
@@ -1259,7 +1308,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16291",
-      "ingestedAt": "2026-08-12T01:08:43.445Z"
+      "ingestedAt": "2026-08-12T03:13:22.178Z"
     },
     "frontiersman": {
       "name": "Frontiersman",
@@ -1267,6 +1316,7 @@
       "infoboxTitle": "Frontiersman",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Use Tools one extra time.\nSOLO CATALYST: Use Tools two extra times.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1281,7 +1331,7 @@
         "ConditionalEffect": "Solo , Catalyst"
       },
       "sourceRevision": "15707",
-      "ingestedAt": "2026-08-12T01:09:54.007Z"
+      "ingestedAt": "2026-08-12T03:14:32.758Z"
     },
     "fusees": {
       "name": "Fusees",
@@ -1289,6 +1339,7 @@
       "infoboxTitle": "Fusees",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "Handheld railroad flares used for illuminating dark areas and for signalling. Can ignite flammable materials. Comes in a pack of five.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "10",
@@ -1305,7 +1356,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14698",
-      "ingestedAt": "2026-08-12T01:09:23.999Z"
+      "ingestedAt": "2026-08-12T03:14:02.714Z"
     },
     "ghoul": {
       "name": "Ghoul",
@@ -1313,6 +1364,7 @@
       "infoboxTitle": "Ghoul",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Killing Monsters restores a small amount of Health.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1326,7 +1378,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15647",
-      "ingestedAt": "2026-08-12T01:10:07.525Z"
+      "ingestedAt": "2026-08-12T03:14:46.256Z"
     },
     "greyhound": {
       "name": "Greyhound",
@@ -1334,6 +1386,7 @@
       "infoboxTitle": "Greyhound",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Sprint at full speed for a longer duration.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1347,7 +1400,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15620",
-      "ingestedAt": "2026-08-12T01:09:55.505Z"
+      "ingestedAt": "2026-08-12T03:14:34.267Z"
     },
     "hand-crossbow": {
       "name": "Hand Crossbow",
@@ -1355,6 +1408,7 @@
       "infoboxTitle": "Hand Crossbow",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Hand Crossbow that fires compact bolts. Quiet at range and convenient to carry. Bolts can be retrieved and reused.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -1380,7 +1434,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "16235",
-      "ingestedAt": "2026-08-12T01:08:22.433Z"
+      "ingestedAt": "2026-08-12T03:13:01.143Z"
     },
     "haymaker": {
       "name": "Haymaker",
@@ -1388,6 +1442,7 @@
       "infoboxTitle": "Haymaker",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Re-envisioned, single-action combination revolver with an additional shotgun barrel. A Long Ammo conversion of the LeMat.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "279",
@@ -1413,7 +1468,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16189",
-      "ingestedAt": "2026-08-12T01:09:08.987Z"
+      "ingestedAt": "2026-08-12T03:13:47.695Z"
     },
     "heavy-knife": {
       "name": "Heavy Knife",
@@ -1421,6 +1476,7 @@
       "infoboxTitle": "Heavy Knife",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "The heavy knife is honed for close quarters combat, its iconic silhouette carves out its home in the American pantheon of armaments.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "20",
@@ -1435,7 +1491,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16046",
-      "ingestedAt": "2026-08-12T01:09:14.995Z"
+      "ingestedAt": "2026-08-12T03:13:53.702Z"
     },
     "hellfire-bomb": {
       "name": "Hellfire Bomb",
@@ -1443,6 +1499,7 @@
       "infoboxTitle": "Hellfire Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "Flammable liquid in a glass container that bursts on impact and creates a massive fireball.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "70",
@@ -1458,7 +1515,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15398",
-      "ingestedAt": "2026-08-12T01:11:07.575Z"
+      "ingestedAt": "2026-08-12T03:15:46.365Z"
     },
     "hive-bomb": {
       "name": "Hive Bomb",
@@ -1466,6 +1523,7 @@
       "infoboxTitle": "Hive Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Poisonous wasps emerge from this bomb to terrorize anyone unfortunate enough to be in the area. However, it has no effect on monsters.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "40",
@@ -1481,7 +1539,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16074",
-      "ingestedAt": "2026-08-12T01:10:49.557Z"
+      "ingestedAt": "2026-08-12T03:15:28.323Z"
     },
     "hundred-hands": {
       "name": "Hundred Hands",
@@ -1489,6 +1547,7 @@
       "infoboxTitle": "Hundred Hands",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Increases the damage of a Hunting Bow and reduces sway while at full draw. Allows use of arrows in melee attacks.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1502,7 +1561,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15468",
-      "ingestedAt": "2026-08-12T01:10:16.541Z"
+      "ingestedAt": "2026-08-12T03:14:55.273Z"
     },
     "hunting-bow": {
       "name": "Hunting Bow",
@@ -1510,6 +1569,7 @@
       "infoboxTitle": "Hunting Bow",
       "selectedBy": "canonical-title",
       "variantCount": 10,
+      "description": "Hunting Bow that fires arrows a great distance. Perfect for stealth. Arrows can be recovered and reused.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "57",
@@ -1535,7 +1595,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16269",
-      "ingestedAt": "2026-08-12T01:08:34.455Z"
+      "ingestedAt": "2026-08-12T03:13:13.151Z"
     },
     "iron-eye": {
       "name": "Iron Eye",
@@ -1543,6 +1603,7 @@
       "infoboxTitle": "Iron Eye",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Remain in iron sights between shots when firing bolt-action, lever-action, and pump-action Weapons.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1556,7 +1617,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15591",
-      "ingestedAt": "2026-08-12T01:10:03.016Z"
+      "ingestedAt": "2026-08-12T03:14:41.758Z"
     },
     "katana": {
       "name": "Katana",
@@ -1564,6 +1625,7 @@
       "infoboxTitle": "Katana",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Two-handed, single-edged sword. Swift and sharp enough to pierce the sturdiest armor.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "115",
@@ -1578,7 +1640,7 @@
         "HeavyStaminaConsumption": "35"
       },
       "sourceRevision": "15067",
-      "ingestedAt": "2026-08-12T01:09:20.993Z"
+      "ingestedAt": "2026-08-12T03:13:59.714Z"
     },
     "kiteskin": {
       "name": "Kiteskin",
@@ -1586,6 +1648,7 @@
       "infoboxTitle": "Kiteskin",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Significantly reduces fall damage.\nCATALYST: Never die from falling.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1600,7 +1663,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15704",
-      "ingestedAt": "2026-08-12T01:09:57.016Z"
+      "ingestedAt": "2026-08-12T03:14:35.746Z"
     },
     "knife": {
       "name": "Knife",
@@ -1608,6 +1671,7 @@
       "infoboxTitle": "Knife",
       "selectedBy": "canonical-title",
       "variantCount": 14,
+      "description": "An all-purpose tool and melee weapon that has saved many lives – and taken just as many.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "40",
@@ -1622,7 +1686,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16218",
-      "ingestedAt": "2026-08-12T01:09:13.478Z"
+      "ingestedAt": "2026-08-12T03:13:52.223Z"
     },
     "knuckle-knife": {
       "name": "Knuckle Knife",
@@ -1630,6 +1694,7 @@
       "infoboxTitle": "Knuckle Knife",
       "selectedBy": "canonical-title",
       "variantCount": 10,
+      "description": "The savage knuckle knife is a roughshod specialization for close quarters combat, suited for both bludgeoning and brutal thrusting deathblows.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "50",
@@ -1644,7 +1709,7 @@
         "HeavyStaminaConsumption": "21"
       },
       "sourceRevision": "16045",
-      "ingestedAt": "2026-08-12T01:09:39.001Z"
+      "ingestedAt": "2026-08-12T03:14:17.735Z"
     },
     "krag-m1894": {
       "name": "Krag",
@@ -1652,6 +1717,7 @@
       "infoboxTitle": "Krag",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "Springfield made, bolt-action rifle. High fire-rate and ability to top off are offset by lower damage than other rifles.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "450",
@@ -1677,7 +1743,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15566",
-      "ingestedAt": "2026-08-12T01:08:59.982Z"
+      "ingestedAt": "2026-08-12T03:13:38.685Z"
     },
     "lebel-1886": {
       "name": "Lebel 1886",
@@ -1685,6 +1751,7 @@
       "infoboxTitle": "Lebel 1886",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "French made, bolt-action rifle. High magazine capacity, damage, and velocity are offset with a slow and wasteful reload.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "397",
@@ -1710,7 +1777,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15570",
-      "ingestedAt": "2026-08-12T01:09:02.996Z"
+      "ingestedAt": "2026-08-12T03:13:41.694Z"
     },
     "lemat-mark-ii": {
       "name": "LeMat",
@@ -1718,6 +1785,7 @@
       "infoboxTitle": "LeMat",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "Re-envisioned, single-action combination revolver with an additional shotgun barrel. High capacity and strong at close range. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "83",
@@ -1743,7 +1811,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16190",
-      "ingestedAt": "2026-08-12T01:08:28.440Z"
+      "ingestedAt": "2026-08-12T03:13:07.167Z"
     },
     "levering": {
       "name": "Levering",
@@ -1751,6 +1819,7 @@
       "infoboxTitle": "Levering",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Faster rate of fire from the hip (First aim stage) when using lever-action weapons.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1764,7 +1833,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15592",
-      "ingestedAt": "2026-08-12T01:09:48.025Z"
+      "ingestedAt": "2026-08-12T03:14:26.740Z"
     },
     "lightfoot": {
       "name": "Lightfoot",
@@ -1772,6 +1841,7 @@
       "infoboxTitle": "Lightfoot",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Vault, fall and climb ladders silently. Also reduces the sound of walking through Noise Traps.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1785,7 +1855,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15622",
-      "ingestedAt": "2026-08-12T01:09:58.535Z"
+      "ingestedAt": "2026-08-12T03:14:37.258Z"
     },
     "liquid-fire-bomb": {
       "name": "Liquid Fire Bomb",
@@ -1793,6 +1863,7 @@
       "infoboxTitle": "Liquid Fire Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Flammable liquid in a glass container. Burns on the surface of water. Internal steel balls cause it to burst on impact.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "35",
@@ -1809,7 +1880,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15396",
-      "ingestedAt": "2026-08-12T01:10:48.056Z"
+      "ingestedAt": "2026-08-12T03:15:26.805Z"
     },
     "magpie": {
       "name": "Magpie",
@@ -1817,6 +1888,7 @@
       "infoboxTitle": "Magpie",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Receive three short effects when picking up a Bounty Token: Antidote, Stamina and Regeneration.\nSOLO: Dark Sight Boost capacity and all Boost sources are doubled.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -1831,7 +1903,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15708",
-      "ingestedAt": "2026-08-12T01:10:27.038Z"
+      "ingestedAt": "2026-08-12T03:15:05.792Z"
     },
     "martini-henry-ic1": {
       "name": "Martini-Henry",
@@ -1839,6 +1911,7 @@
       "infoboxTitle": "Martini-Henry",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "British made, single-shot breech-loading rifle. Can be quickly reloaded and offers good power.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "122",
@@ -1864,7 +1937,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16388",
-      "ingestedAt": "2026-08-12T01:08:53.958Z"
+      "ingestedAt": "2026-08-12T03:13:32.681Z"
     },
     "medical-pack": {
       "name": "Medical Pack",
@@ -1872,6 +1945,7 @@
       "infoboxTitle": "Medical Pack",
       "selectedBy": "canonical-title",
       "variantCount": 2,
+      "description": "A portable medical kit that heals 100 health. Deployable in active health emergencies.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "35",
@@ -1884,7 +1958,7 @@
         "HeavyMeleeDamage": "31"
       },
       "sourceRevision": "15196",
-      "ingestedAt": "2026-08-12T01:11:03.077Z"
+      "ingestedAt": "2026-08-12T03:15:41.822Z"
     },
     "mosin-nagant-avtomat": {
       "name": "Mosin-Nagant Avtomat",
@@ -1892,6 +1966,7 @@
       "infoboxTitle": "Mosin-Nagant Avtomat",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "Russian made, bolt-action rifle. Powerful, fast, and can be reloaded with a stripper clip. Modified with an automatic action and increased ammo capacity.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "1250",
@@ -1917,7 +1992,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15582",
-      "ingestedAt": "2026-08-12T01:09:05.987Z"
+      "ingestedAt": "2026-08-12T03:13:44.698Z"
     },
     "mosin-nagant-m1891": {
       "name": "Mosin-Nagant",
@@ -1925,6 +2000,7 @@
       "infoboxTitle": "Mosin-Nagant",
       "selectedBy": "canonical-title",
       "variantCount": 11,
+      "description": "Russian made, bolt-action rifle. Powerful, fast, and can be reloaded with a stripper clip.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "620",
@@ -1950,7 +2026,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15579",
-      "ingestedAt": "2026-08-12T01:09:01.460Z"
+      "ingestedAt": "2026-08-12T03:13:40.196Z"
     },
     "nagant-m1895": {
       "name": "Nagant M1895",
@@ -1958,6 +2034,7 @@
       "infoboxTitle": "Nagant M1895",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Nagant made, single-action revolver. Medium damage, with a decent muzzle velocity and capacity. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "24",
@@ -1983,7 +2060,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16192",
-      "ingestedAt": "2026-08-12T01:08:14.930Z"
+      "ingestedAt": "2026-08-12T03:12:53.649Z"
     },
     "nagant-officer-carbine": {
       "name": "Officer Carbine",
@@ -1991,6 +2068,7 @@
       "infoboxTitle": "Officer Carbine",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "Nagant made, double-action revolver. High fire-rate, muzzle velocity, and capacity at the cost of damage and reload speed. Extended stock and barrel.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "183",
@@ -2016,7 +2094,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15385",
-      "ingestedAt": "2026-08-12T01:08:32.944Z"
+      "ingestedAt": "2026-08-12T03:13:11.655Z"
     },
     "necromancer": {
       "name": "Necromancer",
@@ -2024,6 +2102,7 @@
       "infoboxTitle": "Necromancer",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Using Dark Sight, revive a downed teammate from a distance. (25m)\nSOLO: You can revive your downed Hunter. Triggers a Full Health Restoration upon revive.",
       "acquisition": "Burn",
       "acquisitionClasses": [
         "Burn"
@@ -2039,7 +2118,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15709",
-      "ingestedAt": "2026-08-12T01:10:13.523Z"
+      "ingestedAt": "2026-08-12T03:14:52.256Z"
     },
     "nitro-express": {
       "name": "Nitro Express",
@@ -2047,6 +2126,7 @@
       "infoboxTitle": "Nitro Express",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "American made, break-action rifle with two barrels. High power, but limited ammunition, and damage drops over range.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "1015",
@@ -2072,7 +2152,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15976",
-      "ingestedAt": "2026-08-12T01:09:07.471Z"
+      "ingestedAt": "2026-08-12T03:13:46.184Z"
     },
     "packmule": {
       "name": "Packmule",
@@ -2080,6 +2160,7 @@
       "infoboxTitle": "Packmule",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Receive an additional item when looting Hunters or opening Tool Boxes.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2093,7 +2174,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15651",
-      "ingestedAt": "2026-08-12T01:09:52.502Z"
+      "ingestedAt": "2026-08-12T03:14:31.258Z"
     },
     "pain-sense": {
       "name": "Pain Sense",
@@ -2101,6 +2182,7 @@
       "infoboxTitle": "Pain Sense",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "You can see nearby bleeding, poisoned and burning Hunters while in Dark Sight. Also applies to Beetle view. (150m)\nCATALYST: Includes Hunters out of Stamina.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2115,7 +2197,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15710",
-      "ingestedAt": "2026-08-12T01:10:24.039Z"
+      "ingestedAt": "2026-08-12T03:15:02.783Z"
     },
     "physician": {
       "name": "Physician",
@@ -2123,6 +2205,7 @@
       "infoboxTitle": "Physician",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Reduce the time needed to bandage.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2136,7 +2219,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15613",
-      "ingestedAt": "2026-08-12T01:09:51.021Z"
+      "ingestedAt": "2026-08-12T03:14:29.750Z"
     },
     "pitcher": {
       "name": "Pitcher",
@@ -2144,6 +2227,7 @@
       "infoboxTitle": "Pitcher",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Increased throwing range for all items using the aim helper.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2157,7 +2241,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15603",
-      "ingestedAt": "2026-08-12T01:10:00.017Z"
+      "ingestedAt": "2026-08-12T03:14:38.769Z"
     },
     "poison-bomb": {
       "name": "Poison Bomb",
@@ -2165,6 +2249,7 @@
       "infoboxTitle": "Poison Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 3,
+      "description": "On detonation emits a persistent, deadly cloud. Anything that passes through or gets caught in the cloud will be poisoned.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "25",
@@ -2181,7 +2266,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16236",
-      "ingestedAt": "2026-08-12T01:11:09.071Z"
+      "ingestedAt": "2026-08-12T03:15:47.834Z"
     },
     "poison-trip-mine": {
       "name": "Poison Trip Mines",
@@ -2189,6 +2274,7 @@
       "infoboxTitle": "Poison Trip Mines",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "This portable tripwire mine released a cloud of poison when triggered, disorienting enemies. Comes in a pack of two.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -2205,7 +2291,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16056",
-      "ingestedAt": "2026-08-12T01:09:34.484Z"
+      "ingestedAt": "2026-08-12T03:14:13.225Z"
     },
     "quad-derringer": {
       "name": "Quad Derringer",
@@ -2213,6 +2299,7 @@
       "infoboxTitle": "Quad Derringer",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A small, light pistol that is easy to carry and conceal. Holds four shots. Twelve additional rounds carried.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -2237,7 +2324,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15187",
-      "ingestedAt": "2026-08-12T01:09:36.008Z"
+      "ingestedAt": "2026-08-12T03:14:14.730Z"
     },
     "quartermaster": {
       "name": "Quartermaster",
@@ -2245,6 +2332,7 @@
       "infoboxTitle": "Quartermaster",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Gain +1 Weapon Capacity",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2258,7 +2346,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15655",
-      "ingestedAt": "2026-08-12T01:09:45.012Z"
+      "ingestedAt": "2026-08-12T03:14:23.742Z"
     },
     "railroad-hammer": {
       "name": "Railroad Hammer",
@@ -2266,6 +2354,7 @@
       "infoboxTitle": "Railroad Hammer",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Two-handed Hammer, swings with weight and power.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "45",
@@ -2280,7 +2369,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15119",
-      "ingestedAt": "2026-08-12T01:08:26.940Z"
+      "ingestedAt": "2026-08-12T03:13:05.651Z"
     },
     "recovery-shot": {
       "name": "Recovery Shot",
@@ -2288,6 +2377,7 @@
       "infoboxTitle": "Recovery Shot",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A shot that restores a lost Health Chunk.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "140",
@@ -2300,7 +2390,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16075",
-      "ingestedAt": "2026-08-12T01:11:01.561Z"
+      "ingestedAt": "2026-08-12T03:15:40.327Z"
     },
     "regeneration-shot": {
       "name": "Regeneration Shot",
@@ -2308,6 +2398,7 @@
       "infoboxTitle": "Regeneration Shot",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "A shot that continually restores health over a long duration.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "105",
@@ -2321,7 +2412,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15288",
-      "ingestedAt": "2026-08-12T01:10:34.562Z"
+      "ingestedAt": "2026-08-12T03:15:13.312Z"
     },
     "regeneration-shot-weak": {
       "name": "Regeneration Shot (Weak)",
@@ -2329,6 +2420,7 @@
       "infoboxTitle": "Regeneration Shot (Weak)",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A shot that continually restores health over a short duration.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "40",
@@ -2342,7 +2434,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15286",
-      "ingestedAt": "2026-08-12T01:10:57.058Z"
+      "ingestedAt": "2026-08-12T03:15:35.831Z"
     },
     "resilience": {
       "name": "Resilience",
@@ -2350,6 +2442,7 @@
       "infoboxTitle": "Resilience",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Your Hunter is revived with up to full health.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2363,7 +2456,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15660",
-      "ingestedAt": "2026-08-12T01:10:10.516Z"
+      "ingestedAt": "2026-08-12T03:14:49.265Z"
     },
     "romero-77": {
       "name": "Romero 77",
@@ -2371,6 +2464,7 @@
       "infoboxTitle": "Romero 77",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "American made, break-action shotgun with single barrel. High damage, cost-effective, and tight bullet spread.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "66",
@@ -2396,7 +2490,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16173",
-      "ingestedAt": "2026-08-12T01:08:40.452Z"
+      "ingestedAt": "2026-08-12T03:13:19.198Z"
     },
     "salveskin": {
       "name": "Salveskin",
@@ -2404,6 +2498,7 @@
       "infoboxTitle": "Salveskin",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "While alive, reduce all fire damage and stop burn speed and stop time from escalating.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2417,7 +2512,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15614",
-      "ingestedAt": "2026-08-12T01:10:12.035Z"
+      "ingestedAt": "2026-08-12T03:14:50.864Z"
     },
     "scottfield-model-3": {
       "name": "Scottfield",
@@ -2425,6 +2520,7 @@
       "infoboxTitle": "Scottfield",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "Scottfield made, single-action top-break revolver. Performs well at medium range and can be reloaded quickly when empty. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "77",
@@ -2450,7 +2546,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16261",
-      "ingestedAt": "2026-08-12T01:08:17.960Z"
+      "ingestedAt": "2026-08-12T03:12:56.649Z"
     },
     "serpent": {
       "name": "Serpent",
@@ -2458,6 +2554,7 @@
       "infoboxTitle": "Serpent",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Using Dark Sight, interact with nearby Clues, Rifts, banishable Targets and abandoned Bounty Tokens. (25m) Applies to Beetle View, except for Bounty Token interactions.\nSOLO: Interaction range increased. (50m)",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2472,7 +2569,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15711",
-      "ingestedAt": "2026-08-12T01:10:06.021Z"
+      "ingestedAt": "2026-08-12T03:14:44.756Z"
     },
     "silent-killer": {
       "name": "Silent Killer",
@@ -2480,6 +2577,7 @@
       "infoboxTitle": "Silent Killer",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Reduce noise when performing melee attacks.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2493,7 +2591,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15664",
-      "ingestedAt": "2026-08-12T01:10:19.540Z"
+      "ingestedAt": "2026-08-12T03:14:58.272Z"
     },
     "slate": {
       "name": "Slate",
@@ -2501,6 +2599,7 @@
       "infoboxTitle": "Slate",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Winfield made, pump-action shotgun. High damage and fast cycle rate, with high pellet spread.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "313",
@@ -2526,7 +2625,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15749",
-      "ingestedAt": "2026-08-12T01:08:50.962Z"
+      "ingestedAt": "2026-08-12T03:13:29.676Z"
     },
     "sparks-lrr": {
       "name": "Sparks",
@@ -2534,6 +2633,7 @@
       "infoboxTitle": "Sparks",
       "selectedBy": "canonical-title",
       "variantCount": 10,
+      "description": "Big-game, single-shot rifle. High power and very effective at range, but cumbersome. Can put down a bison across a prairie.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "130",
@@ -2559,7 +2659,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16389",
-      "ingestedAt": "2026-08-12T01:08:52.453Z"
+      "ingestedAt": "2026-08-12T03:13:31.182Z"
     },
     "sparks-pistol": {
       "name": "Sparks Pistol",
@@ -2567,6 +2667,7 @@
       "infoboxTitle": "Sparks Pistol",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "Single-shot rifle, cut down into a small handgun. Equally powerful up to mid-range, and convenient to handle. Increased recoil. Can be dual wielded.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "155",
@@ -2592,7 +2693,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15448",
-      "ingestedAt": "2026-08-12T01:08:29.977Z"
+      "ingestedAt": "2026-08-12T03:13:08.660Z"
     },
     "specter-1882": {
       "name": "Specter 1882",
@@ -2600,6 +2701,7 @@
       "infoboxTitle": "Specter 1882",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Specter made, pump-action shotgun. Tight pellet spread and competitive rate of fire, but wasteful reloads.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "188",
@@ -2625,7 +2727,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16208",
-      "ingestedAt": "2026-08-12T01:08:49.449Z"
+      "ingestedAt": "2026-08-12T03:13:28.174Z"
     },
     "springfield-1866": {
       "name": "Springfield 1866",
@@ -2633,6 +2735,7 @@
       "infoboxTitle": "Springfield 1866",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Springfield made, breech-loading trapdoor rifle. Fires single shots and is effective at long range.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "38",
@@ -2658,7 +2761,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16390",
-      "ingestedAt": "2026-08-12T01:08:37.455Z"
+      "ingestedAt": "2026-08-12T03:13:16.171Z"
     },
     "spyglass": {
       "name": "Spyglass",
@@ -2666,6 +2769,7 @@
       "infoboxTitle": "Spyglass",
       "selectedBy": "canonical-title",
       "variantCount": 2,
+      "description": "A monocular optical instrument for seeing things far away as if they were nearby",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "8",
@@ -2679,7 +2783,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14704",
-      "ingestedAt": "2026-08-12T01:09:25.478Z"
+      "ingestedAt": "2026-08-12T03:14:04.221Z"
     },
     "stalker-beetle": {
       "name": "Stalker Beetle",
@@ -2687,6 +2791,7 @@
       "infoboxTitle": "Stalker Beetle",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Stalker Beetles are bred to find and track prey, giving Hunters a view from above. As a last resort, they can sacrifice themselves to cause a small explosion, hampering anything caught in the radius.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "45",
@@ -2703,7 +2808,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15340",
-      "ingestedAt": "2026-08-12T01:11:15.082Z"
+      "ingestedAt": "2026-08-12T03:15:53.844Z"
     },
     "stamina-shot": {
       "name": "Stamina Shot",
@@ -2711,6 +2816,7 @@
       "infoboxTitle": "Stamina Shot",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "A shot which immediately restores all stamina and stops further depletion for a long duration.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "100",
@@ -2724,7 +2830,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15201",
-      "ingestedAt": "2026-08-12T01:10:36.048Z"
+      "ingestedAt": "2026-08-12T03:15:14.804Z"
     },
     "stamina-shot-weak": {
       "name": "Stamina Shot (Weak)",
@@ -2732,6 +2838,7 @@
       "infoboxTitle": "Stamina Shot (Weak)",
       "selectedBy": "canonical-title",
       "variantCount": 4,
+      "description": "A shot which immediately restores all stamina and stops further depletion for a short duration..",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "60",
@@ -2745,7 +2852,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15202",
-      "ingestedAt": "2026-08-12T01:10:58.573Z"
+      "ingestedAt": "2026-08-12T03:15:37.332Z"
     },
     "steady-aim": {
       "name": "Steady Aim",
@@ -2753,6 +2860,7 @@
       "infoboxTitle": "Steady Aim",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Gradually lessen weapon sway when looking through a scope or Aperture sights.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2766,7 +2874,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15697",
-      "ingestedAt": "2026-08-12T01:10:18.027Z"
+      "ingestedAt": "2026-08-12T03:14:56.782Z"
     },
     "sticky-bomb": {
       "name": "Sticky Bomb",
@@ -2774,6 +2882,7 @@
       "infoboxTitle": "Sticky Bomb",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Dynamite charge in a sticky frame that can be attached to objects and enemies. Its eight-second fuse doubles the detonation time of a dynamite stick.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "64",
@@ -2790,7 +2899,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15432",
-      "ingestedAt": "2026-08-12T01:10:45.059Z"
+      "ingestedAt": "2026-08-12T03:15:23.819Z"
     },
     "throwing-axes": {
       "name": "Throwing Axes",
@@ -2798,6 +2907,7 @@
       "infoboxTitle": "Throwing Axes",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "Silent and deadly short-ranged projectile weapon. Can be retrieved and reused. Comes in a pack of two.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "50",
@@ -2819,7 +2929,7 @@
         "ThrowStaminaConsumption": "20"
       },
       "sourceRevision": "16051",
-      "ingestedAt": "2026-08-12T01:09:19.479Z"
+      "ingestedAt": "2026-08-12T03:13:58.210Z"
     },
     "throwing-knives": {
       "name": "Throwing Knives",
@@ -2827,6 +2937,7 @@
       "infoboxTitle": "Throwing Knives",
       "selectedBy": "canonical-title",
       "variantCount": 9,
+      "description": "Silent, but short-ranged projectile weapon. Thrown knives can be retrieved and reused. Comes in a pack of eight.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "30",
@@ -2848,7 +2959,7 @@
         "ThrowStaminaConsumption": "15"
       },
       "sourceRevision": "14706",
-      "ingestedAt": "2026-08-12T01:09:17.998Z"
+      "ingestedAt": "2026-08-12T03:13:56.715Z"
     },
     "throwing-spear": {
       "name": "Throwing Spear",
@@ -2856,6 +2967,7 @@
       "infoboxTitle": "Throwing Spear",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "Two-handed melee weapon, also balanced for throwing straight and true. Can be retrieved and reused. You'll receive one, be careful how you use it.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "80",
@@ -2877,7 +2989,7 @@
         "ThrowStaminaConsumption": "34"
       },
       "sourceRevision": "15986",
-      "ingestedAt": "2026-08-12T01:09:37.497Z"
+      "ingestedAt": "2026-08-12T03:14:16.242Z"
     },
     "tool-box": {
       "name": "Tool Box",
@@ -2885,6 +2997,7 @@
       "infoboxTitle": "Tool Box",
       "selectedBy": "canonical-title",
       "variantCount": 2,
+      "description": "A portable toolkit that refills some dwindling supplies in a tight spot.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "70",
@@ -2897,7 +3010,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15116",
-      "ingestedAt": "2026-08-12T01:11:12.069Z"
+      "ingestedAt": "2026-08-12T03:15:50.834Z"
     },
     "vetterli-71-karabiner": {
       "name": "Vetterli 71",
@@ -2905,6 +3018,7 @@
       "infoboxTitle": "Vetterli 71",
       "selectedBy": "canonical-title",
       "variantCount": 7,
+      "description": "Swiss made, bolt-action carbine. Powerful at medium distances, and easy to reload. Balances ease of use with damage.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "105",
@@ -2930,7 +3044,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15170",
-      "ingestedAt": "2026-08-12T01:08:47.970Z"
+      "ingestedAt": "2026-08-12T03:13:26.680Z"
     },
     "vigilant": {
       "name": "Vigilant",
@@ -2938,6 +3052,7 @@
       "infoboxTitle": "Vigilant",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "While using Dark Sight, nearby Traps and active Beetles are highlighted. Also applies to Beetle View. (25m)\nCATALYST: Double the highlighted range in Dark Sight.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -2952,7 +3067,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15712",
-      "ingestedAt": "2026-08-12T01:10:31.551Z"
+      "ingestedAt": "2026-08-12T03:15:10.292Z"
     },
     "vitality-shot": {
       "name": "Vitality Shot",
@@ -2960,6 +3075,7 @@
       "infoboxTitle": "Vitality Shot",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "A shot which immediately restores all health.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "85",
@@ -2972,7 +3088,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15290",
-      "ingestedAt": "2026-08-12T01:10:33.053Z"
+      "ingestedAt": "2026-08-12T03:15:11.802Z"
     },
     "vitality-shot-weak": {
       "name": "Vitality Shot (Weak)",
@@ -2980,6 +3096,7 @@
       "infoboxTitle": "Vitality Shot (Weak)",
       "selectedBy": "canonical-title",
       "variantCount": 5,
+      "description": "A shot which immediately restores 75 health.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "20",
@@ -2992,7 +3109,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15418",
-      "ingestedAt": "2026-08-12T01:10:55.563Z"
+      "ingestedAt": "2026-08-12T03:15:34.333Z"
     },
     "vulture": {
       "name": "Vulture",
@@ -3000,6 +3117,7 @@
       "infoboxTitle": "Vulture",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Looting a Hunter will always reward you money.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -3013,7 +3131,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15666",
-      "ingestedAt": "2026-08-12T01:10:21.040Z"
+      "ingestedAt": "2026-08-12T03:14:59.788Z"
     },
     "waxed-dynamite-stick": {
       "name": "Waxed Dynamite Stick",
@@ -3021,6 +3139,7 @@
       "infoboxTitle": "Waxed Dynamite Stick",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "A dynamite stick with a modified powder fuse that enables detonation under water and in choke bomb clouds.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "24",
@@ -3037,7 +3156,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14732",
-      "ingestedAt": "2026-08-12T01:11:04.567Z"
+      "ingestedAt": "2026-08-12T03:15:43.330Z"
     },
     "whispersmith": {
       "name": "Whispersmith",
@@ -3045,6 +3164,7 @@
       "infoboxTitle": "Whispersmith",
       "selectedBy": "canonical-title",
       "variantCount": 1,
+      "description": "Reduce noise when selecting equipment.",
       "acquisition": "Regular",
       "acquisitionClasses": [
         "Regular"
@@ -3058,7 +3178,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15667",
-      "ingestedAt": "2026-08-12T01:10:22.543Z"
+      "ingestedAt": "2026-08-12T03:15:01.281Z"
     },
     "winfield-1876-centennial": {
       "name": "Centennial",
@@ -3066,6 +3186,7 @@
       "infoboxTitle": "Centennial",
       "selectedBy": "canonical-title",
       "variantCount": 8,
+      "description": "Winfield made, lever-action repeating rifle. High muzzle velocity and good damage at range.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "157",
@@ -3091,7 +3212,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16150",
-      "ingestedAt": "2026-08-12T01:08:55.453Z"
+      "ingestedAt": "2026-08-12T03:13:34.198Z"
     },
     "winfield-m1873": {
       "name": "Ranger 73",
@@ -3099,6 +3220,7 @@
       "infoboxTitle": "Ranger 73",
       "selectedBy": "canonical-title",
       "variantCount": 6,
+      "description": "Winfield made, lever-action repeating rifle. High fire-rate, large magazine, easy reload, and good handling.",
       "acquisition": null,
       "acquisitionClasses": [],
       "priceStated": "75",
@@ -3124,7 +3246,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15379",
-      "ingestedAt": "2026-08-12T01:08:38.970Z"
+      "ingestedAt": "2026-08-12T03:13:17.671Z"
     }
   }
 }

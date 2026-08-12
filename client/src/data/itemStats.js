@@ -37,6 +37,26 @@ export function statsFor(id) {
 }
 
 /**
+ * The scraped description for a catalog id, or null.
+ *
+ * Governing: ADR-0005 (the "and Descriptions" half of its title), SPEC-0007 REQ "Generated,
+ * Committed Stats File". Added with #228.
+ *
+ * Read through here rather than off the record so callers do not have to know that a description can
+ * be absent, or that its paragraphs are newline-joined. Null is a normal outcome: a page can carry a
+ * hatnote and no prose, and a catalog row can predate the dataset — those are the same state to a
+ * caller, exactly as `statsFor` already documents.
+ *
+ * The value is UNTRUSTED wiki text. SPEC-0003 states this rule for the hunter descriptions and it
+ * applies identically here: render it as text, never as markup. The scrape strips tags, which makes
+ * the stored value text rather than a fragment; it does not make it safe to inject.
+ */
+export function descriptionFor(id) {
+  const value = statsFor(id)?.description;
+  return value === undefined || value === "" ? null : value;
+}
+
+/**
  * One infobox field for a catalog id, or null.
  *
  * Values are the wiki's own strings ("75", "Compact"), deliberately not coerced to numbers here:

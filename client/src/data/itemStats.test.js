@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_STATS, STATS_GENERATED, statFieldFor, statsFor } from "./itemStats.js";
+import { ITEM_STATS, STATS_GENERATED, descriptionFor, statFieldFor, statsFor } from "./itemStats.js";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "./catalog.js";
 
 // Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File)
@@ -121,5 +121,51 @@ describe("statFieldFor", () => {
     const id = Object.keys(ITEM_STATS)[0];
     expect(statFieldFor(id, "NoSuchField")).toBeNull();
     expect(statFieldFor("no-such-item", "Price")).toBeNull();
+  });
+});
+
+describe("descriptionFor", () => {
+  it("reads the scraped prose for a covered item", () => {
+    const id = Object.keys(ITEM_STATS).find((k) => ITEM_STATS[k].description);
+    expect(descriptionFor(id)).toBe(ITEM_STATS[id].description);
+    expect(typeof descriptionFor(id)).toBe("string");
+  });
+
+  it("returns null for an unknown item, an absent description, and an empty one", () => {
+    // Null is a normal outcome rather than a gap: a page can carry only a hatnote above its first
+    // section, and a catalog row can predate the dataset. Both reach a caller as null.
+    expect(descriptionFor("no-such-item")).toBeNull();
+    expect(descriptionFor(undefined)).toBeNull();
+  });
+
+  it("covers every item in the committed dataset", () => {
+    // Not a property of the accessor but of the data, and worth pinning: the scrape reads prose from
+    // two different places (a Description section, or the lead above the first section), so a
+    // regression in either would show up as a category-shaped hole rather than a total failure.
+    const missing = Object.keys(ITEM_STATS).filter((k) => !ITEM_STATS[k].description);
+    expect(missing).toEqual([]);
+  });
+
+  it("keeps multi-paragraph descriptions newline-joined rather than collapsed", () => {
+    // Necromancer's second paragraph is its SOLO behaviour — a separate rule from its base effect.
+    const multi = Object.keys(ITEM_STATS).filter((k) => ITEM_STATS[k].description?.includes("\n"));
+    for (const id of multi) {
+      expect(descriptionFor(id)).toContain("\n");
+      expect(descriptionFor(id)).not.toMatch(/\n\s*\n/);
+    }
+  });
+
+  it("never leaves a space before punctuation from an inline link", () => {
+    // `textContent` turns every tag into a space, so `<a>First Aid Kit</a>.` read back as
+    // "First Aid Kit ." until the scrape tidied prose. This pins the whole dataset, not one item.
+    const offenders = Object.keys(ITEM_STATS).filter((k) => /\s[,;:.!?]/.test(ITEM_STATS[k].description ?? ""));
+    expect(offenders).toEqual([]);
+  });
+
+  it("never stores a See-also hatnote as a description", () => {
+    // Weapon and consumable pages open with an italicised "See also: ..." above their Description
+    // section. Taking the first paragraph blindly wrote navigation into most of the catalog.
+    const offenders = Object.keys(ITEM_STATS).filter((k) => /^see also/i.test(ITEM_STATS[k].description ?? ""));
+    expect(offenders).toEqual([]);
   });
 });
