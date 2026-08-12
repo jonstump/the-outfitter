@@ -173,10 +173,32 @@ Dual-wieldability is the worked example. It cannot be derived from `size`: the H
 
 An attribute the scrape cannot resolve for a given item SHALL be recorded as unresolved. It MUST NOT be defaulted to a value that reads as a determination.
 
-#### Scenario: An unresolved attribute is not defaulted to false
+> **Amended 2026-08-12 per the review of #178 (PR #251).** This requirement previously treated "the page was read and did not state the attribute" as unresolvable, and the scenario below forbade writing `false` for it. That half is narrowed for dual-wieldability, and the narrowing is marked rather than rewritten because it relaxes a rule written to prevent exactly this default — a reader is owed the fact that it changed, and on what evidence. The original was right about the risk and too broad about the scope: it treated every silence as equally uninformative, and they are not.
+>
+> **A description that was read and stayed silent is a determination.** What makes it one is corroboration by class, not the silence on its own. Of the 59 weapon rows, 11 are `true`, 47 are `false`, and one — `winfield-m1873c`, retired by #250 — has no stats record at all. Grouped by the catalog's `group` column, the 47 silent rows are **Rifles 26, Shotguns 9, Melee 7, Bows 4, Pistols 1**. For rifles, shotguns, melee and bows the *entire class* is silent: that is a consistent class-wide editorial pattern in the source, not absent evidence, and it is corroborated by the game, in which no member of those classes is wieldable in a pair. For Pistols the evidence runs the other way — 11 of 12 state pairing outright — so silence *there* would be meaningful rather than conventional.
+>
+> Exactly one Pistol is silent: the **Haymaker**, which is independently confirmed two-handed and is the row this requirement and #178 both already name as correctly excluded. So the single case where the class pattern gives no cover is the case whose answer was already established by hand.
+>
+> That coincidence is not what makes the narrowing safe, because it holds only for today's roster. What makes it safe is that it is guarded rather than assumed: a test asserts that any `Pistols` row recorded `false` appears in an explicit, justified allow-list, which today holds `haymaker` alone. A newly-added silent pistol fails CI instead of entering the dataset as a determination nobody checked. Rifles, shotguns, melee and bows need no such list precisely because their silence is class-wide; a pistol's is not.
+>
+> **The other half of this rule is untouched and still live.** An attribute for which *nothing was read* — the page states no description, the description is empty, or the page could not be fetched — remains unresolved, MUST NOT be defaulted in either direction, and SHALL be reported in the run summary. The distinction this requirement now draws is between silence in a source that was read and the absence of any source at all. Only the first is evidence.
 
-- **WHEN** the scrape cannot determine whether a weapon is dual-wieldable
-- **THEN** the record SHALL mark the attribute unresolved, and MUST NOT write `false`
+#### Scenario: An attribute with no source read is not defaulted to false
+
+- **WHEN** the scrape reads no description for a weapon at all — the page states none, it is empty, or the page could not be fetched
+- **THEN** the record SHALL mark the attribute unresolved, MUST NOT write `false`, and the run summary SHALL report it
+
+*(Amended 2026-08-12 with the rule above; this scenario was titled "An unresolved attribute is not defaulted to false". Its **WHEN** previously read "the scrape cannot determine whether a weapon is dual-wieldable" — wording that covered both a description read and silent and a description never read. Only the second is unresolved now; the first is the determination the two scenarios below describe.)*
+
+#### Scenario: A description read and silent is a determination, where the class corroborates it
+
+- **WHEN** a weapon's description is read in full, does not state that it can be dual wielded, and its `group` is one whose members are silent as a class — today Rifles, Shotguns, Melee and Bows
+- **THEN** the record SHALL store `false`, and that `false` SHALL mean "read, and not stated" rather than "denied by the page"
+
+#### Scenario: A silent pistol is not covered by the class pattern
+
+- **WHEN** a weapon in the `Pistols` group is read and does not state that it can be dual wielded
+- **THEN** it MUST NOT be accepted as `false` on the class pattern alone, and SHALL appear in an explicit allow-list carrying the ground for its exclusion — today `haymaker`, confirmed two-handed — or fail
 
 #### Scenario: A name-similar weapon does not inherit an attribute
 

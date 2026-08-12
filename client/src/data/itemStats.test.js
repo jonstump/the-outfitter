@@ -319,6 +319,36 @@ describe("dualWieldFor", () => {
     expect(dualWieldFor("caldwell-conversion-uppercut")).toBe(true);
   });
 
+  it("admits a silent pistol only through an explicit, justified allow-list", () => {
+    // The one place the class argument does not reach, and the reason this is a test rather than a
+    // comment. SPEC-0007's "Stored, Never Inferred", as amended 2026-08-12 by the review of #251,
+    // accepts a description that was read and stayed silent as a determination — but what makes it one
+    // is that the whole GROUP is silent, not the silence itself. That holds for Rifles (26 silent),
+    // Shotguns (9), Melee (7) and Bows (4): every single member is silent, which is an editorial
+    // convention the game agrees with, so those groups need no list and get none.
+    //
+    // Pistols are the asymmetry. Eleven of twelve state pairing outright, so silence there is NOT the
+    // convention and carries real information — a newly silent pistol is far likelier to be an unread
+    // page or a reworded wiki edit than a genuinely two-handed sidearm. It therefore has to be claimed
+    // by hand, with a ground, rather than absorbed by an argument that does not cover it.
+    const TWO_HANDED_PISTOLS = [
+      "haymaker", // Confirmed two-handed. SPEC-0007 and #178 both name it as correctly excluded.
+    ];
+    const silentPistols = WEAPONS.filter((w) => w[5] === "Pistols" && dualWieldFor(w[0]) === false).map((w) => w[0]);
+    expect(silentPistols).toEqual(TWO_HANDED_PISTOLS);
+  });
+
+  it("keeps the class corroboration true, since the pistol allow-list rests on it", () => {
+    // The premise the test above leans on, pinned so it cannot quietly stop being true. Every `true` in
+    // the dataset is a pistol; if a rifle, shotgun, melee weapon or bow ever comes back pairable, then
+    // "silent as a class" is no longer why those 46 rows are `false`, and the allow-list above stops
+    // being the only unguarded gap. Better to fail here and revisit the argument than to keep asserting
+    // a determination whose justification has expired.
+    const pairable = WEAPONS.filter((w) => dualWieldFor(w[0]) === true);
+    expect([...new Set(pairable.map((w) => w[5]))]).toEqual(["Pistols"]);
+    expect(pairable).toHaveLength(11);
+  });
+
   it("resolves every weapon the dataset covers, leaving none merely unread", () => {
     // Scoped to covered rows on purpose. A row with no record at all is the documented uncovered state
     // `statsFor` already describes — `winfield-m1873c` has no wiki page of its own, so it can have no

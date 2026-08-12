@@ -836,22 +836,50 @@ export const UNASSIGNED_AXIS_CATEGORIES = ["Pact"];
 const DUAL_WIELD_SIGNAL = /can be dual[-\s]?wielded/i;
 
 /**
- * Whether the page says this weapon can be dual wielded, or null when it says nothing either way.
+ * Whether the page says this weapon can be dual wielded, or null when no description was read at all.
  *
- * Governing: #178. THREE-VALUED, on the same reasoning as `purchasable`, and the asymmetry matters
- * more here than anywhere else in this file:
+ * Governing: #178, and SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" as
+ * amended 2026-08-12 by the review of PR #251. THREE-VALUED, but NOT — as this comment previously
+ * claimed — "on the same reasoning as `purchasable`". The reasoning is different, and the difference
+ * is worth stating rather than glossing:
  *
  *   true   the description states it outright — "Can be dual wielded." A read, not a guess.
- *   false  a description WAS read and does not state it. That is an inference from absence, and it is
- *          weaker than the `true` case: the wiki asserts dual-wieldability positively and never denies
- *          it, so an editorial omission is indistinguishable from a two-handed weapon.
- *   null   no description was read at all. No evidence in either direction.
+ *   false  a description WAS read and does not state it. A determination, but a weaker one than
+ *          `true`, and a weaker one than `purchasable === false`.
+ *   null   no description was read at all — none stated, empty, or the page did not come back. No
+ *          evidence in either direction; reported as unresolved in the run summary.
  *
- * Recording `false` and `null` separately is what #178 asks for — "any row the scrape cannot resolve
- * is recorded as unresolved rather than defaulted to false" — and the distinction is load-bearing
- * because #178 also notes this attribute "feeds the budget math the same way `size` and `cost` do". A
- * wrong `false` becomes a slot-cost error once #179 consumes it, so a consumer must treat `false` as
- * "not stated" rather than as "denied".
+ * The difference from `purchasable`, precisely. `purchasable === false` requires a price string that
+ * was ACTUALLY PRESENT and refused: the wiki wrote "Scarce" where a number belongs, so the source made
+ * the negative claim itself and the record merely relays it. `dualWield === false` has no such positive
+ * denial available anywhere in the source — the wiki asserts dual-wieldability and never denies it, so
+ * no page will ever read "cannot be dual wielded". Requiring a denial here would make `false` forever
+ * unreachable, which is not the same standard applied twice; it is a standard one field can meet and
+ * the other structurally cannot.
+ *
+ * What substitutes for the missing denial is corroboration by CLASS, which is what the amended spec
+ * accepts in its place. Of the 59 weapon rows, 11 are `true` and 47 are `false` (one — `winfield-m1873c`
+ * — has no record at all; #250 retires it). By the catalog's `group`, those 47 are Rifles 26, Shotguns
+ * 9, Melee 7, Bows 4, Pistols 1. Four entire classes are silent, uniformly, and the game agrees with
+ * them: no rifle, shotgun, melee weapon or bow is wieldable in a pair. One page's silence proves
+ * nothing about that page. A whole class's silence is an editorial convention, and a row that conforms
+ * to it is corroborated rather than merely unread.
+ *
+ * The exception is why a TEST guards this and not just a comment. Pistols are the one group where
+ * silence is not the convention — 11 of 12 state pairing outright — so a silent pistol gets no cover
+ * from the argument above. Exactly one is silent: the Haymaker, independently confirmed two-handed and
+ * named by both #178 and SPEC-0007 as correctly excluded. `itemStats.test.js` pins that allow-list, so
+ * the next silent pistol fails CI instead of being absorbed by reasoning that does not reach it.
+ *
+ * MEANINGFUL FOR WEAPONS ONLY. Tools, consumables and traits have their descriptions read the same way
+ * and so carry `false` too — 109 of them — which is consistent under the rule above but is not a fact
+ * about them worth consuming: pairing is not a property a Medkit has or lacks. What bounds it is the
+ * test in `itemStats.test.js` asserting no non-weapon is ever `true`; nothing derives slot cost from a
+ * non-weapon's `dualWield`.
+ *
+ * Either way a consumer must read `false` as "read, and not stated" rather than as "denied by the
+ * page". The distinction is load-bearing because #178 notes this attribute "feeds the budget math the
+ * same way `size` and `cost` do": a wrong `false` becomes a slot-cost error the moment #179 consumes it.
  *
  * Read from the page's OWN description, which is what defuses the trap #178 flags. `Officer` (a
  * dual-wieldable pistol) and `Officer Carbine` (a rifle) share a near-identical description prefix —
@@ -870,6 +898,39 @@ export function dualWieldFrom(description) {
   if (description === null || description === undefined || String(description).trim() === "") return null;
   return DUAL_WIELD_SIGNAL.test(String(description));
 }
+
+// ---------------------------------------------------------------------------
+// Pair slot size: NOT captured, and the reason, recorded here rather than only in a PR description so
+// that the omission of a stated SHALL survives the merge. (SPEC-0007 REQ "Budget-Affecting Attributes
+// Are Stored, Never Inferred"; review of PR #251.)
+//
+// The spec says: "Where the wiki supports it, the pair's own slot size SHALL be captured per weapon
+// rather than computed as twice the single." That requirement is conditional, and its precondition is
+// unmet. The union of every infobox field key across all 167 committed records is 33 keys, of which
+// exactly one — `Size` — concerns slots, and not one is pair-related: no PairSize, no DualSize, no
+// second Size row on a dual-wieldable page, nothing mentioning pairs, akimbo or wielding. The wiki
+// states a weapon's single slot size and stops. So there is no field to capture, and the omission is
+// the spec's own "where the wiki supports it" escape rather than a shortfall against it.
+//
+// A GAME RULE, supplied by the repo owner and NOT observed by this scrape: a dual-wielded pair must be
+// two of the SAME variant. You cannot pair a Dolch Claw with a plain Dolch. No page this script reads
+// states that, and nothing here parses or checks it — it is written down as a stated rule precisely so
+// the next reader does not go hunting for scrape evidence that does not exist.
+//
+// Why that rule belongs next to this gap: it means each dual-wieldable weapon has exactly ONE pair
+// configuration, so a single per-row pair-slot-size field would be both sufficient and complete if the
+// wiki ever exposes one. There is no cross-variant combinatorics to model and no reason to design a
+// matrix for it. It is also unrepresentable here today for a second, independent reason: the catalog
+// models base weapons only — variants are not rows — so the rule currently has nothing to constrain.
+// It becomes live the moment variants are modelled, and at that point it is what keeps the field a
+// single column instead of a pairing table.
+//
+// The live risk, so the next person sees it: #179 assumes a flat 2 slots per pair. That is exactly the
+// computed-as-twice-the-single assumption the SHALL exists to prevent — the game's slot documentation
+// reserves two slots for "most" dual-wielded pairs, and "most" is the word that makes the assumption
+// unsafe. Nothing in this script can resolve it from the source as it stands. Resolving it needs a
+// source that states a pair's size, and this one does not.
+// ---------------------------------------------------------------------------
 
 export function acquisitionClassesFrom(categories = []) {
   // Matched on the last path segment rather than a `Traits/` prefix, so a rarity category added under
@@ -1659,13 +1720,26 @@ export async function runStatsScrape(options, deps) {
 
   const records = {};
   const renames = [];
+  // Its own bucket, exactly as `purchasable` gets one in the discovery report, and for the same reason
+  // SPEC-0007 REQ "Error Handling Standards" gives: a failure that is not surfaced in the run summary
+  // is a failure nobody sees. `dualWield === null` means no description was read at all, which the
+  // amended "Stored, Never Inferred" requirement keeps unresolved — and unlike a `false`, it is backed
+  // by no class argument whatsoever. It fires on no row today because all 167 pages carry descriptions,
+  // which is precisely why it needs reporting: the day one stops, this is the only thing that says so.
+  const dualWieldUnresolved = [];
 
   for (const target of items) {
     try {
       // eslint-disable-next-line no-await-in-loop
       const result = await scrapeItemStats(target, { ...deps, robotsGroups, rateLimiter, userAgent, dryRun });
       recordResult(summary, result);
-      if (result.status === "succeeded") records[result.id] = buildStatsRecord(result, { now });
+      if (result.status === "succeeded") {
+        const record = buildStatsRecord(result, { now });
+        records[result.id] = record;
+        if (record.dualWield === null) {
+          dualWieldUnresolved.push({ id: result.id, category: target.category, item: target.name, url: result.url });
+        }
+      }
       log({
         level: "info",
         event: `item-${result.status}`,
@@ -1810,11 +1884,13 @@ export async function runStatsScrape(options, deps) {
     ...(blockedByShrink ? { wouldDrop: dropped } : {}),
     ...(catalogWritten ? { catalogWritten } : {}),
     ...(renames.length ? { renameCandidates: renames.length } : {}),
+    ...(dualWieldUnresolved.length ? { dualWieldUnresolved: dualWieldUnresolved.length } : {}),
     ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
   summary.records = records;
   summary.renames = renames;
+  summary.dualWieldUnresolved = dualWieldUnresolved;
   summary.datasetPath = written;
   summary.droppedIds = dropped;
   summary.catalogPlan = catalogPlan;
@@ -1866,6 +1942,19 @@ export function formatSummary(summary) {
   }
   for (const s of summary.skipped) {
     lines.push(`  SKIPPED ${s.category}/${s.id} ("${s.item}"): ${s.reason}`);
+  }
+  // Listed page by page, not merely counted, on the same rule the discovery report follows: a bucket
+  // that names candidate work identifies its pages. The item SUCCEEDED — its stats landed — so it
+  // appears in neither `failed` nor `skipped`, and without this line a row whose dual-wieldability is
+  // genuinely unknown would leave no trace in the summary at all.
+  if (summary.dualWieldUnresolved?.length > 0) {
+    lines.push(
+      `  ${summary.dualWieldUnresolved.length} item(s) with dualWield UNRESOLVED — no description was ` +
+        `read, so the attribute is neither stated nor corroborated by its class:`
+    );
+    for (const u of summary.dualWieldUnresolved) {
+      lines.push(`    unresolved  ${u.category}/${u.id} ("${u.item}") — ${u.url}`);
+    }
   }
   if (summary.droppedIds?.length > 0) {
     // Loud, and last, because it means the run produced no write at all.
