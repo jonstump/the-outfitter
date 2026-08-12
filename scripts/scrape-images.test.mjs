@@ -751,9 +751,13 @@ test("WIKI_TITLE_OVERRIDES: what remains is only what the default cannot express
   // and joins spaces with "_", so it can never produce a three-segment path. A reflex entry — an
   // override whose path the default would have produced anyway — still fails, here and in the
   // redundancy test above.
+  //
+  // Arity alone would not be enough: `Weapon/Dolch_96/Claw` and a `Tools/...` path misfiled under
+  // `weapons` are both three segments. The namespace is asserted too, so a typo cannot pass as a
+  // variant sub-page — that specificity is part of what the literal inventory used to provide.
   const weapons = WIKI_TITLE_OVERRIDES.weapons;
   const notVariantPaths = Object.entries(weapons)
-    .filter(([, path]) => path === null || path.split("/").length !== 3)
+    .filter(([, path]) => path === null || path.split("/").length !== 3 || !path.startsWith("Weapons/"))
     .map(([id, path]) => `${id} -> ${path}`);
   assert.deepEqual(notVariantPaths, [], "a weapons override that is not a variant sub-page");
   // The three that predate #254, named because they are the precedent the 89 followed.

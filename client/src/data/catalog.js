@@ -260,10 +260,13 @@ export const WEAPONS = [
   // Every row also needs a `WIKI_TITLE_OVERRIDES.weapons` entry in scripts/lib/wiki.mjs:
   // `resolveWikiPath` builds `Weapons/{DisplayName}`, and these pages live two segments deep.
   //
-  // These have no images yet. ItemThumb falls back to its SVG icon, which is the specified posture
-  // (SPEC-0001); `scripts/scrape-images.mjs` is what fills them in.
+  // These land with their images already committed (`scripts/scrape-images.mjs`, ADR-0002), so no row
+  // falls back to ItemThumb's SVG icon and weapon image coverage is 147/147. ADR-0002 records asset
+  // weight as its own explicit downside, so the cost is stated rather than left to be discovered:
+  // this block takes client/public/images/weapons from 58 files / 924 KB to 147 / 2409 KB (+161%),
+  // against a whole image tree of 5.44 MB.
   //
-  // WEAPON_GROUPS now buckets 148 weapons into five, and Rifles holds 79 of them. That is #248, and
+  // WEAPON_GROUPS now buckets 147 weapons into five, and Rifles holds 80 of them. That is #248, and
   // this block is what makes it load-bearing rather than cosmetic.
 
   ["1865-carbine-aperture", "1865 Carbine Aperture", 3, 74, "medium", "Rifles"],
