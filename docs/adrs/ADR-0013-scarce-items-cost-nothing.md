@@ -211,9 +211,23 @@ graph TD
 * **Extends ADR-0012** (Cap a Loadout at Fifteen Traits). See "Consequence for ADR-0012" above. The
   cap is unchanged; what changes is that a trait filling a cell may now cost nothing.
 * **Scope.** In scope per the roster decision of 2026-08-11: Scarce (14 traits, 4 weapons) and Event
-  (18 traits). Out of scope: Tarot Cards, which remain the boundary #161 documents. Burn needs no
-  separate decision — five of its six members arrive via Scarce or Event, and Necromancer is already
-  modelled.
+  (18 traits). Out of scope: Tarot Cards, which remain the boundary #161 documents.
+* **Burn needs no separate decision, and its count needs stating carefully.** Six pages carry `Burn`
+  in their `Type` field, but one of them — Final Gasp, whose `Type` is `"Event , Burn"` — is
+  event-gated, so **five Burn traits are permanently available**: Death Cheat, Necromancer, Rampage,
+  Relentless and Remedy. Every one of the six is already reachable under the scope above: Death Cheat,
+  Rampage, Relentless and Remedy arrive via Scarce, Final Gasp via Event, and Necromancer is the one
+  already in the catalog.
+
+  Stated this way because the bare figure invites the wrong reading in both directions. "Six" reads as
+  contradicting the five a player would count in game, and the catalog's own distribution — 31
+  `Regular` and 1 `Burn` across the 32 traits it models — is a **coverage** number that reads as a
+  claim about the game if quoted without that qualifier. It is not: it means five of the six Burn
+  traits are missing from the catalog.
+
+  Open question, deliberately not encoded: whether Final Gasp genuinely behaves as a burn trait while
+  it is available, or whether `Event , Burn` is a wiki categorisation artifact. If the wiki is wrong
+  there, that is a data-quality finding rather than something this decision should bake in.
 * **Catalyst is a function, not a rarity, and so is Solo.** SPEC-0007 REQ "Fields the Scraper Must Not
   Derive" places both on the functional axis, and the wiki's data agrees: all five Catalyst traits
   state `Type: "Regular"` and nothing else, where a genuinely two-rarity trait lists both of its
