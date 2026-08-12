@@ -278,7 +278,10 @@ describe("consumable type", () => {
   });
 });
 
-// Governing: #162 (closing #42), audit §D.2, SPEC-0007 REQ "Fields the Scraper Must Not Derive"
+// Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File — every wiki value
+// measured below is read through `statFieldFor` off the generated itemStats.json, so this suite is
+// bound to that contract as much as to the taxonomy argument), #162 (closing #42), audit §D.2,
+// SPEC-0007 REQ "Fields the Scraper Must Not Derive"
 //
 // The TRAIT_GROUPS rationale, pinned to the measurements it rests on rather than left as prose. The
 // comment above TRAIT_GROUPS argues the wiki's functional scheme would be a WORSE affordance than the
@@ -310,10 +313,39 @@ describe("the TRAIT_GROUPS taxonomy rationale", () => {
   it("would concentrate the roster far more than the app's own buckets do", () => {
     // Reason 2, and the one that decides it. `Supportive` is the wiki's catch-all; if it ever stops
     // being lopsided, the argument for hand-authoring these names weakens and this should be revisited.
+    //
+    // Pinned to the exact counts, not just to `lopsided > even`. The comment PRINTS a table, so the
+    // table is what has to fail — a share threshold alone lets every number in it drift while both
+    // assertions stay green, which is how a printed distribution ages quietly into being wrong.
+    expect(tally(wikiCategories)).toEqual({
+      Supportive: 30, Offensive: 12, Defensive: 10, Movement: 6,
+    });
+    expect(tally(TRAITS.map((t) => t[3]))).toEqual({
+      Combat: 15, Medical: 16, Mobility: 5, Stealth: 8, Utility: 14,
+    });
     const wikiShare = share(tally(wikiCategories));
     const appShare = share(tally(TRAITS.map((t) => t[3])));
     expect(wikiShare).toBeGreaterThan(0.5);
     expect(appShare).toBeLessThan(wikiShare);
+  });
+
+  it("carries a second functional value in a field `group` cannot hold", () => {
+    // Reason 3 — the half of it this repo's data can actually decide. `Solo` and `Catalyst` are on
+    // SPEC-0007's functional axis alongside the four `Category` values, but they arrive in their own
+    // infobox field, so these four traits carry two functional labels at once against one section
+    // header.
+    //
+    // The OTHER half of reason 3 — "no trait is both Offensive and Defensive" — is deliberately not
+    // asserted here, and its absence is the point. `scrape-stats.mjs` persists only the acquisition
+    // axis, so the sole committed evidence is the single-valued `Category` string: a test against it
+    // could only ever pass, which would make it a decoration rather than a check. The comment above
+    // TRAIT_GROUPS states that claim as a 43-of-58 probe for the same reason.
+    const conditional = (id) => statFieldFor(id, "ConditionalEffect");
+    expect(["beastface", "vigilant"].map(conditional)).toEqual(["Catalyst", "Catalyst"]);
+    expect(["necromancer", "conduit"].map(conditional)).toEqual(["Solo", "Solo"]);
+    for (const id of ["beastface", "vigilant", "necromancer", "conduit"]) {
+      expect(statFieldFor(id, "Category")).toBe("Supportive");
+    }
   });
 
   it("assigns every trait to a declared group", () => {

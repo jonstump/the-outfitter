@@ -541,17 +541,32 @@ export const TRAITS = [
 //      A bucket holding over half the roster is a worse affordance than anything below — the app's
 //      largest is Medical at 16 (28%). `Supportive` is the wiki's catch-all, and it absorbs traits as
 //      unrelated as Relentless, Decoy Supply, Poltergeist, Witness and Necromancer.
-//   3. IT IS MULTI-VALUED, THOUGH NOT IN THE WAY #162 ASSUMED. No trait is both Offensive and
-//      Defensive — the primary function really is single-valued. But `Solo` and `Catalyst` sit on the
-//      same axis (SPEC-0007 names them there), so Beastface and Vigilant are Supportive AND Catalyst,
-//      while Necromancer and Conduit are Supportive AND Solo. A `group` field renders one section
-//      header per item and cannot hold two.
+//   3. IT IS MULTI-VALUED, THOUGH NOT IN THE WAY #162 ASSUMED. Across the 43 of 58 traits (74%)
+//      whose page categories were probed while writing this, none was both Offensive and Defensive
+//      — so on that sample the primary function reads as single-valued. That NARROWS audit §D.2's
+//      HIGH-confidence "multi-valued" verdict rather than overturning it, and the qualifier is load-
+//      bearing because THE REPO CANNOT CHECK THE CLAIM: `scrape-stats.mjs` parses whole-page
+//      categories but persists only `acquisitionClasses`, filtered to the acquisition axis, so
+//      itemStats.json carries no functional category SET at all. The one committed piece of evidence
+//      is the infobox `Category` string, which is single-valued by construction and therefore
+//      structurally incapable of falsifying the claim — a test written against it could only ever
+//      pass. The probe is not reproducible from committed data; persisting the full category sets is
+//      what would make it so, and that is its own change.
+//      The multi-valuedness that IS checkable, and is checked: `Solo` and `Catalyst` sit on the same
+//      functional axis (SPEC-0007 names all six there) but arrive in a separate infobox field, so
+//      Beastface and Vigilant are Supportive AND Catalyst, while Necromancer and Conduit are
+//      Supportive AND Solo. A `group` field renders one section header per item and cannot hold two.
 //
 // The SECOND wiki scheme — Regular / Burn / Scarce / Event — is about acquisition rather than
 // function, and #162 noted it was "genuinely missing". It is not missing any more: the scrape records
-// it per item as `acquisitionClasses` in itemStats.json (#230), where it decides which rows belong in
-// the catalog at all (ADR-0013) rather than which section they render under. That is the right home
-// for it, and it is genuinely multi-valued — Relentless is Scarce AND Burn.
+// it per item as `acquisitionClasses` in itemStats.json (#230), where it decides what a row COSTS
+// rather than which section it renders under. NOT whether the row exists at all: ADR-0013 retired
+// unpurchasability as grounds for exclusion, and SPEC-0007 REQ "Acquisition Class Is Captured So
+// Roster Membership Is Checkable" strikes that framing in its 2026-08-12 amendment, replacing
+// "whether it belongs in the catalog at all" with "what it costs". Which is why the 8 Scarce traits
+// thirty lines up are IN this table, at zero — the same correction the boundary block above makes at
+// length. That is the right home for it, and it is genuinely multi-valued — Relentless is Scarce AND
+// Burn.
 //
 // So these five names are a UI affordance this project authors, which is exactly what SPEC-0007 REQ
 // "Fields the Scraper Must Not Derive" already concludes: "None is a single-valued UI category. A new
@@ -576,6 +591,12 @@ export const TRAITS = [
 // REVISIT WHEN: a bucket passes ~20 rows, or the picker's grid (#227) stops fitting a group on one
 // screen. Renaming or splitting a group is UI-only: `group` is never persisted — a saved loadout
 // stores trait ids (`loadoutCodec.js` `toData`) — so regrouping cannot invalidate one.
+//
+// Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File — every wiki number
+// argued above is read through `statFieldFor` off the generated itemStats.json, and reason 3's limits
+// are that file's shape), ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ
+// "Fields the Scraper Must Not Derive", REQ "Acquisition Class Is Captured So Roster Membership Is
+// Checkable". Refs #42, #157, #162, #230.
 export const TRAIT_GROUPS = ["Combat", "Medical", "Mobility", "Stealth", "Utility"];
 
 const THUMBS = {
