@@ -4,6 +4,7 @@ import {
   AMMO_LABEL,
   CONS,
   CONS_GROUPS,
+  CONS_TYPE_COLOR,
   TOOLS,
   TOOL_GROUPS,
   TRAITS,
@@ -94,7 +95,9 @@ function buildRows(tab, ui, loadout, dispatch) {
           name: x.c[1],
           meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 equipped",
           badge: x.c[3].toUpperCase(),
-          badgeColor: x.c[3] === "Shot" ? "#7a8a5c" : "#a5674a",
+          // Governing: #155. Shared with EquipmentSlot via catalog.js rather than duplicated here —
+          // the two-branch copies would both have rendered `Placeable` as `Throwable`.
+          badgeColor: CONS_TYPE_COLOR[x.c[3]] ?? CONS_TYPE_COLOR.Throwable,
           category: "consumables",
           thumb: consThumb(x.c),
           costStr: "$" + x.c[2],
