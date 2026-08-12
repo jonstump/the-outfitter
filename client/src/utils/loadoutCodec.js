@@ -98,13 +98,22 @@ function fromV1(d) {
     const i = indexOfItem(WEAPONS, w[0]);
     return { i, a: boundedAmmo(i, w[1]) };
   };
-  const equip = (d.e || [])
-    .filter((e) => e && (e[0] === "T" || e[0] === "C") && (e[0] === "T" ? TOOL_BY_ID : CONS_BY_ID).has(e[1]))
+  const raw = (d.e || []).filter((e) => e && (e[0] === "T" || e[0] === "C"));
+  const equip = raw
+    .filter((e) => (e[0] === "T" ? TOOL_BY_ID : CONS_BY_ID).has(e[1]))
     .slice(0, 8)
     .map((e) => ({ t: e[0], i: indexOfItem(e[0] === "T" ? TOOLS : CONS, e[1]) }));
 
+  // Read from `raw`, before the filter above discards it: the filter is exactly what would drop a
+  // promoted id, so the promotion has to see the entry the filter is about to remove. (#156)
+  const weapons = [0, 1].map(slotWeapon);
+  promoteToWeaponSlots(
+    weapons,
+    raw.filter((e) => e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
+  );
+
   return {
-    weapons: [0, 1].map(slotWeapon),
+    weapons,
     equip,
     // Traits are stored by stable catalog id (see catalog.js) — pass the ids
     // straight through rather than re-mapping to current array positions, then
@@ -198,6 +207,50 @@ function legacyId(table, index) {
   return table[index] ?? null;
 }
 
+/**
+ * Ids that were equipment when older records were written and are weapons now.
+ *
+ * Governing: #156. The Katana was a Tool and is a size-2 melee weapon.
+ *
+ * This is a DIFFERENT kind of move from the tools-to-consumables crossing that `resolveLegacyEquip`
+ * below handles, and the difference is why it needs its own step. Tools and Consumables share one
+ * equipment pool, so an id found on the other shelf restores into the same slot at the same cost —
+ * "what the record meant is the item, not the shelf it sat on". A weapon does not share that pool:
+ * it occupies one of two weapon slots and spends `capMax()`'s size budget instead of one of the
+ * eight equipment cells. Restoring the item therefore means moving it to a different kind of slot,
+ * not looking it up in a second map.
+ *
+ * Both decoders route through here, because #156's hazard is not legacy-only: `fromV1` filters
+ * equipment through `TOOL_BY_ID`, so a CURRENT-format record carrying `["T","katana"]` would be
+ * dropped just as silently as `LEGACY_TOOL_IDS[6]` would.
+ */
+export const PROMOTED_TO_WEAPON = new Set(["katana"]);
+
+/**
+ * Move promoted ids into free weapon slots, mutating `weapons` in place.
+ *
+ * Best-effort by necessity: a loadout that already carries two weapons has nowhere to put a third,
+ * and no encoding can express one. That case drops the item, which is the same outcome as before this
+ * migration existed and strictly better than the alternative for every other case.
+ *
+ * Deliberately does NOT check the size budget. `fromV1` has never enforced `capMax` on decode — a
+ * weapon whose size grew already decodes over budget — and refusing here would make a record
+ * unloadable rather than self-correcting, which is the failure #201 established the decoder must
+ * avoid: the store persists a decoded loadout before rendering it.
+ */
+function promoteToWeaponSlots(weapons, ids) {
+  for (const id of ids) {
+    if (!WEAPON_BY_ID.has(id)) continue;
+    const i = indexOfItem(WEAPONS, id);
+    // Already carried as a weapon — a record saved after the migration, whose stale equipment entry
+    // must not produce a duplicate.
+    if (weapons.some((w) => w && w.i === i)) continue;
+    const free = weapons.findIndex((w) => w === null);
+    if (free === -1) continue;
+    weapons[free] = { i, a: boundedAmmo(i, -1) };
+  }
+}
+
 // Resolve a legacy equipment slot to its current { t, i }.
 //
 // The lookup crosses categories on purpose. Tools and Consumables share one equipment
@@ -223,14 +276,26 @@ function fromLegacy(d) {
     const i = indexOfItem(WEAPONS, id);
     return { i, a: boundedAmmo(i, w[1]) };
   };
-  const equip = (d.e || [])
-    .filter((e) => e && (e[0] === "T" || e[0] === "C"))
+  const raw = (d.e || []).filter((e) => e && (e[0] === "T" || e[0] === "C"));
+  const equip = raw
     .map((e) => resolveLegacyEquip(e[0], e[1]))
     .filter(Boolean)
     .slice(0, 8);
 
+  // The legacy index has to be translated to an id first — LEGACY_TOOL_IDS[6] is "katana" — which is
+  // why this cannot reuse `resolveLegacyEquip`: that helper returns null for a promoted id, and null
+  // is indistinguishable from a slot that legitimately resolves to nothing. (#156)
+  const weapons = [0, 1].map(slotWeapon);
+  promoteToWeaponSlots(
+    weapons,
+    raw
+      .filter((e) => e[0] === "T")
+      .map((e) => legacyId(LEGACY_TOOL_IDS, e[1]))
+      .filter((id) => id && PROMOTED_TO_WEAPON.has(id))
+  );
+
   return {
-    weapons: [0, 1].map(slotWeapon),
+    weapons,
     equip,
     // Legacy encodings reference traits by array position; translate to the stable
     // catalog id the store now keys on (see catalog.js's trait tuple shape), then clamp

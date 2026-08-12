@@ -199,8 +199,12 @@ export const WIKI_TITLE_OVERRIDES = {
     "winfield-m1873c": null,
   },
   tools: {
-    // The wiki files the Katana under Weapons even though the catalog treats it as a Tool.
-    katana: "Weapons/Katana",
+    // The `katana: "Weapons/Katana"` cross-category override was removed by #156, which moved the row
+    // into WEAPONS where the DEFAULT resolves to that same path. It is worth recording why it was
+    // there: it made the scrape work while leaving the classification wrong, so every run reported
+    // success against a page that disagreed with the catalog about what kind of item this is. An
+    // override that silences a mismatch can hide one — the mismatch is the signal.
+    //
     // The wiki pluralizes the placeable trap pages; the catalog uses the singular in-game label.
     "alert-trip-mine": "Tools/Alert_Trip_Mines",
     "concertina-trip-mine": "Tools/Concertina_Trip_Mines",

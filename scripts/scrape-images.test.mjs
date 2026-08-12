@@ -127,8 +127,19 @@ test("resolveWikiPath: maps weapon variants to their subpage", () => {
   );
 });
 
-test("resolveWikiPath: can cross categories (the Katana is a Tool here, a Weapon on the wiki)", () => {
-  assert.equal(resolveWikiPath("tools", "katana", "Katana"), "Weapons/Katana");
+test("resolveWikiPath: the Katana resolves as the weapon it is, with no override", () => {
+  // This asserted the cross-category override `tools.katana -> "Weapons/Katana"`, which #156 deleted
+  // by moving the row into WEAPONS. The resolved path is unchanged; what changed is that the DEFAULT
+  // produces it, because the catalog and the wiki finally agree on what kind of item this is.
+  //
+  // The override is worth remembering as a caution rather than a pattern: it made the scrape work
+  // while leaving the classification wrong, so every run reported success against a page that
+  // disagreed with the catalog. An override that silences a mismatch can hide one.
+  assert.equal(resolveWikiPath("weapons", "katana", "Katana"), "Weapons/Katana");
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(WIKI_TITLE_OVERRIDES.tools, "katana"),
+    "the Katana is not a tool, so a tools override for it can never be consulted"
+  );
 });
 
 test("resolveWikiPath: pluralizes the trap tools the way the wiki does", () => {
