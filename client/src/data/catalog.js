@@ -231,19 +231,66 @@ export const CONS = [
   ["stamina-shot-weak", "Stamina Shot (Weak)", 60, "Shot", "Shots"],
   ["antidote-shot-weak", "Antidote Shot (Weak)", 30, "Shot", "Shots"],
   ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
-  ["medical-pack", "Medical Pack", 35, "Shot", "Shots"],
+  ["medical-pack", "Medical Pack", 35, "Placeable", "Shots"],
   ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
   ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
   ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
   ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
-  ["ammo-box", "Ammo Box", 65, "Throwable", "Utility"],
-  ["tool-box", "Tool Box", 70, "Throwable", "Utility"],
+  ["ammo-box", "Ammo Box", 65, "Placeable", "Utility"],
+  ["tool-box", "Tool Box", 70, "Placeable", "Utility"],
   ["choke-beetle", "Choke Beetle", 22, "Throwable", "Gas"],
   ["stalker-beetle", "Stalker Beetle", 45, "Throwable", "Utility"],
   ["fire-beetle", "Fire Beetle", 57, "Throwable", "Fire"],
 ];
 
 export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
+
+/**
+ * The `type` field's value set (`CONS[i][3]`), which is NOT the UI bucket — that is `group`
+ * (`CONS[i][4]`) and `CONS_GROUPS` above.
+ *
+ * `Placeable` added 2026-08-12 (#155). Ammo Box, Tool Box and Medical Pack were filed as `Throwable`
+ * and `Shot`; all three are `Category:Placeable_Consumables` on the wiki. Medical Pack is the
+ * instructive one — the wiki files it under BOTH `Placeable Consumables` (a cap category) and
+ * `Healing Consumables` (an effect category), and the app had taken the effect one.
+ *
+ * Read what this field is and is not, because the issue that reported the misfiling described it as a
+ * rules input and it no longer is. `calc.js` once had a `catCount()` that capped four *per type*;
+ * #190 replaced it with per-item `consCount`, and SPEC-0008 now specifies that outright — "counted
+ * per specific consumable rather than per consumable type". So a wrong value here cannot
+ * over-constrain or under-constrain a loadout any more. Its consumers are all display: the badge
+ * colours below, the badge label itself, and the picker's meta line. The fix is for accuracy, and
+ * `catalog.test.js` pins the cap as per-item so the retired rule is not reintroduced on the strength
+ * of that stale description.
+ *
+ * `Shot` is retained and is knowingly not a wiki category: the wiki has no `Shot Consumables`, and
+ * Vitality Shot is filed only under `Healing Consumables`. So this set mixes two of the game's cap
+ * categories with one of our own naming. Recorded rather than silently corrected, because collapsing
+ * `Shot` would change ten rows for no behavioural gain while this field drives only colour.
+ */
+export const CONS_TYPES = ["Shot", "Throwable", "Placeable"];
+
+/**
+ * Badge colour per consumable type, in one place because there were two copies of the switch.
+ *
+ * `EquipmentSlot` and `PickerRow` both coloured their category badge with an inline
+ * `type === "Shot" ? olive : rust`. Two copies of a two-branch conditional survived a third value
+ * being added only by rendering `Placeable` identically to `Throwable` — a distinction the user could
+ * not see, which is the same class of defect as a fallback keyed off the wrong field.
+ *
+ * Steel blue for `Placeable` is measured, not chosen by eye: 5.86:1 against `--panel` (#1a1510),
+ * above all three existing badge colours (tools 3.83:1, Shot 4.85:1, Throwable 4.00:1). These are
+ * text colours, and #93 tracks bringing this palette up to the WCAG AA baseline — a new value should
+ * not be the one that makes that job harder.
+ */
+export const CONS_TYPE_COLOR = {
+  Shot: "#7a8a5c",
+  Throwable: "#a5674a",
+  Placeable: "#7f96a3",
+};
+
+/** The tool badge colour, alongside the consumable ones so the equipment palette reads as one set. */
+export const TOOL_COLOR = "#8a6f42";
 
 // ROSTER BOUNDARY — why this table is 58 rows against the 75 live traits we can evidence.
 //

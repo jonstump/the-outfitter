@@ -1,6 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useMemo } from "react";
-import { CONS, TOOLS, consThumb, toolThumb } from "../../data/catalog.js";
+import { CONS, CONS_TYPE_COLOR, TOOLS, TOOL_COLOR, consThumb, toolThumb } from "../../data/catalog.js";
 import { selectEquipEntry, selectSlotMax } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
@@ -31,7 +31,10 @@ export default function EquipmentSlot({ index }) {
   }
 
   const def = entry.t === "T" ? TOOLS[entry.i] : CONS[entry.i];
-  const catColor = entry.t === "T" ? "#8a6f42" : def[3] === "Shot" ? "#7a8a5c" : "#a5674a";
+  // Governing: #155. The two-branch `def[3] === "Shot" ? olive : rust` this replaces had a duplicate
+  // in PickerRow, and both would have rendered the new `Placeable` type identically to `Throwable`.
+  // The mapping lives in catalog.js beside the value set it keys off.
+  const catColor = entry.t === "T" ? TOOL_COLOR : (CONS_TYPE_COLOR[def[3]] ?? CONS_TYPE_COLOR.Throwable);
   const category = entry.t === "T" ? "tools" : "consumables";
   const svgPath = entry.t === "T" ? toolThumb(def) : consThumb(def);
 

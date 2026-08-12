@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { consCount } from "../utils/calc.js";
 import {
   CONS,
   CONS_GROUPS,
+  CONS_TYPES,
+  CONS_TYPE_COLOR,
   TOOLS,
+  TOOL_COLOR,
   TOOL_GROUPS,
   TRAITS,
   TRAIT_GROUPS,
@@ -76,13 +80,13 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
 
   it("adds the missing consumables and Weak-shot variants (#37)", () => {
     const expected = {
-      "Ammo Box": ["ammo-box", "Ammo Box", 65, "Throwable", "Utility"],
-      "Tool Box": ["tool-box", "Tool Box", 70, "Throwable", "Utility"],
+      "Ammo Box": ["ammo-box", "Ammo Box", 65, "Placeable", "Utility"],
+      "Tool Box": ["tool-box", "Tool Box", 70, "Placeable", "Utility"],
       "Hellfire Bomb": ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
       "Waxed Dynamite Stick": ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
       "Dark Dynamite Satchel": ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
       "Poison Bomb": ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
-      "Medical Pack": ["medical-pack", "Medical Pack", 35, "Shot", "Shots"],
+      "Medical Pack": ["medical-pack", "Medical Pack", 35, "Placeable", "Shots"],
       "Recovery Shot": ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
       "Vitality Shot (Weak)": ["vitality-shot-weak", "Vitality Shot (Weak)", 20, "Shot", "Shots"],
       "Regeneration Shot (Weak)": ["regeneration-shot-weak", "Regeneration Shot (Weak)", 40, "Shot", "Shots"],
@@ -217,5 +221,58 @@ describe("consThumb", () => {
   it("falls back to the Utility icon for an unrecognized group", () => {
     const utilityIcon = consThumb(["fixture", "Fixture", 0, "Throwable", "Utility"]);
     expect(consThumb(["fixture", "Fixture", 0, "Throwable", "NotARealGroup"])).toBe(utilityIcon);
+  });
+});
+
+// Governing: #155 (Placeable consumables), SPEC-0008 (the cap is per specific consumable)
+//
+// The issue that produced these rows described `type` as a rules input — "calc.js's catCount() counts
+// equipped consumables by it" — and by the time it was fixed that was no longer true. #190 replaced
+// the per-type cap with per-item `consCount`, and its "Done means" asked for a test that "a 5th
+// Placeable is rejected", which would have reintroduced the retired rule. These tests pin what the
+// field IS (data, and a badge colour) and what the cap is NOT (per type).
+describe("consumable type", () => {
+  const typeOf = (name) => entry(CONS, name)[3];
+
+  it("files the three placeables the wiki files as Placeable", () => {
+    // All three are Category:Placeable_Consumables. Medical Pack is the instructive one: the wiki has
+    // it under both Placeable Consumables (a cap category) and Healing Consumables (an effect
+    // category), and the app had taken the effect one and written it into `type`.
+    expect(typeOf("Ammo Box")).toBe("Placeable");
+    expect(typeOf("Tool Box")).toBe("Placeable");
+    expect(typeOf("Medical Pack")).toBe("Placeable");
+  });
+
+  it("keeps Medical Pack's UI group, which was never wrong", () => {
+    // `group` is the picker bucket and is a separate field from `type`. Only `type` was misfiled.
+    expect(entry(CONS, "Medical Pack")[4]).toBe("Shots");
+  });
+
+  it("uses only declared types", () => {
+    const undeclared = CONS.filter((c) => !CONS_TYPES.includes(c[3])).map((c) => `${c[0]}:${c[3]}`);
+    expect(undeclared).toEqual([]);
+  });
+
+  it("gives every type its own badge colour", () => {
+    // Two copies of a `type === "Shot" ? olive : rust` conditional would have rendered Placeable
+    // identically to Throwable — a distinction the user cannot see is not a distinction.
+    const colors = CONS_TYPES.map((t) => CONS_TYPE_COLOR[t]);
+    expect(colors.filter(Boolean)).toHaveLength(CONS_TYPES.length);
+    expect(new Set(colors).size).toBe(CONS_TYPES.length);
+    expect(new Set([...colors, TOOL_COLOR]).size).toBe(CONS_TYPES.length + 1);
+  });
+
+  it("does not let type become a cap bucket again", () => {
+    // The regression this issue's own stale description invited. SPEC-0008: "counted per specific
+    // consumable rather than per consumable type". Four of one Placeable plus four of another is
+    // legal, and so is a fifth Placeable that is a different item — what is capped is the item.
+    const placeables = CONS.map((c, i) => ({ c, i })).filter((x) => x.c[3] === "Placeable");
+    expect(placeables.length).toBeGreaterThanOrEqual(3);
+    const equip = placeables.flatMap((x) => Array.from({ length: 4 }, () => ({ t: "C", i: x.i })));
+    const loadout = { equip };
+    for (const x of placeables) {
+      expect(consCount(loadout, x.i)).toBe(4);
+    }
+    expect(equip.length).toBeGreaterThan(4);
   });
 });
