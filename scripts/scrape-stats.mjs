@@ -24,7 +24,10 @@
 //       --allow-shrink                            Permit a write that drops already-covered items
 //       --write-catalog                           Apply scraped values over hand-authored ones
 //       --discover                                Crawl the wiki's category indexes and report
-//                                                  coverage, classifying what the catalog lacks
+//                                                  coverage, classifying what the catalog lacks.
+//                                                  Traits are read from three indexes (Regular,
+//                                                  Scarce, Event) and de-duplicated; see
+//                                                  CATEGORY_INDEX.
 //       --dry-run                                 Resolve URLs and check robots.txt, but fetch
 //                                                  nothing and write nothing
 //
@@ -532,12 +535,29 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
 // wrongly hidden as a tombstone is information nobody sees again.
 // ---------------------------------------------------------------------------
 
-/** The wiki category that enumerates each catalog category's membership. */
+/**
+ * The wiki categories that enumerate each catalog category's membership.
+ *
+ * A LIST per catalog category, because one index does not enumerate the traits. `traits` previously
+ * read `Category:Purchasable_Traits`, which is a **redirect to `Category:Traits/Regular`** — the
+ * server follows it, so the crawl returned 58 Regular traits and a coverage figure that looked
+ * complete while 14 Scarce and 18 Event traits were outside the frame entirely. A Scarce trait could
+ * not be reported as missing, as unpurchasable, or as a tombstone, because it was never enumerated.
+ * The name is what hid it: "Purchasable Traits" reads as every trait you can obtain and means the
+ * Regular ones. (#231, ADR-0013.)
+ *
+ * Burn and Catalyst are deliberately absent. Five of the six Burn traits are members of the Scarce
+ * or Event indexes and Necromancer is already in the catalog, so Burn adds no page a union of these
+ * three would miss; Catalyst is on the functional axis per SPEC-0007 and its five members are
+ * already modelled as Regular traits.
+ *
+ * Governing: ADR-0013, SPEC-0007 REQ "Roster Coverage Is Reported Against the Wiki's Own Categories"
+ */
 export const CATEGORY_INDEX = {
-  weapons: "Category:Weapons",
-  tools: "Category:Tools",
-  traits: "Category:Purchasable_Traits",
-  consumables: "Category:Consumables",
+  weapons: ["Category:Weapons"],
+  tools: ["Category:Tools"],
+  traits: ["Category:Traits/Regular", "Category:Traits/Scarce", "Category:Traits/Event"],
+  consumables: ["Category:Consumables"],
 };
 
 /**
@@ -846,9 +866,12 @@ export function parsePageCategories(html) {
 /**
  * Crawl each category index, diff it against the catalog, and classify what does not match.
  *
- * Deliberately its own phase behind `--discover`: the unmatched set is ~160 pages (109 of the 147
- * weapon-category members are variants and skins the catalog does not model), and a stats run
- * should not quietly triple its request count.
+ * Deliberately its own phase behind `--discover`: the unmatched set is ~190 pages (109 of the 147
+ * weapon-category members are variants and skins the catalog does not model, and the trait indexes
+ * add ~32 more unmatched pages), and a stats run should not quietly triple its request count.
+ *
+ * A catalog category maps to a LIST of wiki indexes. Members are unioned across them and
+ * de-duplicated by page path before any arithmetic — see CATEGORY_INDEX for why traits need three.
  */
 export async function runDiscovery(options, deps) {
   const { categories = CATEGORIES, delayMs = DEFAULT_DELAY_MS, dryRun = false } = options;
@@ -858,17 +881,21 @@ export async function runDiscovery(options, deps) {
   const report = {};
 
   for (const category of categories) {
-    const indexPage = CATEGORY_INDEX[category];
-    if (!indexPage) continue;
+    const indexPages = CATEGORY_INDEX[category];
+    if (!indexPages || indexPages.length === 0) continue;
 
-    const indexUrl = buildItemPageUrl(indexPage);
+    const indexUrls = indexPages.map((page) => ({ page, url: buildItemPageUrl(page) }));
 
-    // The index fetch is the FIRST request this phase makes, and it was the one request that went
-    // out without asking. Every other path here and in scrapeItemStats consults robots first, and
-    // runStatsScrape fails closed when robots.txt cannot even be read — an un-consented request to
-    // establish the crawl is the one place that posture cannot afford an exception. (Review of #186.)
-    if (!isAllowedByRobots(robotsGroups, userAgent, new URL(indexUrl).pathname)) {
-      throw new RobotsDisallowedError(`robots.txt disallows ${indexPage}`, { url: indexUrl });
+    // The index fetches are the FIRST requests this phase makes, and they were the one request that
+    // went out without asking. Every other path here and in scrapeItemStats consults robots first,
+    // and runStatsScrape fails closed when robots.txt cannot even be read — an un-consented request
+    // to establish the crawl is the one place that posture cannot afford an exception. Every index in
+    // the list is checked, not just the first, or adding one would reintroduce the exception.
+    // (Review of #186; extended for #231.)
+    for (const { page, url } of indexUrls) {
+      if (!isAllowedByRobots(robotsGroups, userAgent, new URL(url).pathname)) {
+        throw new RobotsDisallowedError(`robots.txt disallows ${page}`, { url });
+      }
     }
 
     // `--dry-run` promises "resolve URLs and check robots.txt, but fetch nothing". Discovery is the
@@ -876,8 +903,8 @@ export async function runDiscovery(options, deps) {
     // one mode chosen to avoid requests made the most of them. Report what would be crawled.
     if (dryRun) {
       report[category] = {
-        indexPage,
-        indexUrl,
+        indexPages,
+        indexUrls: indexUrls.map((i) => i.url),
         dryRun: true,
         wikiMembers: null,
         catalogRows: collectCatalogItems([category]).length,
@@ -889,21 +916,48 @@ export async function runDiscovery(options, deps) {
         tombstones: [],
         failures: [],
       };
-      log({ level: "info", event: "discovery-dry-run", category, indexUrl });
+      for (const { url } of indexUrls) log({ level: "info", event: "discovery-dry-run", category, indexUrl: url });
       continue;
     }
 
-    await limiter.wait();
-    const res = await fetchFn(indexUrl, { headers: { "User-Agent": userAgent } });
-    if (!res.ok) {
-      throw new NetworkFailureError(`failed to fetch ${indexPage}: HTTP ${res.status} at ${indexUrl}`, {
-        url: indexUrl,
-      });
+    // De-duplicated by page path BEFORE any coverage arithmetic, because a page can be enumerated by
+    // more than one index — six traits are members of both the Scarce and the Event index. `matched`
+    // below is `members.length - unmatched.length`, so a page counted twice would inflate the member
+    // total and silently inflate `matched` with it, which is the opposite of what this table is for.
+    // Insertion order is preserved so a run's output stays stable across runs.
+    // Governing: SPEC-0007 REQ "Roster Coverage Is Reported Against the Wiki's Own Categories"
+    // One normalisation, used for the de-duplication key, the `listedIn` lookup, and the catalog
+    // target map below. Three callers needing the same key is exactly where two copies drift, and a
+    // drift here is silent: members would de-duplicate under one rule and be looked up under another.
+    const norm = (p) => String(p).replace(/_/g, " ").trim().toLowerCase();
+
+    const members = [];
+    const seenMembers = new Set();
+    const memberIndexes = new Map();
+    for (const { page, url } of indexUrls) {
+      await limiter.wait();
+      // eslint-disable-next-line no-await-in-loop
+      const res = await fetchFn(url, { headers: { "User-Agent": userAgent } });
+      if (!res.ok) {
+        throw new NetworkFailureError(`failed to fetch ${page}: HTTP ${res.status} at ${url}`, { url });
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const listed = parseCategoryMembers(await res.text());
+      for (const member of listed) {
+        const key = norm(member);
+        // Which indexes listed a page is recorded rather than discarded: it is the difference between
+        // "this trait is Scarce" and "this trait was found while crawling Scarce", and only the
+        // per-page category read decides the former.
+        if (!memberIndexes.has(key)) memberIndexes.set(key, []);
+        memberIndexes.get(key).push(page);
+        if (seenMembers.has(key)) continue;
+        seenMembers.add(key);
+        members.push(member);
+      }
+      log({ level: "info", event: "discovery-index", category, indexPage: page, listed: listed.length });
     }
-    const members = parseCategoryMembers(await res.text());
 
     // The catalog's own targets, normalised the same way the member list is.
-    const norm = (p) => String(p).replace(/_/g, " ").trim().toLowerCase();
     const catalogTargets = new Map(
       collectCatalogItems([category])
         .filter((item) => item.wikiPath)
@@ -962,12 +1016,14 @@ export async function runDiscovery(options, deps) {
           }
         }
       }
-      unmatched.push({ page, ...classification });
+      const listedIn = memberIndexes.get(norm(page)) ?? [];
+      unmatched.push({ page, listedIn, ...classification });
       log({
         level: classification.state === "unreadable" ? "warn" : "info",
         event: "discovery-unmatched",
         category,
         page,
+        listedIn,
         state: classification.state,
         ...(classification.reason ? { reason: classification.reason } : {}),
         // Parsed twenty lines up and then dropped here, which meant a completed run's own log could
@@ -988,7 +1044,9 @@ export async function runDiscovery(options, deps) {
 
     const live = unmatched.filter((u) => u.state === "live");
     report[category] = {
-      indexPage,
+      indexPages,
+      // Both counted from the de-duplicated set. A page listed by two indexes is one member and one
+      // catalog gap, not two of either.
       wikiMembers: members.length,
       catalogRows: collectCatalogItems([category]).length,
       matched: members.length - unmatched.length,
@@ -1024,8 +1082,12 @@ export async function runDiscovery(options, deps) {
  *
  * "Page exists but the item does not" and "item missing from the catalog" are reported as separate
  * columns on purpose: the audit's trait delta of 26 was read as 26 missing traits, and at least one
- * of them — Iron Repeater — is a tombstone sitting in `Category:Purchasable_Traits`. A single
- * "delta" number invites that reading; two columns do not.
+ * of them — Iron Repeater — is a tombstone sitting in the Regular trait index. A single "delta"
+ * number invites that reading; two columns do not.
+ *
+ * The indexes behind a multi-index category are printed above its row for the same reason. A member
+ * count is not checkable without knowing what was enumerated to produce it, and the failure #231
+ * fixed was precisely a total that looked complete because nobody could see its frame.
  */
 /**
  * The rarity set, printed only when the page declared one.
@@ -1042,8 +1104,14 @@ export function formatCoverage(report) {
   const lines = ["coverage against the wiki's own category indexes:"];
   for (const [category, r] of Object.entries(report)) {
     if (r.dryRun) {
-      lines.push(`  ${category.padEnd(12)} dry-run — would crawl ${r.indexUrl}`);
+      for (const url of r.indexUrls ?? []) lines.push(`  ${category.padEnd(12)} dry-run — would crawl ${url}`);
       continue;
+    }
+    // Which indexes produced the number, printed when there is more than one. A member count for
+    // `traits` is not checkable without knowing whether it came from one index or three, and the whole
+    // point of #231 is that a single-index total looked complete while being a third of the roster.
+    if ((r.indexPages ?? []).length > 1) {
+      lines.push(`  ${category.padEnd(12)} indexes: ${r.indexPages.join(", ")} (members de-duplicated)`);
     }
     lines.push(
       `  ${category.padEnd(12)} wiki ${String(r.wikiMembers).padStart(3)}  catalog ${String(r.catalogRows).padStart(3)}` +

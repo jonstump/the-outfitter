@@ -34,6 +34,7 @@ import {
   buildStatsRecord,
   canonicalTitleFromPageName,
   categoryLineRange,
+  CATEGORY_INDEX,
   classifyPage,
   classifyPageFetchError,
   createSummary,
@@ -1575,6 +1576,133 @@ test("runDiscovery: a page with no price field is unresolved, not proposed as mi
   assert.match(formatCoverage(report), /unresolved\s+Tools\/Unpriced Thing/);
 });
 
+test("CATEGORY_INDEX: traits are enumerated by every in-scope rarity index, not one redirect", () => {
+  // A regression guard with a specific target. `Category:Purchasable_Traits` is a REDIRECT to
+  // `Category:Traits/Regular`, so crawling it returned 58 members and a coverage figure that read as
+  // complete while 14 Scarce and 18 Event traits were never enumerated. Naming the three indexes here
+  // means reverting to the redirect fails a test rather than quietly shrinking the roster. (#231)
+  assert.deepEqual(CATEGORY_INDEX.traits, [
+    "Category:Traits/Regular",
+    "Category:Traits/Scarce",
+    "Category:Traits/Event",
+  ]);
+  for (const [category, indexes] of Object.entries(CATEGORY_INDEX)) {
+    assert.ok(Array.isArray(indexes) && indexes.length > 0, `${category} maps to a non-empty list`);
+    assert.ok(
+      !indexes.includes("Category:Purchasable_Traits"),
+      "the redirecting index is not used by any category"
+    );
+  }
+});
+
+test("runDiscovery: members are unioned across a category's indexes", async () => {
+  const perIndex = {
+    "Category:Traits/Regular": ["Traits/Quartermaster", "Traits/Doctor"],
+    "Category:Traits/Scarce": ["Traits/Relentless"],
+    "Category:Traits/Event": ["Traits/Mariner"],
+  };
+  const fetchFn = async (url) => {
+    const decoded = decodeURIComponent(url);
+    for (const [index, members] of Object.entries(perIndex)) {
+      if (decoded.includes(index.replace("Category:", "Category:").replace(/ /g, "_"))) {
+        return okResponse(categoryPage(members));
+      }
+    }
+    return okResponse(`<html><body>${infobox(PRICE_ROW)}</body></html>`);
+  };
+  const report = await runDiscovery(
+    { categories: ["traits"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  const pages = report.traits.unmatched.map((u) => u.page).sort();
+  assert.ok(pages.includes("Traits/Relentless"), "a Scarce trait is now enumerated at all");
+  assert.ok(pages.includes("Traits/Mariner"), "and so is an Event trait");
+});
+
+test("runDiscovery: a page listed by two indexes is one member and one gap, not two", async () => {
+  // Six real traits are members of both the Scarce and the Event index. `matched` is computed as
+  // members.length - unmatched.length, so a double-counted page inflates the member total AND
+  // `matched` with it — the table would claim coverage it does not have.
+  const shared = "Traits/All Ears";
+  const fetchFn = async (url) => {
+    const decoded = decodeURIComponent(url);
+    if (decoded.includes("Traits/Regular")) return okResponse(categoryPage([]));
+    if (decoded.includes("Traits/Scarce")) return okResponse(categoryPage([shared]));
+    if (decoded.includes("Traits/Event")) return okResponse(categoryPage([shared]));
+    return okResponse(`<html><body>${infobox(PRICE_ROW)}</body></html>`);
+  };
+  const report = await runDiscovery(
+    { categories: ["traits"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  assert.equal(report.traits.wikiMembers, 1, "counted once, not twice");
+  assert.equal(report.traits.unmatched.length, 1, "and classified once, not fetched twice");
+  assert.deepEqual(report.traits.unmatched[0].listedIn, ["Category:Traits/Scarce", "Category:Traits/Event"]);
+});
+
+test("runDiscovery: matched arithmetic stays correct under de-duplication", async () => {
+  // A catalog row matched by a page that two indexes list must not be double-credited.
+  const fetchFn = async (url) => {
+    const decoded = decodeURIComponent(url);
+    if (decoded.includes("Traits/Regular")) return okResponse(categoryPage(["Traits/Quartermaster"]));
+    if (decoded.includes("Traits/Scarce")) return okResponse(categoryPage(["Traits/Quartermaster"]));
+    if (decoded.includes("Traits/Event")) return okResponse(categoryPage([]));
+    return okResponse(`<html><body>${infobox(PRICE_ROW)}</body></html>`);
+  };
+  const report = await runDiscovery(
+    { categories: ["traits"], delayMs: 0 },
+    { fetchFn, robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  assert.equal(report.traits.wikiMembers, 1);
+  assert.equal(report.traits.matched, 1, "not 2 — a page listed twice is one matched member");
+  assert.equal(report.traits.unmatched.length, 0);
+});
+
+test("runDiscovery: every index is robots-checked, not only the first", async () => {
+  // The index fetch was the one request that went out without asking, and #186 fixed that for a
+  // single index. A list reintroduces the hole unless each entry is checked.
+  const fetched = [];
+  await assert.rejects(
+    () =>
+      runDiscovery(
+        { categories: ["traits"], delayMs: 0 },
+        {
+          fetchFn: async (url) => {
+            fetched.push(url);
+            return okResponse(categoryPage([]));
+          },
+          // Allows the Regular index, disallows the Scarce one. The path is percent-encoded because
+          // that is what `buildItemPageUrl` produces and therefore what the robots check is handed:
+          // `Category:Traits/Scarce` becomes `/wiki/Category%3ATraits/Scarce`.
+          robotsGroups: [
+            { userAgents: ["*"], rules: [{ type: "disallow", path: "/wiki/Category%3ATraits/Scarce" }] },
+          ],
+          rateLimiter: noWait,
+          log: () => {},
+        }
+      ),
+    /robots\.txt disallows Category:Traits\/Scarce/
+  );
+  assert.deepEqual(fetched, [], "and it refuses before spending any request, including the allowed one");
+});
+
+test("formatCoverage: a multi-index category names the indexes behind its count", async () => {
+  const out = formatCoverage({
+    traits: {
+      indexPages: ["Category:Traits/Regular", "Category:Traits/Scarce", "Category:Traits/Event"],
+      wikiMembers: 84, catalogRows: 32, matched: 31,
+      missing: [], unpurchasable: [], unresolved: [], tombstones: [], failures: [],
+    },
+    tools: {
+      indexPages: ["Category:Tools"],
+      wikiMembers: 23, catalogRows: 22, matched: 21,
+      missing: [], unpurchasable: [], unresolved: [], tombstones: [], failures: [],
+    },
+  });
+  assert.match(out, /indexes: Category:Traits\/Regular, Category:Traits\/Scarce, Category:Traits\/Event/);
+  assert.ok(!/indexes: Category:Tools/.test(out), "a single-index category adds no noise");
+});
+
 test("runDiscovery: the category index is not fetched without a robots check", async () => {
   // This was the FIRST request the phase made, and the only one that went out without asking.
   const fetched = [];
@@ -1617,8 +1745,22 @@ test("runDiscovery: --dry-run resolves the indexes it would crawl and fetches no
   );
   assert.deepEqual(fetched, [], "no request is made");
   assert.equal(report.tools.dryRun, true);
-  assert.match(report.tools.indexUrl, /Category/);
+  assert.match(report.tools.indexUrls[0], /Category/);
   assert.match(formatCoverage(report), /dry-run — would crawl/);
+});
+
+test("runDiscovery: --dry-run names every index a multi-index category would crawl", async () => {
+  // Traits map to three indexes. Reporting only the first would make the cheap mode the one that
+  // hides the very thing #231 fixed.
+  const report = await runDiscovery(
+    { categories: ["traits"], delayMs: 0, dryRun: true },
+    { fetchFn: async () => okResponse(""), robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
+  );
+  assert.equal(report.traits.indexUrls.length, 3);
+  const out = formatCoverage(report);
+  for (const name of ["Traits/Regular", "Traits/Scarce", "Traits/Event"]) {
+    assert.ok(out.includes(name), `${name} is named in the dry-run output`);
+  }
 });
 
 test("runDiscovery: an unfetchable page is reported as unreadable, not counted as missing", async () => {
