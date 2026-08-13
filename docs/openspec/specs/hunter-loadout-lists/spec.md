@@ -19,6 +19,10 @@ Portrait assets are self-hosted scraped images and therefore inherit the sourcin
 
 See ADR-0006 for the decision record and the rejected alternatives.
 
+**Two requirements added 2026-08-13 are NOT yet implemented** *(per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md), tracked by #102)*. "Loadout Identity Is Scoped to Its List" and "A Loadout's Name Is Derived From Its Weapons Until the User Owns It" are specified below and unbuilt: the server still upserts on `(owner, name)`, so two loadouts sharing a name in different lists silently overwrite one another. The `status: implemented` field below covers the capability **as originally specified**; it is left unchanged rather than reverted because the original scope did ship, and this paragraph is what stops that field being read as covering these two.
+
+**The ordering constraint is load-bearing and is easy to lose at planning time:** the identity fix must land and deploy before derived naming. A derived name is a pure function of the weapon pair, so shipping naming first makes same-name collisions the default outcome rather than a rare one — silently, and in exactly the case the identity fix exists to prevent.
+
 **Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
 
 Three changes were accepted on **2026-08-10**; **one has shipped and survived**. A further change was accepted later that day — the row→card preview replacement, which also withdraws the shed-by-width rule, so the set is no longer purely additive. Each is marked where it appears. (Dropping most-recently-used ordering also happened on that date; it was a removal and is recorded in "List Ordering and Sorting".)
@@ -119,6 +123,79 @@ Records written before this capability existed carry no `listId` and SHALL there
 
 - **WHEN** a user moves a loadout from list A to list B
 - **THEN** the loadout's `listId` SHALL be updated to B, the loadout SHALL disappear from A's group and appear in B's, and no other field of the loadout SHALL change
+
+### Requirement: Loadout Identity Is Scoped to Its List
+
+*(added 2026-08-13, per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md); closes #102. Not yet implemented — see "Implementation status".)*
+
+A saved loadout SHALL be identified by the triple `(owner, listId, name)`. A write whose triple matches an existing record SHALL update that record; a write whose triple matches nothing SHALL create one.
+
+`listId` SHALL be compared **as a value, including when it is `null`**. The Unassigned pseudo-list is `null`, so treating `null` as "missing" rather than as a value collapses every Unassigned save onto the first such record — which is the defect this requirement exists to prevent, in a different form.
+
+Two loadouts carrying the same name in different lists SHALL both persist, and neither SHALL relocate. This follows from the model ADR-0006 established: a list is a folder, and two loadouts named "Fanning" in different folders are different loadouts.
+
+**Pre-existing records SHALL require no migration.** The key narrows rather than widens: any pair that matched under `(owner, name)` and shared a `listId` still matches, and any pair that matched *across* lists was the defect. No stored record changes shape and `FORMAT_VERSION` MUST NOT be raised — `listId` lives on the envelope, not inside `data`, per REQ "Loadouts Are Filed into Lists by Nullable Reference".
+
+A loadout loaded from a saved record SHALL be updated **by its record id** rather than by triple, so that editing a loaded loadout still writes back to the record it came from. That provenance SHALL be client-only; see REQ "The Saved-Loadout Wire Format Is Unchanged".
+
+#### Scenario: The same name in two lists is two loadouts
+
+- **WHEN** one owner saves a loadout named "Fanning" into list A and another named "Fanning" into list B
+- **THEN** two records SHALL exist, neither SHALL have relocated, and neither SHALL have overwritten the other
+
+#### Scenario: Unassigned saves still upsert onto one record
+
+- **WHEN** one owner saves twice under the same name with `listId` `null` both times
+- **THEN** the second write SHALL update the first record rather than creating a second, because `null` is compared as a value
+
+#### Scenario: A loaded loadout updates the record it came from
+
+- **WHEN** a user loads a saved loadout, changes it, and saves without renaming it
+- **THEN** the write SHALL update that same record rather than creating a copy or matching some other record by name
+
+#### Scenario: Deployment over existing records changes nothing
+
+- **WHEN** the change is deployed against a data file written under the old `(owner, name)` key
+- **THEN** every record SHALL remain readable and unmodified, and `FORMAT_VERSION` SHALL be unchanged
+
+### Requirement: A Loadout's Name Is Derived From Its Weapons Until the User Owns It
+
+*(added 2026-08-13, per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md). Not yet implemented — see "Implementation status".)*
+
+**This requirement MUST NOT ship before "Loadout Identity Is Scoped to Its List" has landed and deployed.** A derived name is a pure function of the weapon pair, so two loadouts built from the same two weapons receive the same name by construction. Under the old `(owner, name)` key that turns a rare user error into the default outcome, silently. The ordering is part of the decision, not an implementation preference.
+
+An unsaved loadout's name SHALL default to `{weapon1} and {weapon2}`, taken from each weapon's display name. Degenerate cases are specified rather than left open: **one weapon** SHALL yield that weapon's name alone, and **no weapons** SHALL yield the existing generic default — never the bare string "and".
+
+The name SHALL be re-derived **only when a weapon changes**. It MUST NOT be re-derived on an equipment, trait, or ammo change, none of which the name can express.
+
+Re-derivation SHALL stop permanently for the current editing session the moment the user edits the name field, and SHALL NOT resume. A loadout **loaded from a saved record** SHALL NOT re-derive at all — its name is one the user already owns.
+
+The "still derived" state SHALL be client-only and ephemeral: not persisted, not sent to the server, and not part of the wire format. A derived name SHALL be stored as an ordinary string, indistinguishable from a typed one — the same property REQ "New Lists Default Their Name from the Chosen Portrait" establishes for lists, and for the same reason.
+
+#### Scenario: A weapon change re-derives the name
+
+- **WHEN** a user building a new loadout selects or replaces a weapon
+- **THEN** the name SHALL update to reflect the current weapon pair
+
+#### Scenario: Typing takes ownership of the name
+
+- **WHEN** a user edits the name field and then changes a weapon
+- **THEN** the name SHALL NOT be re-derived, and the user's text SHALL survive unchanged
+
+#### Scenario: A loaded loadout keeps its name
+
+- **WHEN** a user loads a saved loadout and changes one of its weapons
+- **THEN** the name SHALL NOT be re-derived, because the record already carries a name the user owns
+
+#### Scenario: A non-weapon change does not re-derive
+
+- **WHEN** a user with a derived name adds a consumable, a trait, or an ammo variant
+- **THEN** the name SHALL be unchanged
+
+#### Scenario: The degenerate names are specified
+
+- **WHEN** a loadout carries exactly one weapon, and separately when it carries none
+- **THEN** the name SHALL be that weapon's name alone, and the existing generic default, respectively
 
 ### Requirement: Cross-Collection Ownership Enforcement
 
@@ -765,6 +842,15 @@ This capability MUST NOT change the loadout wire format. **Nothing in this spec*
 `description` is subject to this requirement for exactly the reason `listId` is: it is a property of the user's filing, not of the loadout itself. A recipient opening a share URL receives the build, not the sender's notes about it *(clause added 2026-08-10)*.
 
 **Both descriptions are filing state** *(amended 2026-08-11, when the single description requirement was split in two)*. Since the split there are two of them — the list's own description and the saved loadout's note — and neither reaches an encoded payload, a share URL, or a local draft. The reason is the same for both and is the reason it was for `listId`: a list description belongs to the shelf rather than to anything on it, and a loadout note is the filer's annotation rather than a property of the build. Neither is something a recipient asked for. Where this requirement says `description` unqualified, it binds **both** fields.
+
+**The identity and naming state ADR-0022 introduces is client-only, and this requirement is why it costs no version bump** *(clause added 2026-08-13)*. Two pieces of state are involved, and neither reaches the wire: the `savedId` that records which stored record a loaded loadout came from, and the flag tracking whether the current name is still derived rather than typed. Both live in client state for the editing session only. They MUST NOT be persisted, sent to the server, or written into an encoded payload, share URL, or local draft.
+
+This is what keeps the two new requirements free of a migration. A derived name is stored as an ordinary string — storage cannot tell it from a typed one, and REQ "New Lists Default Their Name from the Chosen Portrait" already establishes that same property for lists. A share URL recipient receives a build and a name, never the sender's provenance.
+
+#### Scenario: Provenance and derived-name state never reach the wire
+
+- **WHEN** a loadout carrying a `savedId` and a still-derived name is encoded to a share URL, written to a local draft, or sent to the server
+- **THEN** neither the `savedId` nor the derived-name flag SHALL appear in the payload, and `FORMAT_VERSION` SHALL be unchanged
 
 #### Scenario: Share URLs are unaffected
 
