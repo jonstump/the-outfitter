@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
 import Picker from "./Picker.jsx";
-import { TRAITS } from "../../data/catalog.js";
+import { CONS, TOOLS, TRAITS } from "../../data/catalog.js";
 import * as itemStats from "../../data/itemStats.js";
 import { descriptionFor } from "../../data/itemStats.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
@@ -127,5 +127,44 @@ describe("Picker Traits-tab point badge", () => {
     const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsTab });
     const def = TRAITS[0];
     expect(rowFor(getAllByRole("button"), def[1])).toHaveTextContent(`${def[3]} trait`);
+  });
+});
+
+// Governing: ADR-0009 (index is the cell, `null` is an empty cell), SPEC-0006 REQ
+// "Equipment Occupies a Fixed Eight-Cell Grid".
+//
+// Regression for #295: the Tools-tab duplicate-tool check read `e.t` off every
+// `equip` entry, and `equip` is a fixed eight-cell SPARSE array — so a `null` hole
+// threw `Cannot read properties of null (reading 't')` and crashed the whole page
+// to the error boundary. The crash only fires when there IS free capacity (the
+// `room &&` short-circuit hides it otherwise), so the fixture must leave at least
+// one free cell.
+describe("Picker Tools-tab on a sparse equip grid (issue #295 regression)", () => {
+  it("renders the tools list without throwing when equip has holes and free cells", () => {
+    const vitality = CONS.findIndex((c) => c[0] === "vitality-shot");
+    const kit = TOOLS.findIndex((t) => t[0] === "first-aid-kit");
+    // Holes at cells 1 and 3; cells 0 and 2 occupied; four free cells remain so
+    // `room` is true and the unguarded `e.t` read is reached.
+    const sparse = loadoutState({
+      equip: [
+        { t: "C", i: vitality }, null, { t: "T", i: kit }, null,
+        null, null, null, null,
+      ],
+    });
+    const { getAllByRole } = renderPicker({
+      loadout: sparse,
+      ui: { tab: "Tools", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+    });
+
+    // The Tools tab rendered: at least one tool row is present and enabled, and the
+    // already-equipped First Aid Kit is not offered as a duplicate.
+    const buttons = getAllByRole("button");
+    const firstAid = buttons.find((b) => b.textContent.includes("First Aid Kit"));
+    expect(firstAid).toBeTruthy();
+    expect(firstAid).toHaveClass("disabled");
+    // A different tool is enabled, proving the row map completed rather than throwing.
+    const knife = buttons.find((b) => b.textContent.includes("Knife"));
+    expect(knife).toBeTruthy();
+    expect(knife).not.toHaveClass("disabled");
   });
 });
