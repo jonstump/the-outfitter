@@ -76,7 +76,7 @@ Tickets are implemented by the models below — not by Opus. `/sdd:plan` and `/s
 |-------|-----------|---------|------|
 | Claude Sonnet 5 | `claude-sonnet-5` | 1M | Default for most stories |
 | Claude Haiku 4.5 | `claude-haiku-4-5` | 200K | Mechanical and well-scoped stories |
-| DeepSeek V4 Flash 0731 | *unconfirmed — replace with the exact API id* | unknown | Non-Anthropic; runs outside Claude Code |
+| DeepSeek V4 Flash 0731 | `deepseek-v4-flash-0731` | unknown | Non-Anthropic; runs outside Claude Code |
 
 What this changes about planning:
 
