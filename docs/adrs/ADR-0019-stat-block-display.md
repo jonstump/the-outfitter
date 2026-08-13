@@ -322,6 +322,6 @@ graph TD
   that quietly sums two fields.
 * **Provenance.** The consumer trace, the 8-vs-26 field partition, the 1,268 `{{StatChange}}` count and
   the coverage figures come from a pass over the live wiki and the committed dataset on 2026-08-12,
-  recorded in `docs/reports/suggested-adrs.md` § D, § A1 and § A2, arriving on `main` with **#258**.
+  recorded in `docs/reports/suggested-adrs.md` § D, § A1 and § A2, arrives on `main` with **#266**.
 * **Related issues**: #178 (`dualWield` lifted to its own boolean — the stranded field this ships),
   #227 and #248 (picker grid and picker scale, which any stat row interacts with).
