@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-12
 decision-makers: Jon Stump
 extends: [ADR-0009]
@@ -155,6 +155,8 @@ is asserted after:
    then attempt a Dynamite Bundle. Rejected confirms per-type; accepted falsifies this ADR and it
    should be withdrawn rather than amended. Record the result and the game version in this ADR. This
    is deliberately the only manual step and it gates the rest.
+   **SATISFIED — the Bundle was rejected.** See "Amendment (2026-08-12)" below. Steps 2–6 are now
+   implementable.
 2. **A reducer test asserts the cap per type**, in the form #190's original "Done means" asked for: a
    fifth `Placeable` is rejected, and — the case that inverts SPEC-0006's current scenario — a Stamina
    Shot is **rejected** after four Vitality Shots, because both are `Shot`.
@@ -291,7 +293,8 @@ graph TD
   requirement that it name the category; and SPEC-0006's stacking model, which needs one clarifying
   clause but is unimplemented and unblocked by this.
 * **Provenance.** The reading of Update 2.8, the taxonomy comparison and the surface measurement
-  (3 code sites, 3 test files with contrary assertions, 5 spec documents) come from a verification pass
+  (originally stated as 3 code sites, 3 test files with contrary assertions, 5 spec documents — the
+  test and spec counts were wrong; see "Amendment (2026-08-12)") come from a verification pass
   over the live wiki on 2026-08-12, recorded in `docs/reports/suggested-adrs.md` § 3.4 and § I, which
   arrives on `main` with **#266** alongside ADR-0014. Every quotation there was string-matched against
   its source rather than retyped.
@@ -299,3 +302,48 @@ graph TD
   that motivated a test), #190 (replaced the per-type cap with per-item `consCount`; this decision
   reverses it and its original acceptance criterion was right), #207 (corrected SPEC-0006 to state the
   cap per item), #161 (the Tarot Card scope boundary whose "no new modelling" argument this changes).
+
+## Amendment (2026-08-12): the Arsenal check confirms the per-type cap, and two surface figures were wrong
+
+**Confirmation step 1 is satisfied and this ADR moves to `accepted`.** Four Dynamite Sticks were
+equipped in the Arsenal and a Dynamite Bundle was then attempted; **the Bundle was rejected.** Both
+rows are `type: "Throwable"`, so the fourth Stick exhausts the Throwables budget exactly as Update
+2.8 bullet 4 describes. The falsification condition this ADR set for itself — "accepted falsifies
+this ADR and it should be withdrawn rather than amended" — did not fire.
+
+That closes the one gap the Decision Outcome named. The rule is no longer a patch-note reading: it is
+a patch-note reading corroborated by direct observation, which is the standard this ADR asked for
+before any code changed. **The client version was not captured with the observation.** It should be
+filled in here for the record; the latest patch documented on the wiki as of 2026-08-12 was 2.8.1,
+and nothing in 2.8.0.1 through 2.8.1 revises bullet 4.
+
+**Two figures in the Provenance bullet were wrong, and both were understatements of precision rather
+than of size.** Measured directly against `main` at `943105b`:
+
+| Artifact | Stated | Actual |
+|---|---|---|
+| Code sites | 3 | **3** — correct as stated |
+| Test files with contrary assertions | 3 | **2** |
+| Spec documents | 5 | **3 files across 2 specs** |
+
+The three code sites are `calc.js` (the `consCount` definition), `loadoutSlice.js:48` (the reducer
+guard) and `Picker.jsx` (the picker's enabled state) — the figure was right. A fourth file,
+`catalog.js`, carries only a comment quoting SPEC-0008's per-item wording, and needs updating without
+being a predicate site.
+
+The two test files are `client/src/utils/calc.test.js` and `client/src/data/catalog.test.js`. There is
+no third.
+
+The three spec files are `equipment-slot-arrangement/spec.md` (SPEC-0006 — the Overview plus the
+scenario at line 232), `loadout-randomization/spec.md:157` and `loadout-randomization/design.md:154`
+(both SPEC-0008). SPEC-0007's `MUST NOT` is reversed by this decision too, but it lives in the
+catalog-dataset spec and the Decision Outcome already names it separately, so counting it here would
+double-count.
+
+**The report misattributes one of those artifacts.** `docs/reports/suggested-adrs.md` § 3.4's conflict
+table lists "SPEC-0005 spec.md:229-237" as holding the scenario that asserts a Stamina Shot is still
+accepted after four Vitality Shots. That scenario is at `equipment-slot-arrangement/spec.md:232`,
+which is **SPEC-0006**; SPEC-0005 is Desktop Distribution and says nothing about consumable caps. The
+correction is marked inline in the report rather than patched silently, per that document's own
+convention. It matters because the inverted scenario is the single most load-bearing edit in the
+implementation, and the table would have sent an implementer to the wrong spec.

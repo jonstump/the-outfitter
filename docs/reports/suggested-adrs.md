@@ -1099,7 +1099,7 @@ This is not a stray line — it is a documented, multi-issue migration in the wr
 | `catalog.test.js:229-235` | pins "what the cap is **NOT** (per type)"; records that #190 "replaced the per-type cap with per-item `consCount`" and that #190's own "Done means" asked for "a 5th Placeable is rejected", **declined as reintroducing the retired rule** |
 | SPEC-0006 | corrected by #207 to state the cap per item, "`type` as descriptive rather than a rules input" |
 | SPEC-0008 spec.md:157 | "**counted per specific consumable rather than per consumable type**" |
-| SPEC-0005 spec.md:229-237 | scenarios asserting a Stamina Shot is still accepted after four Vitality Shots |
+| ~~SPEC-0005 spec.md:229-237~~ **SPEC-0006** — `equipment-slot-arrangement/spec.md:232` | scenarios asserting a Stamina Shot is still accepted after four Vitality Shots. **Correction (2026-08-12):** this row named the wrong spec. SPEC-0005 is Desktop Distribution and says nothing about consumable caps; the scenario is SPEC-0006's. Marked rather than patched, per this document's convention. |
 
 **#190's original acceptance criterion was correct and was overridden.** Update 2.8 says a fifth
 Placeable *is* rejected. Nothing in 2.8.0.1, 2.8.0.2, 2.8.0.3 or 2.8.1 — the latest — revises bullet
