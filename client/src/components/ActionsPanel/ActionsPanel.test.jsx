@@ -261,3 +261,48 @@ describe("the save control names its destination", () => {
     expect(family("padding").some((p) => restingDeclarationIn(pill, ".save-dest", p) !== null)).toBe(true);
   });
 });
+
+// Governing: issue #292 (picker panel collapses to 2px on stacked viewports), #294.
+//
+// The regression: `.picker-panel` used `flex: 1 1 0` at every width. Side by side that
+// correctly claims the leftover column height, but once the two columns wrap the right
+// column is alone on its flex line and there is no leftover to claim — the panel resolves
+// to ~2px and its children overflow, painting over the actions box and (in WebKit)
+// intercepting taps on the controls they cover (#294). The fix floors the panel to its
+// natural height at stacked widths. jsdom cannot lay out, so the READABLE outcome of the
+// fix is asserted against the cascade: below the stacking breakpoint the resolved
+// `flex` shorthand on `.picker-panel` is `0 0 auto`, and above it the side-by-side
+// `1 1 0` claim is retained.
+describe("picker-panel flex at the stacking breakpoint (issue #292 regression)", () => {
+  const rules = () => parseStylesheet(readGlobalCss());
+
+  const flexOf = (rs, selector) => {
+    const matches = rs.filter((r) => r.selectors.includes(selector));
+    const values = matches.flatMap((r) =>
+      [...r.body.matchAll(/(?:^|;)\s*flex\s*:([^;]*)/g)].map((m) => m[1].trim())
+    );
+    return values;
+  };
+
+  it("resolves flex 0 0 auto for .picker-panel below the stacking breakpoint", () => {
+    const rs = rules();
+    // The stacked override is inside a media query (no higher-specificity selector), so
+    // the cascade's "media query applies" state flips the same declared value.
+    const conditional = rs.filter(
+      (r) => r.conditions.some((c) => c.startsWith("@media (max-width")) &&
+        r.selectors.includes(".picker-panel")
+    );
+    expect(conditional.length).toBe(1);
+    expect(conditional[0].body).toMatch(/flex\s*:\s*0 0 auto/);
+    expect(conditional[0].conditions[0]).toBe("@media (max-width: 959px)");
+  });
+
+  it("keeps the side-by-side flex claim outside any media query", () => {
+    const rs = rules();
+    const plain = rs.find(
+      (r) => r.conditions.length === 0 && r.selectors.includes(".picker-panel")
+    );
+    expect(plain).toBeTruthy();
+    expect(flexOf([plain], ".picker-panel")).toContain("1 1 0");
+  });
+});

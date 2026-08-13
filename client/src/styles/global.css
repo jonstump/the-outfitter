@@ -305,6 +305,22 @@ button {
   min-height: 0;
 }
 
+/* Governing: issue #292 (picker panel collapses to 2px on stacked viewports), #294.
+   The flex-basis-0 claim above is only valid while the columns sit SIDE BY SIDE, where
+   .app-main's align-items: stretch gives the right column the taller left column's height
+   and the picker claims the leftover. Once the columns wrap (below ~960px), the right column
+   is alone on its flex line, stretching gives it nothing but its own content, and the picker
+   contributes ZERO height — basis 0 with nothing to claim. The panel resolves to ~2px and its
+   children overflow, painting over the actions box; in WebKit the spill also intercepts taps
+   on the controls it covers (#294), which is why iOS Safari could not open the portrait picker.
+   At stacked widths the picker must claim its NATURAL height instead of leftover height. */
+@media (max-width: 959px) {
+  .picker-panel {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+}
+
 /* Saved loadouts span the full page beneath both columns. The roster is a card grid
    (auto-fill, minmax(150px, 1fr)) — in a 400px column it could only ever fit two across,
    which wasted the space and buried the expanded list far down the page. */
@@ -401,6 +417,13 @@ button {
   background: var(--panel);
   border: 1px solid var(--border);
   padding: 20px;
+  /* Governing: ADR-0009, SPEC-0006 REQ "The Grid Renders as Two Ranks of Four".
+     The equipment grid's @container query measures the PANEL's width, not the grid's own:
+     an element cannot query its own size, so the containment context must live on an
+     ancestor. `.equip-grid` used to declare container-type on ITSELF, which made the
+     wide 4x2 state unreachable (the query never matched). Making every .panel a container
+     is inert unless something queries it; only the equipment grid does. */
+  container-type: inline-size;
 }
 
 .panel-header {
@@ -704,7 +727,6 @@ button {
   grid-template-rows: repeat(4, auto);
   gap: 10px;
   margin-top: 12px;
-  container-type: inline-size;
 }
 
 @container (min-width: 460px) {
@@ -1197,7 +1219,7 @@ button {
   min-height: 360px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 959px) {
   .picker-list {
     min-height: 680px;
   }
