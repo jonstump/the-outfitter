@@ -303,6 +303,29 @@ describe("LoadoutListsPanel", () => {
     renderPanel(base([list("a", "Alpha")], [], { selectedListId: "a", confirmRetireListId: "a" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
   });
+
+  it("moves focus to the Unassigned list card after a successful retire (issue #131)", async () => {
+    // Governing: SPEC-0003 REQ "Focus Management". The Retire trigger lives inside
+    // ExpandedList, and the success path deselects the list (unmounting ExpandedList)
+    // before closing the dialog — so returnFocus() targets a detached node and focus
+    // falls to <body>. The fix focuses the Unassigned list card (always present in the
+    // selector, and the control that now holds the retired list's loadouts) before the
+    // dialog closes. Asserting the actual activeElement, not a mock.
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    renderPanel(base([list("a", "Alpha")], [loadout("1", "My build", "a")], {
+      selectedListId: "a",
+      confirmRetireListId: "a",
+    }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retire list" }));
+    });
+
+    const unassignedCard = screen.getByTestId("list-card-__unassigned__");
+    expect(unassignedCard).toBeInTheDocument();
+    expect(document.activeElement).toBe(unassignedCard);
+    expect(document.activeElement).not.toBe(document.body);
+  });
 });
 
 // --- Issue #88: portraits, accents, and the picker ---------------------------------

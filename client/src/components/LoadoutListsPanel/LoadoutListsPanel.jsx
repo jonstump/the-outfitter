@@ -1580,6 +1580,16 @@ function RetireDialog({ list, count }) {
               try {
                 await dispatch(retireListThunk({ id: list.id, name: list.name })).unwrap();
                 dispatch(uiActions.selectList(null));
+                // Governing: SPEC-0003 REQ "Focus Management" — "After a list is retired,
+                // focus MUST move to a stable, predictable element rather than being lost
+                // to the document body". The Retire trigger lives inside ExpandedList,
+                // which selectList(null) just unmounted, so returnFocus() would target a
+                // detached node and focus would fall to <body>. Landing spot: the
+                // Unassigned list card in the selector — always present, and the control
+                // that now necessarily holds the retired list's loadouts, so it is where
+                // a screen-reader user should continue. Focused before close() so the
+                // element is still in the document when the next Tab lands.
+                document.querySelector('[data-testid="list-card-__unassigned__"]')?.focus();
                 close();
               } catch {
                 close(); // thunk surfaced the failure; leave the list selected
