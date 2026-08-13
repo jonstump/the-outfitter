@@ -1,7 +1,7 @@
 ---
 status: draft
 date: 2026-08-10
-implements: [ADR-0005, ADR-0013]
+implements: [ADR-0005, ADR-0013, ADR-0015]
 requires: [SPEC-0001]
 ---
 
@@ -147,7 +147,11 @@ Any change that inserts into, removes from, or reorders an `AMMO` pool SHALL be 
 
 A catalog field read by `calc.js` or `loadoutSlice.js` to decide what a loadout may contain is a **rules input**, not a descriptive field.
 
-The consumable cap is keyed on item identity, not on `type`: `consCount()` counts copies of one specific `CONS` entry and the reducer rejects the fifth, so four Dynamite Sticks and a Dynamite Bundle is a legal loadout. `CONS[i][3]` (`type`) is descriptive — it labels picker rows — and MUST NOT be re-introduced as a cap key.
+**`CONS[i][3]` (`type`) IS the consumable cap key, and is therefore a rules input** *(revised 2026-08-12, per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md))*. The cap is four consumables per cap category, so `type` SHALL be read by the reducer and by the picker's enabled state, and SHALL be held to the obligations of a rules input set out in this requirement.
+
+This reverses the prohibition this requirement previously carried — "`CONS[i][3]` (`type`) is descriptive — it labels picker rows — and MUST NOT be re-introduced as a cap key" — which reasoned from `consCount()`'s per-item counting and concluded that four Dynamite Sticks plus a Dynamite Bundle is legal. That prohibition was the correct conclusion from a wrong premise about the game, and it was recorded to stop a retired per-type rule creeping back by accident. Update 2.8 restricts consumables to "4 instances of the same type (Throwables, Placeables, Shots and Tarot Cards)", confirmed in-game on 2026-08-12. The reversal is therefore deliberate, by ADR, with the evidence stated — which is the path this requirement was written to force rather than a route around it.
+
+The check this requirement demands has been performed and both halves are on record: `type` is never persisted — `toData()` stores only `["C", id]` — so promoting it to a rules input carries **no `FORMAT_VERSION` gate and no migration**.
 
 `type` SHALL be assigned only from the game's mechanical cap categories — Throwable, Placeable, Shot, Tarot Card. It MUST NOT be assigned from a thematic effect category (Healing, Rending, Fire, Poison, Noise, Vision, Light); those are `group` signals at most.
 
@@ -160,10 +164,15 @@ The failure mode that distinguishes a field like this: deriving `type` from "the
 - **WHEN** the Medical Pack is scraped, which the wiki files under both `Category:Healing_Consumables` and `Category:Placeable_Consumables`
 - **THEN** its `type` SHALL be `Placeable`, and its `group` MAY remain `Shots`
 
-#### Scenario: The cap is enforced per item, not per category
+#### Scenario: The cap is enforced per category, not per item
 
 - **WHEN** a loadout holds four Dynamite Sticks and a fifth Dynamite Stick is added
-- **THEN** it SHALL be rejected; and **WHEN** a loadout holds four Dynamite Sticks and a Dynamite Bundle is added — same `type`, different item — it SHALL be accepted
+- **THEN** it SHALL be rejected; and **WHEN** a loadout holds four Dynamite Sticks and a Dynamite Bundle is added — same `type`, different item — it SHALL **also** be rejected, because the four Sticks exhaust the `Throwable` budget
+
+#### Scenario: A `type` outside the declared cap categories is a data error
+
+- **WHEN** a `CONS` row is assigned a `type` that is not one of the declared cap categories
+- **THEN** it SHALL be reported as a data error, because such a row would otherwise escape the cap entirely rather than being capped under the wrong category
 
 ### Requirement: Budget-Affecting Attributes Are Stored, Never Inferred
 

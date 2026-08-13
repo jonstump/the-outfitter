@@ -1,7 +1,7 @@
 ---
 status: approved
 date: 2026-08-11
-implements: [ADR-0010]
+implements: [ADR-0010, ADR-0015]
 requires: [SPEC-0007]
 ---
 
@@ -154,7 +154,11 @@ When an archetype's required traits alone exceed `upBudget`, the generator SHALL
 
 ### Requirement: Equipment Fill Respects Grid Capacity and Existing Item Rules
 
-The generated build SHALL occupy no more than `slotMax` equipment cells. It SHALL always include the First Aid Kit, resolved by its stable `first-aid-kit` id rather than by array position. It SHALL NOT contain the same tool twice. It SHALL NOT contain more than four copies of any one consumable, counted per specific consumable rather than per consumable type, consistent with `consCount` in `calc.js`.
+The generated build SHALL occupy no more than `slotMax` equipment cells. It SHALL always include the First Aid Kit, resolved by its stable `first-aid-kit` id rather than by array position. It SHALL NOT contain the same tool twice. It SHALL NOT contain more than four consumables of any one **cap category** — `CONS[i][3]`, holding `Shot`, `Throwable` and `Placeable`, plus Tarot Cards once admitted — counted per category rather than per specific consumable, and consistent with whatever predicate the reducer enforces.
+
+*Revised 2026-08-12 per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md).* This requirement previously read "no more than four copies of any one consumable, counted **per specific consumable rather than per consumable type**, consistent with `consCount` in `calc.js`" — a SHALL-level statement of the opposite rule, and the only place in the corpus where the per-item basis was stated as a positive requirement rather than implied. ADR-0015 reverses it on Update 2.8's four-per-type rule, confirmed in-game. The generator is in scope for that change rather than a follow-on, because a fill obeying the old rule can emit eight Throwables where four are legal.
+
+The requirement is now phrased against "whatever predicate the reducer enforces" rather than naming `consCount`, so the generator and the builder cannot drift apart the way this requirement and SPEC-0006 did.
 
 Equipment fill SHALL draw from the selected archetype's tool and consumable pools and SHALL terminate deterministically — the fill MUST NOT rely on an iteration guard to exit.
 
@@ -168,10 +172,15 @@ Equipment fill SHALL draw from the selected archetype's tool and consumable pool
 - **WHEN** any build is generated
 - **THEN** the First Aid Kit occupies exactly one cell, and no other cell holds it
 
-#### Scenario: The per-item consumable cap holds
+#### Scenario: The per-category consumable cap holds
 
 - **WHEN** a build is generated
-- **THEN** no single consumable id appears in more than four cells, while distinct consumables of the same type are unconstrained relative to each other
+- **THEN** no cap category SHALL be represented in more than four cells, counting distinct consumables that share a `type` against one budget
+
+#### Scenario: A fill from a single-category pool is bounded at four
+
+- **WHEN** an archetype's consumable pool contains only `Throwable` items and `slotMax` leaves more than four free cells
+- **THEN** the fill SHALL place at most four of them and SHALL return a shorter build rather than filling the remaining cells with further Throwables
 
 #### Scenario: Fill terminates without a guard
 
