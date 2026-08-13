@@ -9,6 +9,36 @@ produced it was **read-only**: no tracked file was modified and no scrape wrote 
 Findings here are flagged, never fixed in place — §3 lists what contradicts an accepted ADR or spec
 and deliberately leaves those documents alone.
 
+> ## Amendment (2026-08-12): §4 and §G are superseded — `robots.txt` disallows the MediaWiki API
+>
+> **What this document got wrong.** §4 concludes that the API "is cheaper and more capable than
+> ADR-0005 assumed" and that "G's research is largely done", and §G recommends adopting it.
+> `huntshowdown.wiki.gg/robots.txt` **disallows it**, under `User-agent: *`: `/api.php`, `/rest.php`,
+> `/index.php`, `/*?action=` and `/wiki/Special:` — so the API is blocked by path *and* by query
+> pattern, and `Special:RecentChanges` with it. ADR-0002 commits this project to respecting
+> `robots.txt` without qualification, and the repo's own `isAllowedByRobots` already returns `false`
+> for `/api.php`.
+>
+> **How the error was made**, because it is an easy one to repeat: §4's caution reads "The API is not
+> covered by the existing robots.txt gate" — that checked whether the *gate looked*, not whether
+> `robots.txt` *forbade*. The gate is called with `/wiki/…` paths, so it passes, and nothing objects
+> until someone reads the disallow list. Every API call behind this document was therefore made
+> against a disallowed path. The HTML scrape the repo actually ships is compliant.
+>
+> **What supersedes it.** **ADR-0016** (two-tier staleness detection over allowed HTML) decides this
+> instead: a 7-fetch scheduled roster check over the category index pages, and a 498-page
+> human-invoked revision sweep. It deliberately **preserves §4's measurements** — 10 requests, ~15
+> seconds, the API-stated 50-title limit — so the option reads as measured and declined rather than
+> missed.
+>
+> **What still stands.** Everything in §4 other than its recommendation: the full-dataset watermark
+> verification (256 of 256 matched), the rate-limit-returns-200 trap, and the category-vs-section
+> reliability finding in §A2 — that one is about which *source* to trust, not which *transport*, and
+> ADR-0014 relies on it. Nothing outside §4 and §G changes.
+>
+> Marked here rather than edited away, on the same principle the rest of this document follows: a
+> retraction is more useful to the next reader than a clean page.
+
 **The wiki was reachable.** `curl -sS -o /dev/null -w '%{http_code}' https://huntshowdown.wiki.gg/wiki/Ammo`
 → `200`. Every finding below was read from a live page or the live MediaWiki API on **2026-08-12**,
 and every page is cited. Where a page contradicts the report or `catalog.js`, it is flagged in
@@ -621,15 +651,23 @@ category drops. **I should admit 14 rows, not 13.** See §3.5.
 
 ---
 
-### G — Incremental wiki refresh over the MediaWiki API · Tier 3 → **pull forward**
+### G — Incremental wiki refresh ~~over the MediaWiki API~~ · Tier 3 → **pull forward**
 
-The report argues G should move up because A and B multiply the crawl. That argument survives, and
-§4 shows the API is cheaper than ADR-0005 assumed. **Tier 3 by structure, but write it before A
-lands its scrape**, not after.
+> **SUPERSEDED (2026-08-12) by ADR-0016**, which decides this over **allowed HTML** rather than the
+> API. The title's "over the MediaWiki API" is the part that is wrong; the recommendation to write it
+> early is the part that survived.
 
-- **Tier:** 3, but sequence it ahead of A's implementation.
-- **Scope:** **reduced** — see §4. The watermark already works; this is plumbing and cadence, not
-  research.
+The report argues G should move up because A and B multiply the crawl. **That argument survives** and
+is the reason ADR-0016 exists. What does not survive is the assumption that the transport would be
+cheap: `robots.txt` disallows the API, so detection costs 498 HTML fetches rather than 10 API
+requests, and the saving moves from *fetching less* to *committing less*.
+
+- **Tier:** 3, but sequence it ahead of A's implementation. **Unchanged** — and strengthened, because
+  the expensive transport makes landing it before the payload grows matter more, not less.
+- **Scope:** ~~**reduced** — the watermark already works; this is plumbing and cadence, not
+  research.~~ **Larger than stated.** The watermark does already work (256 of 256 verified), but with
+  the API off the table the design question is real: which signals are allowed, what may be
+  scheduled, and what stays human-invoked. ADR-0016 answers those in two tiers.
 - **Depends on:** nothing. Cheaper the earlier it lands.
 
 ---
@@ -905,6 +943,9 @@ co-first**, because Update 2.8 turns it from a Tarot scope question into a live 
    needs the ADR. The Tarot rows are bookkeeping that follows from it; the 8-vs-4 question is **closed**
    (8, ADR-0009 confirmed).
 3. **G** — refresh, *before* A's scrape lands, while the payload is 256 items and not 500.
+   *(Decided as **ADR-0016**, over allowed HTML rather than the API — see the amendment at the top.
+   The "land it early" argument is unchanged and matters more, not less, now that the transport is
+   expensive.)*
 4. **C** — trait conditions. Reshaped and **larger** than the report scoped it: four condition axes,
    not one action-type field (C4).
 5. **E** — rarity + Burn permanence. Cheaper than the report thought.
@@ -1215,7 +1256,14 @@ split is purely app-side, confirming ADR-0005's "no wiki equivalent" note — an
 
 ## 4. What the MediaWiki API experiment showed — input to G
 
-**It is cheaper and more capable than ADR-0005 assumed. G's research is largely done.**
+> **SUPERSEDED (2026-08-12) by ADR-0016.** The recommendation in this section is withdrawn:
+> `robots.txt` disallows `/api.php`, `/rest.php` and `/*?action=`, so none of the access below is
+> available to this project under ADR-0002. See the amendment at the top. **The measurements are kept
+> deliberately** — ADR-0016 quotes them to record the option as measured and declined — and the
+> watermark, rate-limit and reliability findings are unaffected.
+
+~~**It is cheaper and more capable than ADR-0005 assumed. G's research is largely done.**~~ It is
+cheaper, and it is disallowed.
 
 **Change detection works today, and the whole dataset was checked — not a sample.** Taking every
 item's committed `sourceRevision` from `itemStats.json` and asking
@@ -1252,10 +1300,18 @@ item's committed `sourceRevision` from `itemStats.json` and asking
    username of your wiki account…"}}`. A refresh job that checks status codes will record empty
    pages as successes — the exact failure that cost 136 pages here. The scrape's existing range
    assertions would catch it; a revision-only watermark check has no such assertion and needs one.
-2. **The API is not covered by the existing robots.txt gate.** `scrape-stats.mjs` checks
+2. ~~**The API is not covered by the existing robots.txt gate.** `scrape-stats.mjs` checks
    `isAllowedByRobots` against `/wiki/` paths. An `api.php` client is a different path and G should
    say explicitly whether the same courtesy checks apply (they should) and whether the wiki's
-   preference for a registered bot account is worth taking up.
+   preference for a registered bot account is worth taking up.~~
+
+   **Corrected 2026-08-12 — this is the sentence that got it wrong.** It asks whether the gate
+   *covers* the API. The question it should have asked is whether `robots.txt` *allows* it, and the
+   answer is no: `Disallow: /api.php`, `/rest.php`, `/*?action=`, `/wiki/Special:`. Running the gate
+   against `/api.php` returns `false` today — the machinery was already correct and was simply never
+   pointed at the new access mode. See the amendment at the top and ADR-0016. The one live idea in the
+   original bullet is the registered bot account: ADR-0016 records it as that decision's revisit
+   trigger, since the wiki's own rate-limit response invites it.
 
 ---
 
