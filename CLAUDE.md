@@ -76,13 +76,15 @@ Tickets are implemented by the models below — not by Opus. `/sdd:plan` and `/s
 |-------|-----------|---------|------|
 | Claude Sonnet 5 | `claude-sonnet-5` | 1M | Default for most stories |
 | Claude Haiku 4.5 | `claude-haiku-4-5` | 200K | Mechanical and well-scoped stories |
-| DeepSeek V4 Flash 0731 | `deepseek-v4-flash-0731` | unknown | Non-Anthropic; runs outside Claude Code |
+| DeepSeek V4 Flash 0731 | `deepseek-v4-flash-0731` | 384K | Non-Anthropic; runs outside Claude Code |
+
+Both DeepSeek figures come from the implementer itself rather than from a published reference. The 384K was reported as `max_tokens: 384000` — in the Anthropic API that names the *output* cap, not the context window, so if DeepSeek uses it the same way then its window is a separate number and this cell is still open. It is recorded as the window because that is how it was supplied, and because either reading leaves the conclusion below unchanged.
 
 What this changes about planning:
 
 - **Issue bodies must stand alone.** A non-Anthropic implementer runs outside Claude Code, so its agent sees none of this: not this file, not the SDD skills, not the qmd index, not the ADRs unless the issue quotes them. Name every file by path, state the governing ADR/spec constraint inline rather than by reference alone, and give the exact test command. `/sdd:plan`'s "extend `X` in `path/to/file`" framing is the floor here, not a nicety.
 - **Size to the low end.** Prefer the ~150–300 line PR target over 200–500 even for greenfield stories, and split rather than stretch. The 3–4-stories-per-spec grouping may need to become 5–6.
-- **Haiku's 200K window is the binding ceiling.** A story whose working set is `spec.md` + `design.md` + `catalog.js` + a test file can exceed it on its own. Keep each story's file list short enough that the issue body fits alongside it.
+- **Haiku's 200K window is the binding ceiling — now confirmed, not assumed.** With Sonnet at 1M and DeepSeek at 384K, Haiku 4.5 has the smallest window of the three, so sizing to it sizes to all of them. A story whose working set is `spec.md` + `design.md` + `catalog.js` + a test file can exceed 200K on its own. Keep each story's file list short enough that the issue body fits alongside it.
 - **Assume nothing is inferred.** Do not rely on the implementer noticing a load-bearing comment, a sibling test, or a wire-format invariant. If a constraint matters, it goes in the issue body.
 
 No SDD skill reads this section yet — `/sdd:work` dispatches to `general-purpose` with no model override, and `/sdd:plan` has no model input. This is guidance for whoever runs those skills. If the skills should honour it directly, that is a plugin change (`/sdd:report-friction`).
