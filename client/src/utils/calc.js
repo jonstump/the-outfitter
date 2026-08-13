@@ -47,7 +47,15 @@ export function hasFreeCell(loadout) {
 /**
  * The consumable cap categories, declared.
  *
- * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
+ * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved",
+ * SPEC-0007 REQ "Rules Inputs Are Assigned Only From Mechanical Categories" (prohibition
+ * withdrawn by ADR-0015).
+ *
+ * SPEC-0007 read, until ADR-0015: "`CONS[i][3]` (`type`) is descriptive — it labels
+ * picker rows — and MUST NOT be re-introduced as a cap key." ADR-0015's Decision
+ * Outcome reverses that: the cap is four per TYPE, so `type` IS a cap key again and
+ * this declaration is the line that withdraws the MUST NOT.
+ *
  * The cap is FOUR PER TYPE, and `type` is `CONS[i][3]`. Tarot Cards are the fourth
  * category and have no rows in the catalog yet — so the cap must be read from a
  * declared list of categories, NOT from the `type` values present in the data,
