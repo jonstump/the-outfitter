@@ -1,5 +1,5 @@
 import { TRAITS } from "../data/catalog.js";
-import { slotMax, upTotal } from "../utils/calc.js";
+import { upTotal } from "../utils/calc.js";
 import { encodeShareUrl, fromData } from "../utils/loadoutCodec.js";
 import { randomizeLoadout } from "../utils/randomize.js";
 import { loadoutActions } from "./loadoutSlice.js";
@@ -9,7 +9,9 @@ export function randomizeThunk() {
   return (dispatch, getState) => {
     const { loadout, ui } = getState();
     const result = randomizeLoadout({
-      slotMax: slotMax(loadout),
+      // Blocked cells travel as their own array (ADR-0009, SPEC-0006 REQ "Cells Are
+      // Individually Blockable"); the generator respects them and keeps them holes.
+      blocked: loadout.blocked,
       budgetOn: ui.budgetOn,
       budget: ui.budget,
       upBudgetOn: ui.upBudgetOn,

@@ -525,19 +525,22 @@ export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
  * instructive one — the wiki files it under BOTH `Placeable Consumables` (a cap category) and
  * `Healing Consumables` (an effect category), and the app had taken the effect one.
  *
- * Read what this field is and is not, because the issue that reported the misfiling described it as a
- * rules input and it no longer is. `calc.js` once had a `catCount()` that capped four *per type*;
- * #190 replaced it with per-item `consCount`, and SPEC-0008 now specifies that outright — "counted
- * per specific consumable rather than per consumable type". So a wrong value here cannot
- * over-constrain or under-constrain a loadout any more. Its consumers are all display: the badge
- * colours below, the badge label itself, and the picker's meta line. The fix is for accuracy, and
- * `catalog.test.js` pins the cap as per-item so the retired rule is not reintroduced on the strength
- * of that stale description.
+ * This IS the declared cap-category list (ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once
+ * and Preserved"). After #190 the cap was per specific consumable and `type` was display-only; that
+ * rule is RETIRED — the cap is four per TYPE again, and SPEC-0008 was updated to match. So a wrong
+ * value here NOW over-constrains or under-constrains a loadout, which is why `catalog.test.js` pins
+ * every row's `type` to this set (a row typed outside it is a data error), and why the comment
+ * below records the one editorial choice in the list.
  *
  * `Shot` is retained and is knowingly not a wiki category: the wiki has no `Shot Consumables`, and
  * Vitality Shot is filed only under `Healing Consumables`. So this set mixes two of the game's cap
  * categories with one of our own naming. Recorded rather than silently corrected, because collapsing
- * `Shot` would change ten rows for no behavioural gain while this field drives only colour.
+ * `Shot` would change ten rows for no behavioural gain.
+ *
+ * Tarot Cards are the game's fourth cap category; they have NO rows in `CONS` yet (see the roster
+ * boundary above), and they are deliberately NOT listed here — the cap is read from the declared
+ * list, and an empty category must not silently escape it. `calc.js`'s `CONS_CAP_CATEGORIES` names
+ * them so the mechanism is ready when the roster admits them.
  */
 export const CONS_TYPES = ["Shot", "Throwable", "Placeable"];
 

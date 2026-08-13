@@ -1,5 +1,5 @@
 import { createSelector } from "@reduxjs/toolkit";
-import { capMax, capUsed, slotMax, totalCost, upTotal } from "../utils/calc.js";
+import { capMax, capUsed, totalCost, upTotal } from "../utils/calc.js";
 import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
@@ -13,7 +13,7 @@ const selectLoadout = (state) => state.loadout;
 
 export const selectWeaponCount = createSelector([selectLoadout], (l) => l.weapons.filter(Boolean).length);
 
-export const selectSlotMax = createSelector([selectLoadout], slotMax);
+export const selectSlotMax = createSelector([selectLoadout], (l) => 8 - (Array.isArray(l.blocked) ? l.blocked.length : 0));
 
 export const selectCapMax = createSelector([selectLoadout], capMax);
 
@@ -27,6 +27,11 @@ export const selectTotalCost = createSelector([selectLoadout], totalCost);
 // `equip.length` is always 8 under this model, so the count the panel header shows is
 // the number of CELLS HOLDING items — the holes must not be counted as equipment.
 export const selectEquipCount = createSelector([selectLoadout], (l) => l.equip.filter(Boolean).length);
+
+// A cell is effectively unavailable when it is either blocked or occupied; the
+// panel drives per-cell blocked styling from this alongside `selectEquipEntry`.
+export const selectBlockedCells = createSelector([selectLoadout], (l) => (Array.isArray(l.blocked) ? l.blocked : []));
+
 
 export const selectEquipEntry = (index) =>
   createSelector([selectLoadout], (l) => l.equip[index]);

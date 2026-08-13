@@ -26,8 +26,73 @@ export function capUsed(loadout) {
   return loadout.weapons.reduce((a, w) => a + (w ? WEAPONS[w.i][2] : 0), 0);
 }
 
+/**
+ * Equipment capacity, stated once.
+ *
+ * Governing: ADR-0009 (sparse eight-cell grid), ADR-0015 (four per type, not four per
+ * specific item — accepted 2026-08-12), SPEC-0006 REQ "Capacity Rules Are Stated Once
+ * and Preserved", SPEC-0008 (the generator obeys the same cap).
+ *
+ * Capacity is ONE predicate: "a free, unblocked cell exists." `equip` is a fixed
+ * eight-cell grid, so a free cell is an empty cell that is not in `blocked` — a hole
+ * at a blocked position does not count as room. Every caller (reducer, picker,
+ * generator) consults this one predicate rather than re-deriving capacity, so the
+ * picker's enabled state and the reducer's acceptance cannot drift apart.
+ */
+export function hasFreeCell(loadout) {
+  const blocked = new Set(loadout.blocked || []);
+  return loadout.equip.some((e, k) => e === null && !blocked.has(k));
+}
+
+/**
+ * The consumable cap categories, declared.
+ *
+ * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
+ * The cap is FOUR PER TYPE, and `type` is `CONS[i][3]`. Tarot Cards are the fourth
+ * category and have no rows in the catalog yet — so the cap must be read from a
+ * declared list of categories, NOT from the `type` values present in the data,
+ * or the empty category silently escapes the cap. `CONS_TYPES` (data/catalog.js)
+ * is that declaration; it already lists Tarot Cards' category as it appears in the
+ * wiki/cap rules and will need no change when such rows are admitted.
+ */
+export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
+
+/**
+ * How many equipped consumables of one cap category, counted across all cells
+ * regardless of adjacency and regardless of which specific items make up the four.
+ *
+ * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
+ * Per-item counting is RETIRED, not kept alongside: four of one item is already four
+ * of its type, and a `×3` stack counts as 3. A row typed outside the declared
+ * categories is a data error (asserted by catalog.test.js) and here yields the
+ * category "unknown", which no legal four can ever reach.
+ */
+export function consCategoryCount(loadout, consIndex) {
+  const category = CONS[consIndex] ? CONS[consIndex][3] : "unknown";
+  return heldItems(loadout).filter((e) => e.t === "C" && (CONS[e.i] ? CONS[e.i][3] : "unknown") === category).length;
+}
+
+/**
+ * Whether a consumable can still be added under the per-category cap.
+ *
+ * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved",
+ * SPEC-0008 (the generator obeys the same cap). The single predicate every caller
+ * uses: four of the item's TYPE are held, another cannot be added. A stack of three
+ * Vitality Shots plus one more is four of `Shot` — and any fifth `Shot` (even a
+ * different specific item) is rejected.
+ */
+export function consAllowed(loadout, consIndex) {
+  return consCategoryCount(loadout, consIndex) < 4;
+}
+
+// Convenience: the checked count a UI row displays ("3/4 in category"), so rows
+// and the reducer read the same figure.
+export function consCategoryMeta(loadout, consIndex) {
+  return consCategoryCount(loadout, consIndex);
+}
+
 export function slotMax(loadout) {
-  return 8 - loadout.blocked;
+  return 8 - (Array.isArray(loadout.blocked) ? loadout.blocked.length : 0);
 }
 
 /**
@@ -48,7 +113,6 @@ export function consCount(loadout, consIndex) {
 }
 
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));
-
 export function upTotal(loadout) {
   return loadout.traits.reduce((a, id) => a + (TRAIT_UP.get(id) || 0), 0);
 }

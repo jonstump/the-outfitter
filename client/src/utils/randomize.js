@@ -1,11 +1,27 @@
 import { AMMO, CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, totalCost } from "./calc.js";
+import { TRAIT_MAX, consAllowed, totalCost } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
 const BUDGET_RETRY_ATTEMPTS = 80;
 const EQUIP_FILL_GUARD = 60;
 
-function attempt({ slotMax, upBudgetOn, upBudget }) {
+// GENERATOR CONTRACT (SPEC-0006 REQ "Randomized and Bulk-Set Loadouts Produce
+// Well-Formed Grids", SPEC-0008, ADR-0009):
+//
+// The generated loadout is a FIXED EIGHT-CELL GRID, not a packed array. Blocks are
+// per-cell indices, so the generator places items only in unblocked cells, and the
+// per-category consumable cap (ADR-0015) is respected via the SAME predicates the
+// reducer uses — consAllowed/hasFreeCell. Holes may remain at blocked positions;
+// the starter tool goes into the lowest free cell.
+function place(equip, blocked, entry) {
+  const free = equip.findIndex((e, k) => e === null && !blocked.has(k));
+  if (free === -1) return false;
+  equip[free] = entry;
+  return true;
+}
+
+function attempt({ blockedArray, upBudgetOn, upBudget }) {
+  const blocked = new Set(blockedArray || []);
   const upCap = upBudgetOn ? upBudget : Infinity;
 
   const traits = [];
@@ -44,30 +60,47 @@ function attempt({ slotMax, upBudgetOn, upBudget }) {
 
   // Starter tool resolved by stable catalog id so a future reorder of TOOLS
   // can't silently remap the random build's guaranteed First Aid Kit.
-  const equip = [{ t: "T", i: TOOLS.findIndex((t) => t[0] === FIRST_AID_KIT) }];
-  const n = Math.min(5 + Math.floor(Math.random() * 4), slotMax);
+  const equip = Array(8).fill(null);
+  const starter = { t: "T", i: TOOLS.findIndex((t) => t[0] === FIRST_AID_KIT) };
+  if (!place(equip, blocked, starter)) return { weapons, equip, traits };
+
+  const n = Math.min(5 + Math.floor(Math.random() * 4), 8 - blocked.size);
   let guard = 0;
-  while (equip.length < n && guard++ < EQUIP_FILL_GUARD) {
+  while (held(equip) < n && guard++ < EQUIP_FILL_GUARD) {
     if (Math.random() < 0.5) {
       const i = 1 + Math.floor(Math.random() * (TOOLS.length - 1));
-      if (i !== equip[0].i && !equip.some((e) => e.t === "T" && e.i === i)) equip.push({ t: "T", i });
+      if (i !== starter.i && !equip.some((e) => e && e.t === "T" && e.i === i)) place(equip, blocked, { t: "T", i });
     } else {
       const i = Math.floor(Math.random() * CONS.length);
-      // Cap is four copies of the same consumable, not four of the same type.
-      if (equip.filter((e) => e.t === "C" && e.i === i).length < 4) equip.push({ t: "C", i });
+      const candidate = { t: "C", i };
+      // Governing: ADR-0015 (four per cap category), SPEC-0008 (the generator obeys
+      // the same cap). The SAME consAllowed predicate the reducer uses, so a random
+      // loadout cannot emit a build the picker would refuse to add to.
+      if (consAllowed(equipAsLoadout(equip), i)) place(equip, blocked, candidate);
     }
   }
 
   return { weapons, equip, traits };
 }
 
-// Returns { weapons, equip, traits } for a random loadout, respecting `slotMax` and,
-// when `budgetOn`, retrying up to 80 times to land at or under `budget`.
-export function randomizeLoadout({ slotMax, budgetOn, budget, upBudgetOn, upBudget }) {
-  let best = attempt({ slotMax, upBudgetOn, upBudget });
+function held(equip) {
+  return equip.filter(Boolean).length;
+}
+
+// Wrapper to reuse the calc.js predicates without rebuilding the full shape.
+function equipAsLoadout(equip) {
+  return { equip };
+}
+
+// Returns { weapons, equip, traits } for a random loadout, respecting `blocked` cells,
+// the per-category consumable cap, and — when `budgetOn` — retrying up to 80 times to
+// land at or under `budget`. `equip` is a full eight-cell grid (ADR-0009); blocked
+// positions stay holes.
+export function randomizeLoadout({ blocked, budgetOn, budget, upBudgetOn, upBudget }) {
+  let best = attempt({ blockedArray: blocked, upBudgetOn, upBudget });
   if (budgetOn) {
     for (let k = 0; k < BUDGET_RETRY_ATTEMPTS; k++) {
-      const a = attempt({ slotMax, upBudgetOn, upBudget });
+      const a = attempt({ blockedArray: blocked, upBudgetOn, upBudget });
       if (totalCost(a) <= budget) {
         best = a;
         break;

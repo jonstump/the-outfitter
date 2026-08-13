@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, capMax, consCount, heldItems } from "../utils/calc.js";
+import { TRAIT_MAX, capMax, consAllowed, hasFreeCell, heldItems } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Governing: ADR-0009 (index is the cell, `null` is empty), SPEC-0006
@@ -22,6 +22,9 @@ function isValidLoadoutShape(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (typeof payload.weapons !== "object" || !Array.isArray(payload.weapons) || payload.weapons.length !== 2) return false;
   if (typeof payload.equip !== "object" || !Array.isArray(payload.equip) || payload.equip.length > 8) return false;
+  // Steady-state blocked cells are array-shaped (ADR-0009, v2), but bulk payloads
+  // are still accepted for the legacy/blind-merge shape guard, and #278's flagged
+  // gap means a payload may carry either a count or an array.
   if (payload.blocked !== undefined && (!Array.isArray(payload.blocked) || payload.blocked.some((c) => !Number.isInteger(c) || c < 0 || c >= 8))) return false;
   if (payload.name !== undefined && typeof payload.name !== "string") return false;
   if (!Array.isArray(payload.traits)) return false;
@@ -53,19 +56,24 @@ const loadoutSlice = createSlice({
     },
     addEquip(state, action) {
       const { t, i } = action.payload;
-      // An occupied or blocked cell cannot hold an item, so capacity is "a free,
-      // unblocked cell exists" — recomputed from the sparse grid rather than kept as a
-      // count, because `equip.length` is always 8 under this model. Comparing it
-      // against a slot maximum would silently disable the picker entirely.
+      // Capacity is the single shared predicate from calc.js — a free, unblocked
+      // cell exists — so the picker's enabled state and the reducer's acceptance
+      // cannot drift apart (SPEC-0006 REQ "Capacity Rules Are Stated Once and
+      // Preserved"). Recomputed from the sparse grid rather than kept as a count,
+      // because `equip.length` is always 8 under this model (ADR-0009); comparing
+      // it against a slot maximum would silently disable the picker entirely.
+      if (!hasFreeCell(state)) return;
       const blockSet = new Set(state.blocked);
       const free = state.equip.findIndex((e, k) => e === null && !blockSet.has(k));
-      if (free === -1) return;
       // One of each specific Tool per loadout — re-verified against the wiki as still
       // in force after Update 2.8's equipment-slot rework (issue #41).
       if (t === "T" && heldItems(state).some((e) => e.t === "T" && e.i === i)) return;
-      // Four copies of one specific consumable — the cap is per item, so a full set of
-      // Dynamite Sticks doesn't block a Dynamite Bundle.
-      if (t === "C" && consCount(state, i) >= 4) return;
+      // Governing: ADR-0015 (four per type, not four per specific item — accepted
+      // 2026-08-12), SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
+      // The cap is per cap CATEGORY (`CONS[i][3]`), not per specific consumable:
+      // four Dynamite Sticks then a Dynamite Bundle is rejected, and four Vitality
+      // Shots then any fifth `Shot` — even a Stamina Shot — is rejected.
+      if (t === "C" && !consAllowed(state, i)) return;
       state.equip[free] = { t, i };
     },
     // Empties the ONE cell named by the index; other items never move (ADR-0009).
