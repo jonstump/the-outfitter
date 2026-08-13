@@ -73,14 +73,35 @@ export default function EquipmentSlot({ index, run, grabRef }) {
     }
   };
 
-  const onPointerDown = (e) => {
-    // Pointer Events, not HTML5 drag-and-drop (ADR-0009). A grab starts on a filled
-    // cell; pointermove/pointerup are captured on the grid root (EquipmentPanel) so a
-    // drag can leave the cell and still drop elsewhere or off-grid (unequip).
+  // Pointer Events, not HTML5 drag-and-drop (ADR-0009). A grab starts on a filled
+  // cell; pointermove/pointerup are captured on the grid root (EquipmentPanel) so a
+  // drag can leave the cell and still drop elsewhere or off-grid (unequip).
+  //
+  // Shared by the tile body (mouse and pen) and by the drag handle (every pointer
+  // type). Capture is set on whichever element took the press, so the grid root still
+  // sees pointerup / pointercancel for the gesture either way.
+  const startGrab = (e) => {
     if (!entry) return;
     if (e.button !== undefined && e.button !== 0) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     ref.current = { origin: index, from: index, mode: "pointer", pointerId: e.pointerId };
+  };
+
+  // Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.
+  //
+  // The tile BODY is a mouse/pen drag source only. A finger press here has to stay
+  // available to the browser as a page pan, so the body keeps `touch-action: auto` and
+  // only `.equip-drag-handle` opts out. The alternative — `touch-action: none` on the
+  // whole tile — also works, and also turns a full grid (692px tall inside a 664px
+  // viewport at 390px wide) into a scroll dead zone larger than one screen.
+  //
+  // The guard is not cosmetic. Without it a finger drag here still starts a grab, the
+  // browser then claims the gesture and fires pointercancel instead of pointerup, and
+  // the drag is the silent no-op #312 exists to fix. Refusing the grab makes the same
+  // press an honest page scroll instead.
+  const onPointerDown = (e) => {
+    if (e.pointerType === "touch") return;
+    startGrab(e);
   };
 
   // The continuation cells of a stack are part of the same tile; the grid root's
@@ -180,6 +201,30 @@ export default function EquipmentSlot({ index, run, grabRef }) {
       data-slot-index={index}
       onPointerDown={onPointerDown}
     >
+      {/* Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.
+          The grip is the drag source for TOUCH — the one element carrying
+          `touch-action: none`, so a finger drag here is not stolen by the page pan while
+          a swipe anywhere else on the tile still scrolls. Mouse and pen may drag from it
+          or from the tile body; both routes call the same startGrab.
+
+          Deliberately a <span>, not a <button>: it is a pointer-only affordance, and the
+          keyboard equivalence SPEC-0006 requires is already carried by .equip-tile-main
+          (Space grabs, arrows move, Enter drops). A focusable control here would put a
+          second stop in the tab order that does nothing on Enter, so it is aria-hidden
+          and unfocusable rather than a button that lies about what it does. */}
+      <span
+        className="equip-drag-handle"
+        aria-hidden="true"
+        onPointerDown={(e) => {
+          // Without this the press also reaches the tile body's handler, which would
+          // start a second grab and re-capture the pointer on the outer element. The ✕
+          // stops propagation for the same reason.
+          e.stopPropagation();
+          startGrab(e);
+        }}
+      >
+        ⠿
+      </span>
       <button
         ref={cellRef}
         className="equip-tile-main"

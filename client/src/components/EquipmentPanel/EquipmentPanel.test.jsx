@@ -5,7 +5,7 @@ import EquipmentPanel from "./EquipmentPanel.jsx";
 import { CONS, TOOLS } from "../../data/catalog.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { equipRuns } from "../../utils/stacking.js";
-import { CSS_RULES, parseStylesheet, readGlobalCss } from "../../test/cssRules.js";
+import { CSS_RULES, parseStylesheet, readGlobalCss, restingDeclaration } from "../../test/cssRules.js";
 import { consCategoryCount, totalCost } from "../../utils/calc.js";
 import { ARRANGEMENT_PROPERTY } from "./gridMove.js";
 import { existsSync, readFileSync } from "node:fs";
@@ -382,6 +382,112 @@ describe("pointer interaction", () => {
     // Cell 1 is the lowest free unblocked cell (0 occupied, 2 blocked).
     expect(s[1]).toEqual({ t: "C", i: vitality });
     expect(s[2]).toBeNull();
+  });
+});
+
+// Covers: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation" on TOUCH (issue #312).
+//
+// WHAT THESE DO AND DO NOT PROVE, stated plainly, because the defect these guard shipped
+// past a green suite twice. jsdom implements no `touch-action`, no pointer capture and no
+// native gesture arbitration, so NOTHING here proves a finger drag works in a browser —
+// that is a real-browser test's job, and #312 says so. What these pin down is the contract
+// the browser fix rests on: which element opts out of panning, which element refuses a
+// touch grab, and that a cancelled pointer drops the grab. Break any of those and the
+// browser behaviour breaks with it, silently, which is the failure mode being guarded.
+describe("touch drag contract", () => {
+  const oneItem = () =>
+    loadoutState({ equip: [{ t: "C", i: vitality }, null, null, null, null, null, null, null] });
+
+  const handleIn = (container, index) =>
+    container.querySelector(`[data-slot-index="${index}"] .equip-drag-handle`);
+
+  // The drop half of gridPointerSequence, with the press supplied by the caller so a
+  // touch/mouse press on a chosen element can be varied.
+  const releaseOver = (container, toCellOrNull) => {
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const target =
+      toCellOrNull === null ? grid : container.querySelector(`[data-slot-index="${toCellOrNull}"]`);
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => target;
+    try {
+      fireEvent.pointerUp(target, {});
+    } finally {
+      document.elementFromPoint = orig;
+    }
+  };
+
+  it("the stylesheet opts ONLY the grip out of the browser's touch gestures", () => {
+    // The whole browser-level fix. `touch-action: none` here is what stops the browser
+    // claiming a finger drag as a page pan and firing pointercancel instead of pointerup.
+    expect(restingDeclaration(".equip-drag-handle", "touch-action")).toBe("none");
+  });
+
+  it("the tile body deliberately does NOT opt out — it stays pannable", () => {
+    // The other half of the split, and the reason it is not simply `touch-action: none`
+    // on the tile: a full grid is 692px tall in a 664px viewport at 390px wide, so that
+    // would put a scroll dead zone larger than one screen in the middle of the page.
+    expect(restingDeclaration(".equip-slot.filled-slot", "touch-action")).toBeNull();
+    expect(restingDeclaration(".equip-slot", "touch-action")).toBeNull();
+  });
+
+  it("a filled tile renders a grip that is not a second tab stop", () => {
+    const { container } = renderPanel({ loadout: oneItem() });
+    const handle = handleIn(container, 0);
+    expect(handle).not.toBeNull();
+    // Pointer-only affordance: the keyboard route is Space on .equip-tile-main, so a
+    // focusable grip would be a tab stop that does nothing on Enter.
+    expect(handle).toHaveAttribute("aria-hidden", "true");
+    expect(handle).not.toHaveAttribute("tabindex");
+    expect(handle.tagName).toBe("SPAN");
+  });
+
+  it("an empty cell renders no grip", () => {
+    const { container } = renderPanel({ loadout: oneItem() });
+    expect(handleIn(container, 1)).toBeNull();
+  });
+
+  it("a TOUCH press on the grip starts a grab — the item moves", () => {
+    const { container, store } = renderPanel({ loadout: oneItem() });
+    fireEvent.pointerDown(handleIn(container, 0), { button: 0, pointerId: 1, pointerType: "touch" });
+    releaseOver(container, 3);
+    expect(store.getState().loadout.equip[3]).toEqual({ t: "C", i: vitality });
+    expect(store.getState().loadout.equip[0]).toBeNull();
+  });
+
+  it("a TOUCH press on the tile BODY does not grab — the swipe belongs to the page", () => {
+    const { container, store } = renderPanel({ loadout: oneItem() });
+    const body = container.querySelector('[data-slot-index="0"]');
+    fireEvent.pointerDown(body, { button: 0, pointerId: 1, pointerType: "touch" });
+    releaseOver(container, 3);
+    // Unmoved: the press never became a grab, so the page keeps the gesture as a pan.
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "C", i: vitality });
+    expect(store.getState().loadout.equip[3]).toBeNull();
+  });
+
+  it("a MOUSE press on the tile body still grabs — the desktop route is untouched", () => {
+    const { container, store } = renderPanel({ loadout: oneItem() });
+    const body = container.querySelector('[data-slot-index="0"]');
+    fireEvent.pointerDown(body, { button: 0, pointerId: 1, pointerType: "mouse" });
+    releaseOver(container, 3);
+    expect(store.getState().loadout.equip[3]).toEqual({ t: "C", i: vitality });
+  });
+
+  it("pointercancel drops the grab, so a later release moves nothing", () => {
+    // What the browser sends when it takes the gesture over. Before #312 this was
+    // handled only as a side effect of lostpointercapture.
+    const { container, store } = renderPanel({ loadout: oneItem() });
+    fireEvent.pointerDown(handleIn(container, 0), { button: 0, pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerCancel(container.querySelector('[data-slot-index="0"]'), { pointerId: 1 });
+    releaseOver(container, 3);
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "C", i: vitality });
+    expect(store.getState().loadout.equip[3]).toBeNull();
+  });
+
+  it("a grip drag off the grid unequips, as the mouse route does", () => {
+    const { container, store } = renderPanel({ loadout: oneItem() });
+    fireEvent.pointerDown(handleIn(container, 0), { button: 0, pointerId: 1, pointerType: "touch" });
+    releaseOver(container, null);
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(0);
   });
 });
 
