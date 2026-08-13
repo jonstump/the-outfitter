@@ -102,6 +102,31 @@ describe("two-rank grid arrangement", () => {
     }
   });
 
+
+  it("declares the containment context on an ANCESTOR of .equip-grid, not the grid itself (issue #296)", () => {
+    // An element cannot query its own size: a @container rule matches an ANCESTOR
+    // container, so `container-type` on `.equip-grid` itself made the wide 4×2 state
+    // unreachable — the `min-width: 460px` query had no container to match against.
+    // The regressions is a CASCADE check: the element carrying container-type must be
+    // strictly above the grid in the selector-anchor sense (the grid's panel), it must
+    // not be the grid's own rule, and the @container query must still target the grid.
+    const gridRule = CSS_RULES.find((r) => r.selectors.includes(".equip-grid"));
+    const containerRules = CSS_RULES.filter(
+      (r) => r.body.includes("container-type:") && !r.conditions.length
+    );
+    const containerSelectors = containerRules.flatMap((r) => r.selectors);
+    // The grid's own rule must NOT carry container-type (that is the bug).
+    expect(gridRule.body).not.toMatch(/container-type:/);
+    // Some ancestor selector carries it — `.panel` is the grid's containing panel.
+    expect(containerSelectors).toContain(".panel");
+    // The @container query still targets the grid (narrow->wide transposition).
+    const containerQuery = CSS_RULES.find(
+      (r) => r.conditions.includes("@container (min-width: 460px)") && r.selectors.includes(".equip-grid")
+    );
+    expect(containerQuery).toBeTruthy();
+    expect(containerQuery.body).toContain("repeat(4, 1fr)");
+  });
+
   it("keeps the column count independent of viewport media queries for .equip-grid", () => {
     // No `@media`-conditional declaration of grid-template-columns for .equip-grid: the
     // arrangement responds to the PANEL, not the viewport.
