@@ -1452,6 +1452,9 @@ describe("the categorised loadout preview", () => {
     expect(groups.weapons).toHaveLength(WEAPON_CELLS);
     expect(groups.equipment).toHaveLength(EQUIP_CELLS);
     expect(groups.traits).toHaveLength(TRAIT_CELLS);
+    // The record decodes through the v1->v2 lift (SPEC-0006 "Version 1 Records Migrate
+    // Losslessly"): packed insertion order becomes the cells the items rendered in, so
+    // the five items sit in cells 0-4 and cells 5-7 are holes.
     expect(groups.equipment.map((c) => c?.kind)).toEqual([
       "tool", "tool", "consumable", "consumable", "tool", undefined, undefined, undefined,
     ]);

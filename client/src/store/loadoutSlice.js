@@ -1,7 +1,18 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, capMax, consCount, slotMax } from "../utils/calc.js";
+import { TRAIT_MAX, capMax, consCount, heldItems } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
+
+// Governing: ADR-0009 (index is the cell, `null` is empty), SPEC-0006
+// REQ "Equipment Occupies a Fixed Eight-Cell Grid", REQ "Cells Are Individually Blockable".
+//
+// Equipment lives in a fixed eight-cell sparse array. Index IS the cell;
+// `null` IS an empty cell. A removal empties that cell only — it never
+// relocates another item, and that is what a packed `splice` used to do.
+// `blocked` is an array of cell indices (not a count): a middle cell can be
+// blocked while later cells stay usable, and an occupied cell cannot be
+// blocked. Placement skips every blocked index, so holes may remain at
+// blocked positions while every unblocked cell is full.
 
 // Shape of a valid loadout state object. setLoadout() rejects payloads that don't
 // conform so a malformed/partial payload can't silently poison the store (issue #27).
@@ -10,9 +21,10 @@ import { emptyLoadout } from "../utils/loadoutCodec.js";
 function isValidLoadoutShape(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (typeof payload.weapons !== "object" || !Array.isArray(payload.weapons) || payload.weapons.length !== 2) return false;
-  if (payload.blocked !== undefined && (typeof payload.blocked !== "number" || payload.blocked < 0 || payload.blocked > 8)) return false;
+  if (typeof payload.equip !== "object" || !Array.isArray(payload.equip) || payload.equip.length > 8) return false;
+  if (payload.blocked !== undefined && (!Array.isArray(payload.blocked) || payload.blocked.some((c) => !Number.isInteger(c) || c < 0 || c >= 8))) return false;
   if (payload.name !== undefined && typeof payload.name !== "string") return false;
-  if (!Array.isArray(payload.equip) || !Array.isArray(payload.traits)) return false;
+  if (!Array.isArray(payload.traits)) return false;
   return payload.weapons.every(
     (w) => w === null || (typeof w === "object" && typeof w.i === "number" && WEAPONS[w.i] && Number.isInteger(w.a))
   );
@@ -33,28 +45,41 @@ const loadoutSlice = createSlice({
     removeWeapon(state, action) {
       state.weapons[action.payload] = null;
     },
+    // Picker placement fills the LOWEST-NUMBERED free (unblocked, empty) cell:
+    // cells 0..7 in order, and `blocked` names the exact cells to skip (ADR-0009).
     setAmmo(state, action) {
       const { slot, ammoIndex } = action.payload;
       if (state.weapons[slot]) state.weapons[slot].a = ammoIndex;
     },
     addEquip(state, action) {
       const { t, i } = action.payload;
-      if (state.equip.length >= slotMax(state)) return;
+      // An occupied or blocked cell cannot hold an item, so capacity is "a free,
+      // unblocked cell exists" — recomputed from the sparse grid rather than kept as a
+      // count, because `equip.length` is always 8 under this model. Comparing it
+      // against a slot maximum would silently disable the picker entirely.
+      const blockSet = new Set(state.blocked);
+      const free = state.equip.findIndex((e, k) => e === null && !blockSet.has(k));
+      if (free === -1) return;
       // One of each specific Tool per loadout — re-verified against the wiki as still
       // in force after Update 2.8's equipment-slot rework (issue #41).
-      if (t === "T" && state.equip.some((e) => e.t === "T" && e.i === i)) return;
+      if (t === "T" && heldItems(state).some((e) => e.t === "T" && e.i === i)) return;
       // Four copies of one specific consumable — the cap is per item, so a full set of
       // Dynamite Sticks doesn't block a Dynamite Bundle.
       if (t === "C" && consCount(state, i) >= 4) return;
-      state.equip.push({ t, i });
+      state.equip[free] = { t, i };
     },
+    // Empties the ONE cell named by the index; other items never move (ADR-0009).
     removeEquip(state, action) {
-      state.equip.splice(action.payload, 1);
+      state.equip[action.payload] = null;
     },
+    // Per-cell blocking (ADR-0009): `blocked` is an array of cell indices. A cell
+    // that already holds an item cannot be blocked, and a blocked cell refuses
+    // placement through `addEquip`'s free-cell scan above.
     toggleBlockedSlot(state, action) {
-      const slotPosition = action.payload;
-      const isBlocked = slotPosition >= slotMax(state);
-      state.blocked = isBlocked ? state.blocked - 1 : Math.min(state.blocked + 1, 8 - state.equip.length);
+      const cell = action.payload;
+      if (state.equip[cell]) return;
+      const i = state.blocked.indexOf(cell);
+      state.blocked = i === -1 ? [...state.blocked, cell].sort((a, b) => a - b) : state.blocked.filter((c) => c !== cell);
     },
     addTrait(state, action) {
       // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
@@ -73,8 +98,9 @@ const loadoutSlice = createSlice({
     },
     clearBuild(state) {
       state.weapons = [null, null];
-      state.equip = [];
+      state.equip = Array(8).fill(null);
       state.traits = [];
+      state.blocked = [];
     },
     // Bulk merge — used by hydrate-on-load, loading a saved build, and randomize.
     // Rejects payloads that don't match the loadout shape so a bad call fails
