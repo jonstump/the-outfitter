@@ -72,7 +72,12 @@ function buildRows(tab, ui, loadout, dispatch) {
     return TOOLS.map((t, i) => ({ t, i }))
       .filter((x) => match(x.t[1]) && gOK(x.t[3]))
       .map((x) => {
-        const ok = room && !loadout.equip.some((e) => e.t === "T" && e.i === x.i);
+        // Governing: ADR-0009 (index is the cell, `null` is an empty cell), SPEC-0006 REQ
+        // "Equipment Occupies a Fixed Eight-Cell Grid". `equip` is a fixed eight-cell
+        // SPARSE array, so the duplicate-tool check must skip empty cells — reading
+        // `e.t` off a `null` entry outside `room`'s short-circuit crashes the row map
+        // (#295). A tool is already equipped only if a NON-EMPTY cell holds it.
+        const ok = room && !loadout.equip.some((e) => e && e.t === "T" && e.i === x.i);
         return {
           key: x.i,
           name: x.t[1],
