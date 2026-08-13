@@ -80,6 +80,30 @@ const loadoutSlice = createSlice({
     removeEquip(state, action) {
       state.equip[action.payload] = null;
     },
+    // Direct manipulation (SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation").
+    // A move is a PERMUTATION of cells and changes nothing but position: which items
+    // are equipped, the total cost, and every capacity total are untouched. Dropping
+    // onto an occupied cell swaps the two; dropping onto the origin cell is a no-op.
+    // Blocked cells are not part of the grid's permutation space (a block is outside
+    // the loadout), so any move involving one is rejected rather than swapped.
+    moveEquip(state, action) {
+      const { from, to } = action.payload;
+      if (from === to) return;
+      // Dragged off the grid unequips: the drop handler passes `to: -1` (or null)
+      // for a release outside any cell (SPEC-0006 "dragged off the grid").
+      if (to === null || to === -1) {
+        if (from < 0 || from >= 8 || state.equip[from] === null) return;
+        state.equip[from] = null;
+        return;
+      }
+      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= 8 || to < 0 || to >= 8) return;
+      if (state.blocked.includes(from) || state.blocked.includes(to)) return;
+      if (state.equip[from] === null && state.equip[to] === null) return;
+      const moving = state.equip[from] === null ? state.equip[to] : state.equip[from];
+      if (moving === null) return;
+      state.equip[from] = state.equip[to];
+      state.equip[to] = moving;
+    },
     // Per-cell blocking (ADR-0009): `blocked` is an array of cell indices. A cell
     // that already holds an item cannot be blocked, and a blocked cell refuses
     // placement through `addEquip`'s free-cell scan above.
