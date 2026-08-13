@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { statFieldFor } from "./itemStats.js";
 import {
   CONS,
+  CONS_CAP_CATEGORIES,
   CONS_GROUPS,
   CONS_TYPES,
   CONS_TYPE_COLOR,
@@ -254,8 +255,62 @@ describe("consumable type", () => {
   it("uses only declared types", () => {
     // Governing: SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved" — a row typed outside
     // the declared categories is a DATA ERROR, because `type` is the cap key.
-    const undeclared = CONS.filter((c) => !CONS_TYPES.includes(c[3])).map((c) => `${c[0]}:${c[3]}`);
+    //
+    // Pinned to CONS_CAP_CATEGORIES, the list the cap actually reads. It used to pin to CONS_TYPES,
+    // which is the narrower badge-palette subset — so a legitimate `Tarot Cards` row would have
+    // failed this assertion as a data error on the very day the roster admitted one, contradicting
+    // the requirement's "no new modelling" scenario.
+    const undeclared = CONS.filter((c) => !CONS_CAP_CATEGORIES.includes(c[3])).map((c) => `${c[0]}:${c[3]}`);
     expect(undeclared).toEqual([]);
+  });
+
+  it("keeps the badge palette a subset of the cap vocabulary (SPEC-0006)", () => {
+    // The two lists have different jobs and different lifetimes: CONS_CAP_CATEGORIES is the rule
+    // vocabulary the cap reads, CONS_TYPES the categories with rows a player can see on a badge.
+    // What must never drift is the direction of containment — a type that can appear on screen but
+    // is invisible to the cap is precisely the bug the single-list rewrite removed.
+    expect(CONS_TYPES.every((t) => CONS_CAP_CATEGORIES.includes(t))).toBe(true);
+    // NOT strict, and the difference is load-bearing. `toBeLessThan` here would encode "Tarot Cards
+    // has no rows" as a permanent fact: admitting one forces it into CONS_TYPES (the assertion
+    // below), which makes both lists length 4 and fails a strict comparison — reproducing the very
+    // tripwire this test's own governing requirement forbids ("no new modelling" the moment rows
+    // are admitted). Equal lengths are the legitimate end state, so only EXCEEDING is a defect.
+    expect(CONS_TYPES.length).toBeLessThanOrEqual(CONS_CAP_CATEGORIES.length);
+    // Every cap category that HAS rows must be in the palette, or its badge falls back to
+    // Throwable's colour and reads as a different category than it is.
+    const withRows = [...new Set(CONS.map((c) => c[3]))];
+    expect(withRows.every((t) => CONS_TYPES.includes(t))).toBe(true);
+  });
+
+  it("caps an undeclared type instead of letting it escape (SPEC-0006)", async () => {
+    // SPEC-0006: a row typed outside the declared categories "SHALL be treated as a data error
+    // rather than silently escaping the cap". The assertion above stops one reaching production;
+    // this asserts what happens if one does. Every undeclared type shares ONE budget, so a typo
+    // cannot mint four fresh slots and two typos cannot mint eight.
+    const { capCategoryOf, consAllowed, consCategoryCount, UNDECLARED_CATEGORY } = await import("../utils/calc.js");
+
+    // The resolution rule itself, tested against types the catalog does not contain — which is the
+    // only way to distinguish "resolve through the declared list" from "group by whatever `type`
+    // says". Reached through a catalog row it is indistinguishable, because every row is declared.
+    expect(capCategoryOf("Shot")).toBe("Shot");
+    expect(capCategoryOf("Tarot Cards")).toBe("Tarot Cards"); // declared with no rows — still itself
+    expect(capCategoryOf("Bogus")).toBe(UNDECLARED_CATEGORY);
+    expect(capCategoryOf("Shots")).toBe(UNDECLARED_CATEGORY); // the plural typo, not the category
+    expect(capCategoryOf("Bogus")).toBe(capCategoryOf("Shots")); // one budget, not two
+    expect(capCategoryOf(undefined)).toBe(UNDECLARED_CATEGORY);
+
+    const bogus = CONS.findIndex((c) => !CONS_CAP_CATEGORIES.includes(c[3]));
+    // No such row exists (that is the point of the assertion above), so drive the predicate with a
+    // synthetic index instead: an out-of-range index has no row and therefore no declared type.
+    expect(bogus).toBe(-1);
+    const ghost = CONS.length + 1;
+    const held = (n) => ({ equip: Array.from({ length: 8 }, (_, k) => (k < n ? { t: "C", i: ghost } : null)) });
+    expect(consCategoryCount(held(3), ghost)).toBe(3);
+    expect(consAllowed(held(3), ghost)).toBe(true);
+    expect(consAllowed(held(4), ghost)).toBe(false);
+    // A second undeclared value shares that same budget rather than opening its own.
+    const otherGhost = CONS.length + 2;
+    expect(consAllowed(held(4), otherGhost)).toBe(false);
   });
 
   it("gives every type its own badge colour", () => {

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 date: 2026-08-10
 implements: [ADR-0009, ADR-0015]
 requires: [SPEC-0001]
@@ -8,6 +8,8 @@ requires: [SPEC-0001]
 # SPEC-0006: Equipment Slot Arrangement
 
 ## Overview
+
+> **This capability is implemented.** The Overview below states the problem it solved, in the present tense of the world before it shipped. Read every "is" in this section as "was" — `state.equip` is a sparse eight-cell array today, `blocked` is a list of cell indices, `FORMAT_VERSION` is 2, and the grid is two fixed ranks of four. See **Implementation status** below for the evidence. This banner exists because the un-marked version of this section was read as current fact and copied into SPEC-0008, which then told its own readers that the live array was still packed.
 
 The Equipment panel renders eight cells but does not have eight slots. `state.equip` is a **dense packed array**; the array index is the cell, so items are pinned to the front of the grid in whatever order they were added, and unequipping the first item slides every item behind it one cell to the left. A player carrying three items occupies cells 1–3 and has no way to reach cell 8.
 
@@ -18,11 +20,11 @@ Four changes follow from that one decision, and they are not separable:
 - **Free placement.** Any item may sit in any cell, and gaps between items are legal. Removal writes `null` in place rather than splicing, so nothing moves that the user did not move.
 - **Per-cell blocking.** `blocked` stops being a count and becomes a set of cell indices. The current model infers blockedness from `index >= slotMax`, which is simply wrong once an item can legitimately sit in cell 8 with four empty cells in front of it.
 - **Wire format v2.** Cell position that is not in the payload does not survive a save, a share link, or a reload. `FORMAT_VERSION` goes to 2.
-- **Fixed two-rank geometry** *(added 2026-08-12 with ADR-0009's amendment of the same date)*. `.equip-grid` is `repeat(auto-fill, minmax(140px, 1fr))` today, so the panel's track count is whatever fits its width — four columns only above roughly a 1434px viewport, three through most of the desktop range, two around 1024px. A stored cell position only buys recognition if it names a stable place, arrow-key movement needs a known track count to define "the cell below this one", and derived stacking renders an adjacency a reflowing grid breaks and reforms at different widths. The grid becomes two ranks of four, transposed on a narrow panel — a rotation that preserves every cell's neighbours, not a reflow to a different track count.
+- **Fixed two-rank geometry** *(added 2026-08-12 with ADR-0009's amendment of the same date)*. `.equip-grid` was `repeat(auto-fill, minmax(140px, 1fr))`, so the panel's track count was whatever fit its width — four columns only above roughly a 1434px viewport, three through most of the desktop range, two around 1024px. A stored cell position only buys recognition if it names a stable place, arrow-key movement needs a known track count to define "the cell below this one", and derived stacking renders an adjacency a reflowing grid breaks and reforms at different widths. The grid becomes two ranks of four, transposed on a narrow panel — a rotation that preserves every cell's neighbours, not a reflow to a different track count.
 
 **Stacking is derived, not stored.** Repeated consumables in adjacent cells render as one tile with a quantity badge; the cells behind the anchor render as held by that stack. There is no stored quantity, so the badge cannot disagree with the cell count. Duplicate *tools* remain forbidden by the existing `addEquip` guard, which is why a run of length ≥ 2 can only ever be consumables — the consumables-only property falls out of a rule that is already enforced and already tested, rather than being restated here as a special case.
 
-**The load-bearing constraint is the server validator.** `server/src/routes/loadouts.js` rejects a `data.e` containing `null` and a `data.b` that is not a number, so a v2 payload is a 400 against today's server. The client half of this capability is not shippable alone. This is the only sequencing constraint in the capability, and "Saved-Loadout Payloads Are Validated at Both Versions" is where it is made testable.
+**The load-bearing constraint was the server validator — and it is satisfied.** `server/src/routes/loadouts.js` used to reject a `data.e` containing `null` and a `data.b` that was not a number, which made a v2 payload a 400 and meant the client half of this capability was not shippable alone. `isValidData` now branches on the version: at v2 it requires `data.e` to be exactly eight entries of `null`-or-entry and `data.b` to be an array of distinct cell indices in `0..7`, and it still accepts the v1 shape. That was the only sequencing constraint in the capability, and "Saved-Loadout Payloads Are Validated at Both Versions" is where it is made testable.
 
 **Item imagery is unchanged and inherited.** Every cell that depicts an item — an ordinary tile or a stack anchor — renders through the same shared container and the same scraped-image-then-SVG-fallback chain that SPEC-0001 (Equipment Iconography) specifies. This capability changes which cell a tile is drawn in and how many tiles a run of identical consumables produces; it changes nothing about how the image inside a tile is resolved.
 
@@ -30,11 +32,25 @@ Four changes follow from that one decision, and they are not separable:
 
 This paragraph previously stated the opposite — four copies of one *specific* consumable, with `type` "descriptive and not a rules input", and two different consumables never sharing a budget. That was correct against `consCount()` as implemented and against SPEC-0007's prohibition, but wrong against the game: Update 2.8 restricts consumables to "4 instances of the same type (Throwables, Placeables, Shots and Tarot Cards)", confirmed by an in-game Arsenal observation on 2026-08-12. ADR-0015 records the reversal and the evidence. **`type` is therefore a rules input**, and SPEC-0007's `MUST NOT` against using it as a cap key is withdrawn by the same decision. This capability changes how repeats read; ADR-0015 changes what bounds them.
 
-**Implementation status.** Nothing in this capability is implemented. `state.equip` is still packed, `blocked` is still a count, `FORMAT_VERSION` is still 1, and the panel has no drag affordance.
+**Implementation status** *(corrected 2026-08-13)*. **This capability is implemented.** All twelve requirements are built and carry tests that name them.
 
-**Interaction with SPEC-0003** *(updated 2026-08-10)*. This paragraph previously said SPEC-0003's preview "sheds later slots before earlier ones as width narrows" and would need a one-line amendment when the sparse model landed. **That amendment has already happened**, and it went further than one line: SPEC-0003's preview is now a fixed-cell categorised panel, the shed-by-width rule is withdrawn, and the requirement is stated in terms of *cells occupied* rather than array shape — so it reads correctly under both the packed array and this capability's sparse one, and needs no change when this lands.
+- **Equipment Occupies a Fixed Eight-Cell Grid** — `state.equip` is a fixed eight-element array with `null` holes; `heldItems`, `totalCost`, `selectEquipCount`, `toData`/`fromData` and the randomizer all derive from occupied cells rather than array length.
+- **The Grid Renders as Two Ranks of Four** — a fixed 4-track grid with column-major fill, transposed to 2×4 by a panel-width `@container` query. The threshold is declared once, in that query, and the keyboard reads the arrangement from a token the query sets rather than measuring geometry.
+- **Cells Are Individually Blockable** — `blocked` is an array of cell indices; `toggleBlockedSlot` refuses an occupied cell, `slotMax()` is `8 - blocked.length`, and placement skips blocked indices.
+- **Items Are Rearranged by Direct Manipulation** — one `moveEquip` operation behind both pointer drag and the keyboard, with an off-grid drop as the remove path.
+- **Repeated Consumables Read as One Stack** — `utils/stacking.js` derives runs at render time; the badge is computed from the run, never stored.
+- **Capacity Rules Are Stated Once and Preserved** — one `hasFreeCell` predicate, and the four-per-category cap read from `CONS_CAP_CATEGORIES` in `catalog.js`.
+- **Wire Format Version 2 Encodes Cell Position** — `FORMAT_VERSION` is 2 and `toData` emits eight positional entries.
+- **Version 1 Records Migrate Losslessly** — `fromV1` and the legacy positional decoder both pad to eight cells.
+- **Randomized and Bulk-Set Loadouts Produce Well-Formed Grids** — the generator builds `Array(8).fill(null)` and leaves holes at blocked positions; `isValidLoadoutShape` gates bulk payloads.
+- **Error Handling at the Payload Boundary** and **Saved-Loadout Payloads Are Validated at Both Versions** — the server's `isValidData` branches on version and names the offending field on rejection.
+- **Keyboard Equivalence for Every Pointer Gesture** — every pointer gesture has a paired keyboard test in `EquipmentPanel.test.jsx`.
 
-What remains owed to SPEC-0003 is narrower and additive: this capability introduces **consumable stacking** and **per-cell blocking**, and SPEC-0003 explicitly scopes both out of its preview for now. When this capability is implemented, SPEC-0003 needs a clause saying whether a preview renders a stack as one badged cell (as the builder will) or as repeated cells, and whether a blocked cell is drawn distinctly from an empty one. Two of SPEC-0003's preview scenarios are also marked as unexercisable until the sparse model exists, and become live then.
+This note previously read: "Nothing in this capability is implemented. `state.equip` is still packed, `blocked` is still a count, `FORMAT_VERSION` is still 1, and the panel has no drag affordance." All four clauses were false. The cost was not confined to this document — SPEC-0008 cited this note as authority for telling its readers the live array was dense and packed, so a stale status line in one spec became a false statement of fact in another. SPEC-0003 still carries two preview scenarios annotated as unexercisable "until the sparse model lands"; that annotation is now wrong for the same reason and is not corrected here.
+
+**Interaction with SPEC-0003** *(updated 2026-08-10)*. This paragraph previously said SPEC-0003's preview "sheds later slots before earlier ones as width narrows" and would need a one-line amendment when the sparse model landed. **That amendment has already happened**, and it went further than one line: SPEC-0003's preview is now a fixed-cell categorised panel, the shed-by-width rule is withdrawn, and the requirement is stated in terms of *cells occupied* rather than array shape — so it read correctly under both the packed array and this capability's sparse one, and needed no change when this landed.
+
+What remains owed to SPEC-0003 is narrower and additive, and it is **now due rather than anticipated**: this capability introduced **consumable stacking** and **per-cell blocking**, and SPEC-0003 explicitly scopes both out of its preview. SPEC-0003 needs a clause saying whether a preview renders a stack as one badged cell (as the builder does) or as repeated cells, and whether a blocked cell is drawn distinctly from an empty one. Two of SPEC-0003's preview scenarios are also still marked as unexercisable until the sparse model exists; it exists, so they are live and their annotations are stale. None of that is fixed here — it is work owed against SPEC-0003.
 
 ## Requirements
 

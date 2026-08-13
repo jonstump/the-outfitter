@@ -4,7 +4,7 @@ import { selectEquipCount } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import EquipmentSlot from "./EquipmentSlot.jsx";
 import { equipRuns } from "../../utils/stacking.js";
-import { announceFailure, arrowTarget } from "./gridMove.js";
+import { announceFailure, arrowTarget, readArrangement } from "./gridMove.js";
 
 // Governing: ADR-0009 (fixed eight-cell grid, no quantity field), SPEC-0006
 // REQ "The Grid Renders as Two Ranks of Four", REQ "Repeated Consumables Read
@@ -74,11 +74,16 @@ export default function EquipmentPanel() {
   // through the CURRENT arrangement; Enter / Ctrl+M drops the grab; Escape cancels.
   const onGridKeyDown = (e) => {
     const k = e.key;
-    const px = gridRef.current?.clientWidth ?? 0;
+    // The arrangement is READ FROM THE STYLESHEET's own token, not measured: the
+    // `@container` query that transposes the grid declares `--equip-arrangement` in
+    // each branch, so the keyboard follows whichever branch the browser applied.
+    // SPEC-0006 forbids deriving it from rendered geometry, and the `clientWidth`
+    // this replaces reported 0 before first layout.
+    const arrangement = readArrangement(gridRef.current);
     if (k === "ArrowUp" || k === "ArrowDown" || k === "ArrowLeft" || k === "ArrowRight") {
       const grab = grabRef.current;
       if (!grab || grab.mode !== "keyboard") return;
-      const step = arrowTarget(grab.from, k.replace("Arrow", ""), px);
+      const step = arrowTarget(grab.from, k.replace("Arrow", ""), arrangement);
       if (step === null) {
         // The arrow left the grid — an edge no-op in EITHER arrangement. The grab
         // survives (the user may still drop with a later arrow / Enter), matching the

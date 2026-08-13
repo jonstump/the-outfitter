@@ -1,4 +1,4 @@
-import { AMMO, CONS, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { AMMO, CONS, CONS_CAP_CATEGORIES, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 
 // All functions take a loadout-shaped object: { weapons: [w0, w1], equip: [{t,i}], traits: [id], blocked }
 
@@ -45,7 +45,7 @@ export function hasFreeCell(loadout) {
 }
 
 /**
- * The consumable cap categories, declared.
+ * The cap category a consumable counts against, RESOLVED THROUGH THE DECLARED LIST.
  *
  * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved",
  * SPEC-0007 REQ "Rules Inputs Are Assigned Only From Mechanical Categories" (prohibition
@@ -53,17 +53,39 @@ export function hasFreeCell(loadout) {
  *
  * SPEC-0007 read, until ADR-0015: "`CONS[i][3]` (`type`) is descriptive — it labels
  * picker rows — and MUST NOT be re-introduced as a cap key." ADR-0015's Decision
- * Outcome reverses that: the cap is four per TYPE, so `type` IS a cap key again and
- * this declaration is the line that withdraws the MUST NOT.
+ * Outcome reverses that: the cap is four per TYPE, so `type` IS a cap key again.
  *
- * The cap is FOUR PER TYPE, and `type` is `CONS[i][3]`. Tarot Cards are the fourth
- * category and have no rows in the catalog yet — so the cap must be read from a
- * declared list of categories, NOT from the `type` values present in the data,
- * or the empty category silently escapes the cap. `CONS_TYPES` (data/catalog.js)
- * is that declaration; it already lists Tarot Cards' category as it appears in the
- * wiki/cap rules and will need no change when such rows are admitted.
+ * SPEC-0006: "The cap SHALL be read from a declared list of cap categories rather than
+ * inferred from the `type` values present in `CONS`." Membership is therefore tested
+ * against `CONS_CAP_CATEGORIES` (data/catalog.js) rather than the row's `type` being
+ * taken at face value. This module used to declare its OWN four-entry copy of that list
+ * and then never read it — the count grouped by raw `type`, which is the inference the
+ * requirement forbids, and which left the list dead and its comment free to go false.
+ *
+ * Every undeclared type folds into ONE shared budget, not a budget per bad value. A row
+ * typed `Bogus` must not get four slots of its own, and two typos must not get eight:
+ * SPEC-0006 says such a row is "treated as a data error rather than silently escaping
+ * the cap". `catalog.test.js` is what stops one reaching production; this is what bounds
+ * it if one does.
  */
-export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
+export const UNDECLARED_CATEGORY = "__undeclared__";
+
+/**
+ * Resolve a raw `type` value to the cap category it counts against.
+ *
+ * Exported because this one line IS the requirement — "read from a declared list ... rather than
+ * inferred from the `type` values present in `CONS`" — and a rule reachable only through a catalog
+ * row cannot be tested against a type the catalog does not contain. Every undeclared value
+ * collapses to the same sentinel, which is what makes two bad values share one budget instead of
+ * minting four slots each.
+ */
+export function capCategoryOf(type) {
+  return CONS_CAP_CATEGORIES.includes(type) ? type : UNDECLARED_CATEGORY;
+}
+
+function capCategory(consIndex) {
+  return capCategoryOf(CONS[consIndex] ? CONS[consIndex][3] : undefined);
+}
 
 /**
  * How many equipped consumables of one cap category, counted across all cells
@@ -71,13 +93,11 @@ export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Car
  *
  * Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
  * Per-item counting is RETIRED, not kept alongside: four of one item is already four
- * of its type, and a `×3` stack counts as 3. A row typed outside the declared
- * categories is a data error (asserted by catalog.test.js) and here yields the
- * category "unknown", which no legal four can ever reach.
+ * of its type, and a `×3` stack counts as 3.
  */
 export function consCategoryCount(loadout, consIndex) {
-  const category = CONS[consIndex] ? CONS[consIndex][3] : "unknown";
-  return heldItems(loadout).filter((e) => e.t === "C" && (CONS[e.i] ? CONS[e.i][3] : "unknown") === category).length;
+  const category = capCategory(consIndex);
+  return heldItems(loadout).filter((e) => e.t === "C" && capCategory(e.i) === category).length;
 }
 
 /**
@@ -91,12 +111,6 @@ export function consCategoryCount(loadout, consIndex) {
  */
 export function consAllowed(loadout, consIndex) {
   return consCategoryCount(loadout, consIndex) < 4;
-}
-
-// Convenience: the checked count a UI row displays ("3/4 in category"), so rows
-// and the reducer read the same figure.
-export function consCategoryMeta(loadout, consIndex) {
-  return consCategoryCount(loadout, consIndex);
 }
 
 export function slotMax(loadout) {

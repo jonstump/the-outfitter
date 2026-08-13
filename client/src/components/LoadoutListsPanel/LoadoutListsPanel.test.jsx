@@ -32,12 +32,12 @@ import {
 } from "../../test/cssRules.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { slugify } from "../../utils/slugify.js";
-import { emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
+import { FORMAT_VERSION, emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
 import { createList } from "../../api/loadouts.js";
 import { HUNTERS } from "../../data/hunters.js";
-import { TRAITS } from "../../data/catalog.js";
+import { CONS, TOOLS, TRAITS } from "../../data/catalog.js";
 
 // Governing: ADR-0006, SPEC-0003 REQ "List Ordering and Sorting", REQ "The Selected List
 // Is Client State", REQ "New Lists Default Their Name from the Chosen Portrait"
@@ -1083,11 +1083,12 @@ describe("choosing an accent on the create form", () => {
 // conformed to has been amended and the shedding rule withdrawn, so every assertion about
 // capacity, shedding order and "+N more"-by-width is gone with the code it described.
 //
-// Two spec scenarios are deliberately NOT here. "Equipment sits in its own cell" and "An
-// unresolvable item leaves a hole" are marked in the spec as exercisable only once SPEC-0006's
-// sparse model lands: today's decoder filters unresolvable ids and packs what survives before
-// any preview sees it, so neither is falsifiable. The placement rule is implemented (every
-// group is a fixed-length array indexed by cell); a test that cannot fail is not written.
+// Two spec scenarios used to be deliberately absent here — "Equipment sits in its own cell"
+// and "An unresolvable item leaves a hole" — on the grounds that the decoder filtered
+// unresolvable ids and packed what survived, so neither was falsifiable and "a test that
+// cannot fail is not written". SPEC-0006's sparse model shipped and both premises died with
+// it: v2 decodes positionally and returns `null` in place for an id it cannot resolve. Both
+// scenarios are now falsifiable, and both are tested below.
 // ---------------------------------------------------------------------------------------
 
 // A raw v1 payload, written the way a stored record actually carries it. Built by hand
@@ -1499,6 +1500,52 @@ describe("the categorised loadout preview", () => {
     const nothing = previewGroups(fromData(v1({})));
     expect(nothing.empty).toBe(true);
     expect(previewSummary(nothing)).toBe(PREVIEW_EMPTY_LABEL);
+  });
+
+  // Covers: SPEC-0003 REQ "Filed Loadouts Preview Their Contents", scenario "Equipment sits
+  // in its own cell". Falsifiable only since SPEC-0006's sparse model shipped — before it,
+  // the decoder packed everything forward and a gap could not be expressed.
+  it("draws each item at its stored cell, leaving gaps as empty cells", () => {
+    const kit = { t: "T", i: TOOLS.findIndex((t) => t[0] === "first-aid-kit") };
+    const groups = previewGroups({
+      weapons: [null, null],
+      equip: [null, null, kit, null, null, null, null, { t: "C", i: 0 }],
+      traits: [],
+    });
+
+    // The point of the scenario is the NEGATIVE: nothing packs toward cell 0. An
+    // implementation that filtered holes would put the kit in cell 0 and pass a
+    // "two items are drawn" assertion, so assert the positions, not the count.
+    expect(groups.equipment[2]?.kind).toBe("tool");
+    expect(groups.equipment[7]?.kind).toBe("consumable");
+    expect(groups.equipment[0]).toBeNull();
+    expect(groups.equipment[1]).toBeNull();
+    expect(groups.equipment.filter(Boolean)).toHaveLength(2);
+    expect(groups.equipment).toHaveLength(EQUIP_CELLS);
+  });
+
+  // Covers: SPEC-0003 REQ "Filed Loadouts Preview Their Contents", scenario "An unresolvable
+  // item leaves a hole". The v2 decoder returns `null` in place for an id it cannot resolve
+  // ("leaves a hole; later cells must not shift" — loadoutCodec.js), so the retired item's
+  // cell reaches the preview empty rather than being filtered out upstream.
+  it("leaves a retired item's cell empty without shifting later items into it", () => {
+    const decoded = fromData({
+      v: FORMAT_VERSION,
+      w: [null, null],
+      e: [["T", "no-such-item-at-all"], null, ["T", TOOLS[0][0]], null, null, null, null, ["C", CONS[0][0]]],
+      tr: [],
+      n: "",
+      b: [],
+    });
+    // The decoder's half of the contract, asserted before the preview's, because a decoder
+    // that packed would make the preview look correct while the cells were already wrong.
+    expect(decoded.equip[0]).toBeNull();
+    expect(decoded.equip[2]).not.toBeNull();
+
+    const groups = previewGroups(decoded);
+    expect(groups.equipment[0]).toBeNull();
+    expect(groups.equipment[2]?.kind).toBe("tool");
+    expect(groups.equipment[7]?.kind).toBe("consumable");
   });
 });
 

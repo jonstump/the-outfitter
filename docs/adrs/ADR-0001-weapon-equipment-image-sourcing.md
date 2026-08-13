@@ -6,6 +6,8 @@ decision-makers: [jmstump]
 
 # ADR-0001: Source Weapon/Equipment Images as In-House Schematic Icons, Not Scraped Wiki Assets
 
+> **Superseded in full by [ADR-0002](ADR-0002-scrape-huntshowdown-wiki-for-images.md)** (2026-08-07), which sources item imagery from a bounded, self-hosted scrape of huntshowdown.wiki.gg and demotes the in-house SVG silhouettes to a fallback tier. The machine-readable edge lives on ADR-0002 as `supersedes: [ADR-0001]`, which is this repo's convention; this line is the human one, so a reader landing here has somewhere to go. The decision below is kept as the record of what was decided and why it changed — see ADR-0002's Context for the reversal.
+
 ## Context and Problem Statement
 
 The Outfitter is a fan-made Hunt: Showdown loadout planner ("Not affiliated with Crytek," per the app's own footer). Today, only the Weapons picker renders any imagery — a small set of hand-authored schematic SVG silhouettes (`THUMBS` in `client/src/data/catalog.js`, dispatched by `weaponThumb()`) grouped by weapon class (pistol/carbine/rifle/shotgun/melee/bow/crossbow). Tools, Traits, and Consumables currently render with no imagery at all — just name, category badge, and cost.

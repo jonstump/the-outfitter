@@ -1,5 +1,5 @@
 ---
-status: approved
+status: implemented
 date: 2026-08-11
 implements: [ADR-0006, ADR-0011, ADR-0012, ADR-0013]
 requires: [SPEC-0001, SPEC-0004]
@@ -508,7 +508,9 @@ Each saved loadout SHALL present a preview of what that loadout holds. The previ
 
 *(amended 2026-08-10 — replaces the compact-strip preview shipped in #139, which conformed to this requirement as originally written and was smaller than intended.)*
 
-The preview SHALL be a **categorised panel**, not a single undifferentiated strip. Its categories SHALL match the builder's **grouping and cell counts**, so a loadout is read the same way in a list as in the panel that produced it. Parity is scoped to grouping and counts deliberately: SPEC-0006 adds consumable stacking and per-cell blocking to the builder, and **neither is required of the preview by this requirement** — they need their own clause when that spec lands:
+The preview SHALL be a **categorised panel**, not a single undifferentiated strip. Its categories SHALL match the builder's **grouping and cell counts**, so a loadout is read the same way in a list as in the panel that produced it. Parity is scoped to grouping and counts deliberately: SPEC-0006 added consumable stacking and per-cell blocking to the builder, and **neither is required of the preview by this requirement** — they need their own clause.
+
+> **That clause is now owed, not anticipated** *(2026-08-13)*. SPEC-0006 shipped, so the scoping note above has outlived its "when that spec lands" framing. What the preview does today, recorded as fact rather than ratified as the rule: `previewGroups` builds each cell independently from `loadout.equip[slot]` and performs no run detection, so a run of three identical consumables renders as **three separate cells**, where the builder draws one badged anchor and two held cells. It also never reads `loadout.blocked`, so a **blocked cell is indistinguishable from an empty one**. Whether either is the desired behaviour is a design decision this correction does not make — it is left to whoever writes the clause, which is why no SHALL is stated here.
 
 - **Weapons** SHALL be the visually largest element of the preview, reflecting that a loadout is identified first by what it shoots with
 - **Tools and consumables** SHALL occupy an **eight-cell grid laid out as two rows of four**, matching the equipment grid's cell count
@@ -522,7 +524,7 @@ Preview imagery SHALL be sized so an item is identifiable at a glance, and that 
 
 Those floors exist because the strip this replaces drew 512×128 weapon art at 34×24 — about 7% of the available width — while conforming to a requirement that said only "preview". An unassertable size rule is what let that ship.
 
-**The equipment grid SHALL place each item at its stored cell.** Where the underlying model supplies a cell index, the preview SHALL honour it; where it supplies a packed sequence, the preview SHALL fill cells in that order. Empty cells SHALL be rendered as empty rather than collapsed away, so the grid keeps a constant shape. This is stated in terms of *cells occupied* rather than a particular array shape deliberately: SPEC-0006 changes `state.equip` from a packed array to a fixed sparse one, and a preview written against either representation alone would need rewriting when the other lands.
+**The equipment grid SHALL place each item at its stored cell.** Where the underlying model supplies a cell index, the preview SHALL honour it; where it supplies a packed sequence, the preview SHALL fill cells in that order. Empty cells SHALL be rendered as empty rather than collapsed away, so the grid keeps a constant shape. This is stated in terms of *cells occupied* rather than a particular array shape deliberately: SPEC-0006 changed `state.equip` from a packed array to a fixed sparse one, and a preview written against either representation alone would have needed rewriting when the other landed. That change has shipped, and this requirement needed no amendment — which was the point of phrasing it this way. Both shapes still reach the preview, because a v1 record decodes to a packed-then-padded array while a v2 record decodes positionally.
 
 Preview imagery SHALL use SPEC-0001's asset-path convention and its fallback chain, and SHALL be lazy-loaded, so a list holding many loadouts fetches imagery proportional to what has been scrolled to rather than to the number of loadouts.
 
@@ -551,14 +553,14 @@ Rendering a preview MUST NOT write to the record, MUST NOT alter `data`, and MUS
 
 #### Scenario: Equipment sits in its own cell
 
-*(exercisable once SPEC-0006's sparse model lands — today's decoder returns a packed array, so gaps are unreachable and this scenario is not yet falsifiable)*
+*(live and satisfied as of 2026-08-13. SPEC-0006's sparse model shipped, so gaps are reachable and this scenario is falsifiable; `previewGroups` indexes `loadout.equip[slot]` for each of the eight cells, so a hole yields an empty cell in place. The annotation this replaces said gaps were unreachable "once SPEC-0006's sparse model lands", which stopped being true when it did.)*
 
 - **WHEN** a loadout's stored equipment leaves gaps between items
 - **THEN** each item SHALL be drawn in the cell it occupies and the gaps SHALL render as empty cells, rather than items being packed toward the start of the grid
 
 #### Scenario: An unresolvable item leaves a hole
 
-*(exercisable once SPEC-0006's sparse model lands — today's decoder filters unresolvable ids before the preview sees them, closing the hole)*
+*(live and satisfied as of 2026-08-13. The v2 decoder maps positionally over eight cells and returns `null` in place for an id it cannot resolve — "leaves a hole; later cells must not shift" — so an unresolved entry now reaches the preview as an empty cell rather than being filtered out. The annotation this replaces described the v1 decoder's filter-then-pack, which is still correct for v1 records, where the packed array IS the cell order.)*
 
 - **WHEN** a saved loadout references a catalog item that no longer exists
 - **THEN** the preview SHALL render the items that do resolve, the unresolvable item's cell SHALL be empty, and no later item SHALL move into it
