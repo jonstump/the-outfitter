@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { consCount } from "../utils/calc.js";
 import { statFieldFor } from "./itemStats.js";
 import {
   CONS,
@@ -226,13 +225,15 @@ describe("consThumb", () => {
   });
 });
 
-// Governing: #155 (Placeable consumables), SPEC-0008 (the cap is per specific consumable)
+// Governing: #155 (Placeable consumables), ADR-0015 (four per type, accepted 2026-08-12),
+// SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved"
 //
 // The issue that produced these rows described `type` as a rules input — "calc.js's catCount() counts
-// equipped consumables by it" — and by the time it was fixed that was no longer true. #190 replaced
-// the per-type cap with per-item `consCount`, and its "Done means" asked for a test that "a 5th
-// Placeable is rejected", which would have reintroduced the retired rule. These tests pin what the
-// field IS (data, and a badge colour) and what the cap is NOT (per type).
+// equipped consumables by it" — and for a while the cap was per specific consumable (#190), which made
+// the field display-only and made these tests pin what the cap is NOT. ADR-0015 reversed that: the cap
+// is four per TYPE again, and `type` IS a rules input. These tests now pin what the field IS (data,
+// a badge colour, and the cap key), and the fifth-Placeable test asserts the NEW rule: four of one
+// Placeable means a fifth Placeable — even a different item — is rejected.
 describe("consumable type", () => {
   const typeOf = (name) => entry(CONS, name)[3];
 
@@ -251,6 +252,8 @@ describe("consumable type", () => {
   });
 
   it("uses only declared types", () => {
+    // Governing: SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved" — a row typed outside
+    // the declared categories is a DATA ERROR, because `type` is the cap key.
     const undeclared = CONS.filter((c) => !CONS_TYPES.includes(c[3])).map((c) => `${c[0]}:${c[3]}`);
     expect(undeclared).toEqual([]);
   });
@@ -264,18 +267,24 @@ describe("consumable type", () => {
     expect(new Set([...colors, TOOL_COLOR]).size).toBe(CONS_TYPES.length + 1);
   });
 
-  it("does not let type become a cap bucket again", () => {
-    // The regression this issue's own stale description invited. SPEC-0008: "counted per specific
-    // consumable rather than per consumable type". Four of one Placeable plus four of another is
-    // legal, and so is a fifth Placeable that is a different item — what is capped is the item.
+  it("caps four per TYPE: a fifth Placeable — even a different item — is rejected", async () => {
+    // Governing: ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved",
+    // SPEC-0008 (the generator obeys the same cap). The assertion #190 used to demand ("a 5th
+    // Placeable is rejected") is the rule now: four Ammo Boxes sit in the Placeable budget, so a
+    // Tool Box — a different specific item, same type — is refused by the reducer's gate. This
+    // test asserts the REDUCER's acceptance, mirroring the acceptance criteria's "a reducer test
+    // asserts a fifth Placeable is rejected, and ... a Stamina Shot after four Vitality Shots."
+    const { configureStore } = await import("@reduxjs/toolkit");
+    const { default: loadoutReducer, loadoutActions } = await import("../store/loadoutSlice.js");
+    const store = configureStore({ reducer: { loadout: loadoutReducer } });
     const placeables = CONS.map((c, i) => ({ c, i })).filter((x) => x.c[3] === "Placeable");
     expect(placeables.length).toBeGreaterThanOrEqual(3);
-    const equip = placeables.flatMap((x) => Array.from({ length: 4 }, () => ({ t: "C", i: x.i })));
-    const loadout = { equip };
-    for (const x of placeables) {
-      expect(consCount(loadout, x.i)).toBe(4);
-    }
-    expect(equip.length).toBeGreaterThan(4);
+    const [ammoBox, toolBox] = placeables;
+    for (let k = 0; k < 4; k++) store.dispatch(loadoutActions.addEquip({ t: "C", i: ammoBox.i }));
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(4);
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: toolBox.i }));
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(4);
+    expect(store.getState().loadout.equip.filter(Boolean).some((e) => e.i === toolBox.i)).toBe(false);
   });
 });
 

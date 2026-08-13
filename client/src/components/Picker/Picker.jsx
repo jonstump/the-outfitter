@@ -17,7 +17,7 @@ import {
   weaponThumb,
 } from "../../data/catalog.js";
 import { descriptionFor } from "../../data/itemStats.js";
-import { capMax, consCount, slotMax, upTotal } from "../../utils/calc.js";
+import { capMax, consAllowed, consCategoryCount, hasFreeCell, upTotal } from "../../utils/calc.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { addTraitIfAllowed } from "../../store/thunks.js";
@@ -41,7 +41,10 @@ function buildRows(tab, ui, loadout, dispatch) {
   const aOK = (cls) => !ui.ammoF || AMMO_FILTERS[ui.ammoF].includes(cls);
 
   const max = capMax(loadout);
-  const sMax = slotMax(loadout);
+  // Capacity is the single shared predicate (SPEC-0006 REQ "Capacity Rules Are Stated
+  // Once and Preserved"): the same "free, unblocked cell exists" check the reducer
+  // enforces, so an item the picker shows as available can never be refused.
+  const room = hasFreeCell(loadout);
   const upSpent = upTotal(loadout);
 
   if (tab === "Weapons") {
@@ -69,7 +72,7 @@ function buildRows(tab, ui, loadout, dispatch) {
     return TOOLS.map((t, i) => ({ t, i }))
       .filter((x) => match(x.t[1]) && gOK(x.t[3]))
       .map((x) => {
-        const ok = loadout.equip.length < sMax && !loadout.equip.some((e) => e.t === "T" && e.i === x.i);
+        const ok = room && !loadout.equip.some((e) => e.t === "T" && e.i === x.i);
         return {
           key: x.i,
           name: x.t[1],
@@ -88,12 +91,16 @@ function buildRows(tab, ui, loadout, dispatch) {
     return CONS.map((c, i) => ({ c, i }))
       .filter((x) => match(x.c[1]) && gOK(x.c[4]))
       .map((x) => {
-        const cnt = consCount(loadout, x.i);
-        const ok = loadout.equip.length < sMax && cnt < 4;
+        // Governing: ADR-0015 (four per type, not four per specific item), SPEC-0006 REQ
+        // "Capacity Rules Are Stated Once and Preserved". The count shown and the gate
+        // applied both come from the per-CAP-CATEGORY rule: four Vitality Shots read as
+        // 4/4 Shot and disable EVERY Shot, Stamina Shot included.
+        const cnt = consCategoryCount(loadout, x.i);
+        const ok = room && consAllowed(loadout, x.i);
         return {
           key: x.i,
           name: x.c[1],
-          meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 equipped",
+          meta: x.c[4] + " · " + x.c[3] + " · " + cnt + "/4 of type",
           badge: x.c[3].toUpperCase(),
           // Governing: #155. Shared with EquipmentSlot via catalog.js rather than duplicated here —
           // the two-branch copies would both have rendered `Placeable` as `Throwable`.

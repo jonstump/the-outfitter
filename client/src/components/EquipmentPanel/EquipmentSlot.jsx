@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useMemo } from "react";
 import { CONS, CONS_TYPE_COLOR, TOOLS, TOOL_COLOR, consThumb, toolThumb } from "../../data/catalog.js";
-import { selectEquipEntry, selectSlotMax } from "../../store/selectors.js";
+import { selectBlockedCells, selectEquipEntry } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
@@ -9,20 +9,25 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 // Self-Hosted Scrape)
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
 // SPEC-0001 REQ "Consistent Visual Presentation"
+//
+// Governing: ADR-0009, SPEC-0006 REQ "Cells Are Individually Blockable". Blocking is
+// per cell: a MIDDLE cell can be blocked while later cells stay usable, so the
+// availability check is `index in blocked`, never a count comparison.
 
 export default function EquipmentSlot({ index }) {
   const dispatch = useDispatch();
   // selectEquipEntry is a selector factory; memoize the instance so its
   // createSelector cache survives re-renders (issue #24/#25).
   const entry = useSelector(useMemo(() => selectEquipEntry(index), [index]));
-  const sMax = useSelector(selectSlotMax);
+  const blocked = useSelector(selectBlockedCells);
+  const isBlocked = blocked.includes(index);
 
   if (!entry) {
-    const isBlocked = index >= sMax;
     return (
       <button
         className={`equip-slot empty-slot${isBlocked ? " blocked-slot" : ""}`}
         title={isBlocked ? "Unblock this slot" : "Block this slot (excluded from loadout)"}
+        aria-pressed={isBlocked}
         onClick={() => dispatch(loadoutActions.toggleBlockedSlot(index))}
       >
         {isBlocked ? "✕ blocked" : "empty"}

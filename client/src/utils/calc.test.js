@@ -114,8 +114,11 @@ describe("upTotal / slotMax", () => {
     expect(upTotal(lo)).toBe(16);
   });
 
-  it("derives slot count from blocked slots", () => {
+  it("derives slot count from blocked cells", () => {
+    // Governing: ADR-0009, SPEC-0006 REQ "Cells Are Individually Blockable". `blocked`
+    // is an array of cell indices (not a count), so availability is 8 minus the number
+    // of blocked cells.
     expect(slotMax(loadoutWith({}))).toBe(8);
-    expect(slotMax(loadoutWith({ blocked: 3 }))).toBe(5);
+    expect(slotMax(loadoutWith({ blocked: [0, 1, 2] }))).toBe(5);
   });
 });

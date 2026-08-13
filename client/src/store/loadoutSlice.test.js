@@ -37,16 +37,21 @@ describe("addEquip", () => {
     expect(held(store.getState())).toHaveLength(4);
   });
 
-  it("counts each consumable separately, not by type", () => {
+  it("caps FOUR PER TYPE: a fifth Dynamite Stick, and a Dynamite Bundle, rejected", () => {
+    // Governing: ADR-0015 (four per cap category — accepted 2026-08-12), SPEC-0006 REQ
+    // "Capacity Rules Are Stated Once and Preserved". The retired rule ("four of one
+    // specific item, another item of the same type still fits") is inverted here: four
+    // Dynamite Sticks fill the Throwable budget, so the Dynamite Bundle — same `type` —
+    // is rejected too.
     const store = makeStore();
-    // 4 Dynamite Sticks fill their own budget; a Dynamite Bundle shares the
-    // "Throwable" type but has its own budget of four, so it still fits.
     const stick = CONS.findIndex((c) => c[0] === "dynamite-stick");
     const bundle = CONS.findIndex((c) => c[0] === "dynamite-bundle");
     expect(CONS[stick][3]).toBe(CONS[bundle][3]);
-    [stick, stick, stick, stick, bundle].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
-    expect(held(store.getState())).toHaveLength(5);
-    expect(held(store.getState()).filter((e) => e.i === bundle)).toHaveLength(1);
+    [stick, stick, stick, stick].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
+    expect(held(store.getState())).toHaveLength(4);
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: bundle }));
+    expect(held(store.getState())).toHaveLength(4);
+    expect(held(store.getState()).some((e) => e.i === bundle)).toBe(false);
   });
 
   it("rejects a duplicate tool (one per loadout)", () => {
