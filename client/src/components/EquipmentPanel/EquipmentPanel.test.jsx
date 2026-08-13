@@ -516,6 +516,28 @@ describe("the ✕ remove control (issue #303)", () => {
     expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitIdx });
   });
 
+  it("a keyboard grab still starts AFTER a removal — the marker must not linger in the grab ref", () => {
+    // Regression for the review finding on PR #305. `removeCell` writes its
+    // pending-focus marker into the SHARED grab ref, and clearing it with
+    // `delete ref.current.removeIndex` left a truthy `{}` behind. handleKeyDown
+    // starts a grab only when `!ref.current`, and grabRef is threaded to all eight
+    // slots — so a single ✕ click disabled the keyboard route for the ENTIRE grid
+    // for the rest of the session (SPEC-0006 REQ "Keyboard Equivalence for Every
+    // Pointer Gesture"). The sequence is what matters: removing first, then
+    // grabbing. A grab on a freshly-rendered panel passes either way.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitIdx }, null, { t: "T", i: kitIdx }, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre }, { width: 800 });
+    fireEvent.click(removeBtn(container, 2));
+    const cell0 = keyboardCell(container, 0);
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(cell0, { key: "ArrowRight" });
+    fireEvent.keyDown(cell0, { key: "Enter" });
+    expect(store.getState().loadout.equip[0]).toBeNull();
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitIdx });
+  });
+
   it("a pointer drag that ends on the origin cell does NOT remove the item", () => {
     const pre = loadoutState({ equip: [{ t: "C", i: vitIdx }, null, null, null, null, null, null, null] });
     const { container, store } = renderPanel({ loadout: pre });

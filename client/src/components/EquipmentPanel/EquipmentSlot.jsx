@@ -101,9 +101,12 @@ export default function EquipmentSlot({ index, run, grabRef }) {
   useLayoutEffect(() => {
     if (removing && cellRef.current) {
       cellRef.current.focus();
-      // The removal marker is one-shot: clear it so a later Space-grab is not
-      // blocked by a stale truthy ref (handleKeyDown checks `!ref.current`).
-      if (ref.current) delete ref.current.removeIndex;
+      // The removal marker is one-shot: clear the ref outright so a later Space-grab
+      // is not blocked (handleKeyDown starts a grab only when `!ref.current`, and
+      // `delete`-ing the key would leave a truthy `{}` behind — issue #303 review).
+      // Nulling is safe: the ✕ stops pointerdown propagation, so removal can never
+      // run mid-drag and there is no in-flight grab to preserve.
+      ref.current = null;
     }
   }, [removing, index]);
 
