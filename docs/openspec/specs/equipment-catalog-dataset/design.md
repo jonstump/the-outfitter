@@ -29,7 +29,7 @@ Fifteen open issues sit downstream of this work. Five of them — #156, #157, #1
 
 ### Non-Goals
 
-- **The loadout rules engine.** This spec constrains what data feeds it and identifies which fields are rules inputs; it does not define the caps themselves. The missing 15-trait maximum, the dual-wield slot arithmetic, and the 4-per-consumable enforcement are rules-engine changes with tests, and ADR-0005 is explicit that its write-through machinery must not be extended to cover them.
+- **The loadout rules engine.** This spec constrains what data feeds it and identifies which fields are rules inputs; it does not define the caps themselves. The missing 15-trait maximum, the dual-wield slot arithmetic, and the four-per-cap-category consumable enforcement (per ADR-0015; previously stated here as "4-per-consumable") are rules-engine changes with tests, and ADR-0005 is explicit that its write-through machinery must not be extended to cover them.
 - **Restructuring the `AMMO` pool model.** ADR-0005 already flags that per-weapon ammo compatibility may not cleanly replace the shared-pool model and that revisiting it "deserves its own decision". This spec forbids scraping the table and gates edits to it; it does not redesign it.
 - **Wire-format version 2.** SPEC-0006 already schedules a `FORMAT_VERSION` bump for the sparse equip grid, and the dual-wield flag needs the same bump. Both belong to that spec's migration, not this one. This spec only states which catalog changes require the gate.
 - **List 2 weapon variants.** Bornheim Extended, Scottfield Swift, Pax Claw, Dolch Bullseye and their siblings need a `variantOf` schema change that is sequenced ahead of bulk import.
@@ -69,6 +69,10 @@ Fifteen open issues sit downstream of this work. Five of them — #156, #157, #1
 **Rationale**: This is the audits' most transferable finding. The Medical Pack is filed by the wiki under both `Category:Healing_Consumables` (effect) and `Category:Placeable_Consumables` (cap); the app took the effect classification and wrote it into the field that drives the cap. The result is bidirectional: four Ammo Boxes and four Frag Bombs are permitted only in combination, while four Medical Packs plus four Ammo Boxes are permitted where the game allows four Placeables total. Neither shows up as an error. A scraper deriving `type` from "the subcategory" would reproduce this at scale.
 
 `type` was checked for the coupling that bit the two earlier write-through fields — display name feeding the image path, `ammoClass` feeding a persisted bare index — and has none. It is never persisted (`toData()` stores `["C", id]`) and never feeds a slug, so it is correctable with no version bump. That negative result is recorded so the check is not repeated from scratch.
+
+**Resolved 2026-08-12, in this document's favour** *(per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md))*. This decision and its companion `spec.md` disagreed. The rationale above describes the game's rule correctly — "four Medical Packs plus four Ammo Boxes are permitted where the game allows four **Placeables total**", and `type` as "the field that drives the cap" — while `spec.md` simultaneously required that `type` "MUST NOT be re-introduced as a cap key" and stated the cap per specific item. Both could not hold: a field cannot drive the cap and be barred from keying it.
+
+ADR-0015 settles it the way this document had it. Update 2.8 caps consumables at four per category, confirmed in-game, so `type` is a rules input in the full sense and the prohibition in `spec.md` is withdrawn. Nothing in the choice or rationale above changes; only the contradiction is removed. The coupling check recorded here is what makes the promotion free — no `FORMAT_VERSION` gate, no migration.
 
 ### Discovery classifies before it proposes
 

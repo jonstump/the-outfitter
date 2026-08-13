@@ -113,6 +113,34 @@ The cost is that inertia, auto-scroll, and drag-image rendering become ours to w
 
 **Rationale**: That comparison is not merely wrong under a sparse array — it is wrong in a way that produces a plausible-looking picker. An eight-element array always has `length === 8`, so the naive port disables every item permanently; a careless fix to `filter(Boolean).length < sMax` silently ignores which cells are blocked. Naming the predicate once removes both.
 
+### The consumable cap is per category, read from a declared list *(added 2026-08-12, per ADR-0015)*
+
+**Choice**: the consumable cap counts by `CONS[i][3]` (`Shot`, `Throwable`, `Placeable`, plus Tarot Cards
+once admitted), not by `CONS` index. The set of cap categories is a **declared constant**, not derived
+from the `type` values present in the catalog. `consCount(loadout, consIndex)` — which counts entries
+whose `i` matches one index — is replaced rather than supplemented.
+
+**Rationale**: ADR-0015 established that the game caps four *per category*, so the per-item count
+under-constrains by a factor of up to two on eight cells. Two consequences shape the design. Declaring
+the categories rather than inferring them means Tarot Cards are capped by the same mechanism the moment
+rows exist, which turns their admission into a data change rather than a mechanism change — and removes
+the argument the `CONS` boundary comment made for keeping them out. And keeping the per-item cap
+alongside would be dead code: four of one item is already four of its type, so per-type subsumes it.
+
+Reusing `type` rather than adding a `capCategory` column is deliberate. A parallel column would hold
+the same three values `type` already holds and leave a reader to work out which of two near-identical
+fields the rules consult. The cost is that `type` becomes a rules input, which SPEC-0007 previously
+forbade — reversed by ADR-0015 with the evidence recorded. It carries **no migration**: `type` is not
+persisted (`toData()` stores only `["C", id]`), so promoting it needs no `FORMAT_VERSION` gate.
+
+**Alternatives considered**:
+- *A new `capCategory` column, leaving SPEC-0007's prohibition standing*: duplicates `type`'s values and
+  creates a two-field ambiguity for every future reader.
+- *Enforce both caps, per item and per type*: the per-item rule can never bind first, so it would be
+  unreachable code asserting a rule the game does not have.
+- *Infer the categories from the rows present*: silently leaves an empty category uncapped, which is
+  exactly the Tarot Card case.
+
 ### `blocked` is an index array, not a boolean array of eight
 
 **Choice**: `blocked: number[]`, holding cell indices.
@@ -227,6 +255,10 @@ Both branches end by moving focus deliberately and announcing the outcome. That 
 - **The client cannot ship before the server.** A v2 payload is a 400 against today's `isValidData`, so a client-first release turns every save into an error. → The validator branch lands and deploys first; it accepts v2 before any client emits it, and accepting a shape nothing sends yet is harmless.
 
 - **The migration is where a repeat of issue #68 would live.** Lifting v1 to v2 means asserting what a v1 record *meant* about cells, and that assertion is exactly the kind that previously lived in a comment and was wrong. → The lift is mechanical and total — dense entries into cells 1..n, `b: N` into the last `N` indices — and is covered by round-trip tests including the case where a middle item no longer resolves and must leave a hole rather than close one. The frozen `LEGACY_*_IDS` tables are not touched.
+
+- **A per-type cap is less legible than a per-item one, and the disabling item is not the item clicked** *(added 2026-08-12, per ADR-0015)*. Under a per-item cap, "why can I not add this?" is answered by the four copies in front of the player. Under a per-type cap, a Frag Bomb can be unavailable because of four Dynamite Sticks elsewhere in the grid — a budget the player cannot see on the item they clicked. → Whatever surfaces the cap MUST name the category, not just disable the tile. This is also the risk that makes picker/reducer divergence easier: both must consult the same category predicate, which the spec requires and a test asserts. Note the panel-header summary in Open Questions becomes more attractive under this rule, since a per-category budget line would answer the question directly.
+
+- **This capability's own sparse-array work now overlaps a semantic change to the same function.** `consCount` appears in the six-file list above because it must tolerate holes; ADR-0015 additionally replaces what it counts. → Land them as one edit rather than two passes over the same predicate, and make the per-category test assert behaviour on a grid with gaps so the two concerns are covered together rather than in sequence.
 
 - **Non-adjacent duplicates render as two tiles with no badge.** A player with Vitality Shots in cells 1 and 6 sees no indication they hold two. → Accepted, and arguably correct under free placement, since the player chose those cells. Revisit only if it is reported as confusing; the fix would be a non-positional "you hold 2" summary in the panel header rather than a change to the stacking model.
 

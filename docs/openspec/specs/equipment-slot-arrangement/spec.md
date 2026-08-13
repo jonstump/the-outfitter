@@ -1,7 +1,7 @@
 ---
 status: draft
 date: 2026-08-10
-implements: [ADR-0009]
+implements: [ADR-0009, ADR-0015]
 requires: [SPEC-0001]
 ---
 
@@ -26,7 +26,9 @@ Four changes follow from that one decision, and they are not separable:
 
 **Item imagery is unchanged and inherited.** Every cell that depicts an item — an ordinary tile or a stack anchor — renders through the same shared container and the same scraped-image-then-SVG-fallback chain that SPEC-0001 (Equipment Iconography) specifies. This capability changes which cell a tile is drawn in and how many tiles a run of identical consumables produces; it changes nothing about how the image inside a tile is resolved.
 
-**Duplicate consumables are already legal.** The existing cap is four copies of one *specific* consumable — `consCount()` counts entries whose `i` matches a single `CONS` index — so two Vitality Shots is a valid loadout today and consumes two of eight cells, and four Dynamite Sticks do not block a Dynamite Bundle. A consumable's `type` (`CONS[i][3]` — `Shot`, `Throwable`, …) is descriptive and is not a rules input; two different consumables never share a budget. This capability changes how repeats read, not whether they are allowed.
+**Duplicate consumables are already legal, and the cap is per type** *(revised 2026-08-12, per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md))*. Two Vitality Shots is a valid loadout and consumes two of eight cells. What bounds repeats is the **cap category** — `CONS[i][3]`, holding `Shot`, `Throwable` and `Placeable`, with Tarot Cards the fourth category once admitted — and four consumables of one category is the limit however they are distributed across specific items. So four Dynamite Sticks **do** block a Dynamite Bundle: both are `Throwable`, and the fourth Stick exhausts that budget.
+
+This paragraph previously stated the opposite — four copies of one *specific* consumable, with `type` "descriptive and not a rules input", and two different consumables never sharing a budget. That was correct against `consCount()` as implemented and against SPEC-0007's prohibition, but wrong against the game: Update 2.8 restricts consumables to "4 instances of the same type (Throwables, Placeables, Shots and Tarot Cards)", confirmed by an in-game Arsenal observation on 2026-08-12. ADR-0015 records the reversal and the evidence. **`type` is therefore a rules input**, and SPEC-0007's `MUST NOT` against using it as a cap key is withdrawn by the same decision. This capability changes how repeats read; ADR-0015 changes what bounds them.
 
 **Implementation status.** Nothing in this capability is implemented. `state.equip` is still packed, `blocked` is still a count, `FORMAT_VERSION` is still 1, and the panel has no drag affordance.
 
@@ -221,20 +223,39 @@ Capacity SHALL be expressed as a single predicate — **a free, unblocked cell e
 The three existing game rules SHALL be preserved exactly:
 
 - At most one of each specific Tool per loadout.
-- At most four copies of any one **specific consumable**, counted across all cells regardless of adjacency. Two different consumables never share a budget, even when they share a `type`.
+- At most four consumables of any one **cap category**, counted across all cells regardless of adjacency and regardless of which specific items make up the four. The cap category is `CONS[i][3]` (`Shot`, `Throwable`, `Placeable`, and Tarot Cards once admitted). Consumables sharing a `type` SHALL share one budget. *(Revised per ADR-0015; this rule previously read "four copies of any one specific consumable" and asserted that two different consumables never share a budget.)*
 - At most eight occupied cells, of which blocked cells are not available.
+
+The cap SHALL be read from a **declared list of cap categories** rather than inferred from the `type` values present in `CONS`, so a category with no rows yet — Tarot Cards today — is capped by the same mechanism the moment rows are admitted, with no new modelling.
+
+A `CONS` row whose `type` falls outside the declared cap categories SHALL be treated as a data error rather than silently escaping the cap.
 
 The picker's enabled/disabled state for an item SHALL be derived from the same predicate and the same rules that the reducer enforces, so an item the picker offers is always an item the reducer will accept.
 
-#### Scenario: The per-item cap counts across non-adjacent cells
+#### Scenario: The per-type cap counts across non-adjacent cells
 
 - **WHEN** a loadout holds four Vitality Shots spread across non-adjacent cells
-- **THEN** every further Vitality Shot SHALL be rejected by the reducer and SHALL render as unavailable in the picker, while a Stamina Shot SHALL still be accepted
+- **THEN** every further Vitality Shot SHALL be rejected by the reducer and SHALL render as unavailable in the picker, **and a Stamina Shot SHALL also be rejected**, because both carry `type: "Shot"` and share one budget
 
-#### Scenario: A stack counts toward its own cap by its full quantity
+#### Scenario: The cap is exhausted by a mix of items in one category
+
+- **WHEN** a loadout holds four Dynamite Sticks
+- **THEN** a Dynamite Bundle SHALL be rejected, because both are `Throwable` and the four Sticks exhaust that category
+
+#### Scenario: A different cap category is unaffected
+
+- **WHEN** a loadout holds four Throwables and has a free unblocked cell
+- **THEN** a `Placeable` and a `Shot` SHALL each still be accepted, because each category carries its own budget of four
+
+#### Scenario: A stack counts toward its category's cap by its full quantity
 
 - **WHEN** a loadout holds a `×3` stack of Vitality Shots and one further Vitality Shot is added
-- **THEN** the stack SHALL be counted as 3, the add SHALL be accepted, and a fifth Vitality Shot SHALL be rejected
+- **THEN** the stack SHALL be counted as 3, the add SHALL be accepted, and any fifth `Shot` — the same item or a different one — SHALL be rejected
+
+#### Scenario: A cap category with no catalog rows is still capped
+
+- **WHEN** the declared cap categories include Tarot Cards and no `CONS` row carries that `type`
+- **THEN** the cap mechanism SHALL require no change when such rows are admitted, and the four-per-category limit SHALL apply to them on admission
 
 #### Scenario: A full grid with holes is still full
 
