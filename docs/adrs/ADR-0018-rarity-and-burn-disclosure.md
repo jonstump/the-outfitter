@@ -294,7 +294,7 @@ graph TD
   glyphs do.
 * **Provenance.** The `/wiki/Traits` quotations, the 58-of-58 vs 2-of-58 field coverage, the four spur
   assets, and the Shadow Crush / Shadow Leap comparison come from a pass over the live wiki on
-  2026-08-12, recorded in `docs/reports/suggested-adrs.md` § E, § E4 and § 3.3, arriving on `main` with
-  **#258**. Every quotation there was string-matched against source rather than retyped.
+  2026-08-12, recorded in `docs/reports/suggested-adrs.md` § E, § E4 and § 3.3, arrives on `main` with
+  **#266**. Every quotation there was string-matched against source rather than retyped.
 * **Related issues**: #157 (trait roster), #164 (tombstone classification — the liveness problem behind
   the Event hold-back), #230 (`acquisitionClasses` captured per item).
