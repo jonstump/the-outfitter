@@ -5,6 +5,12 @@ import { selectBlockedCells, selectEquipEntry } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
+// The grab ref is owned by EquipmentPanel and threaded to every slot. A standalone
+// slot (its test suite renders it directly) may omit the prop.
+function emptyRef() {
+  return { current: null };
+}
+
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
@@ -26,51 +32,43 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 // keyboard path: ArrowUp/Down/Left/Right grab the adjacent cell, Space/Ctrl+M drop
 // onto the grabbed cell, Escape cancels a grab.
 
-export default function EquipmentSlot({ index, run, drag, setDrag, onGridMove, gridRoot, panelWidth }) {
+export default function EquipmentSlot({ index, run, grabRef }) {
+  const ref = grabRef || emptyRef();
   const dispatch = useDispatch();
   // selectEquipEntry is a selector factory; memoize the instance so its
   // createSelector cache survives re-renders (issue #24/#25).
   const entry = useSelector(useMemo(() => selectEquipEntry(index), [index]));
   const blocked = useSelector(selectBlockedCells);
   const isBlocked = blocked.includes(index);
+  const drag = ref.current;
 
-  // KB: arrow grabbing. The vertical step follows the CURRENT arrangement: the CSS
-  // container query swaps columns at 460px of PANEL width; the arrow logic reads the
-  // same threshold (gridMove.js) so a transposed panel arrows with a +1 vertical step.
-  const dispatchKbMove = (target) => {
-    if (target === null || target < 0 || target >= 8) return;
-    dispatch(onGridMove(target));
-  };
-
+  // KB: the arrow step follows the CURRENT arrangement (gridMove.js). The CELL-level
+  // handler is only for Space (start a grab) and Escape (cancel); arrows and Enter/Ctrl+M
+  // are handled at the grid root so the grab is one state machine instead of eight.
   const handleKeyDown = (e) => {
-    const from = index;
     if (e.key === "Escape" || e.key === "Esc") {
-      if (drag && drag.from === index) {
-        setDrag(null);
+      if (ref.current && ref.current.from === index) {
+        ref.current = null;
         e.preventDefault();
       }
       return;
     }
     if (e.key === " " || e.key === "Spacebar") {
-      // Space on a filled cell starts a keyboard grab of THAT cell.
-      if (entry && !drag) {
-        setDrag({ from: index, mode: "keyboard" });
+      // Space on a filled cell starts a keyboard grab of THAT cell, stored in the
+      // shared ref so the grid root's Enter handler reads it synchronously.
+      if (entry && !ref.current) {
+        ref.current = { origin: index, from: index, mode: "keyboard" };
         e.preventDefault();
       }
       return;
     }
     if (e.key === "Enter" || (e.ctrlKey && (e.key === "m" || e.key === "M"))) {
-      // Ctrl+M (and Enter) perform the drop of a grabbed cell onto this cell.
-      if (drag && drag.mode === "keyboard") {
-        dispatchKbMove(index);
-      }
       e.preventDefault();
       return;
     }
-    const horizontalFirst = e.key === "Left" || e.key === "Right";
-    if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
-      // Keyboard grabs move the grab, and the arrow step follows the arrangement.
-      dispatchKbMove(index + cellStepForKey(e.key, panelWidth));
+    if (e.key.startsWith("Arrow")) {
+      // Stop the page scrolling on arrow keys over the grid; the grid root's keydown
+      // handles the grab movement itself.
       e.preventDefault();
     }
   };
@@ -82,7 +80,7 @@ export default function EquipmentSlot({ index, run, drag, setDrag, onGridMove, g
     if (!entry) return;
     if (e.button !== undefined && e.button !== 0) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    setDrag({ from: index, mode: "pointer", pointerId: e.pointerId });
+    ref.current = { origin: index, from: index, mode: "pointer", pointerId: e.pointerId };
   };
 
   // The continuation cells of a stack are part of the same tile; the grid root's
@@ -156,11 +154,4 @@ export default function EquipmentSlot({ index, run, drag, setDrag, onGridMove, g
       </span>
     </button>
   );
-}
-
-// The arrow's numeric step for the current arrangement. `ArrowUp/Down` in the wide
-// arrangement step by the column count (4); in the narrow arrangement (2 columns,
-// 4 rows) the vertical step is 1.
-function cellStepForKey(key, panelWidth) {
-  return key === "ArrowDown" || key === "ArrowUp" ? (panelWidth >= 460 ? 4 : 1) : 1;
 }
