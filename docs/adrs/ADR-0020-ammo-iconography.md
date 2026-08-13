@@ -3,7 +3,6 @@ status: proposed
 date: 2026-08-12
 decision-makers: Jon Stump
 extends: [ADR-0002]
-related: [ADR-0014]
 ---
 
 # ADR-0020: Give Ammo an Image Tier from Allowed Paths, and Leave the SVG Fallback Group-Level
@@ -268,9 +267,9 @@ graph TD
 * **Extends ADR-0002** (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
   Self-Hosted Scrape). See "Consequence for ADR-0002" — the terms are met, and two things belong on its
   record: the positive robots finding, and a fourth category on the asset-weight ledger.
-* **Related to ADR-0014** (per-weapon ammo rows) as a **hard dependency**, not a shared foundation. The
+* **Enabled by ADR-0014** (per-weapon ammo rows) — a **hard dependency**, not a shared foundation. The
   image path is derived from an item's name via `slugify()`, so ammo must be a named, id-addressed row
-  first. Today it is a `[name, cost]` pair at an array index.
+  first. Today it is a `[name, cost]` pair at an array index. Declared as `enables` on ADR-0014.
 * **F2 from the report is already resolved and needs no decision.** All 92 weapon-variant subpages
   carry a distinct `image=`, and `192aac5` shipped all of them — verified through the app's own
   `slugify()` at 147/147 with zero orphans. The report's worry that variants would multiply the image

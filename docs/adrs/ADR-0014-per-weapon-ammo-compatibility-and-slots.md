@@ -3,6 +3,7 @@ status: proposed
 date: 2026-08-12
 decision-makers: Jon Stump
 extends: [ADR-0005, ADR-0013]
+enables: [ADR-0019, ADR-0020]
 ---
 
 # ADR-0014: Model Ammo as Per-Weapon Rows with Stable IDs and Two Independent Slots
@@ -283,12 +284,12 @@ graph TD
 * **Out of scope, deliberately.** The 1,268 `{{StatChange|field|from|to}}` deltas in the same
   `== Ammo Types ==` sections — Muzzle Velocity 310, Drop Range 276, Damage 208, Extra Ammo 198,
   Vertical Recoil 164, Spread 101 — are a second stat tier keyed on (weapon, round). They belong to
-  the stat-block decision, not this one, but they will want the same key this decision creates, which
-  is an argument for creating it well rather than for widening this ADR.
+  the stat-block decision (**ADR-0019**), not this one, but they will want the same key this decision
+  creates, which is an argument for creating it well rather than for widening this ADR.
 * **Also out of scope**: whether a two-slot total is recorded as `2 × price` or as two independent
   priced selections (a wire-format detail for the spec), and whether the ammo select gains an image
   tier — ammo has 100 icon assets on the wiki and no `client/public/images/ammo/` directory, which is
-  a separate decision gated on this one.
+  a separate decision (**ADR-0020**) gated on this one.
 * **Provenance.** The counts, quotes and read-dates above come from a verification pass over the live
   wiki on 2026-08-12, recorded in `docs/reports/suggested-adrs.md` § A, § 3.1, § 3.8 and § 3.9, which
   arrives on `main` with **#266** so the figures are checkable rather than asserted. Every quotation in
