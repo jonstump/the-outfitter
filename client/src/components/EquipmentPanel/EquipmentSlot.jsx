@@ -201,7 +201,9 @@ export default function EquipmentSlot({ index, run, grabRef }) {
       data-slot-index={index}
       onPointerDown={onPointerDown}
     >
-      {/* Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.
+      {/* Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation",
+          SPEC-0006 § Icon-Only Controls, issue #312.
+
           The grip is the drag source for TOUCH — the one element carrying
           `touch-action: none`, so a finger drag here is not stolen by the page pan while
           a swipe anywhere else on the tile still scrolls. Mouse and pen may drag from it
@@ -210,11 +212,26 @@ export default function EquipmentSlot({ index, run, grabRef }) {
           Deliberately a <span>, not a <button>: it is a pointer-only affordance, and the
           keyboard equivalence SPEC-0006 requires is already carried by .equip-tile-main
           (Space grabs, arrows move, Enter drops). A focusable control here would put a
-          second stop in the tab order that does nothing on Enter, so it is aria-hidden
-          and unfocusable rather than a button that lies about what it does. */}
+          second stop in the tab order that does nothing on Enter.
+
+          NAMED, NOT HIDDEN, and the distinction is the whole point. This shipped as
+          aria-hidden on the reasoning above, which is sound about FOCUSABILITY and does
+          not reach naming — the two are independent, and § Icon-Only Controls names this
+          element first and in those words:
+
+            "The drag handle, the remove target, and any control that renders as an icon
+             or a bare glyph SHALL carry an `aria-label` naming its purpose and the item
+             it acts on."
+
+          `role="img"` + `aria-label` satisfies that: a screen reader's virtual cursor
+          announces it, and it adds no tab stop, so nothing about the focus argument is
+          given up. A bare `aria-label` on a role-less <span> would NOT do — a generic
+          element is not reliably exposed, and the role is what makes the name land.
+          Same shape and same phrasing as .equip-remove-btn below, deliberately. */}
       <span
         className="equip-drag-handle"
-        aria-hidden="true"
+        role="img"
+        aria-label={`Drag ${def[1]}`}
         onPointerDown={(e) => {
           // Without this the press also reaches the tile body's handler, which would
           // start a second grab and re-capture the pointer on the outer element. The ✕

@@ -430,15 +430,26 @@ describe("touch drag contract", () => {
     expect(restingDeclaration(".equip-slot", "touch-action")).toBeNull();
   });
 
-  it("a filled tile renders a grip that is not a second tab stop", () => {
+  it("a filled tile renders a grip that is named but is not a second tab stop", () => {
     const { container } = renderPanel({ loadout: oneItem() });
     const handle = handleIn(container, 0);
     expect(handle).not.toBeNull();
     // Pointer-only affordance: the keyboard route is Space on .equip-tile-main, so a
     // focusable grip would be a tab stop that does nothing on Enter.
-    expect(handle).toHaveAttribute("aria-hidden", "true");
     expect(handle).not.toHaveAttribute("tabindex");
     expect(handle.tagName).toBe("SPAN");
+    // SPEC-0006 § Icon-Only Controls: "The drag handle, the remove target, and any
+    // control that renders as an icon or a bare glyph SHALL carry an `aria-label`
+    // naming its purpose and the item it acts on."
+    //
+    // This assertion was `toHaveAttribute("aria-hidden", "true")` when the grip shipped,
+    // and is inverted rather than dropped. The reasoning it encoded — no second tab stop
+    // — was right and is the two lines above; it simply does not imply hiding the grip
+    // from assistive tech, and the spec names this element in so many words. `role` is
+    // load-bearing: aria-label on a role-less <span> is not reliably exposed.
+    expect(handle).not.toHaveAttribute("aria-hidden");
+    expect(handle).toHaveAttribute("role", "img");
+    expect(handle).toHaveAttribute("aria-label", "Drag Vitality Shot");
   });
 
   it("an empty cell renders no grip", () => {
