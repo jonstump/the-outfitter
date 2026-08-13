@@ -119,7 +119,7 @@ function isValidData(data) {
       // clamped when an index is out of range — a clamp would store a grid the client
       // never asked for (REQ "Error Handling at the Payload Boundary").
       if (!Array.isArray(data.b) || data.b.some((c) => !Number.isInteger(c) || c < 0 || c >= 8)) return reject("b");
-      if (new Set(data.b).length !== data.b.length) return reject("b");
+      if (new Set(data.b).size !== data.b.length) return reject("b");
     } else if (typeof data.b !== "number" || data.b < 0 || data.b > 8) {
       return reject("b");
     }

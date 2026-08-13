@@ -229,6 +229,120 @@ describe("loadouts API", () => {
     expect(badAmmo.status).toBe(400);
   });
 
+  // --- The v2 wire format (SPEC-0006, ADR-0009) --------------------------------------
+  //
+  // Governing: SPEC-0006 REQ "Saved-Loadout Payloads Are Validated at Both Versions",
+  // REQ "Error Handling at the Payload Boundary". The validator branches on `data.v`:
+  // version 2 declares the fixed eight-cell sparse `e` (index = cell, null = empty) and
+  // the per-cell blocked array `b`. These pin the six WHEN/THEN behaviours the story
+  // required, most importantly that an out-of-range cell is REJECTED rather than
+  // clamped, and that a rejection names the offending field.
+
+  const v2Data = (overrides = {}) => ({
+    v: 2,
+    w: [["nagant-m1895", -1], null],
+    e: [["T", "first-aid-kit"], null, null, null, null, null, null, null],
+    tr: ["quartermaster"],
+    n: "x",
+    b: [],
+    ...overrides,
+  });
+
+  it("accepts a v2 payload (sparse eight-cell e, array b)", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-accept")
+      .send({ name: `__test__v2${Date.now()}`, data: v2Data() });
+    expect(res.status).toBe(201);
+  });
+
+  it("still accepts a v1 payload alongside v2", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v1-alongside")
+      .send({ name: `__test__v1${Date.now()}`, data: validData });
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a v2 payload with unresolvable item references", async () => {
+    const app = makeApp();
+    // The server's numeric bounds are validation slack, not exact resolution — they
+    // reject clearly out-of-range indices, while unknown string ids pass through for
+    // the client codec to drop (see isValidData's contract). So the unresolvable case
+    // here is the out-of-range numeric index, mirroring the v1 test above.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-unresolvable")
+      .send({
+        name: `__test__v2oor${Date.now()}`,
+        data: v2Data({ e: [["T", 9999], null, null, null, null, null, null, null] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.e/);
+  });
+
+  it("rejects a v2 sparse array that is not exactly eight elements", async () => {
+    const app = makeApp();
+    const short = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-short")
+      .send({ name: `__test__v2short${Date.now()}`, data: v2Data({ e: [["T", "first-aid-kit"], null] }) });
+    expect(short.status).toBe(400);
+    expect(short.body.error).toMatch(/data\.e/);
+
+    const long = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-long")
+      .send({
+        name: `__test__v2long${Date.now()}`,
+        data: v2Data({ e: Array(9).fill(null) }),
+      });
+    expect(long.status).toBe(400);
+    expect(long.body.error).toMatch(/data\.e/);
+  });
+
+  it("rejects an out-of-range blocked cell index rather than clamping it", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-blocked-oor")
+      .send({
+        name: `__test__v2boor${Date.now()}`,
+        data: v2Data({ b: [8] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.b/);
+    // Rejected, not stored: a clamp would have persisted a grid the caller never asked for.
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name.startsWith("__test__v2boor"))).toBe(false);
+  });
+
+  it("accepts a v2 payload with holes at blocked positions", async () => {
+    // A v2 grid may carry holes (empty cells) at blocked indices — that is a valid
+    // state, not a malformed one.
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-holes")
+      .send({
+        name: `__test__v2holes${Date.now()}`,
+        data: v2Data({ b: [2, 3] }),
+      });
+    expect(res.status).toBe(201);
+  });
+
+  it("names the offending field on a rejected save", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-fieldname")
+      .send({ name: `__test__v2field${Date.now()}`, data: v2Data({ tr: ["x".repeat(101)] }) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.tr/);
+  });
+
   it("isolates anonymous (no-token) requests from each other and from tokens", async () => {
     const app = makeApp();
     const name = `__test__anon${Date.now()}`;
