@@ -3,7 +3,6 @@ status: proposed
 date: 2026-08-12
 decision-makers: Jon Stump
 extends: [ADR-0005]
-related: [ADR-0014]
 ---
 
 # ADR-0019: Display the Scraped Stat Block, Never Compute From It, and Phase It Around the Ammo Delta
@@ -291,9 +290,9 @@ graph TD
 * **Extends ADR-0005** (Scrape Item Stats and Descriptions into a Generated, Committed Data File). See
   "Consequence for ADR-0005" — this collects the benefit its own Good bullet promised, and corrects the
   accounting of which of the six named payoffs is deliverable when.
-* **Related to ADR-0014** (per-weapon ammo rows). Phase 2 is gated on it, because the deltas are keyed
-  on (weapon, round). Not `extends`: this decision does not build on ADR-0014's model, it waits for one
-  key from it.
+* **Enabled by ADR-0014** (per-weapon ammo rows). Phase 2 is gated on it, because the deltas are keyed
+  on (weapon, round). Declared as `enables` on ADR-0014 rather than `extends` here: this decision does
+  not build on ADR-0014's model, it waits for one key from it.
 * **The eight ammo-sensitive fields, named so the phasing is checkable**: `Damage`, `DropRange`,
   `Spread`, `MuzzleVelocity`, `VerticalRecoil`, `RateofFire`, `Loaded`, `Extra`. Derived by matching
   `{{StatChange}}` field names against `itemStats` keys across all 139 pages that carry an ammo section;
