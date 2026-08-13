@@ -264,13 +264,18 @@ describe("consumable type", () => {
     expect(undeclared).toEqual([]);
   });
 
-  it("keeps the badge palette a strict subset of the cap vocabulary (SPEC-0006)", () => {
+  it("keeps the badge palette a subset of the cap vocabulary (SPEC-0006)", () => {
     // The two lists have different jobs and different lifetimes: CONS_CAP_CATEGORIES is the rule
     // vocabulary the cap reads, CONS_TYPES the categories with rows a player can see on a badge.
     // What must never drift is the direction of containment — a type that can appear on screen but
     // is invisible to the cap is precisely the bug the single-list rewrite removed.
     expect(CONS_TYPES.every((t) => CONS_CAP_CATEGORIES.includes(t))).toBe(true);
-    expect(CONS_TYPES.length).toBeLessThan(CONS_CAP_CATEGORIES.length);
+    // NOT strict, and the difference is load-bearing. `toBeLessThan` here would encode "Tarot Cards
+    // has no rows" as a permanent fact: admitting one forces it into CONS_TYPES (the assertion
+    // below), which makes both lists length 4 and fails a strict comparison — reproducing the very
+    // tripwire this test's own governing requirement forbids ("no new modelling" the moment rows
+    // are admitted). Equal lengths are the legitimate end state, so only EXCEEDING is a defect.
+    expect(CONS_TYPES.length).toBeLessThanOrEqual(CONS_CAP_CATEGORIES.length);
     // Every cap category that HAS rows must be in the palette, or its badge falls back to
     // Throwable's colour and reads as a different category than it is.
     const withRows = [...new Set(CONS.map((c) => c[3]))];
