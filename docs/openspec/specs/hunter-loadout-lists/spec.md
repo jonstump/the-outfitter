@@ -19,9 +19,14 @@ Portrait assets are self-hosted scraped images and therefore inherit the sourcin
 
 See ADR-0006 for the decision record and the rejected alternatives.
 
-**Two requirements added 2026-08-13 are NOT yet implemented** *(per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md), tracked by #102)*. "Loadout Identity Is Scoped to Its List" and "A Loadout's Name Is Derived From Its Weapons Until the User Owns It" are specified below and unbuilt: the server still upserts on `(owner, name)`, so two loadouts sharing a name in different lists silently overwrite one another. The `status: implemented` field below covers the capability **as originally specified**; it is left unchanged rather than reverted because the original scope did ship, and this paragraph is what stops that field being read as covering these two.
+**Two requirements were added 2026-08-13** *(per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md), tracked by #102 and #315)*; **the server half of the first has now shipped**.
 
-**The ordering constraint is load-bearing and is easy to lose at planning time:** the identity fix must land and deploy before derived naming. A derived name is a pure function of the weapon pair, so shipping naming first makes same-name collisions the default outcome rather than a rare one — silently, and in exactly the case the identity fix exists to prevent.
+- **"Loadout Identity Is Scoped to Its List"** — ~~the server still upserts on `(owner, name)`, so two loadouts sharing a name in different lists silently overwrite one another~~ — **the upsert key became the triple `(owner, listId, name)` in #319**, so the same name in two lists is two records and neither relocates. **One clause of the requirement is still outstanding**: its last paragraph puts a loaded loadout's write-back on the record id rather than the triple, and that provenance is client-side — #314. Read the requirement as implemented on the server and unbuilt on the client.
+- **"A Loadout's Name Is Derived From Its Weapons Until the User Owns It"** — specified below and **still unbuilt** (#315).
+
+The `status: implemented` field below covers the capability **as originally specified**; it is left unchanged rather than reverted because the original scope did ship, and this paragraph is what stops that field being read as covering these two.
+
+**The ordering constraint is load-bearing and is easy to lose at planning time:** the identity fix must land and deploy before derived naming. A derived name is a pure function of the weapon pair, so shipping naming first makes same-name collisions the default outcome rather than a rare one — silently, and in exactly the case the identity fix exists to prevent. **Landing is done (#319); the constraint now rests on deployment** — #315 MUST NOT ship until the triple key is live, not merely merged.
 
 **Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
 
@@ -126,7 +131,7 @@ Records written before this capability existed carry no `listId` and SHALL there
 
 ### Requirement: Loadout Identity Is Scoped to Its List
 
-*(added 2026-08-13, per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md); closes #102. Not yet implemented — see "Implementation status".)*
+*(added 2026-08-13, per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md); closes #102. **Implemented on the server in #319** — the upsert key below is live. The record-id write-back in the last paragraph is client-side and is **not yet implemented** — #314. See "Implementation status".)*
 
 A saved loadout SHALL be identified by the triple `(owner, listId, name)`. A write whose triple matches an existing record SHALL update that record; a write whose triple matches nothing SHALL create one.
 
@@ -136,7 +141,7 @@ Two loadouts carrying the same name in different lists SHALL both persist, and n
 
 **Pre-existing records SHALL require no migration.** The key narrows rather than widens: any pair that matched under `(owner, name)` and shared a `listId` still matches, and any pair that matched *across* lists was the defect. No stored record changes shape and `FORMAT_VERSION` MUST NOT be raised — `listId` lives on the envelope, not inside `data`, per REQ "Loadouts Are Filed into Lists by Nullable Reference".
 
-A loadout loaded from a saved record SHALL be updated **by its record id** rather than by triple, so that editing a loaded loadout still writes back to the record it came from. That provenance SHALL be client-only; see REQ "The Saved-Loadout Wire Format Is Unchanged".
+A loadout loaded from a saved record SHALL be updated **by its record id** rather than by triple, so that editing a loaded loadout still writes back to the record it came from. That provenance SHALL be client-only; see REQ "The Saved-Loadout Wire Format Is Unchanged". *(**Not yet implemented** — #319 shipped the server key above, and a loaded loadout still round-trips by name today. This paragraph is #314.)*
 
 #### Scenario: The same name in two lists is two loadouts
 
