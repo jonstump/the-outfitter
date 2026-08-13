@@ -304,6 +304,6 @@ graph TD
   in the file itself, so it is not static.
 * **Provenance.** The robots findings, the 498/7 fetch counts and the full-dataset watermark
   verification come from a pass over the live wiki on 2026-08-12, recorded in
-  `docs/reports/suggested-adrs.md` § 4 and § G, which arrives on `main` with **#258**. That report's
+  `docs/reports/suggested-adrs.md` § 4 and § G, which arrives on `main` with **#266**. That report's
   § 4 recommends the API and is **corrected by this ADR** — the first of its findings to be overturned
   rather than refined.
