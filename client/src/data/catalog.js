@@ -517,30 +517,50 @@ export const CONS = [
 export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
 
 /**
- * The `type` field's value set (`CONS[i][3]`), which is NOT the UI bucket — that is `group`
- * (`CONS[i][4]`) and `CONS_GROUPS` above.
+ * THE declared cap-category list — the vocabulary `CONS[i][3]` (`type`) draws from, and the one
+ * the four-per-category cap is read from (ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once
+ * and Preserved": "The cap SHALL be read from a declared list of cap categories rather than
+ * inferred from the `type` values present in `CONS`"). `calc.js` imports it; nothing re-declares
+ * it. It is NOT the UI bucket — that is `group` (`CONS[i][4]`) and `CONS_GROUPS` above.
+ *
+ * There used to be two lists claiming this job and neither was consulted: this one asserted "This
+ * IS the declared cap-category list" while excluding Tarot Cards, and `calc.js` declared a second
+ * four-entry `CONS_CAP_CATEGORIES` that it then never read, under a comment claiming THIS list
+ * already named Tarot Cards. The cap meanwhile inferred the category from whatever `type` a row
+ * happened to carry — exactly the inference the requirement forbids. One list, imported, ends it.
+ *
+ * `Tarot Cards` is listed though it has NO rows in `CONS` yet (see the roster boundary above), and
+ * that is the entire point of declaring rather than inferring: SPEC-0006 requires an empty category
+ * to be capped by the same mechanism "the moment rows are admitted, with no new modelling". The
+ * previous arrangement excluded it *in order to* cap it, which is backwards — a category absent
+ * from the list the cap reads is a category the cap cannot see.
+ *
+ * `Shot` is retained and is knowingly not a wiki category: the wiki has no `Shot Consumables`, and
+ * Vitality Shot is filed only under `Healing Consumables`. So this set mixes three of the game's cap
+ * categories with one of our own naming. Recorded rather than silently corrected, because collapsing
+ * `Shot` would change ten rows for no behavioural gain.
  *
  * `Placeable` added 2026-08-12 (#155). Ammo Box, Tool Box and Medical Pack were filed as `Throwable`
  * and `Shot`; all three are `Category:Placeable_Consumables` on the wiki. Medical Pack is the
  * instructive one — the wiki files it under BOTH `Placeable Consumables` (a cap category) and
  * `Healing Consumables` (an effect category), and the app had taken the effect one.
  *
- * This IS the declared cap-category list (ADR-0015, SPEC-0006 REQ "Capacity Rules Are Stated Once
- * and Preserved"). After #190 the cap was per specific consumable and `type` was display-only; that
- * rule is RETIRED — the cap is four per TYPE again, and SPEC-0008 was updated to match. So a wrong
- * value here NOW over-constrains or under-constrains a loadout, which is why `catalog.test.js` pins
- * every row's `type` to this set (a row typed outside it is a data error), and why the comment
- * below records the one editorial choice in the list.
+ * A row typed outside this list is a DATA ERROR (`catalog.test.js` pins every row to it). It is not
+ * thereby uncapped: `calc.js` folds every undeclared type into one shared budget, because SPEC-0006
+ * requires such a row to be "treated as a data error rather than silently escaping the cap".
+ */
+export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
+
+/**
+ * The cap categories that actually have rows today — a strict subset of `CONS_CAP_CATEGORIES`,
+ * enforced as such by `catalog.test.js`.
  *
- * `Shot` is retained and is knowingly not a wiki category: the wiki has no `Shot Consumables`, and
- * Vitality Shot is filed only under `Healing Consumables`. So this set mixes two of the game's cap
- * categories with one of our own naming. Recorded rather than silently corrected, because collapsing
- * `Shot` would change ten rows for no behavioural gain.
- *
- * Tarot Cards are the game's fourth cap category; they have NO rows in `CONS` yet (see the roster
- * boundary above), and they are deliberately NOT listed here — the cap is read from the declared
- * list, and an empty category must not silently escape it. `calc.js`'s `CONS_CAP_CATEGORIES` names
- * them so the mechanism is ready when the roster admits them.
+ * This exists ONLY because a badge palette needs an entry per category a player can see on screen,
+ * and only a category with rows can be seen. Keeping it separate is what lets the cap vocabulary
+ * name `Tarot Cards` without forcing a speculative colour choice for a category the roster
+ * deliberately excludes. Do not use it for a rules decision — the cap reads
+ * `CONS_CAP_CATEGORIES`, and using this subset instead is how Tarot Cards would slip the cap on
+ * the day rows are admitted.
  */
 export const CONS_TYPES = ["Shot", "Throwable", "Placeable"];
 
