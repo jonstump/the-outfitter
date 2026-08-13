@@ -984,6 +984,56 @@ now and needs no schema or wire-format change, not that it is cheap.
 
 ## 3. Contradictions with accepted ADRs, specs, or `catalog.js` — flagged, not fixed
 
+### Disposition (added 2026-08-12, after the eight ADRs landed)
+
+This section was written to flag rather than fix, and the flagging stands as originally written below.
+Each item has since been decided. Recorded here rather than by editing the findings, so the original
+reading and its disposition are both legible.
+
+| Item | Disposition |
+|---|---|
+| 3.1 | **Split.** Populating `AMMO.special` is not wire-format gated — the pool is empty, so any write is an append. Re-typing Bomb Lance off `ammoClass: "none"` **is** gated and belongs to ADR-0014. The false comment is correctable now. |
+| 3.2 | **Closed by ADR-0015** (accepted 2026-08-12). Not a Tarot special case, exactly as this finding argued — the per-item cap it relied on is retired, so the `CONS` boundary's "no new modelling" argument goes with it. |
+| 3.3 | **Correction, no ADR.** The Shadow Crush ↔ Shadow Leap replacement claim is false and the hold-back's revisit trigger as worded can never fire. The general ground survives; the concrete case and the trigger both need rewriting. |
+| 3.4 | **Closed by ADR-0015**, accepted after the Arsenal check confirmed the per-type cap. See that ADR's Amendment (2026-08-12). |
+| 3.5 | No action — not a contradiction; the repo was right. |
+| 3.6 | No action — the premise was false and H was demoted accordingly. |
+| 3.7 | **Correction, no ADR.** The header describes a two-tier SVG lookup the code does not implement. ADR-0020 independently decided the fallback stays group-level, so the comment should be corrected to describe the code, not the code changed to match the comment. |
+| 3.8 | **Not gated — fixable now, ahead of ADR-0014.** Repricing five Scarce rounds to 0 is an in-place value change; it moves no index. This finding's own claim that "either fix reorders or reprices a pool, so both sit behind the `FORMAT_VERSION` gate" is **wrong for the repricing half** — see the correction below. |
+| 3.9 | **ADR-0014.** Moving misfiled rounds between pools is insert/remove/reorder, which is genuinely gated. |
+
+**Correction to 3.8's closing paragraph.** It states that both the omission fix and the repricing fix
+"sit behind the `FORMAT_VERSION` gate". The gate comment at `catalog.js:32-45` scopes itself to
+"inserting, removing, or reordering a variant inside a pool", because those move positions and a saved
+selection persists as a bare index. Changing a row's price in place moves nothing: after
+`["Dumdum", 22]` → `["Dumdum", 0]`, a loadout that stored index 2 still means Dumdum, and only the cost
+line changes — which is the intended effect. So the repricings need no bump and no migration, and
+should not wait on ADR-0014. This matters because 3.8 is a live violation of an **accepted** decision
+(ADR-0013) that renders a $90 charge for a round the game gives away.
+
+ADR-0014 reached the same conclusion independently — "repricing the five Scarce rows to 0 moves no
+index and so needs **no** `FORMAT_VERSION` bump at all under SPEC-0007's positional gate" — but it
+records that under a *rejected* option ("Keep the shared pools and correct the data in place"). That
+option was correctly rejected as a **substitute** for the per-weapon model, on grounds that do not
+apply to shipping the reprice **ahead** of it: a data fix cannot express availability or a second slot,
+but the reprice spends no migration, so it forecloses nothing.
+
+**And the row count is wrong — it is eight rows, not five.** 3.8's table lists `compact` Dumdum 22,
+`medium` Dumdum 28, `slong` Spitzer 90, `xbow` Explosive Bolt 40 and `bow` Frag Arrow 45. Counted
+against `catalog.js` on `main` at `c141367`, Update 2.8's "Dum Dum Ammo, Explosive Ammo, and Spitzer
+Ammo is now Scarce for **all weapons**" also catches three rows the table omits:
+
+| Omitted row | App price |
+|---|---|
+| `AMMO.long` Dumdum | **34** |
+| `AMMO.medium` Spitzer | **60** |
+| `AMMO.long` Spitzer | **75** |
+
+Dumdum appears in three pools and Spitzer in three; the table caught two of the first and one of the
+second. This needs confirming per-round against the weapon pages before the ticket is written — but if
+it holds, a ticket scoped to "the five Scarce rows" would leave the same bug live in three more places,
+including the largest single overcharge after `slong` Spitzer.
+
 ### 3.1 `catalog.js` AMMO comment: "none of their custom rounds can be bought with Hunt Dollars"
 
 `client/src/data/catalog.js:55-63` justifies `special: []` on that claim. Checking the currency
