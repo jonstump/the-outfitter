@@ -292,7 +292,7 @@ graph TD
 * **Provenance.** The field audits of both hunter templates, the zero-wikitable measurement, the
   recruitment and health-chunk quotations, and the 60-row Blood Bonds tally come from a pass over the
   live wiki and the committed dataset on 2026-08-12, recorded in
-  `docs/reports/suggested-adrs.md` § H, § H1, § H2 and § 3.6, arriving on `main` with **#258**.
+  `docs/reports/suggested-adrs.md` § H, § H1, § H2 and § 3.6, arrives on `main` with **#266**.
 * **Related issues**: ADR-0010's archetype generator (the free-hunter kit spec — "cheap weapons, a melee
   tool, a First Aid Kit, a random Consumable and one random Trait" — is a plausible archetype, which is
   the one place this data is still useful).
