@@ -34,6 +34,7 @@ const WIRE_CATEGORIES = { w: 40, eT: 24, eC: 24, tr: 40 };
 const isNonnegInt = (n) => Number.isInteger(n) && n >= 0;
 const isId = (s) => typeof s === "string" && s.length > 0 && s.length <= 100;
 const isRef = (v, bound) => (isNonnegInt(v) && v < bound) || isId(v);
+const isIsland = (v, bound) => Array.isArray(v) && v.length === 2 && isRef(v[0], bound) && Number.isInteger(v[1]);
 
 // Governing: issue #198.
 //
@@ -76,22 +77,54 @@ const MAX_LOADOUTS_PER_OWNER = 200;
 // against the catalog's size. That one is validation slack on an index; this one is the count.
 const MAX_TRAITS = 15;
 
+function isValidV1Entry(entry) {
+  return Array.isArray(entry) && entry.length === 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC);
+}
+
+function isValidV2Entry(entry) {
+  return Array.isArray(entry) && entry.length === 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC);
+}
+
 function isValidData(data) {
-  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
-  if (Object.keys(data).some((k) => !DATA_KEYS.has(k))) return false;
-  if (data.v !== undefined && typeof data.v !== "number") return false;
-  if (!Array.isArray(data.w) || data.w.length !== 2) return false;
+  const reject = (field) => ({ ok: false, field });
+  if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false, field: "data" };
+  if (Object.keys(data).some((k) => !DATA_KEYS.has(k))) return reject("data");
+  if (data.v !== undefined && typeof data.v !== "number") return reject("v");
+  // Version 2 declares the sparse eight-cell shape and the per-cell blocked array
+  // (ADR-0009); anything else carries the v1 packed encoding. A v2 `e` must be exactly
+  // eight entries and may HOLD null holes — rejecting the holes would reject every v2
+  // loadout before one is even sent. The version's own `b` shape is validated below,
+  // under the same version branch.
+  const isV2 = data.v === 2;
+  if (!Array.isArray(data.w) || data.w.length !== 2) return reject("w");
   // Exactly two entries per tuple, not "at least". A floor with no ceiling accepted a slot
   // carrying any amount of trailing junk, which was then stored — the same unbounded-growth
   // hole as an unknown key, wearing the shape of a field the format does define.
-  if (!data.w.every((slot) => slot === null || (Array.isArray(slot) && slot.length === 2 && isRef(slot[0], WIRE_CATEGORIES.w) && Number.isInteger(slot[1])))) return false;
-  if (!Array.isArray(data.e) || data.e.length > 8) return false;
-  if (!data.e.every((entry) => Array.isArray(entry) && entry.length === 2 && (entry[0] === "T" || entry[0] === "C") && isRef(entry[1], entry[0] === "T" ? WIRE_CATEGORIES.eT : WIRE_CATEGORIES.eC))) return false;
-  if (!Array.isArray(data.tr) || data.tr.length > MAX_TRAITS) return false;
-  if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return false;
-  if (typeof data.n !== "string" || data.n.length > 200) return false;
-  if (data.b !== undefined && (typeof data.b !== "number" || data.b < 0 || data.b > 8)) return false;
-  return true;
+  if (!data.w.every((slot) => slot === null || isIsland(slot, WIRE_CATEGORIES.w))) return reject("w");
+  if (!Array.isArray(data.e)) return reject("e");
+  if (isV2) {
+    if (data.e.length !== 8) return reject("e");
+    // Structural shape, not truthiness: each cell is either empty (null) or a valid entry.
+    if (!data.e.every((entry) => entry === null || isValidV2Entry(entry))) return reject("e");
+  } else {
+    if (data.e.length > 8) return reject("e");
+    if (!data.e.every((entry) => isValidV1Entry(entry))) return reject("e");
+  }
+  if (!Array.isArray(data.tr) || data.tr.length > MAX_TRAITS) return reject("tr");
+  if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return reject("tr");
+  if (typeof data.n !== "string" || data.n.length > 200) return reject("n");
+  if (data.b !== undefined) {
+    if (isV2) {
+      // Per-cell blocking (ADR-0009): an array of cell indices. Rejected rather than
+      // clamped when an index is out of range — a clamp would store a grid the client
+      // never asked for (REQ "Error Handling at the Payload Boundary").
+      if (!Array.isArray(data.b) || data.b.some((c) => !Number.isInteger(c) || c < 0 || c >= 8)) return reject("b");
+      if (new Set(data.b).size !== data.b.length) return reject("b");
+    } else if (typeof data.b !== "number" || data.b < 0 || data.b > 8) {
+      return reject("b");
+    }
+  }
+  return { ok: true };
 }
 
 // Governing: ADR-0006, SPEC-0003 REQ "Loadouts Are Filed into Lists by Nullable
@@ -198,10 +231,12 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     if (name.trim().length > NAME_MAX_CHARS) {
       return res.status(400).json({ error: `name must be at most ${NAME_MAX_CHARS} characters` });
     }
-    if (!isValidData(data)) {
-      return res.status(400).json({ error: "data must be a valid loadout payload" });
+    if (!isValidData(data).ok) {
+      // REQ "Error Handling at the Payload Boundary": a rejection names the offending
+      // field rather than the whole request.
+      const field = isValidData(data).field ?? "data";
+      return res.status(400).json({ error: `data.${field} is not a valid loadout payload` });
     }
-
     // Governing: SPEC-0003 REQ "Loadouts Carry a Description of Their Own", SPEC-0003 § HTTP
     // API — "`POST` SHALL accept an optional `description`, so that saving a loadout with one
     // written up front is a single write rather than a save followed by a patch". The key's
