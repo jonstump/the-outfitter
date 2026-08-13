@@ -99,11 +99,20 @@ No SDD skill reads this section yet — `/sdd:work` dispatches to `general-purpo
 
 Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creating duplicates):
 
-| Spec | Project | Number | ID |
-|------|---------|--------|-----|
-| SPEC-0002 | SPEC-0002: Developer Environment Consistency | 1 | `PVT_kwHOA4k1ys4Bf4Mk` |
-| SPEC-0003 | SPEC-0003: Hunter Loadout Lists | 2 | `PVT_kwHOA4k1ys4Bf478` |
-| SPEC-0004 | SPEC-0004: Hunter Roster Dataset | 3 | `PVT_kwHOA4k1ys4Bf5nO` |
-| SPEC-0007 | SPEC-0007: Equipment Catalog Dataset | 4 | `PVT_kwHOA4k1ys4Bf_8Z` |
-| SPEC-0006 | SPEC-0006: Equipment Slot Arrangement | 6 | `PVT_kwHOA4k1ys4BgOAX` |
-| SPEC-0008 | SPEC-0008: Loadout Randomization | 5 | `PVT_kwHOA4k1ys4BgEvL` |
+| Spec | Project | Number | ID | State |
+|------|---------|--------|-----|-------|
+| SPEC-0001 | SPEC-0001: Equipment Iconography | 7 | `PVT_kwHOA4k1ys4BgTKJ` | open |
+| SPEC-0002 | SPEC-0002: Developer Environment Consistency | 1 | `PVT_kwHOA4k1ys4Bf4Mk` | open |
+| SPEC-0003 | SPEC-0003: Hunter Loadout Lists | 2 | `PVT_kwHOA4k1ys4Bf478` | open |
+| SPEC-0004 | SPEC-0004: Hunter Roster Dataset | 3 | `PVT_kwHOA4k1ys4Bf5nO` | **closed** |
+| SPEC-0006 | SPEC-0006: Equipment Slot Arrangement | 6 | `PVT_kwHOA4k1ys4BgOAX` | open |
+| SPEC-0007 | SPEC-0007: Equipment Catalog Dataset | 4 | `PVT_kwHOA4k1ys4Bf_8Z` | open |
+| SPEC-0008 | SPEC-0008: Loadout Randomization | 5 | `PVT_kwHOA4k1ys4BgEvL` | open |
+| — | a11y: WCAG 2.1 AA Baseline | 8 | `PVT_kwHOA4k1ys4BgTKK` | open |
+| — | About and Help | 9 | `PVT_kwHOA4k1ys4BgTKM` | open |
+
+**A closed project is still a cache hit.** SPEC-0004's board is closed because every one of its seven items is done, not because it was abandoned. `/sdd:plan` and `/sdd:organize` MUST reuse the recorded ID rather than creating a second SPEC-0004 board; reopen it if that capability gains new work.
+
+**Two projects have no spec, and that is deliberate.** Under `per-epic` mode a project tracks an epic, and both `a11y` (epic #81) and `About and Help` (epic #72) are epics with no spec of their own — the a11y epic is explicitly scoped as "the WCAG 2.1 AA baseline SPEC-0001 already claims", so its requirements live in SPEC-0001 rather than in a spec of its own. Do not synthesise a spec to fill the `Spec` column.
+
+**Keep this table in step with the tracker.** It went stale once: three projects existed on GitHub that were absent here, which is precisely the duplicate-creation this cache exists to prevent. When a project is created, closed, or renamed, update the row in the same change.
