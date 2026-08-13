@@ -684,13 +684,34 @@ button {
   color: var(--red-bright);
 }
 
-/* Equipment panel */
+/* Equipment panel — the eight cells as TWO RANKS OF FOUR (ADR-0009, SPEC-0006 REQ
+   "The Grid Renders as Two Ranks of Four").
 
+   The ranks are pinned here in CSS: a fixed 4-column grid, never auto-fill/auto-fit.
+   That is what makes the narrow arrangement a TRANSPOSE rather than a reflow — 4×2
+   becomes 2×4 with every cell keeping its neighbours. `grid-auto-flow: column` fills
+   cell order COLUMN-major (0,4 / 1,5 / 2,6 / 3,7 under the two-rank read), so a
+   transposition only swaps which axis holds four cells; the neighbours never change.
+
+   Column count is relative to the PANEL's own width, not the viewport's: below 460px
+   of panel width the four columns fold to two, and the rows to four. No wrap happens —
+   the grid keeps exactly two tracks wide. */
 .equip-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  grid-template-rows: repeat(4, auto);
   gap: 10px;
   margin-top: 12px;
+  container-type: inline-size;
+}
+
+@container (min-width: 460px) {
+  .equip-grid {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, auto);
+  }
 }
 
 .equip-slot {
@@ -757,6 +778,30 @@ button {
 .equip-thumb {
   width: 100%;
   height: 96px;
+}
+
+/* Consumable-stack badge (SPEC-0006 REQ "Repeated Consumables Read as One Stack").
+   A stack is a VIEW (utils/stacking.js) — the badge carries the count of the cells
+   the run consumes. Continuation cells of a run render as a minimal anchor so the
+   grid keeps its eight-cell shape without duplicating the thumbnail. */
+.equip-stack-badge {
+  align-self: flex-start;
+  background: var(--panel-alt, #141009);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+}
+
+.equip-slot.stack-continuation {
+  background: #211a11;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  align-items: center;
+  justify-content: center;
 }
 
 /* Traits panel
