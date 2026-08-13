@@ -13,8 +13,13 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 // Governing: ADR-0009, SPEC-0006 REQ "Cells Are Individually Blockable". Blocking is
 // per cell: a MIDDLE cell can be blocked while later cells stay usable, so the
 // availability check is `index in blocked`, never a count comparison.
+//
+// SPEC-0006 REQ "Repeated Consumables Read as One Stack": the run a cell belongs to
+// arrives as a prop from EquipmentPanel (computed by utils/stacking.js). The FIRST
+// cell of a run renders the tile and its badge; later cells of the run render an
+// anchor that is not an extra tile — the badge's count is the cells consumed.
 
-export default function EquipmentSlot({ index }) {
+export default function EquipmentSlot({ index, run }) {
   const dispatch = useDispatch();
   // selectEquipEntry is a selector factory; memoize the instance so its
   // createSelector cache survives re-renders (issue #24/#25).
@@ -43,14 +48,37 @@ export default function EquipmentSlot({ index }) {
   const category = entry.t === "T" ? "tools" : "consumables";
   const svgPath = entry.t === "T" ? toolThumb(def) : consThumb(def);
 
+  const runCells = run ? run.cells : [index];
+  const isStackHead = run ? run.cells[0] === index : true;
+  if (!isStackHead) {
+    // The continuation cells of a stack — same tile, no duplicate thumbnail. The
+    // count is on the head's badge; this anchor exists so the grid keeps its shape.
+    return (
+      <button
+        className="equip-slot filled-slot stack-continuation"
+        title={`${def[1]} (stack of ${runCells.length})`}
+        aria-label={`${def[1]} (stack of ${runCells.length})`}
+        tabIndex={index === runCells[0] + 1 ? 0 : -1}
+      >
+        <span className="equip-name">{def[1]}</span>
+      </button>
+    );
+  }
+
   return (
     <button
       className="equip-slot filled-slot"
-      title="Remove"
+      title={`Remove ${def[1]}${runCells.length > 1 ? ` (stack of ${runCells.length})` : ""}`}
       onClick={() => dispatch(loadoutActions.removeEquip(index))}
+      data-testid={`equip-tile-${index}`}
     >
       <ItemThumb category={category} name={def[1]} svgPath={svgPath} className="equip-thumb" />
       <span className="equip-name">{def[1]}</span>
+      {runCells.length > 1 && (
+        <span className="equip-stack-badge" data-testid={`stack-badge-${runCells[0]}`}>
+          ×{runCells.length}
+        </span>
+      )}
       <span className="equip-foot">
         <span className="equip-cat" style={{ color: catColor }}>
           {entry.t === "T" ? "TOOL" : def[3].toUpperCase()}
