@@ -739,6 +739,12 @@ button {
   .equip-grid {
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(2, auto);
+    /* The wide override flips the track counts but grid-auto-flow survives from the
+       base rule: without this the wide grid keeps the base's COLUMN-major fill and
+       renders cell 1 BELOW cell 0 instead of to its right (SPEC-0006 "The Grid
+       Renders as Two Ranks of Four"). The transpose is deliberately applied only in
+       this block — the base rule stays column-major for the narrow overlap. */
+    grid-auto-flow: row;
   }
 }
 

@@ -117,6 +117,14 @@ describe("two-rank grid arrangement", () => {
     for (const rule of conditional) {
       expect(rule.conditions.every((c) => c.startsWith("@container"))).toBe(true);
       expect(rule.body).toContain("grid-template-columns: repeat(4, 1fr)");
+      // The wide block must flip the FLOW as well as the track counts. `grid-auto-flow`
+      // survives a change to grid-template-columns/rows, so without this declaration the
+      // wide grid inherits the base rule's column-major fill and renders cell 1 BELOW
+      // cell 0 instead of to its right (issue #301). This is a declaration check and does
+      // not prove the grid RENDERS correctly — jsdom has no layout engine — but it is the
+      // permanent CI guard for the one declaration whose absence caused the bug, and it
+      // mirrors the base rule's `grid-auto-flow: column` assertion above.
+      expect(rule.body).toContain("grid-auto-flow: row");
     }
   });
 
