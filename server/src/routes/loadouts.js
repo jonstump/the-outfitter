@@ -260,7 +260,39 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 
     const trimmedName = name.trim();
     const now = new Date().toISOString();
-    const existing = liveRecords(db.data.loadouts).find((l) => l.owner === token && l.name === trimmedName);
+
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" (issue #102)
+    //
+    // The upsert key is the TRIPLE `(owner, listId, name)`, not `(owner, name)`. Matching on
+    // name alone meant saving "Fanning" while one list was open overwrote AND relocated the
+    // "Fanning" already filed in another — data loss on a routine flow, reported as #102.
+    //
+    // `listId` is compared AS A VALUE, `null` included. The Unassigned pseudo-list is `null`,
+    // so treating it as "no constraint" would collapse every Unassigned save onto the first
+    // such record — the same defect wearing different clothes.
+    //
+    // `l.listId ?? null` coalesces because a record written before SPEC-0003 has NO `listId`
+    // key at all — `undefined`, not `null`. A plain `===` would miss those and mint a
+    // duplicate on the first re-save (the hazard "treats moving an already-unassigned
+    // legacy-shaped record to null as a no-op" pins on the PATCH side).
+    //
+    // An OMITTED `listId` still matches on name alone, and that is deliberate rather than a
+    // gap in the key. The request body distinguishes absent from null: absent means "update
+    // this loadout, do not move it" — the semantic `filing.test.js` pins as "leaves filing
+    // untouched when an upsert omits listId" — and a caller who declined to name a list has
+    // not supplied a triple to match on. The app never takes this path: `resolveSaveListId`
+    // (savedLoadoutsSlice.js) always yields a list id or an explicit `null`, so every save
+    // this application makes is fully keyed. Where two same-named records now legally exist
+    // in different lists, an omitted `listId` resolves to the first and is ambiguous by
+    // construction; the triple is the identity, and this branch is compatibility for callers
+    // that predate it.
+    const scopedToList = listId !== undefined;
+    const existing = liveRecords(db.data.loadouts).find(
+      (l) =>
+        l.owner === token &&
+        l.name === trimmedName &&
+        (!scopedToList || (l.listId ?? null) === ref.value)
+    );
 
     // Governing: issue #198. Only a NEW record is refused: re-saving under an existing name
     // is an update, and an owner sitting at the ceiling must still be able to edit what they

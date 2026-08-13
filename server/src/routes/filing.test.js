@@ -199,6 +199,149 @@ describe("filing loadouts into lists", () => {
     expect(res.status).toBe(404);
   });
 
+  // --- REQ "Loadout Identity Is Scoped to Its List" (ADR-0022, issue #102) ---------
+  //
+  // The upsert key is `(owner, listId, name)`. Every test below fails against the old
+  // `(owner, name)` key, which is the point: #102 was data loss on a routine flow, and a
+  // test that passes either way would not have caught it.
+  //
+  // EACH TEST GETS ITS OWN TOKEN, and that is not decoration. The write limiters are
+  // module-level and per-token (`WRITE_PER_TOKEN = 60`/min, lib/ownership.js), so adding
+  // these thirteen writes to TOKEN_A tipped the file over budget — and it surfaced as a
+  // 429 in "requires listId on a move" further down, an unrelated test that had simply
+  // drawn the short straw. Distinct tokens keep these off the shared budget and make them
+  // order-independent. Same hazard `loadouts.test.js` avoids by seeding the db directly.
+  const T = {
+    twoLists: "c0000000-0000-4000-8000-000000000102",
+    unfiled: "c1000000-0000-4000-8000-000000000102",
+    legacy: "c2000000-0000-4000-8000-000000000102",
+    stable: "c3000000-0000-4000-8000-000000000102",
+    omitted: "c4000000-0000-4000-8000-000000000102",
+    capture: "c5000000-0000-4000-8000-000000000102",
+  };
+
+  it("keeps two same-named loadouts in different lists, relocating neither", async () => {
+    const app = makeApp();
+    const a = await mkList(app, T.twoLists, "__test__solo");
+    const b = await mkList(app, T.twoLists, "__test__duo");
+
+    const first = await save(app, T.twoLists, { name: "__test__fanning", data: validData, listId: a.body.id });
+    const second = await save(app, T.twoLists, { name: "__test__fanning", data: validData, listId: b.body.id });
+
+    // Under the old key the second save returned 200 and MOVED the first record; the user
+    // saw a success banner and the copy in list A was gone.
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.id).not.toBe(first.body.id);
+
+    await db.read();
+    const named = db.data.loadouts.filter((l) => l.name === "__test__fanning");
+    expect(named).toHaveLength(2);
+    // Assert the FILING, not just the count: a relocation would keep two records if the
+    // second were a create, so counting alone does not prove neither moved.
+    expect(named.find((l) => l.id === first.body.id).listId).toBe(a.body.id);
+    expect(named.find((l) => l.id === second.body.id).listId).toBe(b.body.id);
+  });
+
+  it("still upserts onto one record for two Unassigned saves under one name", async () => {
+    const app = makeApp();
+    // `null` is compared AS A VALUE. Treating it as "no constraint" would make every
+    // Unassigned save its own record — the same defect #102 names, inverted.
+    const first = await save(app, T.unfiled, { name: "__test__unfiled", data: validData, listId: null });
+    const second = await save(app, T.unfiled, { name: "__test__unfiled", data: validData, listId: null });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
+    expect(second.body.id).toBe(first.body.id);
+
+    await db.read();
+    expect(db.data.loadouts.filter((l) => l.name === "__test__unfiled")).toHaveLength(1);
+  });
+
+  it("does not let an Unassigned save capture a record filed in a list", async () => {
+    const app = makeApp();
+    // The discriminating case for "`null` is compared AS A VALUE". If `null` instead meant
+    // "no constraint", an Unassigned save would match the FILED record by name and both
+    // update and relocate it — #102 again, arriving from the Unassigned direction.
+    //
+    // Added after mutation testing: the two-Unassigned-saves test above cannot catch this,
+    // because with only null-listId records in play both readings agree.
+    const list = await mkList(app, T.capture, "__test__capture");
+    const filed = await save(app, T.capture, { name: "__test__both", data: validData, listId: list.body.id });
+
+    const unfiled = await save(app, T.capture, { name: "__test__both", data: validData, listId: null });
+
+    expect(unfiled.status).toBe(201);
+    expect(unfiled.body.id).not.toBe(filed.body.id);
+    expect(unfiled.body.listId).toBeNull();
+
+    await db.read();
+    const both = db.data.loadouts.filter((l) => l.name === "__test__both");
+    expect(both).toHaveLength(2);
+    // The filed record kept its list — it was neither updated nor moved.
+    expect(both.find((l) => l.id === filed.body.id).listId).toBe(list.body.id);
+  });
+
+  it("upserts onto a legacy record that has no listId key at all", async () => {
+    const app = makeApp();
+    // A record written before SPEC-0003 carries `listId` UNDEFINED, not null. The match
+    // coalesces, so an Unassigned save must find it rather than minting a duplicate.
+    await db.read();
+    db.data.loadouts.push({
+      id: "00000000-0000-4000-8000-00000000f102",
+      owner: T.legacy,
+      name: "__test__legacy-unfiled",
+      data: validData,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await db.write();
+
+    const res = await save(app, T.legacy, { name: "__test__legacy-unfiled", data: validData, listId: null });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("00000000-0000-4000-8000-00000000f102");
+
+    await db.read();
+    expect(db.data.loadouts.filter((l) => l.name === "__test__legacy-unfiled")).toHaveLength(1);
+  });
+
+  it("changes no stored record when deployed over an existing data file", async () => {
+    const app = makeApp();
+    // "Pre-existing records SHALL require no migration." The key narrows rather than
+    // widens, so a record that matched before and shares its list still matches.
+    const list = await mkList(app, T.stable, "__test__preexisting");
+    const saved = await save(app, T.stable, { name: "__test__stable", data: validData, listId: list.body.id });
+
+    await db.read();
+    const before = JSON.parse(JSON.stringify(db.data.loadouts.find((l) => l.id === saved.body.id)));
+
+    const again = await save(app, T.stable, { name: "__test__stable", data: validData, listId: list.body.id });
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(saved.body.id);
+
+    await db.read();
+    const after = db.data.loadouts.find((l) => l.id === saved.body.id);
+    // Everything but the timestamp is untouched — no reshaping, no new keys.
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    expect(after.listId).toBe(before.listId);
+    expect(after.owner).toBe(before.owner);
+    expect(after.name).toBe(before.name);
+  });
+
+  it("leaves an omitted listId matching across lists, so filing is not lost", async () => {
+    const app = makeApp();
+    // The body distinguishes ABSENT from null: absent means "update this loadout, do not
+    // move it". A caller that named no list supplied no triple, so name-only matching is
+    // retained deliberately. The app never takes this path — `resolveSaveListId` always
+    // yields a list id or an explicit null — but the API contract predates the triple.
+    const list = await mkList(app, T.omitted, "__test__omit");
+    const saved = await save(app, T.omitted, { name: "__test__omitted", data: validData, listId: list.body.id });
+
+    const again = await save(app, T.omitted, { name: "__test__omitted", data: validData });
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(saved.body.id);
+    expect(again.body.listId).toBe(list.body.id);
+  });
+
   // --- REQ "Retiring a List Never Destroys Loadouts" -------------------------------
 
   it("retiring a list keeps every loadout and drops them into Unassigned", async () => {
