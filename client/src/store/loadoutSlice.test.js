@@ -3,6 +3,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { TRAIT_MAX } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 
@@ -53,6 +54,38 @@ describe("addEquip", () => {
     store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));
     store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));
     expect(held(store.getState())).toHaveLength(1);
+  });
+
+  it("places into the lowest free cell on a grid with holes", () => {
+    // Governing: ADR-0009, SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation".
+    // Cells 0 and 2 occupied, cell 1 a hole — the next add must land in cell 1, not
+    // append past the hole (a packed-array push would count the hole as space).
+    const store = makeStore(
+      loadoutState({
+        equip: [
+          { t: "T", i: 0 }, null, { t: "T", i: 5 }, null,
+          null, null, null, null,
+        ],
+      })
+    );
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: 0 });
+    expect(held(store.getState())).toHaveLength(3);
+  });
+
+  it("removing an item leaves the others in their cells (no relocation)", () => {
+    const store = makeStore(
+      loadoutState({
+        equip: [
+          { t: "T", i: 0 }, null, { t: "C", i: 0 }, null,
+          null, null, null, null,
+        ],
+      })
+    );
+    store.dispatch(loadoutActions.removeEquip(2));
+    const s = store.getState().loadout.equip;
+    expect(s[2]).toBeNull();
+    expect(s[0]).toEqual({ t: "T", i: 0 });
   });
 });
 

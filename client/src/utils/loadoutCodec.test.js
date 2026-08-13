@@ -94,6 +94,75 @@ describe("toData / fromData (v1 id-based wire format)", () => {
   });
 });
 
+// Governing: ADR-0009, SPEC-0006 REQ "Wire Format Version 2 Encodes Cell Position",
+// REQ "Version 1 Records Migrate Losslessly".
+//
+// Round-trip coverage across the four cases the story required: the current v2 shape,
+// a v1 record, a pre-versioning (legacy) record, and malformed input. Each asserts the
+// grid stays well-formed — positions preserved, holes surviving, and malformed input
+// decaying to the empty grid rather than throwing.
+describe("wire-format round-trips (v2, v1, pre-versioning, malformed)", () => {
+  it("round-trips a v2 loadout with empty cells preserved", () => {
+    const lo = emptyLoadout();
+    lo.weapons = [{ i: 0, a: -1 }, null];
+    lo.equip = [
+      { t: "T", i: 0 }, null, { t: "C", i: 3 }, null,
+      null, null, null, null,
+    ];
+    lo.traits = ["quartermaster"];
+    lo.name = "v2 gap";
+    lo.blocked = [];
+    const enc = toData(lo);
+    expect(enc.v).toBe(2);
+    const dec = fromData(enc);
+    // Cell positions and the hole at cell 1 survive the round trip.
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, null]);
+    expect(dec.equip).toEqual([
+      { t: "T", i: 0 }, null, { t: "C", i: 3 }, null,
+      null, null, null, null,
+    ]);
+    expect(dec.traits).toEqual(["quartermaster"]);
+  });
+
+  it("round-trips a v2 loadout with blocked cells", () => {
+    const lo = emptyLoadout();
+    lo.equip = [{ t: "C", i: 3 }, null, null, null, null, null, null, null];
+    lo.blocked = [2, 3];
+    const dec = fromData(toData(lo));
+    expect(dec.blocked).toEqual([2, 3]);
+    expect(dec.equip[0]).toEqual({ t: "C", i: 3 });
+  });
+
+  it("decodes a v1 record to the cells it rendered in (pre-versioning path)", () => {
+    // Same pack as the legacy fixture in the legacy describe — a v1 record whose items
+    // were packed in insertion order lands in cells 0..n-1, trailing cells stay holes.
+    const dec = fromData({
+      v: 1,
+      w: [[0, -1], [16, 2]],
+      e: [["T", "first-aid-kit"], ["C", "antidote-shot"]],
+      tr: ["quartermaster"],
+      n: "Old build",
+      b: 1,
+    });
+    expect(dec.equip).toEqual([
+      { t: "T", i: 0 }, { t: "C", i: 3 }, null, null,
+      null, null, null, null,
+    ]);
+    expect(dec.blocked).toEqual([7]);
+  });
+
+  it("treats malformed input as a well-formed empty grid rather than throwing", () => {
+    // Malformed in several ways: non-object, wrong-type arrays, and a v2 `e` with a
+    // junk element. All must come back as the eight-cell empty grid.
+    expect(fromData(null)).toEqual(emptyLoadout());
+    expect(fromData("garbage")).toEqual(emptyLoadout());
+    expect(fromData({ v: 2, w: null, e: "nope", tr: 42, b: "x" })).toEqual(emptyLoadout());
+    const junk = fromData({ v: 2, w: [null, null], e: ["junk", null, null, null, null, null, null, null], tr: [], n: "", b: [] });
+    expect(junk.equip).toEqual(Array(8).fill(null));
+    expect(junk.blocked).toEqual([]);
+  });
+});
+
 // Governing: issue #201 (a crafted share link permanently blanks the app)
 //
 // `a` is an index into the weapon's AMMO pool, and two consumers — WeaponSlot and

@@ -23,7 +23,10 @@ export const selectUpTotal = createSelector([selectLoadout], upTotal);
 
 export const selectTotalCost = createSelector([selectLoadout], totalCost);
 
-export const selectEquipCount = createSelector([selectLoadout], (l) => l.equip.length);
+// Governing: ADR-0009, SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
+// `equip.length` is always 8 under this model, so the count the panel header shows is
+// the number of CELLS HOLDING items — the holes must not be counted as equipment.
+export const selectEquipCount = createSelector([selectLoadout], (l) => l.equip.filter(Boolean).length);
 
 export const selectEquipEntry = (index) =>
   createSelector([selectLoadout], (l) => l.equip[index]);

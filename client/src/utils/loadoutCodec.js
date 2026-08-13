@@ -143,7 +143,7 @@ function fromV1(d) {
     // Traits are stored by stable catalog id (see catalog.js) — pass the ids
     // straight through rather than re-mapping to current array positions, then
     // clamp to the cap (see boundedTraits; fromLegacy clamps the same way).
-    traits: boundedTraits((d.tr || []).filter((id) => TRAIT_BY_ID.has(id))),
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
     // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly". A v1
     // blocked COUNT `b: N` means the LAST N cells were blocked (rendering-packed
@@ -381,7 +381,7 @@ function fromLegacy(d) {
     // catalog id the store now keys on (see catalog.js's trait tuple shape), then clamp
     // to the cap — AFTER the translation, so the fifteen counted are fifteen that survived.
     traits: boundedTraits(
-      (d.tr || [])
+      (Array.isArray(d.tr) ? d.tr : [])
         .map((i) => legacyId(LEGACY_TRAIT_IDS, i))
         .filter((id) => id && TRAIT_BY_ID.has(id))
     ),
@@ -417,15 +417,18 @@ function fromV2(d) {
     : empty;
 
   const weapons = [0, 1].map(slotWeapon);
+  // The promotion reads back over the RAW entries; a malformed `e` (not an array)
+  // simply promotes nothing — the empty grid, not an exception.
+  const rawEntries = Array.isArray(raw) ? raw : [];
   promoteToWeaponSlots(
     weapons,
-    (raw || []).filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
+    rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
   );
 
   return {
     weapons,
     equip,
-    traits: boundedTraits((d.tr || []).filter((id) => TRAIT_BY_ID.has(id))),
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
     // Blocked cells travel as their own array. Malformed values decay to none at
     // all (the well-formed empty grid, not an exception), and out-of-range indices

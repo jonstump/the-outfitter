@@ -45,6 +45,24 @@ describe("totalCost", () => {
     expect(totalCost(loadoutWith({}))).toBe(0);
   });
 
+  // Governing: ADR-0009 (index is the cell, null is empty), SPEC-0006 REQ "Equipment
+  // Occupies a Fixed Eight-Cell Grid". `equip` is a fixed eight-cell grid, so a
+  // packed-array totalCost would charge holes as items — silently, producing
+  // plausible numbers. The assertions below pin the with-gaps behaviour.
+  it("ignores empty cells in the sparse grid when totalling", () => {
+    // First Aid Kit ($30) at cell 2, Vitality Shot ($85) at cell 6, holes elsewhere.
+    const lo = loadoutWith({
+      equip: [null, null, { t: "T", i: 0 }, null, null, null, { t: "C", i: 0 }, null],
+    });
+    expect(totalCost(lo)).toBe(115);
+  });
+
+  it("ignores a high-cell item when low cells are empty", () => {
+    const lo = loadoutWith({ equip: [null, null, null, null, null, null, null, { t: "C", i: 0 }] });
+    // Only the Vitality Shot at cell 7 is charged.
+    expect(totalCost(lo)).toBe(85);
+  });
+
   // Governing: issue #201. This used to index the ammo pool unguarded, so a loadout whose
   // ammo index does not name a variant threw here instead of costing nothing — and totalCost
   // runs on every render, which is what turned a bad share link into a blank page.
@@ -69,6 +87,18 @@ describe("consCount", () => {
     });
     expect(consCount(lo, 4)).toBe(2);
     expect(consCount(lo, 5)).toBe(1);
+  });
+
+  it("counts only held items on a grid with gaps", () => {
+    // Two Dynamite Sticks separated by holes must still count as 2 — a packed-array
+    // count would work here by accident, but one that iterated `.length` or holes
+    // would not; the point is the filter(Boolean) semantics under ADR-0009.
+    const lo = loadoutWith({
+      equip: [
+        { t: "C", i: 4 }, null, null, { t: "C", i: 4 }, null, null, null, null,
+      ],
+    });
+    expect(consCount(lo, 4)).toBe(2);
   });
 
   it("ignores tools sharing the consumable's index", () => {
