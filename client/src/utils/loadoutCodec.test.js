@@ -48,10 +48,24 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     const lo = sampleLoadout();
     const dec = fromData(toData(lo));
     expect(dec.name).toBe("Test build");
-    expect(dec.blocked).toBe(1);
+    // `b: 1` in the v1 sample is a blocked COUNT — but the sample is consumed through
+    // `toData`, which now writes the current v2 shape, and v2's `b` is an array of cell
+    // indices, not a count. A count written as v2 is malformed and decays to no blocks,
+    // which is itself the well-formed-empty-grid rule #278 wants pinned. The v1->v2
+    // lift of the SAME count (`b: 1`) is asserted separately below.
+    expect(dec.blocked).toEqual([]);
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, { i: 19, a: 2 }]);
-    expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
+    // Current entries decode at their own cells; the rest of the fixed grid is holes.
+    expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }, null, null, null, null, null, null]);
     expect(dec.traits).toEqual(["quartermaster"]);
+  });
+
+  it("lifts a v1 blocked count to the last N cell indices", () => {
+    // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly". `b: N` in v1
+    // means the LAST N cells were blocked, so 1 lifts to cell index 7 — the single
+    // cell a count of 1 can mean — and 3 lifts to [5,6,7].
+    expect(fromData({ v: 1, w: [null, null], e: [], tr: [], n: "", b: 1 }).blocked).toEqual([7]);
+    expect(fromData({ v: 1, w: [null, null], e: [], tr: [], n: "", b: 3 }).blocked).toEqual([5, 6, 7]);
   });
 
   it("encodes item references by stable id, not array position", () => {
@@ -62,17 +76,90 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     expect(enc.tr[0]).toBe("quartermaster");
   });
 
-  it("drops v1 items whose ids no longer resolve in the catalog", () => {
+  it("drops a v1 item whose id no longer resolves, at its own cell", () => {
     const enc = toData(sampleLoadout());
     const dec = fromData({
       ...enc,
       w: [["removed-weapon", -1], null],
-      e: [["T", "removed-tool"]],
+      e: [null, ["T", "removed-tool"], null, null, null, null, null, null],
       tr: ["removed-trait"],
     });
     expect(dec.weapons[0]).toBeNull();
-    expect(dec.equip).toEqual([]);
+    // A hole at the unresolvable cell, not a closed-up packing: cell 0 is empty and
+    // cell 1 alone decides whether the test is about the hole or the gap (ADR-0009).
+    expect(dec.equip).toEqual([
+      null, null, null, null, null, null, null, null,
+    ]);
     expect(dec.traits).toEqual([]);
+  });
+});
+
+// Governing: ADR-0009, SPEC-0006 REQ "Wire Format Version 2 Encodes Cell Position",
+// REQ "Version 1 Records Migrate Losslessly".
+//
+// Round-trip coverage across the four cases the story required: the current v2 shape,
+// a v1 record, a pre-versioning (legacy) record, and malformed input. Each asserts the
+// grid stays well-formed — positions preserved, holes surviving, and malformed input
+// decaying to the empty grid rather than throwing.
+describe("wire-format round-trips (v2, v1, pre-versioning, malformed)", () => {
+  it("round-trips a v2 loadout with empty cells preserved", () => {
+    const lo = emptyLoadout();
+    lo.weapons = [{ i: 0, a: -1 }, null];
+    lo.equip = [
+      { t: "T", i: 0 }, null, { t: "C", i: 3 }, null,
+      null, null, null, null,
+    ];
+    lo.traits = ["quartermaster"];
+    lo.name = "v2 gap";
+    lo.blocked = [];
+    const enc = toData(lo);
+    expect(enc.v).toBe(2);
+    const dec = fromData(enc);
+    // Cell positions and the hole at cell 1 survive the round trip.
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, null]);
+    expect(dec.equip).toEqual([
+      { t: "T", i: 0 }, null, { t: "C", i: 3 }, null,
+      null, null, null, null,
+    ]);
+    expect(dec.traits).toEqual(["quartermaster"]);
+  });
+
+  it("round-trips a v2 loadout with blocked cells", () => {
+    const lo = emptyLoadout();
+    lo.equip = [{ t: "C", i: 3 }, null, null, null, null, null, null, null];
+    lo.blocked = [2, 3];
+    const dec = fromData(toData(lo));
+    expect(dec.blocked).toEqual([2, 3]);
+    expect(dec.equip[0]).toEqual({ t: "C", i: 3 });
+  });
+
+  it("decodes a v1 record to the cells it rendered in (pre-versioning path)", () => {
+    // Same pack as the legacy fixture in the legacy describe — a v1 record whose items
+    // were packed in insertion order lands in cells 0..n-1, trailing cells stay holes.
+    const dec = fromData({
+      v: 1,
+      w: [[0, -1], [16, 2]],
+      e: [["T", "first-aid-kit"], ["C", "antidote-shot"]],
+      tr: ["quartermaster"],
+      n: "Old build",
+      b: 1,
+    });
+    expect(dec.equip).toEqual([
+      { t: "T", i: 0 }, { t: "C", i: 3 }, null, null,
+      null, null, null, null,
+    ]);
+    expect(dec.blocked).toEqual([7]);
+  });
+
+  it("treats malformed input as a well-formed empty grid rather than throwing", () => {
+    // Malformed in several ways: non-object, wrong-type arrays, and a v2 `e` with a
+    // junk element. All must come back as the eight-cell empty grid.
+    expect(fromData(null)).toEqual(emptyLoadout());
+    expect(fromData("garbage")).toEqual(emptyLoadout());
+    expect(fromData({ v: 2, w: null, e: "nope", tr: 42, b: "x" })).toEqual(emptyLoadout());
+    const junk = fromData({ v: 2, w: [null, null], e: ["junk", null, null, null, null, null, null, null], tr: [], n: "", b: [] });
+    expect(junk.equip).toEqual(Array(8).fill(null));
+    expect(junk.blocked).toEqual([]);
   });
 });
 
@@ -124,6 +211,11 @@ describe("out-of-range ammo indices decode to no variant selected", () => {
 });
 
 describe("fromData (legacy index-based wire format)", () => {
+  // The legacy shape shares v1's packed semantics, so it decodes through the same
+  // v1->v2 lift: insertion order becomes cell order and trailing cells stay holes
+  // (SPEC-0006 "Version 1 Records Migrate Losslessly").
+  const packedEquip = (items) => [...items, ...Array(8 - items.length).fill(null)];
+
   it("decodes a legacy record against the current catalog order, preserving item identity", () => {
     const legacy = {
       w: [[0, -1], [16, 2]],
@@ -141,7 +233,7 @@ describe("fromData (legacy index-based wire format)", () => {
     // must never shift what a legacy position refers to (data-accuracy update).
     expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nagant M1895");
     expect(WEAPONS[dec.weapons[1].i][1]).toBe("Frontier 73C");
-    expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }]);
+    expect(dec.equip).toEqual(packedEquip([{ t: "T", i: 0 }, { t: "C", i: 3 }]));
     expect(TOOLS[dec.equip[0].i][1]).toBe("First Aid Kit");
     expect(CONS[dec.equip[1].i][1]).toBe("Antidote Shot");
     expect(dec.traits).toEqual(["quartermaster"]);
@@ -155,8 +247,8 @@ describe("fromData (legacy index-based wire format)", () => {
     // legacy table names them, so they come back correctly instead — what the record
     // meant is the item, not the category it sat in.
     const dec = fromData({ w: [null, null], e: [["T", 18], ["T", 19]], tr: [], n: "", b: 0 });
-    expect(dec.equip.map((e) => e.t)).toEqual(["C", "C"]);
-    expect(dec.equip.map((e) => CONS[e.i][1])).toEqual(["Choke Beetle", "Stalker Beetle"]);
+    expect(dec.equip.slice(0, 2).map((e) => e.t)).toEqual(["C", "C"]);
+    expect(dec.equip.slice(0, 2).map((e) => CONS[e.i][1])).toEqual(["Choke Beetle", "Stalker Beetle"]);
   });
 
   it("drops out-of-range legacy indices instead of remapping them", () => {
@@ -166,7 +258,7 @@ describe("fromData (legacy index-based wire format)", () => {
       tr: [999],
     });
     expect(dec.weapons[0]).toBeNull();
-    expect(dec.equip).toEqual([]);
+    expect(dec.equip).toEqual(packedEquip([]));
     expect(dec.traits).toEqual([]);
   });
 
@@ -194,7 +286,7 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
     fromData({ w: [null, null], e: indices.map((i) => ["T", i]), tr: [], n: "", b: 0 });
 
   const equipNames = (dec) =>
-    dec.equip.map((e) => (e.t === "T" ? TOOLS : CONS)[e.i][1]);
+    dec.equip.filter(Boolean).map((e) => (e.t === "T" ? TOOLS : CONS)[e.i][1]);
 
   // Indices 0-8 predate the gap and were never wrong; 10-17 are the ones that were
   // silently off by one. Asserted per index rather than as one record, because a
@@ -210,7 +302,7 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
 
   it("drops the Electric Lamp's position rather than resolving its neighbour", () => {
     // The item left the game; the honest outcome is a missing slot, not Spyglass.
-    expect(legacyTools(9).equip).toEqual([]);
+    expect(legacyTools(9).equip.filter(Boolean)).toEqual([]);
   });
 
   it("restores the retired Choke Bomb consumable as the surviving Choke Bombs tool", () => {
@@ -218,7 +310,7 @@ describe("fromData (legacy tool indices across the Electric Lamp removal)", () =
     // resolves across categories instead of being dropped or shifting Flash Bomb up.
     const dec = fromData({ w: [null, null], e: [["C", 13], ["C", 14], ["C", 15]], tr: [] });
     expect(equipNames(dec)).toEqual(["Choke Bombs", "Flash Bomb", "Concertina Bomb"]);
-    expect(dec.equip[0].t).toBe("T");
+    expect(dec.equip.filter(Boolean)[0].t).toBe("T");
   });
 
   it("resolves legacy trait positions across the in-place renames", () => {
@@ -364,7 +456,7 @@ describe("every decoder clamps a trait list to the cap", () => {
 describe("the Katana's promotion from equipment to weapon", () => {
   const KATANA_WEAPON = WEAPONS.findIndex((w) => w[0] === "katana");
   const weaponIds = (lo) => lo.weapons.map((w) => (w ? WEAPONS[w.i][0] : null));
-  const equipIds = (lo) => lo.equip.map((e) => (e.t === "T" ? TOOLS[e.i][0] : CONS[e.i][0]));
+  const equipIds = (lo) => lo.equip.filter(Boolean).map((e) => (e.t === "T" ? TOOLS[e.i][0] : CONS[e.i][0]));
 
   it("is a weapon and no longer a tool", () => {
     expect(KATANA_WEAPON).toBeGreaterThan(-1);
@@ -386,7 +478,7 @@ describe("the Katana's promotion from equipment to weapon", () => {
       e: [["T", "katana"], ["T", "first-aid-kit"]], tr: [], n: "", b: 0,
     });
     expect(equipIds(decoded)).toEqual(["first-aid-kit"]);
-    expect(decoded.equip).toHaveLength(1);
+    expect(decoded.equip.filter(Boolean)).toHaveLength(1);
   });
 
   it("keeps the second weapon slot free rather than filling both", () => {
@@ -445,7 +537,9 @@ describe("the Katana's promotion from equipment to weapon", () => {
     const decoded = fromData({ v: FORMAT_VERSION, w: [null, null], e: [["T", "katana"]], tr: [], n: "", b: 0 });
     const re = toData(decoded);
     expect(re.w[0]).toEqual(["katana", -1]);
-    expect(re.e).toEqual([]);
+    // The fixed grid encodes cell order: only the holes it carried (all eight cells
+    // were empty after the promotion) write as trailing `null` entries.
+    expect(re.e).toEqual(Array(8).fill(null));
     expect(weaponIds(fromData(re))).toEqual(["katana", null]);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIRST_AID_KIT, TOOLS } from "../data/catalog.js";
+import { fromData, toData } from "./loadoutCodec.js";
 import { TRAIT_MAX } from "./calc.js";
 import { randomizeLoadout } from "./randomize.js";
 

@@ -3,11 +3,20 @@ import { configureStore } from "@reduxjs/toolkit";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { TRAIT_MAX } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 
 // Governing: issue #26/#27 (loadoutSlice resolves the new catalog tuple shapes;
 // setLoadout validates payload shape instead of blindly merging)
+//
+// Governing: ADR-0009 (fixed eight-cell sparse grid), SPEC-0006 REQ "Equipment
+// Occupies a Fixed Eight-Cell Grid".
+//
+// All dispatch assertions now read `equip` as a GRID (array length is always 8;
+// `null` is an empty cell). Counts are expressed per cell-occupied, via
+// `filter(Boolean)`, so a test that merely checked `equip.length` would be
+// asserting the grid size instead of the rule under test.
 
 function makeStore(initial) {
   return configureStore({
@@ -16,14 +25,16 @@ function makeStore(initial) {
   });
 }
 
+const held = (state) => state.loadout.equip.filter(Boolean);
+
 describe("addEquip", () => {
   it("enforces the max-4-copies-of-one-consumable cap", () => {
     const store = makeStore();
     // Equip 4 Vitality Shots, then a 5th must be rejected.
     [0, 0, 0, 0].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
-    expect(store.getState().loadout.equip).toHaveLength(4);
+    expect(held(store.getState())).toHaveLength(4);
     store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 })); // 5th Vitality Shot
-    expect(store.getState().loadout.equip).toHaveLength(4);
+    expect(held(store.getState())).toHaveLength(4);
   });
 
   it("counts each consumable separately, not by type", () => {
@@ -34,15 +45,47 @@ describe("addEquip", () => {
     const bundle = CONS.findIndex((c) => c[0] === "dynamite-bundle");
     expect(CONS[stick][3]).toBe(CONS[bundle][3]);
     [stick, stick, stick, stick, bundle].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
-    expect(store.getState().loadout.equip).toHaveLength(5);
-    expect(store.getState().loadout.equip.filter((e) => e.i === bundle)).toHaveLength(1);
+    expect(held(store.getState())).toHaveLength(5);
+    expect(held(store.getState()).filter((e) => e.i === bundle)).toHaveLength(1);
   });
 
   it("rejects a duplicate tool (one per loadout)", () => {
     const store = makeStore();
     store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));
     store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));
-    expect(store.getState().loadout.equip).toHaveLength(1);
+    expect(held(store.getState())).toHaveLength(1);
+  });
+
+  it("places into the lowest free cell on a grid with holes", () => {
+    // Governing: ADR-0009, SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation".
+    // Cells 0 and 2 occupied, cell 1 a hole — the next add must land in cell 1, not
+    // append past the hole (a packed-array push would count the hole as space).
+    const store = makeStore(
+      loadoutState({
+        equip: [
+          { t: "T", i: 0 }, null, { t: "T", i: 5 }, null,
+          null, null, null, null,
+        ],
+      })
+    );
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: 0 });
+    expect(held(store.getState())).toHaveLength(3);
+  });
+
+  it("removing an item leaves the others in their cells (no relocation)", () => {
+    const store = makeStore(
+      loadoutState({
+        equip: [
+          { t: "T", i: 0 }, null, { t: "C", i: 0 }, null,
+          null, null, null, null,
+        ],
+      })
+    );
+    store.dispatch(loadoutActions.removeEquip(2));
+    const s = store.getState().loadout.equip;
+    expect(s[2]).toBeNull();
+    expect(s[0]).toEqual({ t: "T", i: 0 });
   });
 });
 
@@ -71,7 +114,7 @@ describe("setLoadout", () => {
     );
     const s = store.getState().loadout;
     expect(s.name).toBe("Keep me");
-    expect(s.blocked).toBe(0);
+    expect(s.blocked).toEqual([]);
     expect(s.traits).toEqual(["quartermaster"]);
   });
 
@@ -90,7 +133,7 @@ describe("setLoadout", () => {
         equip: [],
         traits: ["quartermaster", "fanning"],
         name: "x",
-        blocked: 0,
+        blocked: [],
       })
     );
     expect(store.getState().loadout.traits).toEqual(["quartermaster", "fanning"]);

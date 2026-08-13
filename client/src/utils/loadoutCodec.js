@@ -7,7 +7,13 @@ export const LS_CUR = "hunt-outfitter-current";
 // migrate old encodings instead of misreading them (see issue #26 — the previous
 // format referenced catalog items by raw array index, which silently remapped
 // saved loadouts whenever the catalog was reordered or edited).
-export const FORMAT_VERSION = 1;
+//
+// Version 2 (ADR-0009): `e` is a fixed eight-element array where index IS the cell
+// and `null` IS an empty cell, and `b` is an array of blocked cell indices rather
+// than a count of trailing blocked cells. Version 1 records keep decoding — they
+// were packed (insertion order) with a trailing blocked COUNt, and the v1->v2 lift
+// below places each packed item in the cell it rendered in.
+export const FORMAT_VERSION = 2;
 
 // Stable catalog id lookup: id -> tuple (tuple[0] is the id, name is tuple[1]).
 const WEAPON_BY_ID = new Map(WEAPONS.map((t) => [t[0], t]));
@@ -71,18 +77,29 @@ function boundedTraits(ids) {
 }
 
 export function emptyLoadout() {
-  return { weapons: [null, null], equip: [], traits: [], blocked: 0, name: "" };
+  // Governing: ADR-0009 (fixed eight-cell sparse grid, `null` = empty),
+  // SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
+  // Malformed decodes land here as the well-formed empty grid rather than throwing.
+  return { weapons: [null, null], equip: Array(8).fill(null), traits: [], blocked: [], name: "" };
 }
 
 // loadout -> compact wire shape, e.g. for localStorage / share links / saved records.
 // Items are referenced by stable catalog id (see the catalog.js header) rather than
 // array position, and the envelope carries a format version so future format changes
 // have an explicit migration path instead of silent corruption.
+//
+// Governing: ADR-0009, SPEC-0006 REQ "Wire Format Version 2 Encodes Cell Position".
+// `e` is written in CELL ORDER so v2 preserves both positions and empty cells; a
+// hole in the grid — a `null` cell — survives the round trip as a `null` entry.
 export function toData(loadout) {
+  const equip = Array(8).fill(null);
+  loadout.equip.forEach((e, k) => {
+    if (e) equip[k] = [e.t, e.t === "T" ? TOOLS[e.i][0] : CONS[e.i][0]];
+  });
   return {
     v: FORMAT_VERSION,
     w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], w.a] : null)),
-    e: loadout.equip.map((e) => [e.t, e.t === "T" ? TOOLS[e.i][0] : CONS[e.i][0]]),
+    e: equip,
     tr: loadout.traits,
     n: loadout.name,
     b: loadout.blocked,
@@ -117,14 +134,36 @@ function fromV1(d) {
 
   return {
     weapons,
-    equip,
+    // v1's packed array IS its cell order — the cells these items rendered in. The
+    // fixed-width grid keeps that order and pads the rest with the well-formed
+    // empty holes of the sparse model (ADR-0009, SPEC-0006 REQ "Version 1 Records
+    // Migrate Losslessly"). Trailing holes are stripped so `Block 7` cannot block a
+    // cell that is empty anyway.
+    equip: [...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8),
     // Traits are stored by stable catalog id (see catalog.js) — pass the ids
     // straight through rather than re-mapping to current array positions, then
     // clamp to the cap (see boundedTraits; fromLegacy clamps the same way).
-    traits: boundedTraits((d.tr || []).filter((id) => TRAIT_BY_ID.has(id))),
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
-    blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
+    // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly". A v1
+    // blocked COUNT `b: N` means the LAST N cells were blocked (rendering-packed
+    // loadouts fill from the front); it lifts to the last N cell indices. Missing
+    // or malformed counts lift to no blocked cells rather than throwing.
+    blocked: v1BlockedCells(d.b),
   };
+}
+
+// v1's blocked count -> the v2 array of cell indices it meant.
+//
+// The count's semantics were "trailing cells unavailable", so N lifts to the
+// HIGHEST-NUMBERED N cells — [8-N..7]. Anything that does not look like a count
+// lifts to no blocked cells; a malformed record must still produce the well-formed
+// empty grid, not an exception (SPEC-0006 REQ "Version 1 Records Migrate Losslessly").
+function v1BlockedCells(b) {
+  if (typeof b === "number" && Number.isInteger(b) && b >= 0 && b <= 8) {
+    return Array.from({ length: b }, (_, k) => 8 - b + k);
+  }
+  return [];
 }
 
 // Legacy pre-versioning encoding: items referenced by raw array index, e.g.
@@ -332,17 +371,70 @@ function fromLegacy(d) {
 
   return {
     weapons,
-    equip,
+    // Pre-versioning encodings were packed the same way v1 was, and they decode to
+    // v1 semantics first, so the lift is the same one: fixed-width grid in the order
+    // the record carried, holes padded behind it, and the blocked count lifted to the
+    // cells the count meant. (SPEC-0006 REQ "Version 1 Records Migrate Losslessly",
+    // applied to the legacy shape through the shared v1 semantics.)
+    equip: [...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8),
     // Legacy encodings reference traits by array position; translate to the stable
     // catalog id the store now keys on (see catalog.js's trait tuple shape), then clamp
     // to the cap — AFTER the translation, so the fifteen counted are fifteen that survived.
     traits: boundedTraits(
-      (d.tr || [])
+      (Array.isArray(d.tr) ? d.tr : [])
         .map((i) => legacyId(LEGACY_TRAIT_IDS, i))
         .filter((id) => id && TRAIT_BY_ID.has(id))
     ),
     name: d.n || "",
-    blocked: Math.min(Math.max(Number(d.b) || 0, 0), 8),
+    blocked: v1BlockedCells(d.b),
+  };
+}
+
+// Version 2 (ADR-0009): cell-position wire format. `e` is exactly eight entries,
+// index IS the cell and `null` IS an empty cell; `b` is an array of blocked cell
+// indices. Items resolve by stable id, dropped atoms leave their cell as a hole
+// rather than closing it up, and malformed input decays to the empty grid.
+function fromV2(d) {
+  const slotWeapon = (k) => {
+    const w = d.w && d.w[k];
+    if (!w) return null;
+    const id = aliasWeaponId(w[0]);
+    if (!WEAPON_BY_ID.has(id)) return null;
+    const i = indexOfItem(WEAPONS, id);
+    return { i, a: boundedAmmo(i, w[1]) };
+  };
+  const empty = Array(8).fill(null);
+  const raw = d.e || [];
+  const equip = Array.isArray(raw)
+    ? empty.map((_, k) => {
+        if (!(k in raw)) return null; // a sparse input hole stays a cell hole
+        const entry = raw[k];
+        if (!entry || !Array.isArray(entry) || (entry[0] !== "T" && entry[0] !== "C")) return null;
+        const byId = entry[0] === "T" ? TOOL_BY_ID : CONS_BY_ID;
+        if (!byId.has(entry[1])) return null; // leaves a hole; later cells must not shift
+        return { t: entry[0], i: indexOfItem(entry[0] === "T" ? TOOLS : CONS, entry[1]) };
+      })
+    : empty;
+
+  const weapons = [0, 1].map(slotWeapon);
+  // The promotion reads back over the RAW entries; a malformed `e` (not an array)
+  // simply promotes nothing — the empty grid, not an exception.
+  const rawEntries = Array.isArray(raw) ? raw : [];
+  promoteToWeaponSlots(
+    weapons,
+    rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
+  );
+
+  return {
+    weapons,
+    equip,
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
+    name: d.n || "",
+    // Blocked cells travel as their own array. Malformed values decay to none at
+    // all (the well-formed empty grid, not an exception), and out-of-range indices
+    // are dropped rather than clamped — a clamp would move the block the record
+    // actually declared.
+    blocked: Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [],
   };
 }
 
@@ -350,7 +442,8 @@ function fromLegacy(d) {
 // whose version entry matches, so a future FORMAT_VERSION bump only needs a new
 // decoder added here — older records keep migrating instead of silently dropping.
 const DECODERS = [
-  { v: FORMAT_VERSION, decode: fromV1 },
+  { v: 2, decode: fromV2 },
+  { v: 1, decode: fromV1 },
   // Legacy (unversioned) records are the fallback — anything unrecognized routes
   // here, and fromLegacy's bounds checks safely drop what it can't place.
   { v: null, decode: fromLegacy },
@@ -361,6 +454,16 @@ export function fromData(d) {
   if (!d || typeof d !== "object") return emptyLoadout();
   const decoder = DECODERS.find((x) => x.v !== null && d.v === x.v) || DECODERS.find((x) => x.v === null);
   return decoder.decode(d);
+}
+
+/**
+ * Shared by vitest helpers and decode paths that need a known cell-ordered grid:
+ * the eight-cell sparse array with `null` holes.
+ *
+ * Governing: ADR-0009. Kept beside `emptyLoadout` so the shape lives in one place.
+ */
+export function emptyEquipGrid() {
+  return Array(8).fill(null);
 }
 
 export function readStoredLoadout() {

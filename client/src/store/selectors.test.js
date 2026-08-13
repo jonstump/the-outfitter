@@ -115,3 +115,24 @@ describe("the save destination the button names and the one the save uses", () =
     expect(selectSaveDestinationName(state(null))).toBe("Beta");
   });
 });
+
+// Governing: ADR-0009 (index is the cell, null is empty), SPEC-0006 REQ "Equipment
+// Occupies a Fixed Eight-Cell Grid". `selectEquipCount` reads through filter(Boolean),
+// so the count it reports on a grid with holes is the number of HELD items — the
+// packed-array reading (`equip.length`) of the same state would report 8 and is the
+// wrong number the sparse model must not propagate to the panel header.
+describe("selectEquipCount on a grid with gaps", () => {
+  it("counts held items, not cells", async () => {
+    const { selectEquipCount: sel } = await import("./selectors.js");
+    expect(
+      sel({
+        loadout: {
+          weapons: [null, null],
+          equip: [{ t: "T", i: 0 }, null, null, { t: "C", i: 0 }, null, null, null, null],
+          traits: [],
+          blocked: [],
+        },
+      })
+    ).toBe(2);
+  });
+});

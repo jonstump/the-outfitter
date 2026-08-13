@@ -30,11 +30,21 @@ export function slotMax(loadout) {
   return 8 - loadout.blocked;
 }
 
-// The 4-consumable cap is per specific consumable, not per type: four Dynamite Sticks
-// plus a Dynamite Bundle is a legal build. This used to count by CONS[i][3] (the type,
-// "Shot"/"Throwable"), which pooled every throwable in the game into one budget of four.
+/**
+ * The equipment actually held, ignoring empty cells.
+ *
+ * Governing: ADR-0009 (index is the cell, `null` is an empty cell), SPEC-0006
+ * REQ "Equipment Occupies a Fixed Eight-Cell Grid". `equip` is exactly eight
+ * entries under this model, so counting or iterating the raw array would count
+ * holes as items and produce plausible-looking wrong numbers. Every consumer
+ * that counts or totals equipment reads through this helper.
+ */
+export function heldItems(loadout) {
+  return loadout.equip.filter(Boolean);
+}
+
 export function consCount(loadout, consIndex) {
-  return loadout.equip.filter((e) => e.t === "C" && e.i === consIndex).length;
+  return heldItems(loadout).filter((e) => e.t === "C" && e.i === consIndex).length;
 }
 
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));
@@ -57,6 +67,7 @@ export function totalCost(loadout) {
     if (variant) t += variant[1];
   });
   loadout.equip.forEach((e) => {
+    if (!e) return; // empty cell — ADR-0009 holes are not items
     t += e.t === "T" ? TOOLS[e.i][2] : CONS[e.i][2];
   });
   return t;
