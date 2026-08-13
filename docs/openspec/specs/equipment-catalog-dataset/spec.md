@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 date: 2026-08-10
 implements: [ADR-0005, ADR-0013, ADR-0015]
 requires: [SPEC-0001]
@@ -11,7 +11,11 @@ requires: [SPEC-0001]
 
 Realizes ADR-0005: a second offline scrape, `scripts/scrape-stats.mjs`, that reads item pages on huntshowdown.wiki.gg and emits a generated, committed `client/src/data/itemStats.json` keyed by catalog `id`, alongside a bounded, reviewable write-through to the hand-authored `client/src/data/catalog.js`.
 
-ADR-0005 was accepted on 2026-08-09 and neither output exists. In the meantime two reconciliation audits (`docs/audits/weapon-catalog-wiki-audit.md`, `docs/audits/equipment-catalog-wiki-audit.md`) measured what the hand-authored catalog actually contains, and ADR-0005 gained two amendments recording what they found. This spec is written against that amended decision rather than the original, because the audits changed what a correct scraper has to do: several fields turn out to be unscrapable, one turns out to be a rules input that fails silently, and page existence turns out not to imply item existence.
+**Implementation status** *(added 2026-08-13)*. **This capability is implemented**, and the status field moved `draft` → `implemented` on the same date. `scripts/scrape-stats.mjs` exists and carries the offline scrape, the recorded provenance, the opt-in `--write-catalog` reconciliation with its per-field diff, range assertions and shrink guard, the discovery classification, the coverage report, and the unpurchasable/zero-cost evidence. `client/src/data/itemStats.json` is generated and committed. The `AMMO` wire-format gate this spec requires to be "stated in `catalog.js` beside the table" is stated there, under the heading `WIRE-FORMAT GATE — read before editing any pool below`, though it does not cite this requirement by name.
+
+The paragraph below opens the spec's original framing and is kept for the history it carries. Read its first clause as past tense: it said **"ADR-0005 was accepted on 2026-08-09 and neither output exists"**, which was true when written and is not true now — both outputs exist. It is corrected here rather than deleted because the audits it goes on to describe are why the scraper is shaped as it is.
+
+ADR-0005 was accepted on 2026-08-09 and neither output existed at the time this spec was written. In the meantime two reconciliation audits (`docs/audits/weapon-catalog-wiki-audit.md`, `docs/audits/equipment-catalog-wiki-audit.md`) measured what the hand-authored catalog actually contains, and ADR-0005 gained two amendments recording what they found. This spec is written against that amended decision rather than the original, because the audits changed what a correct scraper has to do: several fields turn out to be unscrapable, one turns out to be a rules input that fails silently, and page existence turns out not to imply item existence.
 
 Scope is the four catalog categories — Weapons, Tools, Traits, Consumables — and the fields `catalog.js` already carries plus the stat block it does not. Out of scope: the hunter roster (SPEC-0004), item imagery (SPEC-0001), and the loadout rules engine itself, which this spec constrains but does not define.
 
