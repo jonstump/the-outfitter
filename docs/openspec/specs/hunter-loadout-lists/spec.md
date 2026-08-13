@@ -141,7 +141,9 @@ Two loadouts carrying the same name in different lists SHALL both persist, and n
 
 **Pre-existing records SHALL require no migration.** The key narrows rather than widens: any pair that matched under `(owner, name)` and shared a `listId` still matches, and any pair that matched *across* lists was the defect. No stored record changes shape and `FORMAT_VERSION` MUST NOT be raised — `listId` lives on the envelope, not inside `data`, per REQ "Loadouts Are Filed into Lists by Nullable Reference".
 
-A loadout loaded from a saved record SHALL be updated **by its record id** rather than by triple, so that editing a loaded loadout still writes back to the record it came from. That provenance SHALL be client-only; see REQ "The Saved-Loadout Wire Format Is Unchanged". *(**Not yet implemented** — #319 shipped the server key above, and a loaded loadout still round-trips by name today. This paragraph is #314.)*
+A loadout loaded from a saved record SHALL be updated **by its record id** rather than by triple, so that editing a loaded loadout still writes back to the record it came from. That provenance SHALL be client-only; see REQ "The Saved-Loadout Wire Format Is Unchanged".
+
+The endpoint contract that carries this is the optional `id` on `POST /api/loadouts`, specified under "HTTP API" — including that an `id` naming no record the caller owns is a `404` rather than a fallback to the triple *(clause added 2026-08-13; the requirement above stated the behaviour without naming a mechanism, and no route could perform it — `PATCH /api/loadouts/:id` reaches `listId` and `description` only)*. *(**Not yet implemented** — #319 shipped the server key above, and a loaded loadout still round-trips by name today. This paragraph is #314.)*
 
 #### Scenario: The same name in two lists is two loadouts
 
@@ -1140,7 +1142,7 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 | PATCH | /api/loadout-lists/:id | Token-scoped | Write | Rename a list, change its portrait or accent, or edit its `description` |
 | DELETE | /api/loadout-lists/:id | Token-scoped | Write | Retire a list |
 | GET | /api/loadouts | Token-scoped | Read | List the caller's saved loadouts |
-| POST | /api/loadouts | Token-scoped | Write | Save a loadout, optionally with a `listId` and a `description`. `409` past the per-owner ceiling on **create** |
+| POST | /api/loadouts | Token-scoped | Write | Save a loadout, optionally with an `id`, a `listId` and a `description`. `409` past the per-owner ceiling on **create**; `404` when an `id` names no record the caller owns |
 | PATCH | /api/loadouts/:id | Token-scoped | Write | Move a loadout between lists, and/or edit its `description` |
 | DELETE | /api/loadouts/:id | Token-scoped | Write | Delete a loadout |
 | GET | /api/hunter-favorites | Token-scoped | Read | List the caller's favorite hunters |
@@ -1152,6 +1154,24 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 *(added 2026-08-10)* `POST /api/loadouts` SHALL accept an optional `description`, so that saving a loadout with one written up front is a single write rather than a save followed by a patch. `PATCH /api/loadouts/:id` SHALL accept `listId` and `description` independently rather than requiring `listId`. The length cap and the null-versus-omitted semantics apply identically on both verbs.
 
 *(added 2026-08-11)* `POST /api/loadout-lists` and `PATCH /api/loadout-lists/:id` SHALL accept an optional `description` under the same cap and the same key-presence rules, as defined in "Lists Carry an Editable Description". On the list endpoints an explicit `description: null` means *inherit*; on the loadout endpoints it means *clear*. The two are different fields on different records, and the endpoints SHALL NOT be made to agree on a single meaning.
+
+*(added 2026-08-13, per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md))* `POST /api/loadouts` SHALL accept an optional `id`, naming the record the write is addressed to. When `id` is present the system SHALL resolve the target by `(id, owner)` **instead of** by the `(owner, listId, name)` triple, and the resolved record's `name` SHALL be updated to the submitted name. This is what lets a loaded loadout be renamed and still write back to itself, which the triple cannot express — REQ "Loadout Identity Is Scoped to Its List" requires that behaviour and this clause is the endpoint contract that delivers it.
+
+**An `id` that names no record the caller owns SHALL be a `404`.** It MUST NOT fall back to the triple and MUST NOT create a record. Both fallbacks fail the same way and it is worth stating why: the client sends `id` only for a loadout it believes already exists, so an unresolvable one means the client's provenance is stale or forged. Creating a record would mint a silent duplicate; matching the triple instead would write the user's edits over a *different* loadout that merely shares a name. A `404` is the only answer that neither destroys nor duplicates.
+
+`id` is an addressing argument on the request, not a field of the loadout. It SHALL NOT be written into the stored record's `data`, and REQ "The Saved-Loadout Wire Format Is Unchanged" continues to bar it from every encoded payload, share URL, and local draft. `FORMAT_VERSION` is unaffected.
+
+`PATCH /api/loadouts/:id` is deliberately **not** the vehicle for this. That endpoint's mutable pair is `listId` and `description`; it reaches nothing else about a record — not `data`, not the format version, not the name — and widening it would make every future "just one more field" argument easier. The save path already exists and already validates a full payload, so addressing it by id is the smaller change.
+
+#### Scenario: A save addressed by id updates that record even after a rename
+
+- **WHEN** a caller saves with an `id` naming one of its own records, under a name different from the one that record currently carries
+- **THEN** that record SHALL be updated in place, its `name` SHALL become the submitted name, and no new record SHALL be created
+
+#### Scenario: An unresolvable id is refused rather than resolved another way
+
+- **WHEN** a caller saves with an `id` that names no record, or names a record owned by a different token
+- **THEN** the response SHALL be a `404`, no record SHALL be created, and no other record SHALL be modified
 
 **"Token-scoped" is the honest designation and is REQUIRED on every endpoint in this capability.** No endpoint in this capability SHALL be public. The one public endpoint in the application — the liveness probe at `/healthz` — is outside this capability's scope and is public because orchestrator health checks require unauthenticated access.
 
