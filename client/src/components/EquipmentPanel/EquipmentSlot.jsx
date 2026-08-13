@@ -1,5 +1,5 @@
 import { useDispatch, useSelector } from "react-redux";
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { CONS, CONS_TYPE_COLOR, TOOLS, TOOL_COLOR, consThumb, toolThumb } from "../../data/catalog.js";
 import { selectBlockedCells, selectEquipEntry } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
@@ -87,16 +87,41 @@ export default function EquipmentSlot({ index, run, grabRef }) {
   // drop handler treats a drop on them as a drop on the stack head.
   const runCells = run ? run.cells : [index];
   const isStackHead = run ? run.cells[0] === index : true;
+  // Governing: SPEC-0006 REQ "The Grid Renders as Two Ranks of Four". The tile's
+  // keyboard grab-and-place model must survive the markup change below, so the
+  // cell keeps an explicit tabIndex (the <button> it used to be was natively
+  // focusable) and the continuation branch's hand-managed tab indices are kept.
+  const cellRef = useRef(null);
+  // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture".
+  // The ✕ unmounts itself the moment it dispatches, so without this the focus
+  // would fall to document.body (#131). Draw focus to the now-empty cell at the
+  // same index the layout effect runs BEFORE paint (useLayoutEffect), so there is
+  // no visibly intermediate focused state.
+  const removing = ref.current && ref.current.removeIndex === index;
+  useLayoutEffect(() => {
+    if (removing && cellRef.current) {
+      cellRef.current.focus();
+      // The removal marker is one-shot: clear the ref outright so a later Space-grab
+      // is not blocked (handleKeyDown starts a grab only when `!ref.current`, and
+      // `delete`-ing the key would leave a truthy `{}` behind — issue #303 review).
+      // Nulling is safe: the ✕ stops pointerdown propagation, so removal can never
+      // run mid-drag and there is no in-flight grab to preserve.
+      ref.current = null;
+    }
+  }, [removing, index]);
+
   if (!entry) {
     const targetCell = index;
     return (
       <button
+        ref={cellRef}
         className={`equip-slot empty-slot${isBlocked ? " blocked-slot" : ""}`}
         title={isBlocked ? "Unblock this slot" : "Block this slot (excluded from loadout)"}
         aria-pressed={isBlocked}
         data-slot-index={index}
         onKeyDown={handleKeyDown}
         onClick={() => dispatch(loadoutActions.toggleBlockedSlot(index))}
+        tabIndex={0}
       >
         {isBlocked ? "✕ blocked" : "empty"}
       </button>
@@ -114,8 +139,13 @@ export default function EquipmentSlot({ index, run, grabRef }) {
   if (!isStackHead) {
     // The continuation cells of a stack — same tile, no duplicate thumbnail. The
     // count is on the head's badge; this anchor exists so the grid keeps its shape.
+    // Governing: SPEC-0006 REQ "Repeated Consumables Read as One Stack". Only the
+    // stack HEAD (the lowest-numbered cell of the run) carries a ✕ — removing a
+    // copy empties that cell and the remaining copies close up contiguous one cell
+    // higher — so continuation cells never render a remove control.
     return (
       <button
+        ref={cellRef}
         className="equip-slot filled-slot stack-continuation"
         title={`${def[1]} (stack of ${runCells.length})`}
         aria-label={`${def[1]} (stack of ${runCells.length})`}
@@ -130,28 +160,56 @@ export default function EquipmentSlot({ index, run, grabRef }) {
     );
   }
 
+  // Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation",
+  // REQ "Keyboard Equivalence for Every Pointer Gesture" (removal keeps a keyboard
+  // route and returns focus to the emptied cell), ADR-0009 (removal does not
+  // compact — the ✕ empties THIS cell and nothing else).
+  const removeCell = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ref.current = { ...ref.current, removeIndex: index };
+    dispatch(loadoutActions.removeEquip(index));
+  };
+  const tileTabIndex = 0;
+
   return (
-    <button
+    <div
       className={`equip-slot filled-slot${drag && drag.from === index ? " grabbing" : ""}`}
       title={`${def[1]} — drag to move${runCells.length > 1 ? ` (stack of ${runCells.length})` : ""}`}
       data-testid={`equip-tile-${index}`}
       data-slot-index={index}
       onPointerDown={onPointerDown}
-      onKeyDown={handleKeyDown}
     >
-      <ItemThumb category={category} name={def[1]} svgPath={svgPath} className="equip-thumb" />
-      <span className="equip-name">{def[1]}</span>
-      {runCells.length > 1 && (
-        <span className="equip-stack-badge" data-testid={`stack-badge-${runCells[0]}`}>
-          ×{runCells.length}
+      <button
+        ref={cellRef}
+        className="equip-tile-main"
+        aria-label={def[1]}
+        tabIndex={tileTabIndex}
+        onKeyDown={handleKeyDown}
+      >
+        <ItemThumb category={category} name={def[1]} svgPath={svgPath} className="equip-thumb" />
+        <span className="equip-name">{def[1]}</span>
+        {runCells.length > 1 && (
+          <span className="equip-stack-badge" data-testid={`stack-badge-${runCells[0]}`}>
+            ×{runCells.length}
+          </span>
+        )}
+        <span className="equip-foot">
+          <span className="equip-cat" style={{ color: catColor }}>
+            {entry.t === "T" ? "TOOL" : def[3].toUpperCase()}
+          </span>
+          <span className="equip-cost">${def[2]}</span>
         </span>
-      )}
-      <span className="equip-foot">
-        <span className="equip-cat" style={{ color: catColor }}>
-          {entry.t === "T" ? "TOOL" : def[3].toUpperCase()}
-        </span>
-        <span className="equip-cost">${def[2]}</span>
-      </span>
-    </button>
+      </button>
+      <button
+        className="icon-btn equip-remove-btn"
+        title={`Remove ${def[1]}`}
+        aria-label={`Remove ${def[1]}`}
+        onClick={removeCell}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        ✕
+      </button>
+    </div>
   );
 }

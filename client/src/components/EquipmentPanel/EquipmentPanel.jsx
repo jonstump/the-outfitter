@@ -42,12 +42,15 @@ export default function EquipmentPanel() {
   const onGridPointerUp = (e) => {
     const grab = grabRef.current;
     if (!grab || grab.mode !== "pointer") return;
-    // The pointerdown cell captured the pointer, so pointerup arrives relative to
-    // whatever the pointer is over: a cell (data-slot-index) or nothing grid-like
-    // (an off-grid release). A release over a continuation cell resolves to its
-    // stack head; a release over anything without a slot index means the drag left
-    // the grid and the item is unequipped (SPEC-0006 "dragged off the grid").
-    const over = e.target?.closest?.("[data-slot-index]");
+    // The pointerdown cell captured the pointer, so EVERY event for this pointer is
+    // retargeted to the source cell — `e.target` is always the origin, never the
+    // cell under the cursor (issue #302, Defect B). Resolve the drop target from the
+    // pointer's coordinates instead. elementFromPoint returns the element at
+    // (clientX, clientY): a cell when the release is over one, its stack head when
+    // the release is over a continuation cell, or null when the release left the
+    // grid (a null outermost element -> slot index -1, which unequips per SPEC-0006
+    // "dragged off the grid").
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-slot-index]");
     const target = over ? Number(over.dataset.slotIndex) : -1;
     grabRef.current = null;
     if (target === -1) {

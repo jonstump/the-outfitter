@@ -73,8 +73,26 @@ function gridPointerSequence(container, fromCell, toCellOrNull) {
   // An off-grid drop dispatches on the grid's own client area: the handler's
   // closest() resolves to nothing and unequips.
   const target = toCellOrNull === null ? grid : container.querySelector(`[data-slot-index="${toCellOrNull}"]`);
-  fireEvent.pointerUp(target, {});
+  // The pointerup handler resolves the drop target from the pointer's COORDINATES
+  // (issue #302, Defect B), which jsdom cannot answer. Stub elementFromPoint for the
+  // dispatch so the coordinate-based resolution behaves like a real browser: it
+  // returns the release target, whose closest() yields the cell or nothing.
+  const orig = document.elementFromPoint;
+  document.elementFromPoint = () => target;
+  try {
+    fireEvent.pointerUp(target, {});
+  } finally {
+    document.elementFromPoint = orig;
+  }
 }
+
+// The filled tile's keyboard model lives on the inner .equip-tile-main button (the
+// outer element is a non-button container so the ✕ can nest — issue #303). Empty
+// cells are still a plain button, so resolve the keyboard target accordingly.
+const keyboardCell = (container, index) => {
+  const cell = container.querySelector(`[data-slot-index="${index}"]`);
+  return cell?.querySelector(".equip-tile-main") ?? cell;
+};
 
 describe("two-rank grid arrangement", () => {
   it("declares a fixed 4-column two-rank grid, never auto-fill/auto-fit", () => {
@@ -310,7 +328,7 @@ describe("keyboard equivalence", () => {
     // The keyboard gesture: Space on the CELL grabs it (the CELL's handler owns the
     // grab), ArrowRight on the cell bubbles to the grid root (which moves the grab),
     // Enter on the cell bubbles to the grid root (which drops origin -> current).
-    const cell0 = container.querySelector('[data-slot-index="0"]');
+    const cell0 = keyboardCell(container, 0);
     fireEvent.keyDown(cell0, { key: " " });
     fireEvent.keyDown(cell0, { key: "ArrowRight" });
     fireEvent.keyDown(cell0, { key: "Enter" });
@@ -324,7 +342,7 @@ describe("keyboard equivalence", () => {
     const grid = container.querySelector('[data-testid="equip-grid"]');
     // Space on the CELL grabs it; the grid launches the grab. Dispatch Space on the
     // grid's child with the cell handler, and arrows/Enter on the grid root.
-    fireEvent.keyDown(container.querySelector('[data-slot-index="0"]'), { key: " " });
+    fireEvent.keyDown(keyboardCell(container, 0), { key: " " });
     fireEvent.keyDown(grid, { key: "ArrowDown" });
     fireEvent.keyDown(grid, { key: "Enter" });
     const s = store.getState().loadout.equip;
@@ -339,7 +357,7 @@ describe("keyboard equivalence", () => {
 
   it("vertical arrow step follows the current arrangement (narrow: +1)", () => {
     const { container, store } = renderPanel({ loadout: twoCell() }, narrow);
-    fireEvent.keyDown(container.querySelector('[data-slot-index="0"]'), { key: " " });
+    fireEvent.keyDown(keyboardCell(container, 0), { key: " " });
     const grid = container.querySelector('[data-testid="equip-grid"]');
     fireEvent.keyDown(grid, { key: "ArrowDown" });
     fireEvent.keyDown(grid, { key: "Enter" });
@@ -352,7 +370,7 @@ describe("keyboard equivalence", () => {
 
   it("an arrow at the grid edge is a no-op (wide)", () => {
     const { container, store } = renderPanel({ loadout: twoCell() }, wide);
-    const cell3 = container.querySelector('[data-slot-index="3"]'); // bottom-right? no: cell 3 is bottom of col 3 in 4×2
+    const cell3 = keyboardCell(container, 3); // bottom-right? no: cell 3 is bottom of col 3 in 4×2
     if (!cell3) return;
     fireEvent.keyDown(cell3, { key: "ArrowRight" });
     // No move: nothing at cell 3's neighbourhood changed.
@@ -361,14 +379,14 @@ describe("keyboard equivalence", () => {
 
   it("an arrow at the grid edge is a no-op (narrow)", () => {
     const { container, store } = renderPanel({ loadout: twoCell() }, narrow);
-    const cell1 = container.querySelector('[data-slot-index="1"]'); // right edge of row 0 in 2×4
+    const cell1 = keyboardCell(container, 1); // right edge of row 0 in 2×4
     fireEvent.keyDown(cell1, { key: "ArrowRight" });
     expect(store.getState().loadout.equip).toEqual(twoCell().equip);
   });
 
   it("Escape cancels a grab", () => {
     const { container, store } = renderPanel({ loadout: twoCell() });
-    const cell = container.querySelector('[data-slot-index="0"]');
+    const cell = keyboardCell(container, 0);
     fireEvent.keyDown(cell, { key: " " }); // grab cell 0
     fireEvent.keyDown(cell, { key: "Escape" });
     // A subsequent Enter must not drop anything (grab is cancelled).
@@ -378,7 +396,7 @@ describe("keyboard equivalence", () => {
 
   it("focus follows a moved item", () => {
     const { container, store } = renderPanel({ loadout: twoCell() });
-    const cell = container.querySelector('[data-slot-index="0"]');
+    const cell = keyboardCell(container, 0);
     fireEvent.keyDown(cell, { key: " " });
     fireEvent.keyDown(cell, { key: "ArrowRight" });
     // Focus moves with the grab: the keyboard grab's movement refocuses the grabbed cell.
@@ -397,6 +415,137 @@ describe("keyboard equivalence", () => {
   });
 });
 
+// Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation",
+// REQ "Keyboard Equivalence for Every Pointer Gesture", ADR-0009. The ✕ remove
+// control empties the ONE cell it belongs to and moves nothing else — cell
+// position is meaningful to the player, so a splice-and-shift would rebind
+// everything. Regression for issue #303: removal was previously reachable only
+// through the (broken) drag path, so nothing in the suite exercised the gesture.
+describe("the ✕ remove control (issue #303)", () => {
+  const kitIdx = TOOLS.findIndex((t) => t[0] === "first-aid-kit");
+  const vitIdx = CONS.findIndex((c) => c[0] === "vitality-shot");
+  const dynamiteIdx = CONS.findIndex((c) => c[0] === "dynamite-stick");
+
+  const removeBtn = (container, index) =>
+    container.querySelector(`[data-slot-index="${index}"] .equip-remove-btn`);
+
+  it("empties exactly the cell clicked — the whole eight-cell array is unchanged elsewhere", () => {
+    // Occupied 0, 3, 6 with interior holes at 1, 2 — exactly the sparse shape a
+    // player's removals create. Removing cell 3 must leave 0 and 6 untouched and
+    // the holes still holes.
+    const pre = loadoutState({
+      equip: [
+        { t: "T", i: kitIdx }, null, null, { t: "C", i: vitIdx }, null, null, { t: "C", i: dynamiteIdx }, null,
+      ],
+    });
+    const { container, store } = renderPanel({ loadout: pre });
+    fireEvent.click(removeBtn(container, 3));
+    expect(store.getState().loadout.equip).toEqual([
+      { t: "T", i: kitIdx }, null, null, null, null, null, { t: "C", i: dynamiteIdx }, null,
+    ]);
+  });
+
+  it("shows a ✕ only on the filled tile, not on empty cells or stack continuations", () => {
+    // A stack run on cells 1,2 (vitality x2) plus a tool on 0.
+    const pre = loadoutState({
+      equip: [{ t: "T", i: kitIdx }, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, null, null, null, null, null],
+    });
+    const { container } = renderPanel({ loadout: pre });
+    // Empty cells render no remove control.
+    expect(removeBtn(container, 3)).toBeNull();
+    expect(removeBtn(container, 7)).toBeNull();
+    // The stack HEAD (lowest-numbered cell, 1) carries the ✕; the continuation (2) does not.
+    expect(removeBtn(container, 1)).not.toBeNull();
+    expect(removeBtn(container, 2)).toBeNull();
+  });
+
+  it("removing a stack anchor empties one copy; the rest close up and re-anchor without shifting code", () => {
+    // Run on 3,4,5. Removal empties cell 3 (the anchor); cells 4,5 stay put and
+    // re-anchor at 4 as a ×2 run — the badge derives from the run at render time.
+    const pre = loadoutState({
+      equip: [null, null, null, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre });
+    fireEvent.click(removeBtn(container, 3));
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, null, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, null, null,
+    ]);
+    const badge = container.querySelector('[data-testid="stack-badge-4"]');
+    expect(badge).not.toBeNull();
+    expect(badge).toHaveTextContent("×2");
+  });
+
+  it("the ✕ is a native button — focusable and keyboard-activatable via the platform", () => {
+    // The ✕ must be a real <button>: native buttons are the keyboard route (Enter
+    // and Space activate them by browser default). A div with an onClick would not
+    // satisfy SPEC-0006 UNEQUIPPING SHALL have a keyboard route. (Real Enter/Space
+    // activation is asserted in the browser harness — jsdom does not implement
+    // implicit button activation; the click path it does implement is covered by
+    // "empties exactly the cell clicked" above.)
+    const pre = loadoutState({ equip: [{ t: "T", i: kitIdx }, null, null, null, null, null, null, null] });
+    const { container } = renderPanel({ loadout: pre });
+    const btn = removeBtn(container, 0);
+    expect(btn.tagName).toBe("BUTTON");
+    expect(btn).toHaveAttribute("aria-label", "Remove First Aid Kit");
+    btn.focus();
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it("returns focus to the now-empty cell at that index, not document.body", () => {
+    const pre = loadoutState({ equip: [{ t: "T", i: kitIdx }, null, null, null, null, null, null, null] });
+    const { container, store } = renderPanel({ loadout: pre });
+    fireEvent.click(removeBtn(container, 0));
+    const empty = container.querySelector('[data-slot-index="0"]');
+    expect(empty).not.toBeNull();
+    expect(document.activeElement).toBe(empty);
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("the keyboard grab-and-place model still works after the tile restructure", () => {
+    // Issue #303's structural catch: the filled tile is no longer a <button> (the ✕
+    // needs to nest), but the keyboard model on the inner tile button must be intact.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitIdx }, null, { t: "T", i: kitIdx }, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre }, { width: 800 });
+    const cell0 = keyboardCell(container, 0);
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(cell0, { key: "ArrowRight" });
+    fireEvent.keyDown(cell0, { key: "Enter" });
+    expect(store.getState().loadout.equip[0]).toBeNull();
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitIdx });
+  });
+
+  it("a keyboard grab still starts AFTER a removal — the marker must not linger in the grab ref", () => {
+    // Regression for the review finding on PR #305. `removeCell` writes its
+    // pending-focus marker into the SHARED grab ref, and clearing it with
+    // `delete ref.current.removeIndex` left a truthy `{}` behind. handleKeyDown
+    // starts a grab only when `!ref.current`, and grabRef is threaded to all eight
+    // slots — so a single ✕ click disabled the keyboard route for the ENTIRE grid
+    // for the rest of the session (SPEC-0006 REQ "Keyboard Equivalence for Every
+    // Pointer Gesture"). The sequence is what matters: removing first, then
+    // grabbing. A grab on a freshly-rendered panel passes either way.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitIdx }, null, { t: "T", i: kitIdx }, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre }, { width: 800 });
+    fireEvent.click(removeBtn(container, 2));
+    const cell0 = keyboardCell(container, 0);
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(cell0, { key: "ArrowRight" });
+    fireEvent.keyDown(cell0, { key: "Enter" });
+    expect(store.getState().loadout.equip[0]).toBeNull();
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitIdx });
+  });
+
+  it("a pointer drag that ends on the origin cell does NOT remove the item", () => {
+    const pre = loadoutState({ equip: [{ t: "C", i: vitIdx }, null, null, null, null, null, null, null] });
+    const { container, store } = renderPanel({ loadout: pre });
+    gridPointerSequence(container, 0, 0);
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "C", i: vitIdx });
+  });
+});
+
 describe("announcements to assistive technology", () => {
   it("announces a rejected keyboard drop", () => {
     const pre = loadoutState({ equip: [{ t: "C", i: vitality }, null, null, null, null, null, null, null] });
@@ -406,7 +555,7 @@ describe("announcements to assistive technology", () => {
         <EquipmentPanel />
       </Provider>
     );
-    const c0 = r.container.querySelector('[data-slot-index="0"]');
+    const c0 = keyboardCell(r.container, 0);
     // Grab cell 0, arrow LEFT — an edge no-op in the wide arrangement (cell 0's
     // column is the first), which the grid root announces.
     fireEvent.keyDown(c0, { key: " " });

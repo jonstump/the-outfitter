@@ -119,6 +119,13 @@ export default function ItemThumb({
         <img
           src={candidates[srcIndex]}
           alt={label}
+          // Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation".
+          // Images are natively draggable in HTML, and a press-then-move on the
+          // thumbnail starts an HTML5 drag that fires pointercancel and ends the
+          // pointer gesture before pointerup — the equipment tile's grab-and-drop
+          // never completes (issue #302, Defect A). All callers sit inside controls
+          // that own their gestures, so no thumbnail is ever a drag source.
+          draggable={false}
           {...(loading ? { loading } : {})}
           onError={() => {
             if (srcIndex < candidates.length - 1) setSrcIndex((i) => i + 1);

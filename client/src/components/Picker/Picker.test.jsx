@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
 import Picker from "./Picker.jsx";
+import EquipmentPanel from "../EquipmentPanel/EquipmentPanel.jsx";
 import { CONS, TOOLS, TRAITS } from "../../data/catalog.js";
 import * as itemStats from "../../data/itemStats.js";
 import { descriptionFor } from "../../data/itemStats.js";
@@ -166,5 +167,125 @@ describe("Picker Tools-tab on a sparse equip grid (issue #295 regression)", () =
     const knife = buttons.find((b) => b.textContent.includes("Knife"));
     expect(knife).toBeTruthy();
     expect(knife).not.toHaveClass("disabled");
+  });
+});
+
+// Governing: ADR-0009 (index is the cell, `null` is an empty cell), SPEC-0006
+// REQ "Equipment Occupies a Fixed Eight-Cell Grid", REQ "Items Are Rearranged by
+// Direct Manipulation", REQ "Capacity Rules Are Stated Once and Preserved".
+//
+// Regression for issue #303: removal is the first user gesture that can put an
+// INTERIOR hole in the grid (until now it filled only from the lowest free cell
+// upward). These tests drive the ✕ gesture — the path nothing exercised before,
+// and the path that must not resurrect #295's null-crash. They render EquipmentPanel
+// beside the picker so the removal goes through the real control, not a dispatched
+// action.
+describe("Picker survives and reacts to a removal through the ✕ gesture (issue #303)", () => {
+  const vitIdx = CONS.findIndex((c) => c[0] === "vitality-shot");
+  const kitIdx = TOOLS.findIndex((t) => t[0] === "first-aid-kit");
+  const knifeIdx = TOOLS.findIndex((t) => t[0] === "knife");
+
+  function renderPanelAndPicker(preloadedState, tab = "Tools") {
+    const store = createTestStore({
+      ...preloadedState,
+      ui: { tab, upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+    });
+    const utils = render(
+      <Provider store={store}>
+        <EquipmentPanel />
+        <Picker />
+      </Provider>
+    );
+    return { store, ...utils };
+  }
+
+  const removeBtn = (container, index) =>
+    container.querySelector(`[data-slot-index="${index}"] .equip-remove-btn`);
+
+  const rowFor = (container, name) => {
+    // Only picker rows carry the .picker-row class; the equipment tiles also render
+    // buttons containing item names (the ✕ restructure adds the inner tile button),
+    // so match on the row class to avoid picking up a tile's aria-label.
+    const rows = [...container.querySelectorAll(".picker-row")];
+    return rows.find((b) => b.textContent.includes(name));
+  };
+
+  it("renders every picker tab without throwing after an interior removal", () => {
+    // Fill the grid fully so rows are disabled, then remove an interior cell. The
+    // Tools-tab duplicate check (e.t off every entry) is the #295 crash site.
+    const dynamiteIdx = CONS.findIndex((c) => c[0] === "dynamite-stick");
+    // Cell 3 is a SINGLE tile (not part of a stack run) so its ✕ exists — the run
+    // anchor-only rule means only a run's lowest-numbered cell carries the control.
+    const full = loadoutState({
+      equip: [
+        { t: "T", i: kitIdx }, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, { t: "C", i: dynamiteIdx },
+        { t: "C", i: vitIdx }, { t: "C", i: dynamiteIdx }, { t: "C", i: dynamiteIdx }, { t: "C", i: dynamiteIdx },
+      ],
+      blocked: [],
+    });
+    const { container, store } = renderPanelAndPicker({ loadout: full }, "Tools");
+    // The grid is full: the First Aid Kit row is disabled (room is false).
+    expect(rowFor(container, "First Aid Kit")).toHaveClass("disabled");
+    // Remove the interior cell 3 (a vitality) via the ✕.
+    fireEvent.click(removeBtn(container, 3));
+    // Now iterate every tab and assert nothing throws / rows render.
+    for (const tab of ["Weapons", "Tools", "Consumables", "Traits"]) {
+      const store2 = createTestStore({
+        loadout: store.getState().loadout,
+        ui: { tab, upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+      });
+      const rr = render(
+        <Provider store={store2}>
+          <Picker />
+        </Provider>
+      );
+      expect(rr.container.querySelectorAll(".picker-row").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("re-enables the freed rows after a removal (a Tool, and a category-capped consumable)", () => {
+    // Fill the grid fully: 0 tool, cells 1-7 all Vitality Shot (7 of them — but the
+    // per-category cap is 4 per Shot, so this fixture is not legal for a real picker
+    // placement; instead set 4 Vit + 4 of another type to hit the category cap while
+    // the grid is full). Simpler: full grid with 4 vitalities + 4 dynamites; the Shot
+    // cap is exhausted AND the grid is full; removing one vitality frees BOTH the
+    // cell and a Shot slot.
+    const dynamiteIdx = CONS.findIndex((c) => c[0] === "dynamite-stick");
+    const full = loadoutState({
+      equip: [
+        { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, { t: "C", i: vitIdx }, { t: "C", i: vitIdx },
+        { t: "C", i: dynamiteIdx }, { t: "C", i: dynamiteIdx }, { t: "C", i: dynamiteIdx }, { t: "C", i: dynamiteIdx },
+      ],
+      blocked: [],
+    });
+    const { container, store } = renderPanelAndPicker({ loadout: full }, "Consumables");
+    const shotRow = rowFor(container, "Vitality Shot (Weak)"); // a Shot row distinct from the held one
+    // Grid is full and Shot cap is exhausted → this row is disabled.
+    expect(shotRow).toHaveClass("disabled");
+    fireEvent.click(removeBtn(container, 0)); // remove one vitality → frees a cell AND a Shot slot
+    expect(rowFor(container, "Vitality Shot (Weak)")).not.toHaveClass("disabled");
+  });
+
+  it("re-enables the specific Tool that was just removed, and the grid's free cell accepts it back into the HOLE", () => {
+    // Grid: tool at 0 and 2, plus a full complement so only one cell is free — the
+    // hole an interior removal creates. Remove cell 0's tool, then add it back and
+    // assert it lands in cell 0 (the interior hole), not at the end.
+    const pre = loadoutState({
+      equip: [
+        { t: "T", i: kitIdx }, null, { t: "T", i: knifeIdx },
+        null, null, null, null, null,
+      ],
+    });
+    const { container, store } = renderPanelAndPicker({ loadout: pre }, "Tools");
+    // The First Aid Kit row is disabled (already equipped).
+    expect(rowFor(container, "First Aid Kit")).toHaveClass("disabled");
+    fireEvent.click(removeBtn(container, 0)); // interior hole at cell 0
+    const kitRow = rowFor(container, "First Aid Kit");
+    expect(kitRow).not.toHaveClass("disabled"); // the specific tool is re-enabled
+    fireEvent.click(kitRow); // equip it again
+    const s = store.getState().loadout.equip;
+    // It lands in the HOLE (cell 0), not appended at the end.
+    expect(s[0]).toEqual({ t: "T", i: kitIdx });
+    expect(s[1]).toBeNull();
   });
 });
