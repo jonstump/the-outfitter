@@ -781,6 +781,17 @@ button {
   border: 1px solid var(--border);
   color: var(--text);
   cursor: grab;
+  /* Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.
+     iOS raises the selection magnifier and the callout menu on a press-and-hold over
+     text, and both cancel the pointer stream the drag depends on — the same
+     pointercancel-instead-of-pointerup failure the handle below exists to prevent, by a
+     different route. The tile's name, category and cost are the text in question.
+
+     Note this does NOT set touch-action: the tile body stays pannable on purpose. Only
+     .equip-drag-handle opts out. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .equip-slot.filled-slot:hover {
   border-color: var(--red-border);
@@ -829,10 +840,76 @@ button {
   background: rgba(20, 16, 9, 0.85);
   cursor: pointer;
 }
+
+/* Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.
+
+   THE ONLY ELEMENT IN THE GRID THAT OPTS OUT OF THE BROWSER'S TOUCH GESTURES, and the
+   reason the rest of the tile does not.
+
+   `touch-action: none` is the whole fix for touch dragging. Without it the browser is
+   free to read a finger drag as a page pan, and the moment it does it fires
+   pointercancel, releases pointer capture and never delivers pointerup — so
+   `onGridPointerUp`, the only thing that dispatches moveEquip, never runs and the drag
+   is a silent no-op on every touch device. Measured both ways in Chromium under touch
+   emulation: `pointerdown → pointermove → pointercancel` without it, `pointerdown →
+   pointermove ×12 → pointerup` with it, same gesture.
+
+   Confined to this grip rather than put on `.equip-slot.filled-slot`, which fixes the
+   drag just as well and would also make a full grid — 692px tall inside a 664px viewport
+   at 390px wide — a scroll dead zone larger than one screen. A swipe anywhere else on
+   the tile still pans the page; only the grip is dragged. EquipmentSlot.jsx's
+   `onPointerDown` enforces the other half of that split by refusing touch grabs on the
+   tile body.
+
+   Mirrors `.equip-remove-btn`'s chip geometry at the opposite corner so the two read as
+   a pair. */
+.equip-drag-handle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(20, 16, 9, 0.85);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.equip-slot.filled-slot.grabbing .equip-drag-handle {
+  cursor: grabbing;
+}
+
 .equip-remove-btn:focus-visible {
   outline: 2px solid var(--red-border);
   outline-offset: 1px;
   color: var(--red-bright);
+}
+
+/* Governing: issue #312. WCAG 2.5.5 and Apple's HIG both ask for a 44px touch target;
+   the grip and the ✕ are 22px chips, which is comfortable for a mouse and small for a
+   thumb. Grown only on COARSE pointers, so the desktop tile keeps its compact chips
+   rather than carrying two thumb-sized controls for a cursor that does not need them.
+
+   `pointer: coarse` and not `hover: none`: the question is the size of the pointing
+   device's contact area, which is exactly what this query asks.
+
+   Both chips are absolutely positioned, so growing them costs the tile no layout — they
+   overlay the thumbnail's top corners and leave the name, category and cost untouched. */
+@media (pointer: coarse) {
+  .equip-drag-handle,
+  .equip-remove-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
 }
 
 .equip-slot.empty-slot {

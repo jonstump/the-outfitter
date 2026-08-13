@@ -60,6 +60,22 @@ export default function EquipmentPanel() {
     if (target === grab.from) return;
     dispatch(loadoutActions.moveEquip({ from: grab.from, to: target }));
   };
+  // Governing: issue #312. A gesture the BROWSER takes over — a touch it claims as a
+  // page pan, a native drag, a system edge swipe — ends in pointercancel and never
+  // delivers pointerup, so the grab has to be dropped here too or it outlives the
+  // gesture that owned it. This was previously discarded only as a side effect of
+  // onLostPointerCapture; handling the cancel itself makes the no-op deliberate rather
+  // than incidental, and gives the one place to hang drop-target feedback when a
+  // cancelled drag needs to say so.
+  const onGridPointerCancel = (e) => {
+    if (
+      grabRef.current &&
+      grabRef.current.mode === "pointer" &&
+      grabRef.current.pointerId === e.pointerId
+    ) {
+      grabRef.current = null;
+    }
+  };
   const onLostPointerCapture = (e) => {
     if (
       grabRef.current &&
@@ -121,6 +137,7 @@ export default function EquipmentPanel() {
         ref={gridRef}
         onPointerMove={onGridPointerMove}
         onPointerUp={onGridPointerUp}
+        onPointerCancel={onGridPointerCancel}
         onLostPointerCapture={onLostPointerCapture}
         onKeyDown={onGridKeyDown}
         data-testid="equip-grid"
