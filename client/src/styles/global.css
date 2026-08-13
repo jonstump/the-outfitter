@@ -722,10 +722,24 @@ button {
    cell order COLUMN-major (0,4 / 1,5 / 2,6 / 3,7 under the two-rank read), so a
    transposition only swaps which axis holds four cells; the neighbours never change.
 
-   Column count is relative to the PANEL's own width, not the viewport's: below 460px
-   of panel width the four columns fold to two, and the rows to four. No wrap happens —
-   the grid keeps exactly two tracks wide. */
+   Column count is relative to the PANEL's own width, not the viewport's: below the
+   @container threshold below, the four columns fold to two and the rows to four. No
+   wrap happens — the grid keeps exactly two tracks wide.
+
+   THE THRESHOLD IS DECLARED ONCE, in the `@container` condition below, and nowhere
+   else — SPEC-0006 requires exactly that ("The threshold SHALL be declared in exactly
+   one place and consumed by both the stylesheet and the keyboard sensor"). The sensor
+   does NOT get the number. Each branch instead declares `--equip-arrangement`, and
+   gridMove.js's `readArrangement()` reads that token to pick the vertical arrow step.
+   So the two consumers cannot disagree: whichever branch the browser applied is the
+   branch the keyboard reads, and moving the breakpoint is one edit here.
+
+   The token is also why the sensor never measures anything. `clientWidth` on the grid
+   used to stand in for the panel's width, which SPEC-0006 forbids ("Neither the sensor
+   nor any other consumer MAY determine the current arrangement by measuring rendered
+   geometry"), and which reported 0 — hence "narrow" — before first layout. */
 .equip-grid {
+  --equip-arrangement: narrow;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-auto-flow: column;
@@ -737,6 +751,7 @@ button {
 
 @container (min-width: 460px) {
   .equip-grid {
+    --equip-arrangement: wide;
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(2, auto);
     /* The wide override flips the track counts but grid-auto-flow survives from the

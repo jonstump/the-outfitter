@@ -7,6 +7,8 @@ import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { equipRuns } from "../../utils/stacking.js";
 import { CSS_RULES, parseStylesheet, readGlobalCss } from "../../test/cssRules.js";
 import { consCategoryCount, totalCost } from "../../utils/calc.js";
+import { ARRANGEMENT_PROPERTY } from "./gridMove.js";
+import { existsSync, readFileSync } from "node:fs";
 
 // Covers: SPEC-0006 REQ "The Grid Renders as Two Ranks of Four" (issue #282),
 // REQ "Repeated Consumables Read as One Stack" (issue #282),
@@ -35,19 +37,23 @@ const declarationOf = (rule, property) => {
   return [...found.body.matchAll(new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`, "g"))].map((m) => m[1].trim()).at(-1) ?? null;
 };
 
-function renderPanel(preloaded, { width = 800 } = {}) {
+function renderPanel(preloaded, { arrangement = "wide" } = {}) {
   const store = createTestStore(preloaded);
   const result = render(
     <Provider store={store}>
       <EquipmentPanel />
     </Provider>
   );
-  // Control the PANEL's width by stubbing clientWidth on the grid root (jsdom
-  // reports 0), so arrangement-sensitive assertions are deterministic.
+  // Select the arrangement the way the STYLESHEET does — by declaring the token the
+  // sensor reads (gridMove.js `readArrangement`). jsdom evaluates no `@container`
+  // query, so the inline declaration stands in for the branch a browser would apply;
+  // it exercises the same code path, because inline style wins the cascade there too.
+  //
+  // This replaces a `clientWidth` stub. Stubbing a geometry property was only ever
+  // possible because the sensor measured geometry — which SPEC-0006 forbids — so the
+  // stub is gone along with the measurement.
   const grid = result.container.querySelector('[data-testid="equip-grid"]');
-  if (grid) {
-    Object.defineProperty(grid, "clientWidth", { configurable: true, get: () => width });
-  }
+  if (grid) grid.style.setProperty(ARRANGEMENT_PROPERTY, arrangement);
   return { ...result, store };
 }
 
@@ -145,12 +151,71 @@ describe("two-rank grid arrangement", () => {
     expect(gridRule.body).not.toMatch(/container-type:/);
     // Some ancestor selector carries it — `.panel` is the grid's containing panel.
     expect(containerSelectors).toContain(".panel");
-    // The @container query still targets the grid (narrow->wide transposition).
+    // The @container query still targets the grid (narrow->wide transposition). Matched
+    // STRUCTURALLY, on the condition's shape rather than its value: this assertion used
+    // to pin the literal `@container (min-width: 460px)`, which made it a third copy of
+    // a threshold SPEC-0006 requires to exist exactly once. Moving the breakpoint is now
+    // one edit in global.css and breaks nothing here.
     const containerQuery = CSS_RULES.find(
-      (r) => r.conditions.includes("@container (min-width: 460px)") && r.selectors.includes(".equip-grid")
+      (r) =>
+        r.selectors.includes(".equip-grid") &&
+        r.conditions.some((c) => /^@container \(min-width: \d+px\)$/.test(c))
     );
     expect(containerQuery).toBeTruthy();
     expect(containerQuery.body).toContain("repeat(4, 1fr)");
+  });
+
+  it("declares the arrangement as a token in BOTH branches, so the sensor never measures (SPEC-0006)", () => {
+    // The coupling guard. SPEC-0006: the threshold is declared in exactly ONE place and
+    // "consumed by both the stylesheet and the keyboard sensor", and no consumer may
+    // determine the arrangement "by measuring rendered geometry or reading back a
+    // computed track count". Both halves are structural facts about global.css:
+    //
+    //   * the unconditional rule declares the NARROW token, so a browser that never
+    //     applies the container query renders 2 columns AND reports "narrow";
+    //   * the container query's own block declares the WIDE token beside the 4-column
+    //     tracks, so the token and the tracks flip together or not at all.
+    //
+    // Nothing in JS carries the number — that is asserted directly below.
+    const base = CSS_RULES.find((r) => r.selectors.includes(".equip-grid") && !r.conditions.length);
+    expect(base.body).toContain(`${ARRANGEMENT_PROPERTY}: narrow`);
+    const wideBlock = CSS_RULES.find(
+      (r) =>
+        r.selectors.includes(".equip-grid") &&
+        r.conditions.some((c) => c.startsWith("@container"))
+    );
+    expect(wideBlock.body).toContain(`${ARRANGEMENT_PROPERTY}: wide`);
+    expect(wideBlock.body).toContain("repeat(4, 1fr)");
+  });
+
+  it("keeps the pixel threshold out of the JavaScript entirely (SPEC-0006)", () => {
+    // The regression this pairs with: `gridMove.js` held `WIDE_PANEL_MIN_WIDTH = 460`
+    // and compared it against `clientWidth`. A second declaration of the threshold is
+    // exactly what SPEC-0006 forbids, and a grep is the only thing that can prove a
+    // number is absent. Read the module source rather than its exports — an export
+    // named something else would still be a second copy.
+    //
+    // Located from the working directory, not `import.meta.url`: under jsdom the latter
+    // resolves against the dev server's origin rather than the filesystem, which is the
+    // same trap cssRules.js documents and sidesteps the same way.
+    //
+    // COMMENTS ARE STRIPPED FIRST, and that is not a loophole. SPEC-0006 governs where
+    // the threshold is DECLARED — a second declaration is what drifts. Prose recording
+    // that the number used to live here, and why it moved, is the thing this repo wants
+    // kept; the first version of this test failed against its own explanatory comment.
+    const source = readFileSync(
+      ["src/components/EquipmentPanel/gridMove.js", "client/src/components/EquipmentPanel/gridMove.js"].find(existsSync),
+      "utf8"
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const threshold = CSS_RULES.find(
+      (r) =>
+        r.selectors.includes(".equip-grid") &&
+        r.conditions.some((c) => c.startsWith("@container"))
+    ).conditions.find((c) => c.startsWith("@container")).match(/(\d+)px/)[1];
+    expect(source).not.toContain(threshold);
+    expect(source).not.toMatch(/clientWidth|offsetWidth|getBoundingClientRect/);
   });
 
   it("keeps the column count independent of viewport media queries for .equip-grid", () => {
@@ -321,8 +386,8 @@ describe("pointer interaction", () => {
 });
 
 describe("keyboard equivalence", () => {
-  const wide = { width: 800 }; // 4×2
-  const narrow = { width: 300 }; // 2×4 (transposed)
+  const wide = { arrangement: "wide" }; // 4×2
+  const narrow = { arrangement: "narrow" }; // 2×4 (transposed)
   const twoCell = () =>
     loadoutState({
       equip: [
@@ -515,7 +580,7 @@ describe("the ✕ remove control (issue #303)", () => {
     const pre = loadoutState({
       equip: [{ t: "C", i: vitIdx }, null, { t: "T", i: kitIdx }, null, null, null, null, null],
     });
-    const { container, store } = renderPanel({ loadout: pre }, { width: 800 });
+    const { container, store } = renderPanel({ loadout: pre }, { arrangement: "wide" });
     const cell0 = keyboardCell(container, 0);
     fireEvent.keyDown(cell0, { key: " " });
     fireEvent.keyDown(cell0, { key: "ArrowRight" });
@@ -536,7 +601,7 @@ describe("the ✕ remove control (issue #303)", () => {
     const pre = loadoutState({
       equip: [{ t: "C", i: vitIdx }, null, { t: "T", i: kitIdx }, null, null, null, null, null],
     });
-    const { container, store } = renderPanel({ loadout: pre }, { width: 800 });
+    const { container, store } = renderPanel({ loadout: pre }, { arrangement: "wide" });
     fireEvent.click(removeBtn(container, 2));
     const cell0 = keyboardCell(container, 0);
     fireEvent.keyDown(cell0, { key: " " });
