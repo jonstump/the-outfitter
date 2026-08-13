@@ -293,7 +293,7 @@ graph TD
   here touches that.
 * **Provenance.** The coverage bijection, the 62-vs-102 enumeration, the robots positions and the
   asset-weight figures come from a pass over the live wiki and the committed tree on 2026-08-12,
-  recorded in `docs/reports/suggested-adrs.md` § F, § F1, § F2 and § 3.7, arriving on `main` with
-  **#258**.
+  recorded in `docs/reports/suggested-adrs.md` § F, § F1, § F2 and § 3.7, arrives on `main` with
+  **#266**.
 * **Related issues**: #7 (the original image scrape), #178 and #227 (picker surfaces any thumbnail
   appears in).
