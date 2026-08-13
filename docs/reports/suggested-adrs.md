@@ -999,7 +999,7 @@ reading and its disposition are both legible.
 | 3.5 | No action — not a contradiction; the repo was right. |
 | 3.6 | No action — the premise was false and H was demoted accordingly. |
 | 3.7 | **Correction, no ADR.** The header describes a two-tier SVG lookup the code does not implement. ADR-0020 independently decided the fallback stays group-level, so the comment should be corrected to describe the code, not the code changed to match the comment. |
-| 3.8 | **Not gated — fixable now, ahead of ADR-0014.** Repricing five Scarce rounds to 0 is an in-place value change; it moves no index. This finding's own claim that "either fix reorders or reprices a pool, so both sit behind the `FORMAT_VERSION` gate" is **wrong for the repricing half** — see the correction below. |
+| 3.8 | **Not gated — fixable now, ahead of ADR-0014.** Repricing is an in-place value change; it moves no index. This finding's own claim that "either fix reorders or reprices a pool, so both sit behind the `FORMAT_VERSION` gate" is **wrong for the repricing half** — see the correction below. **The count is eight rows, not five — confirmed 2026-08-12, see § 3.10.** |
 | 3.9 | **ADR-0014.** Moving misfiled rounds between pools is insert/remove/reorder, which is genuinely gated. |
 
 **Correction to 3.8's closing paragraph.** It states that both the omission fix and the repricing fix
@@ -1301,6 +1301,60 @@ Also relevant to A's schema: the wiki gives Crossbow, Hand Crossbow, Hunting Bow
 Bomb Launcher all the same `Ammo Type=Special`. The app's four-way `xbow`/`hxbow`/`bow`/`special`
 split is purely app-side, confirming ADR-0005's "no wiki equivalent" note — and confirming the wiki
 `AmmoType` field cannot drive `ammoClass`.
+
+---
+
+### 3.10 Confirmation of § 3.8 and § 3.1 per round (2026-08-12)
+
+The three extra rows § 3.8's disposition predicted are **confirmed**, and the confirmation turned up a
+ninth Scarce round the app does not carry at all. Method: the 147-page corpus cached by this
+document's own verification pass, parsed offline — the `== Ammo Types ==` section only, so Update
+History mentions are excluded. Every `{{Ammo|…}}` row was classified as Scarce, priced in Hunt
+Dollars, or neither. **No new fetches**, so this is a re-derivation from the same evidence the
+original five rows came from, not an independent second source.
+
+| Round | Pages listing it | Scarce | Priced | App rows charging for it |
+|---|---|---|---|---|
+| Dumdum Ammo | 42 | **42** | **0** | `compact` 22, `medium` 28, **`long` 34** |
+| Spitzer Ammo | 17 | **17** | **0** | **`medium` 60**, **`long` 75**, `slong` 90 |
+| Explosive Bolt | 3 | **3** | **0** | `xbow` 40 |
+| Frag Arrows | 1 | **1** | **0** | `bow` 45 |
+| Shredder Ammo | 1 | **1** | **0** | *none — see below* |
+
+Dumdum is priced on **zero** of the 42 pages that list it, so all three pool rows carrying it are
+unjustified, not the two § 3.8 tabulated. Spitzer is priced on **zero** of 17, so all three of its rows
+are too. **Eight rows, confirmed per round.** The Dumdum and Spitzer totals reproduce § 3.8's own
+adversarial paragraph exactly (42 / 0 and 17 / 0) — that paragraph was right and its table under-listed
+against it, which is an internal inconsistency in this document rather than a new fact.
+
+**A ninth Scarce round exists that no pool carries.** `Shredder Ammo` is Scarce on the one page that
+lists it and priced nowhere. Under ADR-0013 it is a cost-0 row that belongs in `AMMO.special`, which is
+empty — so § 3.1 and § 3.8 meet here: the same update that makes five rows overcharged makes this one
+missing.
+
+**§ 3.1's nine Hunt-Dollar rounds are confirmed exactly**: Dragon Breath Charge 10 (2 pages), Harpoon 5
+(2), Steel Ball Ammo 5 (2), Waxed Frag Charge 50 (2), Incendiary Bolt 25 (1) — nine rows across Bomb
+Launcher, Bomb Lance and Chu Ko Nu, none in Blood Bonds.
+
+**§ 3.9 is confirmed and understates the price drift.** Beyond the two misfiled rounds it names, the
+bolt and arrow pools disagree with the wiki on price in four more places, and omit two rounds:
+
+| Pool | App | Wiki | Delta |
+|---|---|---|---|
+| `xbow` Shot Bolt | 30 | **40** | under by 10 |
+| `xbow` Steel Bolt | *absent* | **40** | missing |
+| `hxbow` Chaos Bolt | 20 | **10** | over by 10 |
+| `hxbow` Choke Bolt | 25 | **10** | over by 15 |
+| `hxbow` Dragon Breath Compact Bolt | *absent* | **40** | missing |
+| `bow` Concertina Arrow | 35 | **30** | over by 5 |
+
+**Two notes for ADR-0014's scraper.** Hand Crossbow rounds are named `<X> Compact Bolt` on the wiki
+(`Chaos Compact Bolt`, `Choke Compact Bolt`, `Poison Compact Bolt`, `Dragon Breath Compact Bolt`) while
+the app calls them `<X> Bolt` — the stable-id scheme has to reconcile that. And ammo rows take optional
+template parameters: `{{Ammo|Explosive Bolt|category=Explosive Ammo}}`, `{{Ammo|Shot Bolt|nocategory=true}}`.
+A name pattern that requires `}}` immediately after the round name silently drops **every bolt row** —
+that mistake was made and caught while producing this table. No current repo code is affected, because
+nothing parses this section today; `scrape-stats.mjs` reads rendered `druid-infobox` HTML instead.
 
 ---
 
