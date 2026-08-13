@@ -293,7 +293,7 @@ graph TD
 * **Provenance.** The reading of Update 2.8, the taxonomy comparison and the surface measurement
   (3 code sites, 3 test files with contrary assertions, 5 spec documents) come from a verification pass
   over the live wiki on 2026-08-12, recorded in `docs/reports/suggested-adrs.md` § 3.4 and § I, which
-  arrives on `main` with **#258** alongside ADR-0014. Every quotation there was string-matched against
+  arrives on `main` with **#266** alongside ADR-0014. Every quotation there was string-matched against
   its source rather than retyped.
 * **Related issues**: #155 (Placeable consumable type — the rows this cap reads, and the misfiling
   that motivated a test), #190 (replaced the per-type cap with per-item `consCount`; this decision
