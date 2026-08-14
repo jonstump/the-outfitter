@@ -109,6 +109,7 @@ Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creatin
 | SPEC-0007 | SPEC-0007: Equipment Catalog Dataset | 4 | `PVT_kwHOA4k1ys4Bf_8Z` | open |
 | SPEC-0008 | SPEC-0008: Loadout Randomization | 5 | `PVT_kwHOA4k1ys4BgEvL` | open |
 | SPEC-0009 | SPEC-0009: Weapon Slots and Dual-Wielded Pairs | 10 | `PVT_kwHOA4k1ys4BgUlt` | open |
+| SPEC-0010 | SPEC-0010: Per-Weapon Ammo | 11 | `PVT_kwHOA4k1ys4BgUy6` | open |
 | — | a11y: WCAG 2.1 AA Baseline | 8 | `PVT_kwHOA4k1ys4BgTKK` | open |
 | — | About and Help | 9 | `PVT_kwHOA4k1ys4BgTKM` | open |
 
