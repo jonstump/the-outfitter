@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WEAPONS } from "../data/catalog.js";
-import { consCount, slotMax, totalCost, upTotal } from "./calc.js";
+import { QM, WEAPONS } from "../data/catalog.js";
+import { capMax, capUsed, consCount, slotMax, totalCost, upTotal } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -120,5 +120,52 @@ describe("upTotal / slotMax", () => {
     // of blocked cells.
     expect(slotMax(loadoutWith({}))).toBe(8);
     expect(slotMax(loadoutWith({ blocked: [0, 1, 2] }))).toBe(5);
+  });
+});
+
+// Governing: SPEC-0009 REQ "The Weapon Budget Is Five Points, Six With Quartermaster",
+// REQ "Occupied Capacity Is the Sum of Entry Sizes", ADR-0023.
+//
+// These pin the weapon-size budget rules SPEC-0009 Part A codified:
+//   - capacity is 5, or 6 with the real Quartermaster trait;
+//   - occupied capacity is the sum of the catalog sizes of the held entries.
+//
+// Weapon sizes are read from `WEAPONS[i][2]` rather than hardcoded so a catalog
+// rebalance fails a test instead of silently invalidating one, and Quartermaster is
+// the real catalog id (`QM`) so a rename breaks the pin rather than passing through
+// a hand-written string that stopped meaning anything.
+describe("SPEC-0009: the weapon budget", () => {
+  it("holds exactly two weapon entries in a fresh loadout, both null", () => {
+    const fresh = loadoutWith({});
+    expect(fresh.weapons).toHaveLength(2);
+    expect(fresh.weapons[0]).toBeNull();
+    expect(fresh.weapons[1]).toBeNull();
+    // The budget rule this pins: an empty grid occupies none of the five points.
+    expect(capUsed(fresh)).toBe(0);
+  });
+
+  it("is 5 points with no Quartermaster and 6 with the real Quartermaster trait", () => {
+    const noTrait = loadoutWith({});
+    expect(capMax(noTrait)).toBe(5);
+
+    const withQM = loadoutWith({ traits: [QM] });
+    expect(capMax(withQM)).toBe(6);
+    // A fresh loadout always has the default 5-point ceiling, never an unbounded one.
+    expect(capMax(withQM)).toBeGreaterThan(capMax(noTrait));
+  });
+
+  it("sums the catalog sizes of the held entries, a null entry contributing zero", () => {
+    // A size-3 weapon in one slot and an empty slot must occupy 3 points.
+    const size3 = WEAPONS.findIndex((w) => w[2] === 3);
+    expect(WEAPONS[size3][2]).toBe(3);
+    const held = loadoutWith({ weapons: [{ i: size3, a: -1 }, null] });
+    expect(capUsed(held)).toBe(3);
+
+    // And two held entries sum their sizes: 1 + 2 = 3.
+    const size1 = WEAPONS.findIndex((w) => w[2] === 1);
+    const size2 = WEAPONS.findIndex((w) => w[2] === 2);
+    expect(capUsed(loadoutWith({ weapons: [{ i: size1, a: -1 }, { i: size2, a: -1 }] }))).toBe(
+      WEAPONS[size1][2] + WEAPONS[size2][2]
+    );
   });
 });
