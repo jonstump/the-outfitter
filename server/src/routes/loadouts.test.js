@@ -605,16 +605,19 @@ describe("loadouts API", () => {
   // floor-with-no-ceiling a persisted storage hole). These pin the acceptance and the
   // four-element rejection that fails if the bound was relaxed to a minimum.
 
+  // The fixture is the body `toData()` actually emits once FORMAT_VERSION becomes 3, not a
+  // minimal one: `e` is the eight-cell grid in cell order WITH null holes and `b` is the
+  // per-cell blocked array, because ADR-0023 changes the weapon entry and nothing else.
+  // Building it on the v1 packed shape instead would have validated a payload no client
+  // ever sends, and hidden the fact that v3 was falling down the packed path.
   const v3Data = (overrides = {}) => ({
     v: 3,
-    // [id, ammo, d] — the v3 weapon entry, with d the pair flag. Today's client wire
-    // format sends numeric catalog indices (toData/fromData in loadoutCodec.js), so the
-    // packed `e` below uses the same numeric form the existing v2 fixture does.
+    // [id, ammo, d] — the v3 weapon entry, with d the pair flag.
     w: [["nagant-m1895", -1, false], null],
-    e: [["T", 0]],
+    e: [["T", 0], null, null, null, null, null, null, null],
     tr: ["quartermaster"],
     n: "x",
-    b: 0,
+    b: [],
     ...overrides,
   });
 
@@ -625,6 +628,62 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "v3-accept")
       .send({ name: `__test__v3accept${Date.now()}`, data: v3Data({ w: [["nagant-m1895", -1, true], null] }) });
     expect(res.status).toBe(201);
+  });
+
+  // Governing: SPEC-0009 REQ "Version 2 and Version 1 Records Continue to Decode"
+  // ("every field version 2 defined SHALL survive unchanged" across a v2 → v3 re-encode).
+  //
+  // The version gate on `e` and `b` is "version 2 or later", not "version 2 exactly". When
+  // it was an equality, a v3 payload fell down the v1 PACKED path, where a null grid hole
+  // fails `isValidV1Entry` and an array `b` fails a `typeof number` check — so every save
+  // from a v3 client 400'd, which is the break this story exists to prevent. These three
+  // fail if the gate is ever narrowed back to an equality.
+  it("accepts the eight-cell grid and the blocked array under v3, storing both unchanged", async () => {
+    const app = makeApp();
+    const name = `__test__v3grid${Date.now()}`;
+    // Byte-for-byte what toData() emits once FORMAT_VERSION is 3: holes in the grid, a
+    // blocked ARRAY, and a three-element weapon entry, all in one body.
+    const data = v3Data({
+      w: [["nagant-m1895", -1, true], null],
+      e: [["T", 0], null, null, ["C", 3], null, null, null, null],
+      b: [1, 2],
+    });
+    const res = await request(app).post("/api/loadouts").set("x-loadout-token", "v3-grid").send({ name, data });
+    expect(res.status).toBe(201);
+
+    // Stored unchanged — the grid keeps its holes and its cell positions, and `b` is still
+    // the array it was sent as. A round trip that silently re-shaped either would lose the
+    // cell positions ADR-0009 exists to preserve.
+    await db.read();
+    const stored = db.data.loadouts.find((l) => l.name === name);
+    expect(stored.data.e).toEqual([["T", 0], null, null, ["C", 3], null, null, null, null]);
+    expect(stored.data.b).toEqual([1, 2]);
+  });
+
+  it("rejects a v3 payload carrying the v1 packed equipment shape", async () => {
+    const app = makeApp();
+    // A short `e` is the packed encoding, which v3 does not use. Accepting it here is the
+    // symptom of the gate having been narrowed back to `data.v === 2`.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v3-packed-e")
+      .send({ name: "__test__v3packede", data: v3Data({ e: [["T", 0]] }) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.e/);
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name === "__test__v3packede")).toBe(false);
+  });
+
+  it("rejects a v3 payload whose blocked field is a count rather than a cell array", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v3-packed-b")
+      .send({ name: "__test__v3packedb", data: v3Data({ b: 3 }) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.b/);
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name === "__test__v3packedb")).toBe(false);
   });
 
   it("rejects a four-element weapon entry with a 4xx naming the w field, persisting nothing", async () => {
