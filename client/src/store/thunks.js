@@ -46,7 +46,11 @@ export function addTraitIfAllowed(index) {
 
 export function loadSavedThunk(record) {
   return (dispatch) => {
-    dispatch(loadoutActions.setLoadout(fromData(record.data)));
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" —
+    // carry the record's id as `savedId` so a subsequent save addresses this record
+    // instead of matching on the name triple. `fromData` decodes the wire payload and
+    // knows nothing about record ids; the id is attached alongside its result.
+    dispatch(loadoutActions.setLoadout({ ...fromData(record.data), savedId: record.id }));
     dispatch(uiActions.setMessage(`Loaded “${record.name}”.`));
   };
 }

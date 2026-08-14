@@ -136,8 +136,20 @@ loaded loadout is edited beyond recognition, at what point does it stop being th
   name matching, which is a precondition for ever changing naming again.
 * Bad, because the client gains provenance state it has never had, and provenance is a category of bug
   the app has so far avoided entirely — a stale `savedId` would write over the wrong record.
-* Bad, because loading a loadout from list A and saving it while list B is open now creates a copy in B
-  rather than moving the original. That is the correct behaviour and it is still a behaviour change.
+* Bad, because loading a loadout from list A and saving it while list B is open changes what it used to
+  do, and that is a behaviour change whichever way it lands. *(Corrected 2026-08-13, during the review of
+  #314. This bullet read "creates a copy in B rather than moving the original", which was reasoned about
+  the triple key alone and is **false once `savedId` exists** — under the triple, `(owner, B, "Fanning")`
+  matches nothing and a copy is what you get, but a loaded loadout is addressed by id and never reaches
+  the triple at all. The two decisions in this ADR interact, and this bullet described only the first of
+  them.)*
+* **An id-addressed save updates the record where it lives and does not re-file it** *(clause added
+  2026-08-13, per the same review)*. `listId` is a **keying** argument on the triple path, and
+  `resolveSaveListId` sends one on every save whether or not the user meant anything by it — so honouring
+  it on the id path would silently turn "save the loadout I loaded" into "move it into whichever list I
+  have open". That is the unasked-for relocation #102 was, arriving by the other door. Moving stays an
+  explicit control: `PATCH /api/loadouts/:id`, one of exactly two fields that endpoint reaches. An invalid
+  `listId` is still rejected rather than ignored — ignored-on-apply is not ignored-on-validate.
 * Bad, because a user who liked typing names sees the field change under them until they touch it once.
 * Neutral, because the derived name is only a default. Nothing prevents two identical names in one list
   if the user insists; the key stops that from destroying data, it does not forbid it.

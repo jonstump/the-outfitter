@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { deleteLoadout, describeLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
+import { loadoutActions } from "./loadoutSlice.js";
 import { uiActions } from "./uiSlice.js";
 
 // Failed save/delete/fetch attempts surface through the same ui.message banner
@@ -47,7 +48,11 @@ export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, {
   const listId = resolveSaveListId(state);
 
   try {
-    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId);
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId, loadout.savedId);
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" —
+    // set `savedId` from the returned record's id so a fresh build which has just been
+    // saved for the first time becomes "loaded" and subsequent saves address it by id.
+    dispatch(loadoutActions.setSavedId(record.id));
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;
   } catch (err) {
@@ -56,9 +61,26 @@ export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, {
   }
 });
 
-export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id, { dispatch }) => {
+// Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List"
+//
+// Deleting the record a loaded loadout came from CLEARS that loadout's `savedId`. The
+// provenance addresses a record that no longer exists, and the server answers an
+// unresolvable id with a 404 rather than falling back to the triple — deliberately, so
+// that a stale id can neither mint a duplicate nor overwrite a same-named loadout. Left
+// in place, the id would therefore make every subsequent save of the build still on
+// screen fail, with no way to clear it short of discarding that build.
+//
+// The build itself is not the record: deleting the filing does not delete what the user
+// is editing. Only the pointer goes, and the next save upserts on the triple as a
+// never-saved build does.
+//
+// The id is compared before clearing. Deleting some OTHER loadout says nothing about the
+// provenance of the one being edited, and clearing unconditionally would silently demote
+// a loaded loadout to a fresh one — the same class of defect from the other direction.
+export const deleteSaved = createAsyncThunk("savedLoadouts/delete", async (id, { getState, dispatch }) => {
   try {
     await deleteLoadout(id);
+    if (getState().loadout.savedId === id) dispatch(loadoutActions.setSavedId(null));
     return id;
   } catch (err) {
     dispatch(uiActions.setMessage(`!Couldn't delete loadout: ${err.message}`));

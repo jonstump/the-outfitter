@@ -56,8 +56,14 @@ export function getLoadouts() {
 // it could only ever send a wrong value: the save path's nearest string is `data.n`, and a
 // re-save that quietly overwrote the user's note with the build's inner name is precisely
 // the bug the omission prevents. The key set is asserted in the panel's tests.
-export function upsertLoadout(name, data, listId) {
-  const body = listId === undefined ? { name, data } : { name, data, listId };
+// Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" — `id` is
+// an addressing argument on the request, naming the record a loaded loadout writes back
+// to. It is included ONLY when `savedId` is set, and never as null or undefined: key
+// presence is meaningful to this API, so an absent key and a null key mean different things.
+export function upsertLoadout(name, data, listId, savedId) {
+  const body = { name, data };
+  if (listId !== undefined) body.listId = listId;
+  if (savedId) body.id = savedId;
   return fetch(BASE, {
     method: "POST",
     headers: headers(),

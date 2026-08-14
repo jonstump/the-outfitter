@@ -156,6 +156,85 @@ describe("filing loadouts into lists", () => {
     expect(again.body.listId).toBe(list.body.id);
   });
 
+  // --- REQ "Loadout Identity Is Scoped to Its List" — id-addressed writes never re-file ---
+  //
+  // Governing: ADR-0022, SPEC-0003 § "HTTP API" (issue #314). An id-addressed save updates
+  // the record where it lives; `listId` is a keying argument on the triple path only, and
+  // `resolveSaveListId` sends one on every save whether or not it means anything. Honouring
+  // it here would turn "save the loadout I loaded" into "move it into whichever list I have
+  // open" — the unasked-for relocation #102 was, arriving by the other door.
+  //
+  // A dedicated token: the write limiters are module-level and per-token (60/min), and these
+  // stack four writes onto whatever the suite has already spent on TOKEN_A.
+  const ID_FILE_T = "e0000000-0000-4000-8000-000000000314";
+
+  it("does not re-file an id-addressed save into the list the caller named", async () => {
+    const app = makeApp();
+    const home = await mkList(app, ID_FILE_T, "__test__id-home");
+    const elsewhere = await mkList(app, ID_FILE_T, "__test__id-elsewhere");
+    const saved = await save(app, ID_FILE_T, {
+      name: "__test__id-stays",
+      data: validData,
+      listId: home.body.id,
+    });
+    expect(saved.body.listId).toBe(home.body.id);
+
+    // The client always sends a listId — here, the OTHER list, as if it were open.
+    const again = await save(app, ID_FILE_T, {
+      name: "__test__id-stays",
+      data: validData,
+      listId: elsewhere.body.id,
+      id: saved.body.id,
+    });
+
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(saved.body.id);
+    expect(again.body.listId).toBe(home.body.id);
+
+    await db.read();
+    expect(db.data.loadouts.find((l) => l.id === saved.body.id).listId).toBe(home.body.id);
+  });
+
+  it("does not un-file an id-addressed save that names Unassigned", async () => {
+    const app = makeApp();
+    const home = await mkList(app, ID_FILE_T, "__test__id-home2");
+    const saved = await save(app, ID_FILE_T, {
+      name: "__test__id-stays2",
+      data: validData,
+      listId: home.body.id,
+    });
+
+    // `listId: null` is what the client sends whenever no list is selected. On the id path
+    // that is not a request to move the record to Unassigned.
+    const again = await save(app, ID_FILE_T, {
+      name: "__test__id-stays2",
+      data: validData,
+      listId: null,
+      id: saved.body.id,
+    });
+
+    expect(again.status).toBe(200);
+    expect(again.body.listId).toBe(home.body.id);
+  });
+
+  it("still rejects an id-addressed save naming a list the caller does not own", async () => {
+    const app = makeApp();
+    const saved = await save(app, ID_FILE_T, { name: "__test__id-badlist", data: validData });
+    const bList = await mkList(app, TOKEN_B, "__test__id-b-list");
+
+    // Ignored-on-apply is not ignored-on-validate: a caller sending a list it does not own
+    // is wrong about something, and answering 200 would hide that.
+    const res = await save(app, ID_FILE_T, {
+      name: "__test__id-badlist",
+      data: validData,
+      listId: bList.body.id,
+      id: saved.body.id,
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("loadout list not found");
+  });
+
   // --- REQ "Cross-Collection Ownership Enforcement" --------------------------------
 
   it("refuses to file a loadout into another token's list", async () => {
