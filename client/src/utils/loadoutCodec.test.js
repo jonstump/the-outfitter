@@ -683,3 +683,161 @@ describe("wire format stays clean with both savedId and nameIsDerived active", (
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, null]);
   });
 });
+
+// Governing: ADR-0023 (the pair flag is the third element of a version-3 weapon entry),
+// SPEC-0009 REQ "Version 2 and Version 1 Records Continue to Decode".
+//
+// The version-3 decoder accepts `[weaponId, ammoIndex, d]` entries and lands the pair
+// flag on the DECODED weapon object as `d`, verbatim. Nothing older than v3 can express
+// a pair, and the flag is never inferred — a v2, v1 or legacy record must decode with no
+// weapon flagged. Selection is by declared version: a `v: 3` payload whose entries have
+// only two elements is NOT silently treated as v2.
+describe("version-3 wire format (ADR-0023 pair flag)", () => {
+  // Nagant M1895 is the first catalog weapon. All fixtures reference ids, not indices.
+  const NAGANT = WEAPONS[0][0];
+  const NAGANT_INDEX = 0;
+  // A real ammo variant index the Nagant's pool actually has.
+  const AMMO_INDEX = 1;
+
+  // {weapons} carry the pair flag; {equip, tr, n, b} are props of the whole record and
+  // MUST NOT be inferred from anything about the weapons.
+  const v3Payload = (weapons) => ({
+    v: 3,
+    w: weapons,
+    e: [],
+    tr: [],
+    n: "x",
+    b: 0,
+  });
+
+  it("decodes a hand-built version-3 payload, landing d on the flagged weapon", () => {
+    const dec = fromData(
+      v3Payload([
+        [NAGANT, AMMO_INDEX, true], // dual-wielded pair
+        [NAGANT, AMMO_INDEX, false], // same weapon, single
+      ])
+    );
+    expect(dec.weapons[0]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX, d: true });
+    expect(dec.weapons[1]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX, d: false });
+  });
+
+  it("a version-2 record decodes with no weapon flagged, explicitly", () => {
+    // The acceptance criterion: no weapon flagged, asserted explicitly — not merely
+    // "does not throw". A v2 entry has no third element, so `d` must be absent.
+    const dec = fromData({
+      v: 2,
+      w: [
+        [NAGANT, AMMO_INDEX],
+        [NAGANT, AMMO_INDEX],
+      ],
+      e: [],
+      tr: [],
+      n: "x",
+      b: [],
+    });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX });
+    expect(dec.weapons[1]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX });
+    expect(dec.weapons[0]).not.toHaveProperty("d");
+    expect(dec.weapons[1]).not.toHaveProperty("d");
+  });
+
+  it("a version-1 record and a legacy record decode with no weapon flagged", () => {
+    const v1 = fromData({
+      v: 1,
+      w: [
+        [NAGANT, AMMO_INDEX],
+        [NAGANT, AMMO_INDEX],
+      ],
+      e: [],
+      tr: [],
+      n: "x",
+      b: 0,
+    });
+    expect(v1.weapons[0]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX });
+    expect(v1.weapons[0]).not.toHaveProperty("d");
+
+    // Legacy (unversioned) records fall back to the legacy decoder. Legacy entries are
+    // NUMERIC catalog indices, not ids.
+    const legacy = fromData({
+      w: [
+        [0, AMMO_INDEX],
+        null,
+      ],
+      e: [],
+      tr: [],
+      n: "x",
+      b: 0,
+    });
+    expect(legacy.weapons[0]).toEqual({ i: 0, a: AMMO_INDEX });
+    expect(legacy.weapons[0]).not.toHaveProperty("d");
+  });
+
+  it("a version-2 record re-encoded at version 3 keeps every v2 field unchanged", () => {
+    // Re-encoding a v2 record to a v3 shape must preserve exactly the fields v2 defined,
+    // with nothing invented — the flag is not implied by re-encoding either. `e` uses
+    // the client wire format's stable string ids (toData writes TOOLS[e.i][0]), and the
+    // v2 blocked array shape.
+    const reEncodedAsV3 = {
+      v: 3,
+      w: [[NAGANT, AMMO_INDEX], null],
+      e: [["T", TOOLS[0][0]], null, null, null, null, null, null, null],
+      tr: ["quartermaster"],
+      n: "Test build",
+      b: [],
+    };
+    const dec = fromData(reEncodedAsV3);
+    // Under v3 the flag is always present on the decoded entry — false here, because
+    // the two-element entry simply has no flag to carry. A v2 record decoded through
+    // the v3 shape therefore reads as an unpaired single, matching what v2 computed.
+    expect(dec.weapons[0]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX, d: false });
+
+    // And the loadout's other fields survive the decode exactly as v2 defined them.
+    expect(dec.equip[0]).toEqual({ t: "T", i: 0 });
+    expect(dec.traits).toEqual(["quartermaster"]);
+    expect(dec.name).toBe("Test build");
+    expect(dec.blocked).toEqual([]);
+  });
+
+  it("selection is by declared version: a v:3 payload with two-element entries is not decoded as v2", () => {
+    // The registry picks the match for the DECLARED version. A v3 payload whose weapon
+    // entry omits the pair flag is malformed FOR v3, and the decoder must not fall
+    // through to a v2 read of it — `fromData` selects by `d.v`, never by shape. `w[2]`
+    // is undefined here, which the v3 decoder normalises to `d: false` — the entry
+    // still resolves, but under v3 semantics, not v2's.
+    const dec = fromData(
+      v3Payload([
+        [NAGANT, AMMO_INDEX],
+        null,
+      ])
+    );
+    // Two elements decoded under v3: the pair flag is present and false. This is what
+    // distinguishes "declared v3, missing the flag" from "declared v2".
+    expect(dec.weapons[0]).toEqual({ i: NAGANT_INDEX, a: AMMO_INDEX, d: false });
+  });
+
+  it("a malformed v3 payload still decays to the well-formed empty grid", () => {
+    // Missing `w` entirely is the same malformed-input contract as v2 — the empty
+    // grid, not an exception.
+    expect(fromData({ v: 3, w: null, e: "nope", tr: 42, n: "", b: "x" })).toEqual(emptyLoadout());
+  });
+
+  it("does not infer a pair from a duplicate weapon appearing twice in a v2 record", () => {
+    // The sharpest case: two entries of the SAME weapon in a v2 record is not a
+    // dual-wield signal. Absence means absent.
+    const dec = fromData({
+      v: 2,
+      w: [
+        [NAGANT, -1],
+        [NAGANT, -1],
+      ],
+      e: [],
+      tr: [],
+      n: "x",
+      b: [],
+    });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT_INDEX, a: -1 });
+    expect(dec.weapons[1]).toEqual({ i: NAGANT_INDEX, a: -1 });
+    expect(dec.weapons[0]).not.toHaveProperty("d");
+    expect(dec.weapons[1]).not.toHaveProperty("d");
+  });
+});
