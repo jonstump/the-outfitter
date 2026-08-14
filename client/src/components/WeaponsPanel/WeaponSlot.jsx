@@ -1,8 +1,10 @@
 import { useDispatch, useSelector } from "react-redux";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { dualWieldFor } from "../../data/itemStats.js";
 import { selectWeaponSlot } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
+import { capMax, capUsed } from "../../utils/calc.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -15,6 +17,11 @@ export default function WeaponSlot({ slot }) {
   // selectWeaponSlot is a selector factory; memoize the instance so its
   // createSelector cache survives re-renders (issue #24/#25).
   const w = useSelector(useMemo(() => selectWeaponSlot(slot), [slot]));
+  // ALL hooks run before the early return below — an empty slot must not change the
+  // hook order React sees (Rules of Hooks), so the live-region state and the whole
+  // loadout are selected unconditionally.
+  const [announced, setAnnounced] = useState("");
+  const l = useSelector((s) => s.loadout);
 
   if (!w) {
     return (
@@ -37,6 +44,35 @@ export default function WeaponSlot({ slot }) {
   const variant = w.a >= 0 ? variants[w.a] : null;
   const ammoCost = variant ? variant[1] : 0;
 
+  // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot".
+  //
+  // The affordance exists ONLY for a weapon the stored per-weapon attribute marks
+  // dual-wieldable — read from itemStats.json, never derived from size/name/ammo. It is
+  // one of three states, and the accessible name (aria-label) distinguishes them so a
+  // screen reader user can tell available from locked without seeing the tile:
+  //   - available (d: false, budget has room)  -> activating marks the pair
+  //   - locked   (d: false, budget has no room) -> disabled, stays in the a11y tree
+  //   - paired   (d: true)                      -> activating returns to a single
+  const pairable = dualWieldFor(def[0]) === true;
+  // The whole loadout is needed here for the OTHER slot's occupied size, so it is
+  // selected directly rather than threaded through a slot-scoped selector.
+  const used = capUsed(l);
+  const max = capMax(l);
+  // The single is ALREADY counted in `used`, so a pair costs only the MARGINAL extra
+  // point: it is affordable when used + 1 <= max. This is the delta that decides the
+  // locked vs available state; the reducer's toggle refuses using the shared weaponSize
+  // cost, so the two routes cannot disagree about what a pair costs (SPEC-0009).
+  const pairFits = used + 1 <= max;
+  const isPair = w.d === true;
+  const pairLocked = pairable && !isPair && !pairFits;
+  const pairState = pairable ? (isPair ? "paired" : pairLocked ? "locked" : "available") : null;
+  const pairLabel =
+    pairState === "paired"
+      ? `Unpair ${def[1]}`
+      : pairState === "locked"
+        ? `Dual-wield ${def[1]} — not enough budget`
+        : `Dual-wield ${def[1]}`;
+
   return (
     <div className="weapon-slot filled-slot">
       <div className="weapon-slot-row">
@@ -49,6 +85,28 @@ export default function WeaponSlot({ slot }) {
               {variant ? ` · ${variant[0]}` : ""}
             </div>
           </div>
+          {pairState && (
+            <div className="pair-row">
+              {/* The ghosted second copy: rendered beside the real tile whenever the
+                  affordance exists. In the locked state it carries the locked styling
+                  and the control exposes disabled programmatically while staying in
+                  the accessibility tree (never display:none). */}
+              <button
+                type="button"
+                className={`pair-toggle ${pairState}`}
+                aria-label={pairLabel}
+                disabled={pairState === "locked"}
+                onClick={() => {
+                  dispatch(loadoutActions.togglePair(slot));
+                  if (pairState === "available") setAnnounced(`Dual-wielding ${def[1]}.`);
+                  else if (pairState === "paired") setAnnounced(`${def[1]} is no longer dual-wielded.`);
+                }}
+              >
+                <span className="pair-single">×1</span>
+                <span className="pair-ghost">×2</span>
+              </button>
+            </div>
+          )}
         </div>
         <div className="weapon-slot-side">
           <button className="icon-btn" onClick={() => dispatch(loadoutActions.removeWeapon(slot))}>
@@ -83,6 +141,13 @@ export default function WeaponSlot({ slot }) {
           </select>
         </div>
       )}
+      {/* Live region: capacity changes from pairing/unpairing are announced to assistive
+          tech (SPEC-0009 "Operable and Named in Every State"). Rendered permanently —
+          inserting a live region together with its content is the way to get silence from
+          a screen reader (same pattern as ActionsPanel.jsx). */}
+      <div className="sr-only pair-live-region" role="status" aria-live="polite" aria-atomic="true">
+        {announced}
+      </div>
     </div>
   );
 }

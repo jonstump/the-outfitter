@@ -700,6 +700,60 @@ button {
   color: var(--gold);
 }
 
+/* The pair affordance (SPEC-0009, ADR-0023): a ghosted second copy of the equipped
+   pistol inside the weapon's own tile. One of three states — available, locked,
+   paired — and the ghost only renders alongside a dual-wieldable weapon. The control
+   is a real <button> (reachable, Enter/Space operable); the locked state stays in the
+   accessibility tree, disabled, never display:none. */
+.pair-row {
+  margin-top: 10px;
+}
+.pair-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #171310;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  font-size: var(--control-font-sm);
+  cursor: pointer;
+}
+.pair-toggle .pair-single {
+  opacity: 1;
+}
+.pair-toggle .pair-ghost {
+  opacity: 0.45;
+}
+.pair-toggle.available {
+  border-color: var(--gold-border);
+  color: var(--gold);
+}
+.pair-toggle.available:hover {
+  border-color: var(--gold);
+}
+.pair-toggle.paired {
+  border-color: var(--gold);
+  background: #1d1710;
+  color: var(--gold);
+}
+.pair-toggle.locked {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.pair-toggle.locked .pair-ghost {
+  opacity: 0.25;
+}
+.pair-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.pair-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .ammo-row {
   margin-top: 10px;
   display: flex;
