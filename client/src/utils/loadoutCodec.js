@@ -13,7 +13,11 @@ export const LS_CUR = "hunt-outfitter-current";
 // than a count of trailing blocked cells. Version 1 records keep decoding — they
 // were packed (insertion order) with a trailing blocked COUNt, and the v1->v2 lift
 // below places each packed item in the cell it rendered in.
-export const FORMAT_VERSION = 2;
+//
+// Version 3 (ADR-0023): the weapon entry gains a third element, the dual-wield pair
+// flag — [weaponId, ammoIndex, d]. Version 2 records keep decoding; a pair is
+// expressible only from version 3 on.
+export const FORMAT_VERSION = 3;
 
 // Stable catalog id lookup: id -> tuple (tuple[0] is the id, name is tuple[1]).
 const WEAPON_BY_ID = new Map(WEAPONS.map((t) => [t[0], t]));
@@ -98,7 +102,14 @@ export function toData(loadout) {
   });
   return {
     v: FORMAT_VERSION,
-    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], w.a] : null)),
+    // Governing: ADR-0023, SPEC-0009 REQ "Wire Format Version 3 Encodes the Pair Flag".
+    // Version 3 writes the pair flag as the third element. #331 guarantees every weapon
+    // in STATE carries a boolean `d`, and the serialized byte at index 2 MUST be a boolean
+    // — `undefined` would become `null` in the array and the server's version-3 validator
+    // (isIslandV3) rejects that. A d-less weapon can still legitimately reach `toData`
+    // from a decoder-produced loadout (e.g. the Katana promotion, which builds `{i, a}`
+    // by design — #330), so the undefined case is normalized here rather than shipped.
+    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], w.a, w.d === true] : null)),
     e: equip,
     tr: loadout.traits,
     n: loadout.name,

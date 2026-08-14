@@ -100,11 +100,19 @@ Style/rules that matter a great deal:
 
 ## The loadout wire format (`client/src/utils/loadoutCodec.js`)
 
-- `FORMAT_VERSION = 2`. Bump it when `toData()`'s shape changes so `fromData()` can migrate old
-  encodings instead of misreading them.
+- `FORMAT_VERSION = 3` (ADR-0023). Bump it when `toData()`'s shape changes so `fromData()` can
+  migrate old encodings instead of misreading them. A version-3 weapon entry is
+  `[weaponId, ammoIndex, d]` — the third element is the dual-wield pair flag, always a
+  boolean on the wire. Decoders are selected by declared version; v2/v1/legacy records still
+  decode with no pair flag at all (they could not express one).
 - Equipment is a **fixed eight-cell sparse grid**: `e` is a length-8 array where **index IS the
   cell and `null` IS an empty cell**; `b` is an array of blocked cell indices. This is
   ADR-0009. A removal empties only that cell — never a packed `splice`.
+- **Every weapon in loadout STATE carries a boolean `d`**, normalized at the reducer boundary
+  (`addWeapon`, `setLoadout`) rather than in the decoders — the decoders deliberately return
+  `d`-less weapons for pre-v3 records. Pairability is read from the scraped itemStats
+  attribute (`dualWieldFor`, never derived from size/name). A pair costs `size + 1`
+  (`weaponSize` in `utils/calc.js`) and doubles only the weapon's price in `totalCost`.
 - **Decoders clamp rather than throw.** The store's localStorage `subscribe` persists a decoded
   loadout *before* it is rendered, so a decoder that refused would write the very record it
   rejects and then fail on it on every visit. Bounds like the ammo-variant index and the
@@ -112,8 +120,8 @@ Style/rules that matter a great deal:
   persist.
 - Loadout shape invariants (fixed capacities) are also validated by `loadoutSlice.js`
   (`isValidLoadoutShape`) and all cost/capacity predicates live once in `utils/calc.js`
-  (`TRAIT_MAX = 15`, `capMax`, `consAllowed`, `hasFreeCell`, `heldItems`) — **import these
-  rather than re-deriving a bound**. The reducer, picker, generator, and both decoders all
+  (`TRAIT_MAX = 15`, `capMax`, `consAllowed`, `hasFreeCell`, `heldItems`, `weaponSize`) — **import
+  these rather than re-deriving a bound**. The reducer, picker, generator, and both decoders all
   consult the same predicates so they cannot drift apart.
 
 ## Governing comments convention (strong, pervasive)
