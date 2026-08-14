@@ -700,58 +700,86 @@ button {
   color: var(--gold);
 }
 
-/* The pair affordance (SPEC-0009, ADR-0023): a ghosted second copy of the equipped
-   pistol inside the weapon's own tile. One of three states — available, locked,
-   paired — and the ghost only renders alongside a dual-wieldable weapon. The control
-   is a real <button> (reachable, Enter/Space operable); the locked state stays in the
-   accessibility tree, disabled, never display:none. */
-.pair-row {
-  margin-top: 10px;
+/* The pair affordance (SPEC-0009, ADR-0023): a ghosted SECOND COPY OF THE PISTOL inside
+   the weapon's own tile — literally the weapon's photograph rendered twice, side by side,
+   because that is what a dual-wielded pair looks like. The affordance is the image, not a
+   label describing one.
+
+   Three states: available (ghosted, plus sign, activating marks the pair), locked (greyed
+   out because the budget has no room), paired (the twin resolves to full colour). The
+   control is a real <button> so it is reachable and Enter/Space operable; the locked state
+   stays in the accessibility tree, disabled, never display:none. */
+.weapon-thumb-pair {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+/* The tile's image area is one thumb wide by default. Once the affordance exists the two
+   photographs share it evenly, so a pair reads as two weapons rather than one enlarged. */
+.weapon-thumb-pair > .weapon-thumb,
+.weapon-thumb-pair > .pair-toggle {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .pair-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--border);
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 1px dashed var(--border);
   border-radius: 4px;
-  background: #171310;
-  color: var(--text-muted);
-  padding: 6px 10px;
-  font-size: var(--control-font-sm);
+  background: transparent;
   cursor: pointer;
 }
-.pair-toggle .pair-single {
-  opacity: 1;
+.pair-toggle .pair-thumb {
+  width: 100%;
+  display: block;
 }
-.pair-toggle .pair-ghost {
-  opacity: 0.45;
-}
+/* Available: a ghost of the real weapon — desaturated and faded so it reads as "not yet
+   yours", with the plus sign naming the action. */
 .pair-toggle.available {
   border-color: var(--gold-border);
+}
+.pair-toggle.available .pair-thumb {
+  opacity: 0.42;
+  filter: grayscale(0.7);
+}
+.pair-toggle.available:hover .pair-thumb {
+  opacity: 0.72;
+  filter: grayscale(0.25);
+}
+.pair-toggle .pair-plus {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  line-height: 1;
   color: var(--gold);
+  pointer-events: none;
 }
-.pair-toggle.available:hover {
-  border-color: var(--gold);
-}
-.pair-toggle.paired {
-  border-color: var(--gold);
-  background: #1d1710;
-  color: var(--gold);
-}
+/* Locked: greyed out. No plus sign — there is nothing to add — and the accessible name
+   carries the reason ("not enough budget") for anyone who cannot see the greying. */
 .pair-toggle.locked {
   cursor: not-allowed;
-  opacity: 0.6;
+  border-style: dotted;
 }
-.pair-toggle.locked .pair-ghost {
-  opacity: 0.25;
+.pair-toggle.locked .pair-thumb {
+  opacity: 0.22;
+  filter: grayscale(1);
+}
+/* Paired: the twin is real now, so it renders exactly like its sibling. */
+.pair-toggle.paired {
+  border: 1px solid var(--gold);
+  background: #1d1710;
+}
+.pair-toggle.paired .pair-thumb {
+  opacity: 1;
+  filter: none;
 }
 .pair-toggle:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
-}
-.pair-toggle:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .ammo-row {

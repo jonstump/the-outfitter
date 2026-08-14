@@ -77,20 +77,18 @@ export default function WeaponSlot({ slot }) {
     <div className="weapon-slot filled-slot">
       <div className="weapon-slot-row">
         <div className="weapon-slot-main">
-          <ItemThumb category="weapons" name={def[1]} svgPath={weaponThumb(def)} className="weapon-thumb" />
-          <div>
-            <div className="weapon-name">{def[1]}</div>
-            <div className="weapon-meta">
-              Size {def[2]} · {AMMO_LABEL[def[4]]}
-              {variant ? ` · ${variant[0]}` : ""}
-            </div>
-          </div>
-          {pairState && (
-            <div className="pair-row">
-              {/* The ghosted second copy: rendered beside the real tile whenever the
-                  affordance exists. In the locked state it carries the locked styling
-                  and the control exposes disabled programmatically while staying in
-                  the accessibility tree (never display:none). */}
+          {/* Governing: ADR-0023 ("renders a ghosted second copy WITHIN that weapon's own
+              tile: a plus sign when the budget has room for the extra slot, a locked state
+              when it does not"), SPEC-0009 REQ "The Pair Affordance Lives on the Weapon
+              Slot" ("SHALL render a representation of the second pistol").
+              The affordance IS the second photograph of the weapon, sitting beside the
+              real one in the tile's image area — not a label describing one. It is wrapped
+              in a real <button> so it stays keyboard-operable and named (REQ "Operable and
+              Named in Every State"); the button carries the semantics, the image carries
+              the meaning. */}
+          <div className={`weapon-thumb-pair${pairState ? ` has-pair-${pairState}` : ""}`}>
+            <ItemThumb category="weapons" name={def[1]} svgPath={weaponThumb(def)} className="weapon-thumb" />
+            {pairState && (
               <button
                 type="button"
                 className={`pair-toggle ${pairState}`}
@@ -102,11 +100,31 @@ export default function WeaponSlot({ slot }) {
                   else if (pairState === "paired") setAnnounced(`${def[1]} is no longer dual-wielded.`);
                 }}
               >
-                <span className="pair-single">×1</span>
-                <span className="pair-ghost">×2</span>
+                {/* alt="" — the button's aria-label already names the control in all three
+                    states, so the second photo is decorative to assistive tech and must not
+                    announce the weapon's name a second time. */}
+                <ItemThumb
+                  category="weapons"
+                  name={def[1]}
+                  alt=""
+                  svgPath={weaponThumb(def)}
+                  className="weapon-thumb pair-thumb"
+                />
+                {pairState === "available" && (
+                  <span className="pair-plus" aria-hidden="true">
+                    +
+                  </span>
+                )}
               </button>
+            )}
+          </div>
+          <div>
+            <div className="weapon-name">{def[1]}</div>
+            <div className="weapon-meta">
+              Size {def[2]} · {AMMO_LABEL[def[4]]}
+              {variant ? ` · ${variant[0]}` : ""}
             </div>
-          )}
+          </div>
         </div>
         <div className="weapon-slot-side">
           <button className="icon-btn" onClick={() => dispatch(loadoutActions.removeWeapon(slot))}>

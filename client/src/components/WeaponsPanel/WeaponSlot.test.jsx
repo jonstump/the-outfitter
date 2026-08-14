@@ -220,6 +220,54 @@ describe("WeaponSlot — the dual-wield pair affordance", () => {
     expect(store.getState().loadout.weapons[1].d).toBe(false);
   });
 
+  // Governing: ADR-0023 ("renders a ghosted second copy within that weapon's own tile"),
+  // SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot" ("SHALL render a
+  // representation of the second pistol").
+  //
+  // The affordance IS a second photograph of the weapon. The first implementation of this
+  // story satisfied every other assertion in this file — role, accessible name, disabled
+  // state, keyboard, live region — with a `×1 ×2` TEXT chip and no image at all, because
+  // nothing here asserted the representation. This is that assertion. It must fail if the
+  // second copy of the weapon ever stops being rendered, in any of the three states.
+  it.each([
+    ["available", { weapons: [{ i: PISTOL, a: -1, d: false }, null] }, 0],
+    ["paired", { weapons: [{ i: PISTOL, a: -1, d: true }, null] }, 0],
+    // Uppercut (2, pairable) + rifle (3) = 5 of 5, so the extra point cannot be afforded —
+    // the same arrangement the dedicated locked test above uses, read from slot 1.
+    [
+      "locked",
+      () => ({
+        weapons: [
+          { i: RIFLE, a: -1, d: false },
+          { i: WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-uppercut"), a: -1, d: false },
+        ],
+      }),
+      1,
+    ],
+  ])("the %s affordance renders a second copy of the weapon's own image", (state, weapons, slot) => {
+    const store = createTestStore({ loadout: loadoutState(typeof weapons === "function" ? weapons() : weapons) });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={slot} />
+      </Provider>
+    );
+    const btn = pairButton(container);
+    expect(btn).toHaveClass(state);
+
+    // The control's content is an IMAGE of the same weapon as the real tile — not a label
+    // describing one. Both thumbs resolve to the same source, and they sit together in the
+    // tile's image area rather than the affordance living somewhere else in the slot.
+    const thumbs = container.querySelectorAll(".weapon-thumb-pair img");
+    expect(thumbs).toHaveLength(2);
+    expect(thumbs[1].getAttribute("src")).toBe(thumbs[0].getAttribute("src"));
+    expect(btn.querySelector("img")).toBe(thumbs[1]);
+
+    // Decorative: the button's accessible name already carries the meaning, so the second
+    // photo must not announce the weapon's name a second time.
+    expect(thumbs[1]).toHaveAttribute("alt", "");
+    expect(btn).toHaveAccessibleName(/\S/);
+  });
+
   it("renders no affordance for a weapon the data does not mark dual-wieldable", () => {
     // Haymaker (size 2) is not pairable; the Uppercut (also size 2) is — the stored
     // attribute, never the size, decides.
