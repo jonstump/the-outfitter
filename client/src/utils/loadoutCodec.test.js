@@ -626,8 +626,12 @@ describe("the retired Winfield M1873C alias", () => {
 // Each feature individually tests that its own client-only state — `savedId` and
 // `nameIsDerived` — never reaches the wire. What is missing is coverage of BOTH fields
 // active at once: a loadout that carries a `savedId` AND a still-derived name. Neither
-// may leak into `data`, a share URL, or a local draft, and a decoded share URL must
-// produce a fresh build — no `savedId`, and a name that is derived, not owned.
+// may leak into `data`, a share URL, or a local draft, and decoding one must not hand
+// the recipient provenance over the sender's record.
+//
+// `savedId` and `nameIsDerived` are both set by `setLoadout`, not by `fromData` — these
+// tests cover the codec half only. What `setLoadout` does with a decoded payload is
+// covered in `loadoutSlice.test.js`.
 describe("wire format stays clean with both savedId and nameIsDerived active", () => {
   // A loadout carrying both pieces of client-only state at once.
   function loadoutWithBoth() {
@@ -656,18 +660,24 @@ describe("wire format stays clean with both savedId and nameIsDerived active", (
     expect(url).not.toContain("nameIsDerived");
   });
 
-  it("a round trip through toData/fromData yields a loadout with no savedId and a derived name", () => {
-    // This is the interesting case: decoding a share URL must produce a FRESH build,
-    // not one that believes it owns someone else's record. `fromData` returns a
-    // plain object with no `savedId` and no `nameIsDerived` — the caller (setLoadout)
-    // is what sets those, based on whether `savedId` was attached to the payload.
+  it("a round trip through toData/fromData yields a payload with neither savedId nor nameIsDerived", () => {
+    // The provenance half of the guarantee: a decoded share URL must not believe it
+    // owns someone else's record. `fromData` returns a plain object carrying neither
+    // client-only field — `setLoadout` is what sets both, from what the payload holds.
+    //
+    // Note what that means for the name, because it is easy to get backwards: the name
+    // DOES survive on the wire (`n`), and `setLoadout` reads a payload carrying a name
+    // as owned rather than derived (`!payload.savedId && !payload.name`, added in #322,
+    // so that a reload or a share link cannot overwrite a name someone typed). So a
+    // decoded share URL is a fresh build as far as `savedId` goes, but its name is not
+    // re-derived. See "keeps a typed name through a toData/fromData round trip and
+    // re-hydration" in `loadoutSlice.test.js` for the state-side assertion.
     const lo = loadoutWithBoth();
     const enc = toData(lo);
     const dec = fromData(enc);
     expect(dec).not.toHaveProperty("savedId");
     expect(dec).not.toHaveProperty("nameIsDerived");
-    // The name survives (it was in `n` on the wire), but the decoded loadout has no
-    // provenance: a shared build is not the sender's record.
+    // The name survives — it was in `n` on the wire — while the provenance does not.
     expect(dec.name).toBe("Nagant M1895");
     // The weapons survive the round trip.
     expect(dec.weapons).toEqual([{ i: 0, a: -1 }, null]);
