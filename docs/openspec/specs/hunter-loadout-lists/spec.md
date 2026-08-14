@@ -1159,6 +1159,10 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 
 **An `id` that names no record the caller owns SHALL be a `404`.** It MUST NOT fall back to the triple and MUST NOT create a record. Both fallbacks fail the same way and it is worth stating why: the client sends `id` only for a loadout it believes already exists, so an unresolvable one means the client's provenance is stale or forged. Creating a record would mint a silent duplicate; matching the triple instead would write the user's edits over a *different* loadout that merely shares a name. A `404` is the only answer that neither destroys nor duplicates.
 
+**An id-addressed write SHALL NOT re-file the record.** *(clause added 2026-08-13, during the review of #314; the requirement above specified the `name` update and was silent on `listId`, and the silence resolved as a silent relocation.)* When `id` is present the system SHALL leave the resolved record's `listId` exactly as it is, and SHALL do so whatever `listId` the request carries — a list id, `null`, or nothing at all. `listId` is a **keying** argument on the triple path, and `resolveSaveListId` supplies one on every save the client makes whether or not the user meant anything by it; honouring it here would turn "save the loadout I loaded" into "move it into whichever list I have open", which is the unasked-for relocation REQ "Loadout Identity Is Scoped to Its List" exists to stop. Re-filing is `PATCH /api/loadouts/:id`, an explicit control the user operates deliberately.
+
+A `listId` the caller does not own SHALL still be rejected on this path with the same `404` the triple path gives it. Not applying a value is not the same as not validating it: a caller naming a list it does not own is wrong about something, and a `200` would conceal that.
+
 `id` is an addressing argument on the request, not a field of the loadout. It SHALL NOT be written into the stored record's `data`, and REQ "The Saved-Loadout Wire Format Is Unchanged" continues to bar it from every encoded payload, share URL, and local draft. `FORMAT_VERSION` is unaffected.
 
 `PATCH /api/loadouts/:id` is deliberately **not** the vehicle for this. That endpoint's mutable pair is `listId` and `description`; it reaches nothing else about a record — not `data`, not the format version, not the name — and widening it would make every future "just one more field" argument easier. The save path already exists and already validates a full payload, so addressing it by id is the smaller change.
@@ -1172,6 +1176,16 @@ This capability adds HTTP endpoints and is therefore subject to the following. N
 
 - **WHEN** a caller saves with an `id` that names no record, or names a record owned by a different token
 - **THEN** the response SHALL be a `404`, no record SHALL be created, and no other record SHALL be modified
+
+#### Scenario: A save addressed by id does not move the record between lists
+
+- **WHEN** a user loads a loadout filed in list A, selects list B, and saves — so the request carries both that record's `id` and list B's `listId`
+- **THEN** the record SHALL be updated in place and SHALL remain filed in list A, and a request carrying `listId: null` SHALL likewise leave it in A rather than moving it to Unassigned
+
+#### Scenario: An unowned list is still refused on the id path
+
+- **WHEN** a caller saves with an `id` naming one of its own records and a `listId` naming a list it does not own
+- **THEN** the response SHALL be a `404` naming the list, even though a valid `listId` would not have been applied
 
 **"Token-scoped" is the honest designation and is REQUIRED on every endpoint in this capability.** No endpoint in this capability SHALL be public. The one public endpoint in the application — the liveness probe at `/healthz` — is outside this capability's scope and is public because orchestrator health checks require unauthenticated access.
 

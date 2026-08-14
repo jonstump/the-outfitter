@@ -282,6 +282,18 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     //    different loadout that merely shares a name; a create would mint a silent duplicate.
     //    A 404 is the only answer that neither destroys nor duplicates.
     //
+    //    On this path `listId` is NOT applied — an id-addressed write updates the record
+    //    where it already lives and never relocates it. `listId` is a KEYING argument on
+    //    the triple path, and `resolveSaveListId` (savedLoadoutsSlice.js) always yields a
+    //    value or an explicit `null`, so every save this client makes carries one whether
+    //    or not it means anything. Honouring it here would silently turn "save the loadout
+    //    I loaded" into "move it into whichever list I happen to have open" — the same
+    //    unasked-for relocation that #102 was, arriving by the other door. Moving is an
+    //    explicit control (`PATCH /:id`, one of exactly two fields it reaches); the save
+    //    path is not it. An invalid `listId` is still REJECTED rather than ignored: a
+    //    caller sending a list it does not own is wrong about something, and answering 200
+    //    would hide that.
+    //
     // 2. `id` absent — the upsert key is the TRIPLE `(owner, listId, name)`, not `(owner,
     //    name)`. Matching on name alone meant saving "Fanning" while one list was open
     //    overwrote AND relocated the "Fanning" already filed in another — data loss on a
@@ -306,8 +318,9 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     //    records now legally exist in different lists, an omitted `listId` resolves to the
     //    first and is ambiguous by construction; the triple is the identity, and this branch
     //    is compatibility for callers that predate it.
+    const idAddressed = id !== undefined;
     let existing;
-    if (id !== undefined) {
+    if (idAddressed) {
       existing = liveRecords(db.data.loadouts).find((l) => l.id === id && l.owner === token);
       if (!existing) {
         return res.status(404).json({ error: "loadout not found" });
@@ -337,8 +350,10 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       existing.name = trimmedName;
       existing.updatedAt = now;
       // Only re-file when the caller said something about it. An upsert that omits listId
-      // is updating the loadout, not moving it out of its list.
-      if (listId !== undefined) existing.listId = ref.value;
+      // is updating the loadout, not moving it out of its list — and an id-addressed write
+      // never re-files at all, because there `listId` is an artefact of the client always
+      // sending one rather than a request to move anything (see the two-path note above).
+      if (!idAddressed && listId !== undefined) existing.listId = ref.value;
       // Same rule for the description, for the same reason: re-saving a build under a name
       // that already exists must not silently discard the note the user wrote about it.
       if (describes) existing.description = desc.value;
