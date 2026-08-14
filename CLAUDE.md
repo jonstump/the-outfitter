@@ -108,8 +108,11 @@ Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creatin
 | SPEC-0006 | SPEC-0006: Equipment Slot Arrangement | 6 | `PVT_kwHOA4k1ys4BgOAX` | open |
 | SPEC-0007 | SPEC-0007: Equipment Catalog Dataset | 4 | `PVT_kwHOA4k1ys4Bf_8Z` | open |
 | SPEC-0008 | SPEC-0008: Loadout Randomization | 5 | `PVT_kwHOA4k1ys4BgEvL` | open |
+| SPEC-0009 | SPEC-0009: Weapon Slots and Dual-Wielded Pairs | 10 | `PVT_kwHOA4k1ys4BgUlt` | open |
 | — | a11y: WCAG 2.1 AA Baseline | 8 | `PVT_kwHOA4k1ys4BgTKK` | open |
 | — | About and Help | 9 | `PVT_kwHOA4k1ys4BgTKM` | open |
+
+**SPEC-0005 is still absent, and that is a real gap rather than a stale row.** Desktop Distribution is `approved` with seven requirements and a `design.md`, and has no project, no epic and no stories — it is the one spec that was never planned. Do not add a row for it until `/sdd:plan SPEC-0005` creates the board.
 
 **A closed project is still a cache hit.** SPEC-0004's board is closed because every one of its seven items is done, not because it was abandoned. `/sdd:plan` and `/sdd:organize` MUST reuse the recorded ID rather than creating a second SPEC-0004 board; reopen it if that capability gains new work.
 
