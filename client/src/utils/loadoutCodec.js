@@ -438,10 +438,66 @@ function fromV2(d) {
   };
 }
 
+// Version 3 (ADR-0023): exactly Version 2, plus the dual-wield pair flag as a
+// THIRD element on each weapon entry — `[weaponId, ammoIndex, d]`. `d` is a boolean:
+// true marks the entry as a dual-wielded pair, and anything else decodes to false.
+//
+// The flag is decoded verbatim, never inferred. No record older than version 3 can
+// express a pair, and nothing about a v2/v1/legacy record (not a duplicated weapon,
+// not a size) is a signal of one, so the older decoders leave `d` absent entirely.
+// Malformed input still decays to the well-formed empty grid rather than throwing.
+//
+// Governing: ADR-0023 (the pair flag is the third element), SPEC-0009 REQ "Version 2
+// and Version 1 Records Continue to Decode" (selection is by declared version).
+function fromV3(d) {
+  const slotWeapon = (k) => {
+    const w = d.w && d.w[k];
+    if (!w) return null;
+    const id = aliasWeaponId(w[0]);
+    if (!WEAPON_BY_ID.has(id)) return null;
+    const i = indexOfItem(WEAPONS, id);
+    return { i, a: boundedAmmo(i, w[1]), d: w[2] === true };
+  };
+  const empty = Array(8).fill(null);
+  const raw = d.e || [];
+  const equip = Array.isArray(raw)
+    ? empty.map((_, k) => {
+        if (!(k in raw)) return null; // a sparse input hole stays a cell hole
+        const entry = raw[k];
+        if (!entry || !Array.isArray(entry) || (entry[0] !== "T" && entry[0] !== "C")) return null;
+        const byId = entry[0] === "T" ? TOOL_BY_ID : CONS_BY_ID;
+        if (!byId.has(entry[1])) return null; // leaves a hole; later cells must not shift
+        return { t: entry[0], i: indexOfItem(entry[0] === "T" ? TOOLS : CONS, entry[1]) };
+      })
+    : empty;
+
+  const weapons = [0, 1].map(slotWeapon);
+  // The promotion reads back over the RAW entries; a malformed `e` (not an array)
+  // simply promotes nothing — the empty grid, not an exception.
+  const rawEntries = Array.isArray(raw) ? raw : [];
+  promoteToWeaponSlots(
+    weapons,
+    rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
+  );
+
+  return {
+    weapons,
+    equip,
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
+    name: d.n || "",
+    // Blocked cells travel as their own array. Malformed values decay to none at
+    // all (the well-formed empty grid, not an exception), and out-of-range indices
+    // are dropped rather than clamped — a clamp would move the block the record
+    // actually declared.
+    blocked: Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [],
+  };
+}
+
 // Wire-format decoders, oldest to newest. fromData() picks the newest decoder
 // whose version entry matches, so a future FORMAT_VERSION bump only needs a new
 // decoder added here — older records keep migrating instead of silently dropping.
 const DECODERS = [
+  { v: 3, decode: fromV3 },
   { v: 2, decode: fromV2 },
   { v: 1, decode: fromV1 },
   // Legacy (unversioned) records are the fallback — anything unrecognized routes
