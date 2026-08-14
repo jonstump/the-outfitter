@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { TRAIT_MAX } from "../utils/calc.js";
-import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { emptyLoadout, fromData, toData } from "../utils/loadoutCodec.js";
 import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
@@ -21,7 +21,7 @@ import uiReducer from "./uiSlice.js";
 function makeStore(initial) {
   return configureStore({
     reducer: { loadout: loadoutReducer },
-    preloadedState: { loadout: initial || emptyLoadout() },
+    preloadedState: { loadout: initial || { ...emptyLoadout(), savedId: null, nameIsDerived: true } },
   });
 }
 
@@ -118,7 +118,10 @@ describe("setLoadout", () => {
       })
     );
     const s = store.getState().loadout;
-    expect(s.name).toBe("Keep me");
+    // No savedId → nameIsDerived is true, so the name re-derives from the weapons
+    // (SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons Until the User
+    // Owns It"). A randomize-shaped payload has no savedId, so it derives.
+    expect(s.name).toBe(WEAPONS[0][1]);
     expect(s.blocked).toEqual([]);
     expect(s.traits).toEqual(["quartermaster"]);
   });
@@ -218,5 +221,174 @@ describe("addTrait: the fifteen-trait cap", () => {
     store.dispatch(loadoutActions.addTrait(traitIds[TRAIT_MAX]));
     expect(store.getState().loadout.traits).toHaveLength(TRAIT_MAX);
     expect(store.getState().loadout.traits).toContain(traitIds[TRAIT_MAX]);
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
+// Until the User Owns It". A loadout's name defaults to "{weapon1} and {weapon2}"
+// from the equipped weapons, and re-derives only on weapon changes. Typing takes
+// ownership permanently; a loaded record never re-derives.
+describe("derived loadout name", () => {
+  // Weapon indices used across these tests:
+  // 0 = "Nagant M1895", 1 = "Conversion"
+  const W0 = 0;
+  const W1 = 1;
+  const NAME0 = WEAPONS[W0][1];
+  const NAME1 = WEAPONS[W1][1];
+
+  it("derives the name from the first weapon added", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    expect(store.getState().loadout.name).toBe(NAME0);
+  });
+
+  it("derives \"{first} and {second}\" in slot order when two weapons are held", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    store.dispatch(loadoutActions.addWeapon(W1));
+    expect(store.getState().loadout.name).toBe(`${NAME0} and ${NAME1}`);
+  });
+
+  it("re-derives from what remains when a weapon is removed", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    store.dispatch(loadoutActions.addWeapon(W1));
+    // Remove the primary (slot 0). The secondary stays put in slot 1 — nothing is
+    // compacted; `derivedName` simply skips the now-empty slot.
+    store.dispatch(loadoutActions.removeWeapon(0));
+    expect(store.getState().loadout.name).toBe(NAME1);
+  });
+
+  it("yields that weapon's name alone for one weapon — no \"and\"", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    const name = store.getState().loadout.name;
+    expect(name).toBe(NAME0);
+    expect(name).not.toContain(" and ");
+  });
+
+  it("yields the empty string for no weapons — never a dangling \"and\"", () => {
+    const store = makeStore();
+    // Fresh build: no weapons. nameIsDerived is true, so the name is derived (empty).
+    expect(store.getState().loadout.nameIsDerived).toBe(true);
+    const name = store.getState().loadout.name;
+    expect(name).toBe("");
+    expect(name).not.toBe("and");
+    expect(name).not.toBe(" and ");
+    expect(name).not.toBe("undefined and undefined");
+  });
+
+  it("does not change the name on setAmmo — a name cannot express a round", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    const before = store.getState().loadout.name;
+    // The name must have been derived from the weapon — not left empty.
+    expect(before).toBe(NAME0);
+    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoIndex: 0 }));
+    expect(store.getState().loadout.name).toBe(before);
+  });
+
+  it("leaves a derived name byte-identical when a consumable is added", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    const before = store.getState().loadout.name;
+    expect(before).toBe(NAME0);
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+    expect(store.getState().loadout.name).toBe(before);
+  });
+
+  it("leaves a derived name byte-identical when a tool is added", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    const before = store.getState().loadout.name;
+    expect(before).toBe(NAME0);
+    store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));
+    expect(store.getState().loadout.name).toBe(before);
+  });
+
+  it("leaves a derived name byte-identical when a trait is added", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    const before = store.getState().loadout.name;
+    expect(before).toBe(NAME0);
+    store.dispatch(loadoutActions.addTrait(TRAITS[0][0]));
+    expect(store.getState().loadout.name).toBe(before);
+  });
+
+  it("does not alter the name after setName, even on a weapon change", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    store.dispatch(loadoutActions.setName("My Build"));
+    // setName takes ownership — nameIsDerived must be false.
+    expect(store.getState().loadout.nameIsDerived).toBe(false);
+    // Adding a second weapon must NOT overwrite the owned name.
+    store.dispatch(loadoutActions.addWeapon(W1));
+    expect(store.getState().loadout.name).toBe("My Build");
+    // Removing a weapon must NOT overwrite it either.
+    store.dispatch(loadoutActions.removeWeapon(0));
+    expect(store.getState().loadout.name).toBe("My Build");
+  });
+
+  it("resets to a derived name after clearBuild, even if the user had typed", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(W0));
+    store.dispatch(loadoutActions.setName("Owned"));
+    store.dispatch(loadoutActions.clearBuild());
+    expect(store.getState().loadout.name).toBe("");
+    expect(store.getState().loadout.nameIsDerived).toBe(true);
+    // A weapon change after clearing re-derives again.
+    store.dispatch(loadoutActions.addWeapon(W1));
+    expect(store.getState().loadout.name).toBe(NAME1);
+  });
+
+  // The store subscriber persists the loadout to localStorage on every change
+  // (store/index.js), and App.jsx hydrates it through setLoadout on boot with no
+  // savedId. A typed name is on the wire (`n`), so deriving over a hydrated payload
+  // would destroy it on every reload. Deriving keys off BOTH savedId and name.
+  it("keeps a typed name through a toData/fromData round trip and re-hydration", () => {
+    const s1 = makeStore();
+    s1.dispatch(loadoutActions.addWeapon(W0));
+    s1.dispatch(loadoutActions.setName("Doc's Rat Slayer"));
+    const persisted = toData(s1.getState().loadout);
+    expect(persisted.n).toBe("Doc's Rat Slayer");
+
+    // Fresh boot: hydrate the persisted draft exactly as App.jsx does.
+    const s2 = makeStore();
+    s2.dispatch(loadoutActions.setLoadout(fromData(persisted)));
+    expect(s2.getState().loadout.name).toBe("Doc's Rat Slayer");
+    // The name came in owned, so a later weapon change must not overwrite it.
+    expect(s2.getState().loadout.nameIsDerived).toBe(false);
+    s2.dispatch(loadoutActions.addWeapon(W1));
+    expect(s2.getState().loadout.name).toBe("Doc's Rat Slayer");
+  });
+
+  it("still derives on hydration when the persisted draft carried no name", () => {
+    const s1 = makeStore();
+    s1.dispatch(loadoutActions.addWeapon(W0));
+    const persisted = toData(s1.getState().loadout);
+    // Nothing was typed, so the persisted name is the derived one; hydrating it must
+    // leave the loadout still-derived rather than latching it as owned.
+    const s2 = makeStore();
+    s2.dispatch(loadoutActions.setLoadout({ ...fromData(persisted), name: "" }));
+    expect(s2.getState().loadout.nameIsDerived).toBe(true);
+    expect(s2.getState().loadout.name).toBe(NAME0);
+    s2.dispatch(loadoutActions.addWeapon(W1));
+    expect(s2.getState().loadout.name).toBe(`${NAME0} and ${NAME1}`);
+  });
+
+  it("does not re-derive when a weapon changes on a loadout loaded with savedId", () => {
+    // A loadout loaded from a saved record has an owned name — savedId is set, so
+    // nameIsDerived is false. Weapon changes must not overwrite it.
+    const store = makeStore(loadoutState({
+      weapons: [{ i: W0, a: -1 }, null],
+      name: "Loaded Name",
+      savedId: "rec-1",
+      nameIsDerived: false,
+    }));
+    expect(store.getState().loadout.nameIsDerived).toBe(false);
+    // Adding a weapon must not re-derive because nameIsDerived is false.
+    store.dispatch(loadoutActions.addWeapon(W1));
+    expect(store.getState().loadout.name).toBe("Loaded Name");
+    expect(store.getState().loadout.nameIsDerived).toBe(false);
   });
 });

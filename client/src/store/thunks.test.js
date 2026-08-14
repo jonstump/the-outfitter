@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
-import loadoutReducer from "./loadoutSlice.js";
+import { WEAPONS } from "../data/catalog.js";
+import { encodeShareUrl, toData } from "../utils/loadoutCodec.js";
+import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 import { loadSavedThunk, randomizeThunk } from "./thunks.js";
 
@@ -16,7 +18,7 @@ function makeStore() {
       ui: uiReducer,
     },
     preloadedState: {
-      loadout: { ...emptyLoadout(), savedId: null },
+      loadout: { ...emptyLoadout(), savedId: null, nameIsDerived: true },
       ui: {
         tab: "Weapons",
         search: "",
@@ -100,5 +102,48 @@ describe("loadSavedThunk", () => {
     const store = makeStore();
     store.dispatch(loadSavedThunk({ id: "x", name: "Fanning", data: validData }));
     expect(store.getState().ui.message).toContain("Fanning");
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
+// Until the User Owns It". A randomized loadout (no savedId) derives its name from
+// the rolled weapons; a loadout loaded from a saved record (savedId set) does not.
+describe("derived name on setLoadout paths", () => {
+  it("a randomized loadout derives its name from its weapons", () => {
+    const store = makeStore();
+    store.dispatch(randomizeThunk());
+    const s = store.getState().loadout;
+    expect(s.nameIsDerived).toBe(true);
+    // If randomize rolled weapons, the name should reflect them. If it rolled none
+    // (unlikely but possible), the name is "". Either way it must be derived.
+    const weapons = s.weapons.filter(Boolean);
+    if (weapons.length === 1) {
+      expect(s.name).toBe(WEAPONS[weapons[0].i][1]);
+      expect(s.name).not.toContain(" and ");
+    } else if (weapons.length === 2) {
+      expect(s.name).toBe(`${WEAPONS[weapons[0].i][1]} and ${WEAPONS[weapons[1].i][1]}`);
+    }
+  });
+
+  it("a loadout loaded with savedId does not re-derive on weapon change", () => {
+    const store = makeStore();
+    const record = { id: "rec-xyz", name: "Owned Name", data: validData };
+    store.dispatch(loadSavedThunk(record));
+    expect(store.getState().loadout.nameIsDerived).toBe(false);
+    expect(store.getState().loadout.name).toBe("Test build");
+    // A weapon change must not overwrite the owned name.
+    store.dispatch(loadoutActions.addWeapon(0));
+    expect(store.getState().loadout.name).toBe("Test build");
+  });
+
+  it("toData output contains no nameIsDerived key, and a share URL does not carry it", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(0));
+    const lo = store.getState().loadout;
+    const enc = toData(lo);
+    expect(enc).not.toHaveProperty("nameIsDerived");
+    expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
+    const url = encodeShareUrl(lo);
+    expect(url).not.toContain("nameIsDerived");
   });
 });

@@ -29,5 +29,5 @@ export function createTestStore(preloadedState) {
 }
 
 export function loadoutState(overrides) {
-  return { ...emptyLoadout(), ...overrides };
+  return { ...emptyLoadout(), savedId: null, nameIsDerived: true, ...overrides };
 }

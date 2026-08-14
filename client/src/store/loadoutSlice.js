@@ -33,6 +33,27 @@ function isValidLoadoutShape(payload) {
   );
 }
 
+// Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons Until
+// the User Owns It".
+//
+// `nameIsDerived` tracks whether the loadout's name is still auto-derived from its
+// weapons — true for a fresh build, false once the user types in the name field or
+// loads a saved record. It is client-only and ephemeral: not persisted, not sent to
+// the server, and not part of the wire format (`toData()` never reads it). A derived
+// name is stored as an ordinary string, indistinguishable from a typed one.
+function weaponDisplayName(w) {
+  return w ? WEAPONS[w.i][1] : null;
+}
+
+// Derive the loadout name from its weapons: "{first} and {second}", or the one
+// weapon's name alone, or "" for no weapons. Never a dangling "and".
+function derivedName(weapons) {
+  const names = weapons.map(weaponDisplayName).filter(Boolean);
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  return `${names[0]} and ${names[1]}`;
+}
+
 const loadoutSlice = createSlice({
   name: "loadout",
   // `savedId` is client-only provenance (SPEC-0003 REQ "The Saved-Loadout Wire Format Is
@@ -41,7 +62,10 @@ const loadoutSlice = createSlice({
   // MUST NOT be persisted, sent to the server inside `data`, or written into a share URL
   // — `toData()` never reads it. A new, randomized, or shared loadout has no provenance,
   // so it defaults to null.
-  initialState: { ...emptyLoadout(), savedId: null },
+  //
+  // `nameIsDerived` starts true: a fresh build's name tracks its weapons until the user
+  // takes ownership by typing.
+  initialState: { ...emptyLoadout(), savedId: null, nameIsDerived: true },
   reducers: {
     addWeapon(state, action) {
       const weaponIndex = action.payload;
@@ -50,9 +74,13 @@ const loadoutSlice = createSlice({
       const other = state.weapons[1 - slot] ? WEAPONS[state.weapons[1 - slot].i][2] : 0;
       if (w[2] + other > capMax(state)) return;
       state.weapons[slot] = { i: weaponIndex, a: -1 };
+      // Re-derive the name only while the user has not taken ownership (SPEC-0003 REQ
+      // "A Loadout's Name Is Derived From Its Weapons Until the User Owns It").
+      if (state.nameIsDerived) state.name = derivedName(state.weapons);
     },
     removeWeapon(state, action) {
       state.weapons[action.payload] = null;
+      if (state.nameIsDerived) state.name = derivedName(state.weapons);
     },
     // Picker placement fills the LOWEST-NUMBERED free (unblocked, empty) cell:
     // cells 0..7 in order, and `blocked` names the exact cells to skip (ADR-0009).
@@ -131,8 +159,14 @@ const loadoutSlice = createSlice({
     removeTrait(state, action) {
       state.traits = state.traits.filter((x) => x !== action.payload);
     },
+    // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
+    // Until the User Owns It". Typing in the name field takes ownership: once false,
+    // `nameIsDerived` stays false for the rest of the editing session — no later weapon
+    // change re-derives. It returns to true only via `clearBuild` or a `setLoadout`
+    // that starts a fresh build. Even clearing the field is an act of ownership.
     setName(state, action) {
       state.name = action.payload;
+      state.nameIsDerived = false;
     },
     // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" —
     // set after a successful save so the loadout becomes "loaded" and subsequent saves
@@ -140,11 +174,16 @@ const loadoutSlice = createSlice({
     setSavedId(state, action) {
       state.savedId = action.payload;
     },
+    // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
+    // Until the User Owns It". Clearing the build resets to a fresh state: the name
+    // re-derives (back to ""), and `nameIsDerived` returns to true.
     clearBuild(state) {
       state.weapons = [null, null];
       state.equip = Array(8).fill(null);
       state.traits = [];
       state.blocked = [];
+      state.name = "";
+      state.nameIsDerived = true;
     },
     // Bulk merge — used by hydrate-on-load, loading a saved build, and randomize.
     // Rejects payloads that don't match the loadout shape so a bad call fails
@@ -163,6 +202,35 @@ const loadoutSlice = createSlice({
       // randomized, or shared loadout must never inherit the previous one's provenance
       // (SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged").
       state.savedId = payload.savedId ?? null;
+      // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
+      // Until the User Owns It". Derive only for a payload that brought no name of its
+      // own. Two signals, and BOTH are needed:
+      //
+      //   - `savedId` — a loadout loaded from a saved record has a name the user owns.
+      //   - `name` — the payload carried a name, so there is nothing to default.
+      //
+      // `savedId` alone is not enough, because two of this reducer's three callers are
+      // hydration paths that carry a name and no id. `readStoredLoadout()` returns the
+      // local draft the store subscriber persists on every change (store/index.js), and
+      // `readHashLoadout()` returns a decoded share URL; `n` is in the wire format and
+      // every decoder sets it. Deriving over those overwrites a name the user typed —
+      // silently, on every page reload. ADR-0022 leaves reload persistence explicitly
+      // out of scope, so this resolves it the non-destructive way.
+      //
+      // Randomize is unaffected: `randomizeLoadout()` returns { weapons, equip, traits }
+      // with no `name` at all, which `isValidLoadoutShape` above records as deliberate.
+      // It still derives, as does any hydrated payload whose stored name was empty.
+      //
+      // This does mean a share URL's name survives for the recipient, where ADR-0022
+      // says a shared loadout "derives freely". That line reads as an oversight rather
+      // than an intent — the wire format carries `n` precisely so a name travels, and
+      // deriving over it would make the field dead weight on the receiving end.
+      //
+      // When derived, re-derive from the weapons the payload just set: randomize and
+      // hydration replace weapons without going through addWeapon/removeWeapon, so the
+      // derivation has to happen here too.
+      state.nameIsDerived = !payload.savedId && !payload.name;
+      if (state.nameIsDerived) state.name = derivedName(state.weapons);
     },
   },
 });
