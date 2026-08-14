@@ -2,6 +2,8 @@
 
 A Hunt: Showdown loadout builder — pick weapons, equipment, and traits, then save and share your builds.
 
+**Try it:** <https://the-outfitter.onrender.com/>
+
 ## Stack
 
 - **Client**: React 18, Redux Toolkit, Vite
