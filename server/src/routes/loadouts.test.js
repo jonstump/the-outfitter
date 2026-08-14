@@ -176,6 +176,130 @@ describe("loadouts API", () => {
     expect(stored.data.tr).toHaveLength(20);
   });
 
+  // --- REQ "Loadout Identity Is Scoped to Its List" — id-addressed writes (#314) -------
+  //
+  // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List". A
+  // loadout loaded from a saved record and then edited (including renamed) SHALL write
+  // back to the record it came from, addressed by `id` rather than the name triple.
+  // A stale or foreign `id` is a 404 — not a silent create, and not a write to the
+  // wrong record.
+  //
+  // EACH TEST GETS ITS OWN TOKEN, for the same reason the filing suite does: the write
+  // limiters are module-level and per-token (WRITE_PER_TOKEN = 60/min), and stacking
+  // these on a shared token risks a 429 in an unrelated test. These run BEFORE the
+  // rate-limit exhaustion tests below, which burn the shared IP budget on purpose.
+  const ID_T = {
+    update: "d0000000-0000-4000-8000-000000000314",
+    missing: "d1000000-0000-4000-8000-000000000314",
+    foreign: "d2000000-0000-4000-8000-000000000314",
+    triple: "d3000000-0000-4000-8000-000000000314",
+    bad: "d4000000-0000-4000-8000-000000000314",
+  };
+
+  it("saving with id updates that record even when its name has changed, and creates nothing new", async () => {
+    const app = makeApp();
+    const created = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.update)
+      .send({ name: "__test__id-original", data: validData });
+    expect(created.status).toBe(201);
+
+    // Re-save with a DIFFERENT name, addressing the record by id.
+    const renamed = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.update)
+      .send({ name: "__test__id-renamed", data: { ...validData, n: "__test__id-renamed" }, id: created.body.id });
+
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.id).toBe(created.body.id);
+    expect(renamed.body.name).toBe("__test__id-renamed");
+
+    // No new record was created: the renamed one replaced the original.
+    await db.read();
+    const mine = db.data.loadouts.filter((l) => l.owner === ID_T.update);
+    expect(mine).toHaveLength(1);
+    expect(mine[0].id).toBe(created.body.id);
+    expect(mine[0].name).toBe("__test__id-renamed");
+  });
+
+  it("saving with an id that does not exist returns 404 and creates no record", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.missing)
+      .send({ name: "__test__id-missing", data: validData, id: "00000000-0000-4000-8000-000000000000" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("loadout not found");
+
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.owner === ID_T.missing)).toBe(false);
+  });
+
+  it("saving with an id owned by a different token returns 404 and does not touch that record", async () => {
+    const app = makeApp();
+    // TOKEN_foreign creates a record.
+    const created = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.foreign)
+      .send({ name: "__test__id-foreign-owner", data: validData });
+    expect(created.status).toBe(201);
+
+    // A DIFFERENT token tries to address it by id.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "d2500000-0000-4000-8000-000000000314")
+      .send({ name: "__test__id-foreign-attacker", data: validData, id: created.body.id });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("loadout not found");
+
+    // The original record is untouched.
+    await db.read();
+    const stored = db.data.loadouts.find((l) => l.id === created.body.id);
+    expect(stored.name).toBe("__test__id-foreign-owner");
+  });
+
+  it("saving with no id still upserts on the triple", async () => {
+    const app = makeApp();
+    const first = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.triple)
+      .send({ name: "__test__id-triple", data: validData, listId: null });
+    expect(first.status).toBe(201);
+
+    // Same name + same listId → update, not create.
+    const second = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.triple)
+      .send({ name: "__test__id-triple", data: { ...validData, n: "__test__id-triple" }, listId: null });
+    expect(second.status).toBe(200);
+    expect(second.body.id).toBe(first.body.id);
+
+    await db.read();
+    expect(db.data.loadouts.filter((l) => l.owner === ID_T.triple)).toHaveLength(1);
+  });
+
+  it("rejects a non-string or over-long id with 400", async () => {
+    const app = makeApp();
+    const nonString = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.bad)
+      .send({ name: "__test__id-nonstring", data: validData, id: 12345 });
+    expect(nonString.status).toBe(400);
+    expect(nonString.body.error).toMatch(/id/);
+
+    const overLong = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", ID_T.bad)
+      .send({ name: "__test__id-overlong", data: validData, id: "x".repeat(101) });
+    expect(overLong.status).toBe(400);
+    expect(overLong.body.error).toMatch(/id/);
+
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.owner === ID_T.bad)).toBe(false);
+  });
+
   it("rate limits the write endpoint", async () => {
     const app = makeApp();
     // Burst past the limit (60/min) — 70 quick writes should trip it.

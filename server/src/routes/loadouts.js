@@ -224,12 +224,22 @@ loadoutsRouter.get("/", readLimiter, async (_req, res) => {
 loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
   try {
     const body = req.body || {};
-    const { name, data, listId } = body;
+    const { name, data, listId, id } = body;
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name must be a non-empty string" });
     }
     if (name.trim().length > NAME_MAX_CHARS) {
       return res.status(400).json({ error: `name must be at most ${NAME_MAX_CHARS} characters` });
+    }
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List"
+    //
+    // `id` is an addressing argument on the request, not a field of the loadout. When
+    // present it names the record the write is addressed to — a loaded loadout writing back
+    // to the record it came from — and the target is resolved by (id, owner) instead of by
+    // the (owner, listId, name) triple. It SHALL NOT be written into the stored record's
+    // `data` (REQ "The Saved-Loadout Wire Format Is Unchanged").
+    if (id !== undefined && !isId(id)) {
+      return res.status(400).json({ error: "id must be a non-empty string of at most 100 characters" });
     }
     if (!isValidData(data).ok) {
       // REQ "Error Handling at the Payload Boundary": a rejection names the offending
@@ -263,36 +273,54 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
 
     // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" (issue #102)
     //
-    // The upsert key is the TRIPLE `(owner, listId, name)`, not `(owner, name)`. Matching on
-    // name alone meant saving "Fanning" while one list was open overwrote AND relocated the
-    // "Fanning" already filed in another — data loss on a routine flow, reported as #102.
+    // Two resolution paths, selected by whether `id` is present on the request:
     //
-    // `listId` is compared AS A VALUE, `null` included. The Unassigned pseudo-list is `null`,
-    // so treating it as "no constraint" would collapse every Unassigned save onto the first
-    // such record — the same defect wearing different clothes.
+    // 1. `id` present — resolve by (id, owner). A loadout loaded from a saved record and
+    //    then edited (including renamed) writes back to the record it came from. A stale or
+    //    foreign `id` resolves to nothing and is a 404: it MUST NOT fall back to the triple
+    //    and MUST NOT create a record. A fallback would write the user's edits over a
+    //    different loadout that merely shares a name; a create would mint a silent duplicate.
+    //    A 404 is the only answer that neither destroys nor duplicates.
     //
-    // `l.listId ?? null` coalesces because a record written before SPEC-0003 has NO `listId`
-    // key at all — `undefined`, not `null`. A plain `===` would miss those and mint a
-    // duplicate on the first re-save (the hazard "treats moving an already-unassigned
-    // legacy-shaped record to null as a no-op" pins on the PATCH side).
+    // 2. `id` absent — the upsert key is the TRIPLE `(owner, listId, name)`, not `(owner,
+    //    name)`. Matching on name alone meant saving "Fanning" while one list was open
+    //    overwrote AND relocated the "Fanning" already filed in another — data loss on a
+    //    routine flow, reported as #102.
     //
-    // An OMITTED `listId` still matches on name alone, and that is deliberate rather than a
-    // gap in the key. The request body distinguishes absent from null: absent means "update
-    // this loadout, do not move it" — the semantic `filing.test.js` pins as "leaves filing
-    // untouched when an upsert omits listId" — and a caller who declined to name a list has
-    // not supplied a triple to match on. The app never takes this path: `resolveSaveListId`
-    // (savedLoadoutsSlice.js) always yields a list id or an explicit `null`, so every save
-    // this application makes is fully keyed. Where two same-named records now legally exist
-    // in different lists, an omitted `listId` resolves to the first and is ambiguous by
-    // construction; the triple is the identity, and this branch is compatibility for callers
-    // that predate it.
-    const scopedToList = listId !== undefined;
-    const existing = liveRecords(db.data.loadouts).find(
-      (l) =>
-        l.owner === token &&
-        l.name === trimmedName &&
-        (!scopedToList || (l.listId ?? null) === ref.value)
-    );
+    //    `listId` is compared AS A VALUE, `null` included. The Unassigned pseudo-list is
+    //    `null`, so treating it as "no constraint" would collapse every Unassigned save onto
+    //    the first such record — the same defect wearing different clothes.
+    //
+    //    `l.listId ?? null` coalesces because a record written before SPEC-0003 has NO
+    //    `listId` key at all — `undefined`, not `null`. A plain `===` would miss those and
+    //    mint a duplicate on the first re-save (the hazard "treats moving an
+    //    already-unassigned legacy-shaped record to null as a no-op" pins on the PATCH side).
+    //
+    //    An OMITTED `listId` still matches on name alone, and that is deliberate rather
+    //    than a gap in the key. The request body distinguishes absent from null: absent means
+    //    "update this loadout, do not move it" — the semantic `filing.test.js` pins as
+    //    "leaves filing untouched when an upsert omits listId" — and a caller who declined to
+    //    name a list has not supplied a triple to match on. The app never takes this path:
+    //    `resolveSaveListId` (savedLoadoutsSlice.js) always yields a list id or an explicit
+    //    `null`, so every save this application makes is fully keyed. Where two same-named
+    //    records now legally exist in different lists, an omitted `listId` resolves to the
+    //    first and is ambiguous by construction; the triple is the identity, and this branch
+    //    is compatibility for callers that predate it.
+    let existing;
+    if (id !== undefined) {
+      existing = liveRecords(db.data.loadouts).find((l) => l.id === id && l.owner === token);
+      if (!existing) {
+        return res.status(404).json({ error: "loadout not found" });
+      }
+    } else {
+      const scopedToList = listId !== undefined;
+      existing = liveRecords(db.data.loadouts).find(
+        (l) =>
+          l.owner === token &&
+          l.name === trimmedName &&
+          (!scopedToList || (l.listId ?? null) === ref.value)
+      );
+    }
 
     // Governing: issue #198. Only a NEW record is refused: re-saving under an existing name
     // is an update, and an owner sitting at the ceiling must still be able to edit what they
@@ -306,6 +334,7 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     let record;
     if (existing) {
       existing.data = data;
+      existing.name = trimmedName;
       existing.updatedAt = now;
       // Only re-file when the caller said something about it. An upsert that omits listId
       // is updating the loadout, not moving it out of its list.
