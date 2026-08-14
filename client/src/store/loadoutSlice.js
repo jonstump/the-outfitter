@@ -203,14 +203,33 @@ const loadoutSlice = createSlice({
       // (SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged").
       state.savedId = payload.savedId ?? null;
       // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
-      // Until the User Owns It". A loadout that came from a saved record has an owned
-      // name; anything else is derived. The signal is `savedId`: if present, the name is
-      // owned (`nameIsDerived = false`); if absent, the name is derived (`true`). This
-      // covers all three callers — loadSavedThunk (owned), randomize (derived), and
-      // share-URL/local-draft hydration (derived). When derived, re-derive from the
-      // weapons the payload just set (randomize and hydration replace weapons without
-      // going through addWeapon/removeWeapon, so the derivation must happen here too).
-      state.nameIsDerived = payload.savedId ? false : true;
+      // Until the User Owns It". Derive only for a payload that brought no name of its
+      // own. Two signals, and BOTH are needed:
+      //
+      //   - `savedId` — a loadout loaded from a saved record has a name the user owns.
+      //   - `name` — the payload carried a name, so there is nothing to default.
+      //
+      // `savedId` alone is not enough, because two of this reducer's three callers are
+      // hydration paths that carry a name and no id. `readStoredLoadout()` returns the
+      // local draft the store subscriber persists on every change (store/index.js), and
+      // `readHashLoadout()` returns a decoded share URL; `n` is in the wire format and
+      // every decoder sets it. Deriving over those overwrites a name the user typed —
+      // silently, on every page reload. ADR-0022 leaves reload persistence explicitly
+      // out of scope, so this resolves it the non-destructive way.
+      //
+      // Randomize is unaffected: `randomizeLoadout()` returns { weapons, equip, traits }
+      // with no `name` at all, which `isValidLoadoutShape` above records as deliberate.
+      // It still derives, as does any hydrated payload whose stored name was empty.
+      //
+      // This does mean a share URL's name survives for the recipient, where ADR-0022
+      // says a shared loadout "derives freely". That line reads as an oversight rather
+      // than an intent — the wire format carries `n` precisely so a name travels, and
+      // deriving over it would make the field dead weight on the receiving end.
+      //
+      // When derived, re-derive from the weapons the payload just set: randomize and
+      // hydration replace weapons without going through addWeapon/removeWeapon, so the
+      // derivation has to happen here too.
+      state.nameIsDerived = !payload.savedId && !payload.name;
       if (state.nameIsDerived) state.name = derivedName(state.weapons);
     },
   },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { TRAIT_MAX } from "../utils/calc.js";
-import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { emptyLoadout, fromData, toData } from "../utils/loadoutCodec.js";
 import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
@@ -253,7 +253,8 @@ describe("derived loadout name", () => {
     const store = makeStore();
     store.dispatch(loadoutActions.addWeapon(W0));
     store.dispatch(loadoutActions.addWeapon(W1));
-    // Remove the primary (slot 0); the secondary shifts to slot 0 via re-derivation.
+    // Remove the primary (slot 0). The secondary stays put in slot 1 — nothing is
+    // compacted; `derivedName` simply skips the now-empty slot.
     store.dispatch(loadoutActions.removeWeapon(0));
     expect(store.getState().loadout.name).toBe(NAME1);
   });
@@ -338,6 +339,41 @@ describe("derived loadout name", () => {
     // A weapon change after clearing re-derives again.
     store.dispatch(loadoutActions.addWeapon(W1));
     expect(store.getState().loadout.name).toBe(NAME1);
+  });
+
+  // The store subscriber persists the loadout to localStorage on every change
+  // (store/index.js), and App.jsx hydrates it through setLoadout on boot with no
+  // savedId. A typed name is on the wire (`n`), so deriving over a hydrated payload
+  // would destroy it on every reload. Deriving keys off BOTH savedId and name.
+  it("keeps a typed name through a toData/fromData round trip and re-hydration", () => {
+    const s1 = makeStore();
+    s1.dispatch(loadoutActions.addWeapon(W0));
+    s1.dispatch(loadoutActions.setName("Doc's Rat Slayer"));
+    const persisted = toData(s1.getState().loadout);
+    expect(persisted.n).toBe("Doc's Rat Slayer");
+
+    // Fresh boot: hydrate the persisted draft exactly as App.jsx does.
+    const s2 = makeStore();
+    s2.dispatch(loadoutActions.setLoadout(fromData(persisted)));
+    expect(s2.getState().loadout.name).toBe("Doc's Rat Slayer");
+    // The name came in owned, so a later weapon change must not overwrite it.
+    expect(s2.getState().loadout.nameIsDerived).toBe(false);
+    s2.dispatch(loadoutActions.addWeapon(W1));
+    expect(s2.getState().loadout.name).toBe("Doc's Rat Slayer");
+  });
+
+  it("still derives on hydration when the persisted draft carried no name", () => {
+    const s1 = makeStore();
+    s1.dispatch(loadoutActions.addWeapon(W0));
+    const persisted = toData(s1.getState().loadout);
+    // Nothing was typed, so the persisted name is the derived one; hydrating it must
+    // leave the loadout still-derived rather than latching it as owned.
+    const s2 = makeStore();
+    s2.dispatch(loadoutActions.setLoadout({ ...fromData(persisted), name: "" }));
+    expect(s2.getState().loadout.nameIsDerived).toBe(true);
+    expect(s2.getState().loadout.name).toBe(NAME0);
+    s2.dispatch(loadoutActions.addWeapon(W1));
+    expect(s2.getState().loadout.name).toBe(`${NAME0} and ${NAME1}`);
   });
 
   it("does not re-derive when a weapon changes on a loadout loaded with savedId", () => {
