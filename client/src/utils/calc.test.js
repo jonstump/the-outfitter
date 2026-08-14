@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QM, WEAPONS } from "../data/catalog.js";
-import { capMax, capUsed, consCount, slotMax, totalCost, upTotal } from "./calc.js";
+import { capMax, capUsed, consCount, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -167,5 +167,56 @@ describe("SPEC-0009: the weapon budget", () => {
     expect(capUsed(loadoutWith({ weapons: [{ i: size1, a: -1 }, { i: size2, a: -1 }] }))).toBe(
       WEAPONS[size1][2] + WEAPONS[size2][2]
     );
+  });
+});
+
+// Governing: ADR-0023, SPEC-0009 REQ "A Pair Costs Its Weapon's Size Plus One",
+// REQ "A Pair Carries One Weapon's Ammo and Doubles Only the Weapon Price".
+//
+// A dual-wielded pair is a flag on ONE weapon entry (`d: true`) that occupies the
+// weapon's size plus one point and doubles the WEAPON price only — both pistols fire
+// the same round, so the ammo line must not double. Sizes and prices come from the
+// catalog, never hardcoded, so a rebalance fails a test instead of silently
+// invalidating one.
+describe("dual-wielded pairs: budget and cost", () => {
+  // Real catalog pair: a size-1 dual-wieldable pistol (Conversion) and a size-3 rifle
+  // (Frontier 73C) must together total 5 points.
+  const PISTOL = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
+  const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
+  const pair = { i: PISTOL, a: -1, d: true };
+  const single = { i: PISTOL, a: -1, d: false };
+
+  it("a pair occupies size + 1, occupying 2 of 5 with a size-1 pistol", () => {
+    expect(WEAPONS[PISTOL][2]).toBe(1);
+    expect(weaponSize(pair)).toBe(2);
+    expect(weaponSize(single)).toBe(1);
+  });
+
+  it("a pair of a size-1 pistol and a size-3 rifle is a legal 5-point loadout", () => {
+    expect(WEAPONS[RIFLE][2]).toBe(3);
+    const lo = loadoutWith({ weapons: [pair, { i: RIFLE, a: -1, d: false }] });
+    expect(capUsed(lo)).toBe(5);
+    expect(capUsed(lo)).toBeLessThanOrEqual(capMax(lo));
+  });
+
+  it("weaponSize returns 0 for an empty entry and ignores an absent d", () => {
+    expect(weaponSize(null)).toBe(0);
+    // An entry that has not been normalized (no `d` at all) is a single, never a pair.
+    expect(weaponSize({ i: PISTOL, a: -1 })).toBe(1);
+  });
+
+  it("doubles the weapon price for a pair but leaves the ammo price unchanged", () => {
+    // The Conversion's own catalog price, plus one priced ammo variant from its pool.
+    const AMMO_INDEX = 0;
+    const singleLo = loadoutWith({ weapons: [{ i: PISTOL, a: AMMO_INDEX, d: false }] });
+    const pairLo = loadoutWith({ weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }] });
+    const ammoLine = (lo) => totalCost(lo) - WEAPONS[lo.weapons[0].i][3] * (lo.weapons[0].d === true ? 2 : 1);
+
+    // The pool really has a priced variant at index 0, or this test proves nothing.
+    expect(ammoLine(singleLo)).toBeGreaterThan(0);
+
+    // Weapon line: doubles. Ammo line: byte-identical. Asserted separately.
+    expect(totalCost(pairLo) - totalCost(singleLo)).toBe(WEAPONS[PISTOL][3]);
+    expect(ammoLine(pairLo)).toBe(ammoLine(singleLo));
   });
 });
