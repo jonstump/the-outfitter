@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
-import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX } from "../utils/calc.js";
+import { CONS, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { TRAIT_MAX, capMax, capUsed } from "../utils/calc.js";
 import { emptyLoadout, fromData, toData } from "../utils/loadoutCodec.js";
 import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
+import { randomizeLoadout } from "../utils/randomize.js";
 
 // Governing: issue #26/#27 (loadoutSlice resolves the new catalog tuple shapes;
 // setLoadout validates payload shape instead of blindly merging)
@@ -430,5 +431,81 @@ describe("identical weapon pairs derive identical names (the collision the tripl
     expect(name2).toBe(EXPECTED);
     // The collision: two independent builds share one name, by construction.
     expect(name1).toBe(name2);
+  });
+});
+
+// Governing: SPEC-0009 REQ "A Loadout Holds Exactly Two Weapon Entries", REQ "The
+// Weapon Budget Is Five Points, Six With Quartermaster", REQ "The Weapon Budget Is
+// Enforced at Every Write Path", ADR-0023.
+//
+// The reducer-side pins for the rules the calc predicates above state. Sizes are read
+// from `WEAPONS[i][2]`, and Quartermaster is the real catalog id (`QM`), so neither a
+// catalog rebalance nor a trait rename can silently invalidate these.
+describe("SPEC-0009: the weapon budget in the reducer", () => {
+  it("gives a fresh loadout two null weapon entries", () => {
+    const store = makeStore();
+    const w = store.getState().loadout.weapons;
+    expect(w).toHaveLength(2);
+    expect(w[0]).toBeNull();
+    expect(w[1]).toBeNull();
+  });
+
+  it("keeps a 6-point loadout over capacity when Quartermaster is removed, removing no weapon", () => {
+    const store = makeStore();
+    const size3 = WEAPONS.findIndex((w) => w[2] === 3);
+    store.dispatch(loadoutActions.addTrait(QM));
+    store.dispatch(loadoutActions.addWeapon(size3));
+    store.dispatch(loadoutActions.addWeapon(size3));
+    expect(capUsed(store.getState().loadout)).toBe(6);
+
+    store.dispatch(loadoutActions.removeTrait(QM));
+    // Remaining over capacity under the 5-point ceiling, and both entries still held.
+    expect(capMax(store.getState().loadout)).toBe(5);
+    expect(capUsed(store.getState().loadout)).toBe(6);
+    expect(store.getState().loadout.weapons.every((w) => w !== null && WEAPONS[w.i][2] === 3)).toBe(true);
+  });
+
+  it("refuses an oversized weapon with 1 point remaining, leaving both entries unchanged", () => {
+    const store = makeStore();
+    const size4 = WEAPONS.findIndex((w) => w[2] === 4);
+    const size5 = WEAPONS.findIndex((w) => w[2] === 5);
+    const size1 = WEAPONS.findIndex((w) => w[2] === 1);
+    store.dispatch(loadoutActions.addWeapon(size4));
+    store.dispatch(loadoutActions.addWeapon(size1));
+    expect(capUsed(store.getState().loadout)).toBe(5);
+    expect(store.getState().loadout.weapons.filter(Boolean)).toHaveLength(2);
+
+    // The refused add must leave the two held entries exactly as they were.
+    const before = store.getState().loadout.weapons.map((w) => w && { i: w.i, a: w.a });
+    store.dispatch(loadoutActions.addWeapon(size5));
+    expect(store.getState().loadout.weapons.map((w) => w && { i: w.i, a: w.a })).toEqual(before);
+  });
+
+  it("rejects a bulk-set payload with a weapons array of length 1, leaving the store unchanged", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.setName("Keep me"));
+    const before = store.getState().loadout;
+    expect(() =>
+      store.dispatch(
+        loadoutActions.setLoadout({
+          // One weapon entry — the shape guard must refuse before anything is merged.
+          weapons: [{ i: 0, a: -1 }],
+          equip: [],
+          traits: [],
+        })
+      )
+    ).toThrow();
+    expect(store.getState().loadout).toEqual(before);
+  });
+
+  it("randomized loadouts total no more than the capacity their own traits grant", () => {
+    // The generator's draw respects the budget rule no matter which traits it lands on:
+    // whatever the generated build carries, its occupied capacity must stay within the
+    // capacity that same trait set grants. Sizes come from the catalog, so a rebalance
+    // that started generating over-cap draws fails here rather than shipping.
+    for (let i = 0; i < 30; i++) {
+      const drawn = randomizeLoadout({});
+      expect(capUsed(drawn)).toBeLessThanOrEqual(capMax(drawn));
+    }
   });
 });
