@@ -537,17 +537,24 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     expect(w.d).toBe(false);
   });
 
-  it("addWeapon refuses a pair flag on a weapon the data does not permit", () => {
-    expect(dualWieldFor(WEAPONS[HAYMAKER][0])).not.toBe(true);
+  it("addWeapon adds a single even when the weapon IS dual-wieldable", () => {
+    // The load-bearing case: the Conversion is pairable by the stored attribute, so if the
+    // interactive path ever started inferring a pair, this is where it would show. It adds
+    // a single regardless — the pair toggle and its refusal ship with the affordance (#333).
+    expect(dualWieldFor(WEAPONS[PISTOL][0])).toBe(true);
     const store = makeStore();
-    // addWeapon's payload is a bare catalog index; the interactive path cannot request a
-    // pair today (the affordance is a later story). Even if a caller smuggles a payload
-    // object with `d: true`, the stored attribute must be the only authority — the flag
-    // is refused and the weapon lands as a single.
-    store.dispatch(loadoutActions.addWeapon(HAYMAKER));
-    const w = store.getState().loadout.weapons[0];
-    expect(typeof w.d).toBe("boolean");
-    expect(w.d).toBe(false);
+    store.dispatch(loadoutActions.addWeapon(PISTOL));
+    expect(store.getState().loadout.weapons[0]).toEqual({ i: PISTOL, a: -1, d: false });
+    // And the capacity it occupies is the single's, not the pair's — a size-1 pistol added
+    // through this route costs 1, never 2.
+    expect(capUsed(store.getState().loadout)).toBe(WEAPONS[PISTOL][2]);
+
+    // A non-pairable weapon lands the same way, so `d: false` here is not a coincidence of
+    // the stored attribute — the route simply does not write the flag.
+    expect(dualWieldFor(WEAPONS[HAYMAKER][0])).not.toBe(true);
+    const other = makeStore();
+    other.dispatch(loadoutActions.addWeapon(HAYMAKER));
+    expect(other.getState().loadout.weapons[0]).toEqual({ i: HAYMAKER, a: -1, d: false });
   });
 
   it("a pair + a size-3 rifle is a legal 5-point loadout, and marking the pistol as a pair leaves the rifle in place", () => {

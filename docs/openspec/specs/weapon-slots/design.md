@@ -238,7 +238,10 @@ loadout enters state, and it happens again for every other route that writes one
 Not greenfield: records exist at versions 2, 1, and unversioned legacy.
 
 1. **Server first.** Widen the weapon-entry element count to the version-3 shape, keeping it an
-   equality check. Deploy before any client can emit a version-3 payload, or every save fails.
+   equality check. This must land before any client can emit a version-3 payload, or every save
+   fails. That is a constraint on MERGE ORDER, not a separate deployment step: client and server
+   are packaged as one artifact, so a version-3 client and the validator that accepts it always
+   ship from the same commit and cannot skew apart.
 2. **Decoder next.** Add the version-3 decoder beside the existing registry entries. Existing decoders
    are untouched; a pre-version-3 record cannot express a pair, so it decodes with none.
 3. **Encoder and maths together.** Raise the format version, teach capacity and cost about the flag,

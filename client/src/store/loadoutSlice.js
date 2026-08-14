@@ -88,11 +88,19 @@ const loadoutSlice = createSlice({
       const slot = state.weapons[0] ? 1 : 0;
       const other = state.weapons[1 - slot] ? weaponSize(state.weapons[1 - slot]) : 0;
       if (weaponSize({ i: weaponIndex, d: false }) + other > capMax(state)) return;
-      // Governing: SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does Not
-      // Permit It" — the interactive path is one of the refusal's write routes. The
-      // stored attribute is read from itemStats.json, never derived from size/name/etc.
-      if (action.payload?.d === true && dualWieldFor(w[0]) !== true) return;
-      state.weapons[slot] = { i: weaponIndex, a: -1, d: action.payload?.d === true };
+      // Governing: ADR-0023, SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does
+      // Not Permit It".
+      //
+      // The interactive path adds SINGLES, always — `d: false`, never read from the payload.
+      // The payload here is a bare catalog index (every caller dispatches `addWeapon(i)`), so
+      // there is nothing to carry a flag: a guard reading `action.payload?.d` off a number
+      // could never fire, and an object payload would already have thrown at `WEAPONS[...]`
+      // above. Writing `false` outright is the honest statement of what this route does.
+      //
+      // The pair toggle and ITS refusal — both the stored-attribute check and the capacity
+      // check — arrive with the slot affordance in #333. This route stays pair-free until
+      // then, which is what the test below pins.
+      state.weapons[slot] = { i: weaponIndex, a: -1, d: false };
       // Re-derive the name only while the user has not taken ownership (SPEC-0003 REQ
       // "A Loadout's Name Is Derived From Its Weapons Until the User Owns It").
       if (state.nameIsDerived) state.name = derivedName(state.weapons);
