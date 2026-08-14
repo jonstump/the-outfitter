@@ -35,7 +35,13 @@ function isValidLoadoutShape(payload) {
 
 const loadoutSlice = createSlice({
   name: "loadout",
-  initialState: emptyLoadout(),
+  // `savedId` is client-only provenance (SPEC-0003 REQ "The Saved-Loadout Wire Format Is
+  // Unchanged"): it records which stored record a loaded loadout came from, so an edited
+  // save writes back to that record by id instead of matching on the name triple. It
+  // MUST NOT be persisted, sent to the server inside `data`, or written into a share URL
+  // — `toData()` never reads it. A new, randomized, or shared loadout has no provenance,
+  // so it defaults to null.
+  initialState: { ...emptyLoadout(), savedId: null },
   reducers: {
     addWeapon(state, action) {
       const weaponIndex = action.payload;
@@ -128,6 +134,12 @@ const loadoutSlice = createSlice({
     setName(state, action) {
       state.name = action.payload;
     },
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" —
+    // set after a successful save so the loadout becomes "loaded" and subsequent saves
+    // address the record by id. Dispatched from `saveCurrent` on fulfilment.
+    setSavedId(state, action) {
+      state.savedId = action.payload;
+    },
     clearBuild(state) {
       state.weapons = [null, null];
       state.equip = Array(8).fill(null);
@@ -147,6 +159,10 @@ const loadoutSlice = createSlice({
       state.traits = payload.traits;
       state.blocked = payload.blocked ?? state.blocked;
       state.name = payload.name ?? state.name;
+      // `?? null` so any payload that does not carry a savedId CLEARS it — a new,
+      // randomized, or shared loadout must never inherit the previous one's provenance
+      // (SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged").
+      state.savedId = payload.savedId ?? null;
     },
   },
 });

@@ -9,7 +9,7 @@ import savedLoadoutsReducer, {
   describeSaved,
 } from "./savedLoadoutsSlice.js";
 import { describeLoadout, moveLoadout } from "../api/loadouts.js";
-import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { encodeShareUrl, emptyLoadout, toData } from "../utils/loadoutCodec.js";
 
 // Governing: issue #20 (failed save/delete/fetch attempts must surface in the UI)
 //
@@ -26,7 +26,7 @@ function makeStore() {
       savedLoadouts: savedLoadoutsReducer,
     },
     preloadedState: {
-      loadout: { ...emptyLoadout(), name: "My Loadout" },
+      loadout: { ...emptyLoadout(), name: "My Loadout", savedId: null },
       ui: { message: "" },
       savedLoadouts: { items: [], status: "idle", error: null },
     },
@@ -207,5 +207,81 @@ describe("editing a loadout description", () => {
       expect(store.getState().ui.message).toContain("Cleared the description");
       expect(store.getState().ui.message).not.toContain("hunter");
     }
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List", REQ "The
+// Saved-Loadout Wire Format Is Unchanged" (issue #314)
+//
+// `savedId` is client-only provenance: it travels on the request envelope as `id` when
+// a loaded loadout writes back to its own record, but it MUST NOT enter `data`, a share
+// URL, or a local draft. These tests pin both sides: the request-body presence, and the
+// wire-format absence.
+describe("savedId on save (id-addressed writes)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const bodyOf = (call) => JSON.parse(call[1].body);
+
+  it("sends id in the request body when savedId is set", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-1", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-1" });
+
+    await store.dispatch(saveCurrent());
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts$/);
+    expect(opts.method).toBe("POST");
+    expect(bodyOf(global.fetch.mock.calls.at(-1)).id).toBe("rec-1");
+  });
+
+  it("omits the id key entirely when savedId is null", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-2", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    // savedId is null by default (the `?? null` clear in setLoadout).
+    expect(store.getState().loadout.savedId).toBeNull();
+
+    await store.dispatch(saveCurrent());
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts$/);
+    expect(opts.method).toBe("POST");
+    expect(bodyOf(global.fetch.mock.calls.at(-1))).not.toHaveProperty("id");
+  });
+
+  it("sets savedId from the response after a successful first save", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-3", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    expect(store.getState().loadout.savedId).toBeNull();
+
+    await store.dispatch(saveCurrent());
+    expect(store.getState().loadout.savedId).toBe("rec-3");
+  });
+});
+
+// Governing: SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged" — `savedId`
+// MUST NOT appear in `data`, in a share URL, or in a local draft. `toData()` never reads
+// it, and `encodeShareUrl` routes through `toData`, so both are clean by construction.
+// These tests pin that invariant: they fail if `toData` or `encodeShareUrl` ever reads
+// `savedId`.
+describe("savedId never enters the wire format", () => {
+  it("toData output contains no savedId key", () => {
+    const lo = { ...emptyLoadout(), savedId: "leaked-id", name: "Test" };
+    const enc = toData(lo);
+    expect(enc).not.toHaveProperty("savedId");
+    // The wire keys are exactly the format's own, and nothing more.
+    expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
+  });
+
+  it("an encoded share URL does not contain the savedId", () => {
+    const lo = { ...emptyLoadout(), savedId: "leaked-id", name: "Test" };
+    const url = encodeShareUrl(lo);
+    expect(url).not.toContain("leaked-id");
+    expect(url).not.toContain("savedId");
   });
 });

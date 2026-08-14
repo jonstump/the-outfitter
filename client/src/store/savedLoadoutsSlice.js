@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { deleteLoadout, describeLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
+import { loadoutActions } from "./loadoutSlice.js";
 import { uiActions } from "./uiSlice.js";
 
 // Failed save/delete/fetch attempts surface through the same ui.message banner
@@ -47,7 +48,11 @@ export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, {
   const listId = resolveSaveListId(state);
 
   try {
-    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId);
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId, loadout.savedId);
+    // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" —
+    // set `savedId` from the returned record's id so a fresh build which has just been
+    // saved for the first time becomes "loaded" and subsequent saves address it by id.
+    dispatch(loadoutActions.setSavedId(record.id));
     dispatch(uiActions.setMessage(`Saved “${name}”.`));
     return record;
   } catch (err) {
