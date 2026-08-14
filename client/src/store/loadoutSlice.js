@@ -1,6 +1,7 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, capMax, consAllowed, hasFreeCell, heldItems } from "../utils/calc.js";
+import { dualWieldFor } from "../data/itemStats.js";
+import { TRAIT_MAX, capMax, consAllowed, hasFreeCell, heldItems, weaponSize } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 
 // Governing: ADR-0009 (index is the cell, `null` is empty), SPEC-0006
@@ -31,6 +32,20 @@ function isValidLoadoutShape(payload) {
   return payload.weapons.every(
     (w) => w === null || (typeof w === "object" && typeof w.i === "number" && WEAPONS[w.i] && Number.isInteger(w.a))
   );
+}
+
+// Governing: ADR-0023, SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does Not
+// Permit It", REQ "Dual-Wieldability Is a Stored Attribute, Never Derived".
+//
+// The pair flag, as it enters loadout STATE. `d` is struck to a boolean and refused when
+// the stored per-weapon attribute does not permit a pair. Absence is not permission: a
+// weapon with no scraped `dualWield` record cannot be paired (the attribute is asserted
+// positively by the wiki; `false`/null there is an inference from absence, never proof of
+// pairability — see dualWieldFor's doc comment).
+function normalizeWeaponPairFlag(w) {
+  if (w === null) return null;
+  if (w.d === true && dualWieldFor(WEAPONS[w.i][0]) !== true) return { ...w, d: false };
+  return { ...w, d: w.d === true };
 }
 
 // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons Until
@@ -71,9 +86,21 @@ const loadoutSlice = createSlice({
       const weaponIndex = action.payload;
       const w = WEAPONS[weaponIndex];
       const slot = state.weapons[0] ? 1 : 0;
-      const other = state.weapons[1 - slot] ? WEAPONS[state.weapons[1 - slot].i][2] : 0;
-      if (w[2] + other > capMax(state)) return;
-      state.weapons[slot] = { i: weaponIndex, a: -1 };
+      const other = state.weapons[1 - slot] ? weaponSize(state.weapons[1 - slot]) : 0;
+      if (weaponSize({ i: weaponIndex, d: false }) + other > capMax(state)) return;
+      // Governing: ADR-0023, SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does
+      // Not Permit It".
+      //
+      // The interactive path adds SINGLES, always — `d: false`, never read from the payload.
+      // The payload here is a bare catalog index (every caller dispatches `addWeapon(i)`), so
+      // there is nothing to carry a flag: a guard reading `action.payload?.d` off a number
+      // could never fire, and an object payload would already have thrown at `WEAPONS[...]`
+      // above. Writing `false` outright is the honest statement of what this route does.
+      //
+      // The pair toggle and ITS refusal — both the stored-attribute check and the capacity
+      // check — arrive with the slot affordance in #333. This route stays pair-free until
+      // then, which is what the test below pins.
+      state.weapons[slot] = { i: weaponIndex, a: -1, d: false };
       // Re-derive the name only while the user has not taken ownership (SPEC-0003 REQ
       // "A Loadout's Name Is Derived From Its Weapons Until the User Owns It").
       if (state.nameIsDerived) state.name = derivedName(state.weapons);
@@ -193,7 +220,7 @@ const loadoutSlice = createSlice({
       if (!isValidLoadoutShape(payload)) {
         throw new Error("setLoadout: payload does not match the expected loadout shape");
       }
-      state.weapons = payload.weapons;
+      state.weapons = payload.weapons.map(normalizeWeaponPairFlag);
       state.equip = payload.equip;
       state.traits = payload.traits;
       state.blocked = payload.blocked ?? state.blocked;

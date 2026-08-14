@@ -23,7 +23,28 @@ export function capMax(loadout) {
 }
 
 export function capUsed(loadout) {
-  return loadout.weapons.reduce((a, w) => a + (w ? WEAPONS[w.i][2] : 0), 0);
+  return loadout.weapons.reduce((a, w) => a + weaponSize(w), 0);
+}
+
+/**
+ * The weapon-budget points one entry occupies: its catalog size, or size + 1 when it
+ * is a dual-wielded pair.
+ *
+ * Governing: ADR-0023, SPEC-0009 REQ "A Pair Costs Its Weapon's Size Plus One".
+ *
+ * The +1 is stated once and read by every capacity consumer — the reducer's addWeapon,
+ * the picker, the generator and totalCost all MUST agree on what a pair costs, so the
+ * arithmetic cannot drift between them. `undefined` entries (and entries whose `d` is
+ * absent) are singles: a pair flag is a property of version-3 state, and state that has
+ * not been normalized never pays the pair premium.
+ *
+ * Size-1 pistols only are verified in game; the size-2 figure is untested, and this
+ * rule is implemented exactly as SPEC-0009 states it — no special case, no confirmation
+ * in comments or tests (issue #178).
+ */
+export function weaponSize(w) {
+  if (!w) return 0;
+  return WEAPONS[w.i][2] + (w.d === true ? 1 : 0);
 }
 
 /**
@@ -143,7 +164,11 @@ export function totalCost(loadout) {
   let t = 0;
   loadout.weapons.forEach((w) => {
     if (!w) return;
-    t += WEAPONS[w.i][3];
+    // Governing: ADR-0023, SPEC-0009 REQ "A Pair Carries One Weapon's Ammo and Doubles
+    // Only the Weapon Price". A pair buys two pistols, so the WEAPON price counts twice;
+    // both fire the same round, so the ammo price does NOT double — the ammo line below
+    // is deliberately outside this branch.
+    t += WEAPONS[w.i][3] * (w.d === true ? 2 : 1);
     // Governing: issue #201. The decoder bounds `a` against the weapon's own variant list,
     // so a selection that resolves to nothing should be unreachable — but this used to
     // index straight into the pool, and an unresolved variant threw here rather than

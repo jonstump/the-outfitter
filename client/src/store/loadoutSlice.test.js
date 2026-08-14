@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { CONS, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, capMax, capUsed } from "../utils/calc.js";
+import { dualWieldFor } from "../data/itemStats.js";
+import { TRAIT_MAX, capMax, capUsed, weaponSize } from "../utils/calc.js";
 import { emptyLoadout, fromData, toData } from "../utils/loadoutCodec.js";
 import { loadoutState } from "../test/testStore.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
@@ -506,6 +507,162 @@ describe("SPEC-0009: the weapon budget in the reducer", () => {
     for (let i = 0; i < 30; i++) {
       const drawn = randomizeLoadout({});
       expect(capUsed(drawn)).toBeLessThanOrEqual(capMax(drawn));
+    }
+  });
+});
+
+// Governing: ADR-0023, SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does Not
+// Permit It", REQ "A Pair Never Consumes the Second Weapon Entry", REQ "A Pair Costs Its
+// Weapon's Size Plus One".
+//
+// The pair flag (dual-wield) normalization and gating in STORE STATE. Every weapon in
+// loadout state carries a boolean `d` — not merely falsy, since `undefined` is falsy and
+// is exactly the value this invariant exists to eliminate. The flag is refused at every
+// route that can write it — addWeapon, setLoadout, and the generator — never inferred,
+// and read only from the stored per-weapon attribute (`dualWieldFor`).
+describe("SPEC-0009: the dual-wield pair flag in state", () => {
+  // Real catalog pair: a size-1 dual-wieldable pistol (Conversion) and a size-3 rifle
+  // (Frontier 73C). Sizes come from WEAPONS[i][2].
+  const PISTOL = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
+  const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
+  // A real weapon the stored attribute does NOT mark dual-wieldable.
+  const HAYMAKER = WEAPONS.findIndex((w) => w[0] === "haymaker");
+  const AMMO_INDEX = 1; // a real variant the Conversion's pool has
+
+  it("addWeapon gives the new weapon a boolean d of false", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(PISTOL));
+    const w = store.getState().loadout.weapons[0];
+    expect(typeof w.d).toBe("boolean");
+    expect(w.d).toBe(false);
+  });
+
+  it("addWeapon adds a single even when the weapon IS dual-wieldable", () => {
+    // The load-bearing case: the Conversion is pairable by the stored attribute, so if the
+    // interactive path ever started inferring a pair, this is where it would show. It adds
+    // a single regardless — the pair toggle and its refusal ship with the affordance (#333).
+    expect(dualWieldFor(WEAPONS[PISTOL][0])).toBe(true);
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(PISTOL));
+    expect(store.getState().loadout.weapons[0]).toEqual({ i: PISTOL, a: -1, d: false });
+    // And the capacity it occupies is the single's, not the pair's — a size-1 pistol added
+    // through this route costs 1, never 2.
+    expect(capUsed(store.getState().loadout)).toBe(WEAPONS[PISTOL][2]);
+
+    // A non-pairable weapon lands the same way, so `d: false` here is not a coincidence of
+    // the stored attribute — the route simply does not write the flag.
+    expect(dualWieldFor(WEAPONS[HAYMAKER][0])).not.toBe(true);
+    const other = makeStore();
+    other.dispatch(loadoutActions.addWeapon(HAYMAKER));
+    expect(other.getState().loadout.weapons[0]).toEqual({ i: HAYMAKER, a: -1, d: false });
+  });
+
+  it("a pair + a size-3 rifle is a legal 5-point loadout, and marking the pistol as a pair leaves the rifle in place", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(PISTOL));
+    store.dispatch(loadoutActions.addWeapon(RIFLE));
+    let s = store.getState().loadout;
+    expect(s.weapons[0]).toEqual({ i: PISTOL, a: -1, d: false });
+    expect(s.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    // Marking the already-held pistol as a pair (via setLoadout, the pair-carrying route)
+    // must leave the rifle's entry untouched — a pair never consumes the second slot.
+    const withFlag = s.weapons.map((w) => (w && w.i === PISTOL ? { ...w, d: true } : w));
+    store.dispatch(loadoutActions.setLoadout({ ...s, weapons: withFlag }));
+    s = store.getState().loadout;
+    expect(s.weapons[0]).toEqual({ i: PISTOL, a: -1, d: true });
+    expect(s.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(weaponSize(s.weapons[0])).toBe(2);
+    expect(capUsed(s)).toBe(5);
+    expect(capUsed(s)).toBeLessThanOrEqual(capMax(s));
+  });
+
+  it("a pair costs its size plus one, which is what turns 1 point remaining into a refusal", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(RIFLE)); // 3 points
+    store.dispatch(loadoutActions.addWeapon(PISTOL)); // size-1 single fits -> 4
+    let s = store.getState().loadout;
+    expect(s.weapons[0]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(s.weapons[1]).toEqual({ i: PISTOL, a: -1, d: false });
+    expect(capUsed(s)).toBe(4);
+
+    // Exactly 1 point remains. The pair would cost 2 (size 1 + 1), pushing to 6 over the
+    // 5-point cap — the arithmetic the picker/affordance will refuse on (a later story).
+    // This story owns the cost: assert that the pair's occupied capacity is what overflows.
+    const pairEntry = { i: PISTOL, a: -1, d: true };
+    expect(weaponSize(pairEntry)).toBe(2);
+    expect(capUsed(s) + weaponSize(pairEntry)).toBe(6);
+    expect(capUsed(s) + weaponSize(pairEntry)).toBeGreaterThan(capMax(s));
+    // The single still fits, and the pair flag is not silently written in a way that
+    // would store an over-capacity build (the capacity refusal is the affordance's gate).
+    expect(s.weapons[1]).toEqual({ i: PISTOL, a: -1, d: false });
+  });
+
+  it("setLoadout normalizes every weapon in a version-2 record to a boolean d", () => {
+    // Build the v2 payload with fromData, per the acceptance criterion — do not hand-write
+    // the decoded shape. fromData gives d-less {i, a} entries (v2 cannot express a pair).
+    const decoded = fromData({
+      v: 2,
+      w: [
+        [WEAPONS[PISTOL][0], AMMO_INDEX],
+        [WEAPONS[RIFLE][0], -1],
+      ],
+      e: [],
+      tr: [],
+      n: "x",
+      b: [],
+    });
+    // The decoder itself leaves `d` absent (proven by #330's tests, which still pass).
+    expect(decoded.weapons[0]).not.toHaveProperty("d");
+
+    const store = makeStore();
+    store.dispatch(loadoutActions.setLoadout({ ...decoded, name: "x" }));
+    const [w0, w1] = store.getState().loadout.weapons;
+    expect(typeof w0.d).toBe("boolean");
+    expect(typeof w1.d).toBe("boolean");
+    expect(w0.d).toBe(false);
+    expect(w1.d).toBe(false);
+  });
+
+  it("setLoadout strikes an impermissible pair flag to false, reflecting the single's capacity", () => {
+    // A decoded share URL carrying the flag on a weapon the data does not permit — the
+    // flag must NOT reach state, and occupied capacity must reflect the single only.
+    const store = makeStore();
+    store.dispatch(
+      loadoutActions.setLoadout({
+        weapons: [
+          { i: HAYMAKER, a: -1, d: true }, // haymaker: shared size with the Uppercut, NOT pairable
+          null,
+        ],
+        equip: [],
+        traits: [],
+      })
+    );
+    const w = store.getState().loadout.weapons[0];
+    expect(typeof w.d).toBe("boolean");
+    expect(w.d).toBe(false);
+    expect(capUsed(store.getState().loadout)).toBe(WEAPONS[HAYMAKER][2]); // single, not +1
+  });
+
+  it("marking a pair leaves the ammo selection byte-identical (setAmmo then toggle d)", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.addWeapon(PISTOL));
+    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoIndex: AMMO_INDEX }));
+    const before = store.getState().loadout.weapons[0].a;
+    // The pair flag is normalized onto a state entry that already carries its ammo.
+    store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }, null], equip: [], traits: [] }));
+    expect(store.getState().loadout.weapons[0].a).toBe(before);
+    expect(store.getState().loadout.weapons[0].d).toBe(true);
+    expect(Object.keys(store.getState().loadout.weapons[0]).sort()).toEqual(["a", "d", "i"].sort());
+  });
+
+  it("the generator emits weapons whose d is a boolean, and never a flag the data disallows", () => {
+    for (let i = 0; i < 30; i++) {
+      const drawn = randomizeLoadout({});
+      for (const w of drawn.weapons) {
+        if (w === null) continue;
+        expect(typeof w.d).toBe("boolean");
+        if (w.d === true) expect(dualWieldFor(WEAPONS[w.i][0])).toBe(true);
+      }
     }
   });
 });

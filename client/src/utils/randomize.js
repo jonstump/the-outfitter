@@ -1,5 +1,5 @@
 import { AMMO, CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, consAllowed, totalCost } from "./calc.js";
+import { TRAIT_MAX, consAllowed, totalCost, weaponSize } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
 const BUDGET_RETRY_ATTEMPTS = 80;
@@ -49,14 +49,21 @@ function attempt({ blockedArray, upBudgetOn, upBudget }) {
   }
 
   const cap = 5 + (traits.includes(QM) ? 1 : 0);
-  const w1c = WEAPONS.map((w, i) => i).filter((i) => WEAPONS[i][2] <= cap - 1);
+  // Governing: ADR-0023, SPEC-0009 REQ "The Pair Flag Is Refused Wherever the Data Does
+  // Not Permit It", REQ "A Pair Costs Its Weapon's Size Plus One".
+  //
+  // The generator draws SINGLE weapons only — `d: false` on every entry — and budgets the
+  // pair-free size. `weaponSize` is the shared capacity predicate, so if a future story
+  // makes the generator emit pairs, the same +1 the reducer/picker use gates here too and
+  // the draw cannot silently exceed the cap.
+  const w1c = WEAPONS.map((w, i) => i).filter((i) => weaponSize({ i, d: false }) <= cap - 1);
   const i1 = w1c[Math.floor(Math.random() * w1c.length)];
-  const rem = cap - WEAPONS[i1][2];
-  const w2c = WEAPONS.map((w, i) => i).filter((i) => WEAPONS[i][2] <= rem);
+  const rem = cap - weaponSize({ i: i1, d: false });
+  const w2c = WEAPONS.map((w, i) => i).filter((i) => weaponSize({ i, d: false }) <= rem);
   const i2 = w2c.length ? w2c[Math.floor(Math.random() * w2c.length)] : null;
   const mkAmmo = (i) =>
     Math.random() < 0.3 && AMMO[WEAPONS[i][4]].length ? Math.floor(Math.random() * AMMO[WEAPONS[i][4]].length) : -1;
-  const weapons = [{ i: i1, a: mkAmmo(i1) }, i2 === null ? null : { i: i2, a: mkAmmo(i2) }];
+  const weapons = [{ i: i1, a: mkAmmo(i1), d: false }, i2 === null ? null : { i: i2, a: mkAmmo(i2), d: false }];
 
   // Starter tool resolved by stable catalog id so a future reorder of TOOLS
   // can't silently remap the random build's guaranteed First Aid Kit.
