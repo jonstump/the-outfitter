@@ -34,7 +34,16 @@ const WIRE_CATEGORIES = { w: 40, eT: 24, eC: 24, tr: 40 };
 const isNonnegInt = (n) => Number.isInteger(n) && n >= 0;
 const isId = (s) => typeof s === "string" && s.length > 0 && s.length <= 100;
 const isRef = (v, bound) => (isNonnegInt(v) && v < bound) || isId(v);
+// Governing: ADR-0023 (the pair flag is the third element of a version-3 weapon entry),
+// SPEC-0009 REQ "The Weapon Entry Is Validated at an Exact Element Count".
+//
+// Two-entry weapon slots: [ref, ammo]. `d`, the third element, is the version-3
+// dual-wield pair flag — a boolean, when present, and nothing else. The count stays an
+// EQUALITY and its own version decides which count is legal: two for v1/v2, three for
+// v3, never "at least" (issue #198). A four-element entry is rejected, not truncated.
 const isIsland = (v, bound) => Array.isArray(v) && v.length === 2 && isRef(v[0], bound) && Number.isInteger(v[1]);
+const isIslandV3 = (v, bound) =>
+  Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && Number.isInteger(v[1]) && typeof v[2] === "boolean";
 
 // Governing: issue #198.
 //
@@ -97,16 +106,26 @@ function isValidData(data) {
   // under the same version branch.
   const isV2 = data.v === 2;
   if (!Array.isArray(data.w) || data.w.length !== 2) return reject("w");
+  // Governing: ADR-0023, SPEC-0009 REQ "The Weapon Entry Is Validated at an Exact
+  // Element Count". The weapon check is version-aware like `e`/`b` above: a v3 payload's
+  // entry carries the pair flag at `[ref, ammo, d]`, a v1/v2 payload's carries
+  // `[ref, ammo]`, and each is validated under its own version's count.
+  //
   // Exactly two entries per tuple, not "at least". A floor with no ceiling accepted a slot
   // carrying any amount of trailing junk, which was then stored — the same unbounded-growth
   // hole as an unknown key, wearing the shape of a field the format does define.
-  if (!data.w.every((slot) => slot === null || isIsland(slot, WIRE_CATEGORIES.w))) return reject("w");
+  const weaponValid = (slot) => slot === null || (data.v === 3 ? isIslandV3(slot, WIRE_CATEGORIES.w) : isIsland(slot, WIRE_CATEGORIES.w));
+  if (!data.w.every(weaponValid)) return reject("w");
   if (!Array.isArray(data.e)) return reject("e");
-  if (isV2) {
+  if (data.v === 2) {
+    // Version 2 (ADR-0009): a fixed eight-cell grid whose cells may hold null holes.
     if (data.e.length !== 8) return reject("e");
     // Structural shape, not truthiness: each cell is either empty (null) or a valid entry.
     if (!data.e.every((entry) => entry === null || isValidV2Entry(entry))) return reject("e");
   } else {
+    // Versions 1 and 3 (and any version beyond) carry the packed encoding: at most
+    // eight entries, each a valid entry. Version 3's weapon pairs do not change the
+    // equipment encoding (ADR-0023), so the packed shape is the correct one for it.
     if (data.e.length > 8) return reject("e");
     if (!data.e.every((entry) => isValidV1Entry(entry))) return reject("e");
   }
@@ -114,7 +133,7 @@ function isValidData(data) {
   if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return reject("tr");
   if (typeof data.n !== "string" || data.n.length > 200) return reject("n");
   if (data.b !== undefined) {
-    if (isV2) {
+    if (data.v === 2) {
       // Per-cell blocking (ADR-0009): an array of cell indices. Rejected rather than
       // clamped when an index is out of range — a clamp would store a grid the client
       // never asked for (REQ "Error Handling at the Payload Boundary").
