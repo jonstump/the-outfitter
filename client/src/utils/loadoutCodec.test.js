@@ -9,6 +9,7 @@ import {
   PROMOTED_TO_WEAPON,
   RETIRED_WEAPON_ALIASES,
   emptyLoadout,
+  encodeShareUrl,
   fromData,
   toData,
 } from "./loadoutCodec.js";
@@ -616,5 +617,69 @@ describe("the retired Winfield M1873C alias", () => {
       v: FORMAT_VERSION, w: [["no-such-weapon", -1], null], e: [], tr: [], n: "", b: 0,
     });
     expect(decoded.weapons).toEqual([null, null]);
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged" and
+// REQ "A Loadout's Name Is Derived From Its Weapons Until the User Owns It" (issue #316)
+//
+// Each feature individually tests that its own client-only state — `savedId` and
+// `nameIsDerived` — never reaches the wire. What is missing is coverage of BOTH fields
+// active at once: a loadout that carries a `savedId` AND a still-derived name. Neither
+// may leak into `data`, a share URL, or a local draft, and decoding one must not hand
+// the recipient provenance over the sender's record.
+//
+// `savedId` and `nameIsDerived` are both set by `setLoadout`, not by `fromData` — these
+// tests cover the codec half only. What `setLoadout` does with a decoded payload is
+// covered in `loadoutSlice.test.js`.
+describe("wire format stays clean with both savedId and nameIsDerived active", () => {
+  // A loadout carrying both pieces of client-only state at once.
+  function loadoutWithBoth() {
+    const lo = emptyLoadout();
+    lo.weapons = [{ i: 0, a: -1 }, null]; // Nagant M1895 — a derived name
+    lo.name = "Nagant M1895"; // still derived (matches what derivation would produce)
+    lo.savedId = "rec-from-server";
+    lo.nameIsDerived = true;
+    return lo;
+  }
+
+  it("toData output contains neither savedId nor nameIsDerived, and FORMAT_VERSION is unchanged", () => {
+    const enc = toData(loadoutWithBoth());
+    expect(enc).not.toHaveProperty("savedId");
+    expect(enc).not.toHaveProperty("nameIsDerived");
+    // The wire keys are exactly the format's own, and nothing more.
+    expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
+    expect(enc.v).toBe(FORMAT_VERSION);
+  });
+
+  it("an encoded share URL contains neither the savedId nor the nameIsDerived flag", () => {
+    const lo = loadoutWithBoth();
+    const url = encodeShareUrl(lo);
+    expect(url).not.toContain("rec-from-server");
+    expect(url).not.toContain("savedId");
+    expect(url).not.toContain("nameIsDerived");
+  });
+
+  it("a round trip through toData/fromData yields a payload with neither savedId nor nameIsDerived", () => {
+    // The provenance half of the guarantee: a decoded share URL must not believe it
+    // owns someone else's record. `fromData` returns a plain object carrying neither
+    // client-only field — `setLoadout` is what sets both, from what the payload holds.
+    //
+    // Note what that means for the name, because it is easy to get backwards: the name
+    // DOES survive on the wire (`n`), and `setLoadout` reads a payload carrying a name
+    // as owned rather than derived (`!payload.savedId && !payload.name`, added in #322,
+    // so that a reload or a share link cannot overwrite a name someone typed). So a
+    // decoded share URL is a fresh build as far as `savedId` goes, but its name is not
+    // re-derived. See "keeps a typed name through a toData/fromData round trip and
+    // re-hydration" in `loadoutSlice.test.js` for the state-side assertion.
+    const lo = loadoutWithBoth();
+    const enc = toData(lo);
+    const dec = fromData(enc);
+    expect(dec).not.toHaveProperty("savedId");
+    expect(dec).not.toHaveProperty("nameIsDerived");
+    // The name survives — it was in `n` on the wire — while the provenance does not.
+    expect(dec.name).toBe("Nagant M1895");
+    // The weapons survive the round trip.
+    expect(dec.weapons).toEqual([{ i: 0, a: -1 }, null]);
   });
 });

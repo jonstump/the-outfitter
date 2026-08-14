@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 import { WEAPONS } from "../data/catalog.js";
 import { encodeShareUrl, toData } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
+import savedLoadoutsReducer, { saveCurrent } from "./savedLoadoutsSlice.js";
 import { loadSavedThunk, randomizeThunk } from "./thunks.js";
 
 // Governing: issue #27 (randomize's payload must satisfy setLoadout's shape
@@ -145,5 +146,187 @@ describe("derived name on setLoadout paths", () => {
     expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
     const url = encodeShareUrl(lo);
     expect(url).not.toContain("nameIsDerived");
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" and
+// REQ "A Loadout's Name Is Derived From Its Weapons Until the User Owns It" (issue #316, area C)
+//
+// The sharpest interaction: a loadout loaded from a saved record has an owned name AND a
+// savedId. Renaming it and saving must update THAT SAME RECORD by id — not create a copy
+// or match some other record by name. And a weapon change after loading must NOT re-derive,
+// even though it would on a fresh build. This is the test that fails if someone wires
+// derivation to weapon changes without checking savedId first.
+describe("load → rename → save interaction (savedId + derived names together)", () => {
+  function makeSaveStore() {
+    return configureStore({
+      reducer: {
+        loadout: loadoutReducer,
+        ui: uiReducer,
+        savedLoadouts: savedLoadoutsReducer,
+      },
+      preloadedState: {
+        loadout: { ...emptyLoadout(), savedId: null, nameIsDerived: true },
+        ui: { message: "" },
+        savedLoadouts: { items: [], status: "idle", error: null },
+      },
+    });
+  }
+
+  const respond = (obj, status = 200) => ({ ok: status < 400, status, json: async () => obj });
+  const bodyOf = (call) => JSON.parse(call[1].body);
+
+  const validData = {
+    v: 2,
+    w: [["nagant-m1895", -1], null],
+    e: [["T", "first-aid-kit"], null, null, null, null, null, null, null],
+    tr: ["quartermaster"],
+    n: "Original Name",
+    b: [],
+  };
+
+  it("load → rename → save addresses the original record by id, carrying the new name", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      global.fetch.mockResolvedValueOnce(
+        respond({ id: "rec-original", name: "Renamed", data: {}, listId: null })
+      );
+      const store = makeSaveStore();
+
+      // 1. Load a saved record.
+      store.dispatch(loadSavedThunk({ id: "rec-original", name: "Original Name", data: validData }));
+      expect(store.getState().loadout.savedId).toBe("rec-original");
+      expect(store.getState().loadout.nameIsDerived).toBe(false);
+
+      // 2. Rename it.
+      store.dispatch(loadoutActions.setName("Renamed"));
+
+      // 3. Save — the request must carry the record's id and the NEW name.
+      await store.dispatch(saveCurrent());
+
+      const [, opts] = global.fetch.mock.calls.at(-1);
+      expect(opts.method).toBe("POST");
+      const body = bodyOf(global.fetch.mock.calls.at(-1));
+      expect(body.id).toBe("rec-original");
+      expect(body.name).toBe("Renamed");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a weapon change after loading does not re-derive the name, even though it would on a fresh build", () => {
+    // This is the test that fails if someone wires derivation to weapon changes without
+    // checking savedId first. A loaded loadout has nameIsDerived=false, so addWeapon must
+    // NOT call derivedName.
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      const store = makeSaveStore();
+      store.dispatch(loadSavedThunk({ id: "rec-w", name: "My Build", data: validData }));
+      expect(store.getState().loadout.name).toBe("Original Name");
+      expect(store.getState().loadout.nameIsDerived).toBe(false);
+
+      // Add a weapon. On a fresh build this would re-derive. On a loaded build it must not.
+      store.dispatch(loadoutActions.addWeapon(0));
+      expect(store.getState().loadout.name).toBe("Original Name");
+      expect(store.getState().loadout.nameIsDerived).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+// Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List" and
+// REQ "A Loadout's Name Is Derived From Its Weapons Until the User Owns It" (issue #316, area D)
+//
+// A fresh build with a derived name saves with NO `id` in the request body — it upserts on
+// the triple. After the first save succeeds, the loadout adopts the returned record's id,
+// so a second save carries `id`. A randomized build has no savedId and saves by triple too.
+describe("fresh vs loaded save addressing (triple vs id)", () => {
+  function makeSaveStore() {
+    return configureStore({
+      reducer: {
+        loadout: loadoutReducer,
+        ui: uiReducer,
+        savedLoadouts: savedLoadoutsReducer,
+      },
+      preloadedState: {
+        loadout: { ...emptyLoadout(), savedId: null, nameIsDerived: true },
+        ui: { message: "" },
+        savedLoadouts: { items: [], status: "idle", error: null },
+      },
+    });
+  }
+
+  const respond = (obj, status = 200) => ({ ok: status < 400, status, json: async () => obj });
+  const bodyOf = (call) => JSON.parse(call[1].body);
+
+  it("a fresh build saves with no id — it upserts on the triple", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      global.fetch.mockResolvedValueOnce(
+        respond({ id: "rec-first", name: "Nagant M1895", data: {}, listId: null })
+      );
+      const store = makeSaveStore();
+      // Add a weapon so the name is derived (not empty, not "Unnamed loadout").
+      store.dispatch(loadoutActions.addWeapon(0));
+      expect(store.getState().loadout.savedId).toBeNull();
+
+      await store.dispatch(saveCurrent());
+
+      const body = bodyOf(global.fetch.mock.calls.at(-1));
+      expect(body).not.toHaveProperty("id");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("after the first save succeeds, a second save carries id", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      global.fetch
+        .mockResolvedValueOnce(
+          respond({ id: "rec-first", name: "Nagant M1895", data: {}, listId: null })
+        )
+        .mockResolvedValueOnce(
+          respond({ id: "rec-first", name: "Nagant M1895", data: {}, listId: null })
+        );
+      const store = makeSaveStore();
+      store.dispatch(loadoutActions.addWeapon(0));
+
+      // First save: no id (triple).
+      await store.dispatch(saveCurrent());
+      const firstBody = bodyOf(global.fetch.mock.calls.at(-1));
+      expect(firstBody).not.toHaveProperty("id");
+
+      // The loadout now carries the returned id.
+      expect(store.getState().loadout.savedId).toBe("rec-first");
+
+      // Second save: carries id.
+      await store.dispatch(saveCurrent());
+      const secondBody = bodyOf(global.fetch.mock.calls.at(-1));
+      expect(secondBody.id).toBe("rec-first");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a randomized build saves with no id — it upserts on the triple", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      global.fetch.mockResolvedValueOnce(
+        respond({ id: "rec-rand", name: "Some Name", data: {}, listId: null })
+      );
+      const store = makeSaveStore();
+      store.dispatch(randomizeThunk());
+      expect(store.getState().loadout.savedId).toBeNull();
+      expect(store.getState().loadout.nameIsDerived).toBe(true);
+
+      await store.dispatch(saveCurrent());
+
+      const body = bodyOf(global.fetch.mock.calls.at(-1));
+      expect(body).not.toHaveProperty("id");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

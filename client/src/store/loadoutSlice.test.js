@@ -392,3 +392,43 @@ describe("derived loadout name", () => {
     expect(store.getState().loadout.nameIsDerived).toBe(false);
   });
 });
+
+// Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons Until
+// the User Owns It" (issue #316, area B)
+//
+// Derived names are a pure function of the weapon pair, so two builds with the same two
+// weapons get the same name BY CONSTRUCTION — no user error required. Under the old
+// `(owner, name)` upsert key that would have been systematic data loss: saving the second
+// build would overwrite and relocate the first. The current `(owner, listId, name)` triple
+// key makes the two records coexist.
+//
+// This test pins the collision that makes the triple key load-bearing. The server-side proof
+// that two same-named records in different lists survive is in
+// `server/src/routes/filing.test.js` — "keeps two same-named loadouts in different lists,
+// relocating neither". This is the client half: it produces the collision that test proves
+// survivable. If someone "simplifies" the key back to `(owner, name)`, the server test fails
+// and this test explains what it cost.
+describe("identical weapon pairs derive identical names (the collision the triple key survives)", () => {
+  // Two size-1 weapons so both fit. 0 = Nagant M1895, 1 = Conversion.
+  const W0 = 0;
+  const W1 = 1;
+  const EXPECTED = `${WEAPONS[W0][1]} and ${WEAPONS[W1][1]}`;
+
+  it("two builds with the same weapon pair produce the same derived name", () => {
+    const s1 = makeStore();
+    s1.dispatch(loadoutActions.addWeapon(W0));
+    s1.dispatch(loadoutActions.addWeapon(W1));
+
+    const s2 = makeStore();
+    s2.dispatch(loadoutActions.addWeapon(W0));
+    s2.dispatch(loadoutActions.addWeapon(W1));
+
+    const name1 = s1.getState().loadout.name;
+    const name2 = s2.getState().loadout.name;
+
+    expect(name1).toBe(EXPECTED);
+    expect(name2).toBe(EXPECTED);
+    // The collision: two independent builds share one name, by construction.
+    expect(name1).toBe(name2);
+  });
+});
