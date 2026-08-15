@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { selectEquipCount } from "../../store/selectors.js";
+import { selectEquipCount, selectEquipOverCapacity } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import EquipmentSlot from "./EquipmentSlot.jsx";
 import { equipRuns } from "../../utils/stacking.js";
@@ -29,6 +29,7 @@ import { announceFailure, arrowTarget, readArrangement } from "./gridMove.js";
 // the same ref for its highlight.
 export default function EquipmentPanel() {
   const equipCount = useSelector(selectEquipCount);
+  const overCap = useSelector(selectEquipOverCapacity);
   const loadout = useSelector((s) => s.loadout);
   const dispatch = useDispatch();
   const runs = equipRuns(loadout.equip);
@@ -151,6 +152,17 @@ export default function EquipmentPanel() {
           />
         ))}
       </div>
+      {/* Governing: issue #353, ADR-0015. A build the game refuses (five of one
+          consumable type, or more items than unblocked cells) must be surfaced
+          here rather than priced confidently. Driven from the shared capacity
+          predicates so the warning cannot disagree with the reducer's rules. */}
+      {overCap && (
+        <div className="over-capacity-warning" role="status">
+          {overCap.kind === "slots"
+            ? `Over capacity — ${overCap.held} items in ${overCap.max} slots. Remove an item or unblock a cell.`
+            : `Over capacity — more than 4 ${overCap.category} consumables equipped. Drop one.`}
+        </div>
+      )}
     </div>
   );
 }

@@ -773,5 +773,78 @@ describe("a move changes nothing but position", () => {
     const ids = after.equip.filter(Boolean).map((e) => `${e.t}:${e.i}`).sort();
     expect(ids).toEqual(["C:" + vitality, "T:" + kit]);
   });
+});
 
+// Governing: issue #353, ADR-0015 (four per cap category), ADR-0009 (eight cells).
+//
+// The equipment panel must surface a build the game refuses — five of one consumable
+// type, or more items than unblocked cells — rather than pricing it confidently. The
+// warning is driven from the shared `equipOverCapacity` predicate, so it cannot
+// disagree with the reducer's rules. A legal grid renders no warning.
+describe("over-capacity surface (issue #353)", () => {
+  const STICK = CONS.findIndex((c) => c[0] === "dynamite-stick");
+  const BUNDLE = CONS.findIndex((c) => c[0] === "dynamite-bundle");
+
+  it("renders an over-capacity warning for more than four of one consumable category", () => {
+    // 4 × Dynamite Stick + 1 × Dynamite Bundle = 5 Throwables, over the 4-per-category cap.
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: BUNDLE }, null, null, null,
+        ],
+      }),
+    });
+    const warning = container.querySelector(".over-capacity-warning");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent(/Over capacity/i);
+    expect(warning).toHaveTextContent(/Throwable/i);
+  });
+
+  it("renders NO warning for a legal grid (four of one category)", () => {
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          null, null, null, null,
+        ],
+      }),
+    });
+    expect(container.querySelector(".over-capacity-warning")).not.toBeInTheDocument();
+  });
+
+  it("renders an over-capacity warning when items exceed the slot count", () => {
+    // 6 items held, no single category over 4, 3 blocked cells → slotMax 5, 6 > 5.
+    // The blocked cells are empty (an occupied cell cannot be blocked), so this is a
+    // grid that was legal before three cells were blocked — the kind of state a
+    // decoded save can land in. Two tools + four consumables spread across two
+    // categories keeps the per-type check below 4.
+    const SHOT = CONS.findIndex((c) => c[0] === "vitality-shot");
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "T", i: 0 }, { t: "T", i: 1 }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: SHOT }, { t: "C", i: SHOT }, null, null,
+        ],
+        blocked: [5, 6, 7],
+      }),
+    });
+    const warning = container.querySelector(".over-capacity-warning");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent(/Over capacity/i);
+    expect(warning).toHaveTextContent(/slots/i);
+  });
+
+  it("the warning is a live region (role=status) so assistive tech announces it", () => {
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: BUNDLE }, null, null, null,
+        ],
+      }),
+    });
+    const warning = container.querySelector('.over-capacity-warning[role="status"]');
+    expect(warning).toBeInTheDocument();
+  });
 });

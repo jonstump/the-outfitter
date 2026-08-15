@@ -155,6 +155,38 @@ export function consCount(loadout, consIndex) {
   return heldItems(loadout).filter((e) => e.t === "C" && e.i === consIndex).length;
 }
 
+/**
+ * Whether the equipment grid is over its capacity, and why.
+ *
+ * Governing: ADR-0009 (eight cells), ADR-0015 (four per cap category), SPEC-0006
+ * REQ "Capacity Rules Are Stated Once and Preserved", issue #353.
+ *
+ * Two independent ways to be over capacity: more items held than unblocked cells
+ * (`held > slotMax`), or more than four consumables of one cap category. Either
+ * produces a loadout the game refuses, and the equipment panel must surface it
+ * rather than pricing the build confidently. Returns null when the grid is legal.
+ *
+ * Reads through `heldItems`, `slotMax`, and `capCategoryOf` — the SAME predicates
+ * the reducer and picker use — so the warning cannot disagree with the rules.
+ */
+export function equipOverCapacity(loadout) {
+  const held = heldItems(loadout).length;
+  const max = slotMax(loadout);
+  if (held > max) return { kind: "slots", held, max };
+  // Per-category count: four per `CONS_CAP_CATEGORIES` entry, the same list the
+  // reducer's `consAllowed` reads. An undeclared type collapses to one shared
+  // budget, so two unknown types share the four-slot cap rather than minting eight.
+  const counts = new Map();
+  for (const e of heldItems(loadout)) {
+    if (e.t !== "C") continue;
+    const cat = capCategory(e.i);
+    const n = (counts.get(cat) || 0) + 1;
+    counts.set(cat, n);
+    if (n > 4) return { kind: "category", category: cat, held: n, max: 4 };
+  }
+  return null;
+}
+
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));
 export function upTotal(loadout) {
   return loadout.traits.reduce((a, id) => a + (TRAIT_UP.get(id) || 0), 0);
