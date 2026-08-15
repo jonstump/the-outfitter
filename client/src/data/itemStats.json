@@ -4159,16 +4159,16 @@
       "acquisitionClasses": [
         "Regular"
       ],
-      "priceStated": "3",
+      "priceStated": "2",
       "purchasable": true,
       "fields": {
-        "Cost": "3",
+        "Cost": "2",
         "Unlock": "Bloodline Rank 40",
         "Category": "Defensive",
         "Type": "Regular"
       },
-      "sourceRevision": "15612",
-      "ingestedAt": "2026-08-12T22:54:29.478Z"
+      "sourceRevision": "16392",
+      "ingestedAt": "2026-08-15T08:22:47.970Z"
     },
     "mosin-nagant-avtomat": {
       "name": "Mosin-Nagant Avtomat",
