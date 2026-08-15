@@ -104,7 +104,10 @@ export function capCategoryOf(type) {
   return CONS_CAP_CATEGORIES.includes(type) ? type : UNDECLARED_CATEGORY;
 }
 
-function capCategory(consIndex) {
+// Exported so callers resolve a consumable's cap category through this rather than
+// re-deriving `capCategoryOf(CONS[i][3])` at the call site — the decoder's clamp
+// needed exactly this and had inlined the body (issue #418 review).
+export function capCategory(consIndex) {
   return capCategoryOf(CONS[consIndex] ? CONS[consIndex][3] : undefined);
 }
 

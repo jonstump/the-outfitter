@@ -1,5 +1,5 @@
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX, capCategoryOf, equipOverCapacity } from "./calc.js";
+import { TRAIT_MAX, capCategory, equipOverCapacity } from "./calc.js";
 
 export const LS_CUR = "hunt-outfitter-current";
 
@@ -95,6 +95,25 @@ function boundedTraits(ids) {
 }
 
 /**
+ * The blocked-cell list a decoded loadout is allowed to keep: in-range integers,
+ * each appearing once.
+ *
+ * Governing: ADR-0009, SPEC-0006 REQ "Version 1 Records Migrate Losslessly" —
+ * "Decoding SHALL be total: ... no input SHALL produce a blocked list containing a
+ * duplicate or an out-of-range index." The out-of-range half was already enforced;
+ * the DUPLICATE half was not, and a record carrying nine copies of `0` decoded to a
+ * nine-element blocked list. That was silent until `boundedEquip` started dividing
+ * the grid by it: `8 - blocked.length` went negative, and a loop that drops items
+ * until the count falls below a negative bound never terminates. Deduplicating here
+ * closes the spec gap and removes the negative bound at its source, rather than
+ * bounding the loop that tripped over it.
+ */
+function boundedBlocked(b) {
+  if (!Array.isArray(b)) return [];
+  return [...new Set(b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8))];
+}
+
+/**
  * The equipment grid a decoded loadout is allowed to keep: at most `slotMax` items
  * (8 minus blocked cells) and at most four per consumable cap category.
  *
@@ -107,59 +126,39 @@ function boundedTraits(ids) {
  * every later visit. Clamping keeps the record loadable and self-correcting — the
  * next save writes the clamped grid back.
  *
- * The clamp is DETERMINISTIC: it drops from the END of the equip array (the
- * highest-numbered cells) first, so the same record always decodes to the same
- * loadout. The per-category cap is enforced by scanning from the end and dropping
- * the last item that pushes a category over four, so the earliest four of each
- * category survive. Both passes run until `equipOverCapacity` returns null, so
- * the result is legal under BOTH rules.
+ * The clamp is DETERMINISTIC: it drops the highest-numbered occupied cell first, so
+ * the earliest items survive and the same record always decodes to the same loadout.
+ * For a category overflow it drops the last item OF THAT CATEGORY, so the earliest
+ * four of each survive and items of other categories are never disturbed.
  *
- * The rule is read through `equipOverCapacity` (calc.js), which itself reads through
- * `heldItems`, `slotMax`, and `capCategoryOf` — no new copy of the cap literal.
+ * Both rules are read through `equipOverCapacity` (calc.js) — one loop, not two, so
+ * there is no second copy of the slot arithmetic. An earlier revision hand-rolled
+ * `8 - blocked.length` for the slot pass; with a blocked list that was never
+ * deduplicated, that bound could go negative and the loop spun forever on an empty
+ * grid. `boundedBlocked` fixes the input, and driving the whole clamp from
+ * `equipOverCapacity` means the arithmetic exists once, in `slotMax`.
+ *
+ * TERMINATION is structural rather than a counter: every iteration nulls exactly one
+ * occupied cell, the grid holds at most eight, and `dropLast` returning false — the
+ * over-capacity report names a category with nothing left to drop — exits instead of
+ * spinning. So the loop cannot outlive the items it is removing.
  */
+function dropLast(equip, category) {
+  for (let k = equip.length - 1; k >= 0; k--) {
+    const e = equip[k];
+    if (!e) continue;
+    if (category !== null && (e.t !== "C" || capCategory(e.i) !== category)) continue;
+    equip[k] = null;
+    return true;
+  }
+  return false;
+}
+
 function boundedEquip(equip, blocked) {
   const result = [...equip];
-  const blockedArr = Array.isArray(blocked) ? blocked : [];
-  // Drop from the end until under the slot count. A blocked cell that is also
-  // occupied is contradictory, but the slot check counts all held items regardless.
-  while (result.filter(Boolean).length > 8 - blockedArr.length) {
-    for (let k = result.length - 1; k >= 0; k--) {
-      if (result[k] !== null) {
-        result[k] = null;
-        break;
-      }
-    }
-  }
-  // Then drop from the end until no cap category exceeds four.
-  let guard = 0;
-  while (equipOverCapacity({ equip: result, blocked: blockedArr }) && guard++ < 16) {
-    const over = equipOverCapacity({ equip: result, blocked: blockedArr });
-    // Drop the LAST item of the overflowing category (or the last held item if
-    // the overflow is slot-based, though the slot pass above should have handled it).
-    const held = result.filter(Boolean);
-    if (over.kind === "category") {
-      const cat = over.category;
-      // Scan from the end for the last item of this category.
-      for (let k = result.length - 1; k >= 0; k--) {
-        const e = result[k];
-        if (e && e.t === "C") {
-          const itemCat = capCategoryOf(CONS[e.i] ? CONS[e.i][3] : undefined);
-          if (itemCat === cat) {
-            result[k] = null;
-            break;
-          }
-        }
-      }
-    } else {
-      // Slot overflow (shouldn't happen after the pass above, but handle it).
-      for (let k = result.length - 1; k >= 0; k--) {
-        if (result[k] !== null) {
-          result[k] = null;
-          break;
-        }
-      }
-    }
-    void held;
+  const loadout = { equip: result, blocked: Array.isArray(blocked) ? blocked : [] };
+  for (let over = equipOverCapacity(loadout); over; over = equipOverCapacity(loadout)) {
+    if (!dropLast(result, over.kind === "category" ? over.category : null)) break;
   }
   return result;
 }
@@ -554,7 +553,7 @@ function fromV2(d) {
     rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
   );
 
-  const blocked = Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [];
+  const blocked = boundedBlocked(d.b);
 
   return {
     weapons,
@@ -611,7 +610,7 @@ function fromV3(d) {
     rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
   );
 
-  const v3blocked = Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [];
+  const v3blocked = boundedBlocked(d.b);
 
   return {
     weapons,

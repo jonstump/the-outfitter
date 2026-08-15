@@ -1098,7 +1098,7 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     ["v2", v2(overCategory)],
     ["v1", v1(overCategory)],
     ["legacy", legacy(legacyOverCategoryPadded)],
-  ])("clamps an over-category record (%s: 5 Throwables → 4)", (label, payload) => {
+  ])("clamps an over-category record (%s: 5 Throwables → 4)", (_label, payload) => {
     const dec = fromData(payload);
     const held = dec.equip.filter(Boolean);
     expect(held).toHaveLength(4);
@@ -1106,31 +1106,26 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
     // The 5th cell is now a hole.
     expect(dec.equip[4]).toBeNull();
-    void label;
   });
 
   it.each([
     ["v3", v3(toolPayload(), { blocked: [6, 7] })],
     ["v2", v2(toolPayload(), { blocked: [6, 7] })],
     ["v1", v1(toolPayload(), { blockedCount: 2 })],
-    ["legacy", legacy(legacyToolPayload())],
-  ])("clamps an over-slot record (%s: 7 items, slotMax 6 → 6)", (label, payload) => {
-    // Legacy has no blocked count → slotMax 8, so 7 items is NOT over slots. The
-    // legacy variant instead asserts that 7 items with b: 1 (slotMax 7) is clamped
-    // to 7 — but since legacy doesn't support blocked arrays, only v3/v2/v1 test
-    // the slot overflow. Legacy is skipped here and tested for category above.
-    if (label === "legacy") {
-      // Legacy 7 items with slotMax 8 is legal — no slot clamp needed. This is a
-      // sanity check that 7 items survive.
-      const dec = fromData(payload);
-      expect(dec.equip.filter(Boolean)).toHaveLength(7);
-      return;
-    }
+  ])("clamps an over-slot record (%s: 7 items, slotMax 6 → 6)", (_label, payload) => {
     const dec = fromData(payload);
     const held = dec.equip.filter(Boolean);
     expect(held).toHaveLength(6);
     expect(dec.equip[6]).toBeNull();
-    void label;
+  });
+
+  // Legacy is excluded from the row set above rather than early-returning inside it:
+  // its `b` is a trailing COUNT, and these seven tools carry `b: 0`, so slotMax is 8
+  // and seven items are legal. Asserting "no clamp" under a title that says "clamps
+  // to 6" would describe the opposite of what it checks.
+  it("leaves a legacy record of 7 tools untouched — slotMax is 8 with no blocked count", () => {
+    const dec = fromData(legacy(legacyToolPayload()));
+    expect(dec.equip.filter(Boolean)).toHaveLength(7);
   });
 
   it.each([
@@ -1138,12 +1133,11 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     ["v2", v2(legal)],
     ["v1", v1(legal)],
     ["legacy", legacy(legacyLegal())],
-  ])("leaves a legal grid untouched (%s: 4 Throwables)", (label, payload) => {
+  ])("leaves a legal grid untouched (%s: 4 Throwables)", (_label, payload) => {
     const dec = fromData(payload);
     const held = dec.equip.filter(Boolean);
     expect(held).toHaveLength(4);
     expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
-    void label;
   });
 
   it("the clamp is deterministic — the same record decodes to the same loadout", () => {
@@ -1151,5 +1145,61 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     const dec1 = fromData(payload);
     const dec2 = fromData(payload);
     expect(dec1.equip).toEqual(dec2.equip);
+  });
+
+  // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly" — "Decoding SHALL
+  // be total: ... no input SHALL produce a blocked list containing a duplicate or an
+  // out-of-range index."
+  //
+  // The out-of-range half was enforced; the duplicate half was not. Nine copies of `0`
+  // are nine individually valid indices, so `b` decoded to a nine-element list and the
+  // clamp's `8 - blocked.length` went NEGATIVE. A loop dropping items until the count
+  // fell below a negative bound could never finish — an infinite loop inside the
+  // decoder, reachable from a share link, which freezes the tab rather than blanking
+  // it the way issue #201 did. These pin the input, which is where the fix belongs.
+  it.each([
+    ["duplicates", [0, 0, 0, 0, 0, 0, 0, 0, 0], [0]],
+    ["duplicates mixed with distinct", [3, 3, 5, 5, 5, 3], [3, 5]],
+    ["out-of-range mixed with duplicates", [9, 2, 2, -1, 2, 99], [2]],
+  ])("decodes a v2 record whose blocked list carries %s, deduplicated", (_label, b, expected) => {
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], null, null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b,
+    });
+    expect(dec.blocked).toEqual(expected);
+    // And the grid still decodes — the item survives, because slotMax is now positive.
+    expect(dec.equip.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("decodes a v3 record with a duplicate-laden blocked list the same way", () => {
+    const dec = fromData({
+      v: 3,
+      w: [null, null],
+      e: [["T", "knife"], null, null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [7, 7, 7, 7, 7, 7, 7, 7, 7],
+    });
+    expect(dec.blocked).toEqual([7]);
+    expect(dec.equip.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("clamps to an empty grid when every cell is blocked, without spinning", () => {
+    // slotMax 0: nothing may be held. The clamp drops every item and stops, rather
+    // than looping on a grid it can no longer make smaller.
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], ["T", "dusters"], null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [0, 1, 2, 3, 4, 5, 6, 7],
+    });
+    expect(dec.blocked).toHaveLength(8);
+    expect(dec.equip.filter(Boolean)).toHaveLength(0);
   });
 });
