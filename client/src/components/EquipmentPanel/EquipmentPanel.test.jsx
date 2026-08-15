@@ -773,5 +773,110 @@ describe("a move changes nothing but position", () => {
     const ids = after.equip.filter(Boolean).map((e) => `${e.t}:${e.i}`).sort();
     expect(ids).toEqual(["C:" + vitality, "T:" + kit]);
   });
+});
 
+// Governing: issue #353, ADR-0015 (four per cap category), ADR-0009 (eight cells).
+//
+// The equipment panel must surface a build the game refuses — five of one consumable
+// type, or more items than unblocked cells — rather than pricing it confidently. The
+// warning is driven from the shared `equipOverCapacity` predicate, so it cannot
+// disagree with the reducer's rules. A legal grid renders no warning.
+describe("over-capacity surface (issue #353)", () => {
+  const STICK = CONS.findIndex((c) => c[0] === "dynamite-stick");
+  const BUNDLE = CONS.findIndex((c) => c[0] === "dynamite-bundle");
+
+  it("renders an over-capacity warning for more than four of one consumable category", () => {
+    // 4 × Dynamite Stick + 1 × Dynamite Bundle = 5 Throwables, over the 4-per-category cap.
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: BUNDLE }, null, null, null,
+        ],
+      }),
+    });
+    const warning = container.querySelector(".over-capacity-warning");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent(/Over capacity/i);
+    expect(warning).toHaveTextContent(/Throwable/i);
+  });
+
+  it("renders NO warning for a legal grid (four of one category)", () => {
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          null, null, null, null,
+        ],
+      }),
+    });
+    expect(container.querySelector(".over-capacity-warning")).not.toBeInTheDocument();
+  });
+
+  it("renders an over-capacity warning when items exceed the slot count", () => {
+    // 6 items held, no single category over 4, 3 blocked cells → slotMax 5, 6 > 5.
+    //
+    // Cell 5 is BOTH occupied and blocked, deliberately: six items plus three empty
+    // blocked cells needs nine cells and the grid has eight, so the slots branch is
+    // unreachable without the overlap. That combination is exactly what an unvalidated
+    // decode can produce and what #353 exists to surface — `heldItems` counts every
+    // non-null cell regardless of `blocked`, so held is 6 against a slotMax of 5.
+    // Two tools plus four consumables split across two categories keeps the per-type
+    // check below the cap, so this pins the slots branch and not the category one.
+    const SHOT = CONS.findIndex((c) => c[0] === "vitality-shot");
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "T", i: 0 }, { t: "T", i: 1 }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: SHOT }, { t: "C", i: SHOT }, null, null,
+        ],
+        blocked: [5, 6, 7],
+      }),
+    });
+    const warning = container.querySelector(".over-capacity-warning");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent(/Over capacity/i);
+    expect(warning).toHaveTextContent(/slots/i);
+  });
+
+  // Governing: SPEC-0001 (WCAG 2.1 AA baseline), issue #400 — the defect these two
+  // tests exist to prevent. A live region that is INSERTED together with its content
+  // is silent: assistive tech has nothing mounted to observe a change against. So the
+  // region must already be in the tree while the grid is still legal, and gain text
+  // only when the grid goes over. Asserting `role="status"` exists on a conditionally
+  // rendered node would pass while announcing nothing, which is why the legal-grid
+  // case is the load-bearing half of this pair.
+  it("the live region is mounted even while the grid is LEGAL, carrying no message", () => {
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          null, null, null, null,
+        ],
+      }),
+    });
+    const region = container.querySelector('[data-testid="equip-overcap-announcer"]');
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("");
+    // And no visible warning — the region is the announced channel, not a second warning.
+    expect(container.querySelector(".over-capacity-warning")).not.toBeInTheDocument();
+  });
+
+  it("the live region gains the message when the grid goes over capacity", () => {
+    const { container } = renderPanel({
+      loadout: loadoutState({
+        equip: [
+          { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK }, { t: "C", i: STICK },
+          { t: "C", i: BUNDLE }, null, null, null,
+        ],
+      }),
+    });
+    const region = container.querySelector('[data-testid="equip-overcap-announcer"]');
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveTextContent(/Over capacity/i);
+    // Both channels carry the SAME message — the sighted and announced surfaces
+    // are rendered from one string and cannot drift apart.
+    expect(container.querySelector(".over-capacity-warning").textContent).toBe(region.textContent);
+  });
 });

@@ -1,5 +1,5 @@
 import { createSelector } from "@reduxjs/toolkit";
-import { capMax, capUsed, totalCost, upTotal } from "../utils/calc.js";
+import { capMax, capUsed, equipOverCapacity, totalCost, upTotal } from "../utils/calc.js";
 import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
@@ -27,6 +27,11 @@ export const selectTotalCost = createSelector([selectLoadout], totalCost);
 // `equip.length` is always 8 under this model, so the count the panel header shows is
 // the number of CELLS HOLDING items — the holes must not be counted as equipment.
 export const selectEquipCount = createSelector([selectLoadout], (l) => l.equip.filter(Boolean).length);
+
+// Governing: issue #353, ADR-0009, ADR-0015. The over-capacity surface the equipment
+// panel renders — null when the grid is legal, otherwise a structured reason. Reads
+// through `equipOverCapacity` so the warning cannot disagree with the reducer's rules.
+export const selectEquipOverCapacity = createSelector([selectLoadout], equipOverCapacity);
 
 // A cell is effectively unavailable when it is either blocked or occupied; the
 // panel drives per-cell blocked styling from this alongside `selectEquipEntry`.

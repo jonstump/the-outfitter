@@ -130,8 +130,18 @@ export function consCategoryCount(loadout, consIndex) {
  * Vitality Shots plus one more is four of `Shot` — and any fifth `Shot` (even a
  * different specific item) is rejected.
  */
+/**
+ * The per-cap-category consumable ceiling (ADR-0015). Named rather than inlined
+ * because it is read from two directions — `consAllowed` asks "is there room for
+ * one more" (`< CONS_CAP`) and `equipOverCapacity` asks "are we past it"
+ * (`> CONS_CAP`). ADR-0015 already moved this rule once (four per specific item →
+ * four per type) and SPEC-0006 anticipates Tarot Cards becoming a fourth cap
+ * category, so a second copy of the literal is a drift waiting to happen.
+ */
+export const CONS_CAP = 4;
+
 export function consAllowed(loadout, consIndex) {
-  return consCategoryCount(loadout, consIndex) < 4;
+  return consCategoryCount(loadout, consIndex) < CONS_CAP;
 }
 
 export function slotMax(loadout) {
@@ -153,6 +163,41 @@ export function heldItems(loadout) {
 
 export function consCount(loadout, consIndex) {
   return heldItems(loadout).filter((e) => e.t === "C" && e.i === consIndex).length;
+}
+
+/**
+ * Whether the equipment grid is over its capacity, and why.
+ *
+ * Governing: ADR-0009 (eight cells), ADR-0015 (four per cap category), SPEC-0006
+ * REQ "Capacity Rules Are Stated Once and Preserved", issue #353.
+ *
+ * Two independent ways to be over capacity: more items held than unblocked cells
+ * (`held > slotMax`), or more than four consumables of one cap category. Either
+ * produces a loadout the game refuses, and the equipment panel must surface it
+ * rather than pricing the build confidently. Returns null when the grid is legal.
+ *
+ * Reads through `heldItems`, `slotMax`, `consCategoryCount` and `CONS_CAP` — the
+ * SAME counter and the SAME ceiling `consAllowed` is built on — so the warning
+ * cannot disagree with the reducer's rules. #353 asks for exactly this ("drive it
+ * from `consAllowed` / `capCategoryOf` rather than re-deriving the rule"): counting
+ * categories here with a second literal `4` would have been a copy of the cap that
+ * the next change to ADR-0015 could miss.
+ */
+export function equipOverCapacity(loadout) {
+  const items = heldItems(loadout);
+  const max = slotMax(loadout);
+  if (items.length > max) return { kind: "slots", held: items.length, max };
+  // `consCategoryCount` resolves each item's cap category and counts the whole
+  // grid for it, so asking once per held consumable is enough — an over-cap
+  // category necessarily contains at least one held item that reports it. An
+  // undeclared type collapses to one shared budget inside `capCategoryOf`, so two
+  // unknown types share the ceiling rather than minting one each.
+  for (const e of items) {
+    if (e.t !== "C") continue;
+    const n = consCategoryCount(loadout, e.i);
+    if (n > CONS_CAP) return { kind: "category", category: capCategory(e.i), held: n, max: CONS_CAP };
+  }
+  return null;
 }
 
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));
