@@ -306,4 +306,60 @@ describe("WeaponSlot — the dual-wield pair affordance", () => {
     fireEvent.click(pairButton(container));
     expect(region.textContent).toContain("Dual-wielding");
   });
+
+  // Governing: issue #400 — the live region must be driven by the STORE, not by the
+  // click. A store change the component did not initiate (a refused dispatch, an
+  // unpair over capacity, a decoded save) must still be announced truthfully — and a
+  // change the store refused must never be announced.
+  it("announces a pairing change it did not initiate, dispatched directly to the store", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: false }, null] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const region = container.querySelector('[role="status"]');
+    expect(region.textContent).toBe("");
+
+    // Dispatch togglePair straight to the store — the button is not involved. The
+    // announcement must follow the state change anyway.
+    act(() => store.dispatch(loadoutActions.togglePair(0)));
+    expect(store.getState().loadout.weapons[0].d).toBe(true);
+    expect(region.textContent).toContain(`Dual-wielding ${WEAPONS[PISTOL][1]}`);
+  });
+
+  it("never announces a pairing change the store refused (a locked dispatch)", () => {
+    // Uppercut (2, pairable) + rifle (3) = 5 of 5. Dispatching the pair directly is
+    // REFUSED by the reducer — the region must stay silent, because the store did not
+    // change.
+    const UPPER = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-uppercut");
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: RIFLE, a: -1, d: false }, { i: UPPER, a: -1, d: false }] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={1} />
+      </Provider>
+    );
+    const region = container.querySelector('[role="status"]');
+    expect(region.textContent).toBe("");
+
+    act(() => store.dispatch(loadoutActions.togglePair(1)));
+    expect(store.getState().loadout.weapons[1].d).toBe(false); // refused by the guard
+    expect(region.textContent).toBe(""); // and no false announcement
+  });
+
+  it("renders an empty live region for a loadout that already holds a pair on first render", () => {
+    // A decoded save (or a reload) that lands with d: true must arrive silently — the
+    // first render never announces, so a pair that was already there is not reported as
+    // if it had just been created.
+    const { container } = renderSlot({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: true }, null] }),
+    });
+    const region = container.querySelector('[role="status"]');
+    expect(pairButton(container)).toHaveClass("paired");
+    expect(region.textContent).toBe("");
+  });
 });
