@@ -38,7 +38,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16147",
-      "ingestedAt": "2026-08-12T22:50:09.772Z"
+      "ingestedAt": "2026-08-15T08:18:28.160Z"
     },
     "1865-carbine-aperture": {
       "name": "1865 Carbine Aperture",
@@ -73,7 +73,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16148",
-      "ingestedAt": "2026-08-12T22:50:39.765Z"
+      "ingestedAt": "2026-08-15T08:18:58.170Z"
     },
     "1865-carbine-silencer": {
       "name": "1865 Carbine Silencer",
@@ -108,7 +108,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16149",
-      "ingestedAt": "2026-08-12T22:50:41.307Z"
+      "ingestedAt": "2026-08-15T08:18:59.667Z"
     },
     "1890-cavalry": {
       "name": "1890 Cavalry",
@@ -143,7 +143,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16387",
-      "ingestedAt": "2026-08-12T22:50:08.306Z"
+      "ingestedAt": "2026-08-15T08:18:26.645Z"
     },
     "adrenaline": {
       "name": "Adrenaline",
@@ -166,7 +166,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15618",
-      "ingestedAt": "2026-08-12T22:54:12.965Z"
+      "ingestedAt": "2026-08-15T08:22:31.425Z"
     },
     "alert-trip-mine": {
       "name": "Alert Trip Mines",
@@ -190,7 +190,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16057",
-      "ingestedAt": "2026-08-12T22:53:11.412Z"
+      "ingestedAt": "2026-08-15T08:21:29.874Z"
     },
     "ambidextrous": {
       "name": "Ambidextrous",
@@ -213,7 +213,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15632",
-      "ingestedAt": "2026-08-12T22:54:08.461Z"
+      "ingestedAt": "2026-08-15T08:22:26.950Z"
     },
     "ammo-box": {
       "name": "Ammo Box",
@@ -235,7 +235,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15275",
-      "ingestedAt": "2026-08-12T22:55:29.544Z"
+      "ingestedAt": "2026-08-15T08:23:48.046Z"
     },
     "antidote-shot": {
       "name": "Antidote Shot",
@@ -258,7 +258,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15190",
-      "ingestedAt": "2026-08-12T22:54:56.494Z"
+      "ingestedAt": "2026-08-15T08:23:15.014Z"
     },
     "antidote-shot-weak": {
       "name": "Antidote Shot (Weak)",
@@ -281,7 +281,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15191",
-      "ingestedAt": "2026-08-12T22:55:19.020Z"
+      "ingestedAt": "2026-08-15T08:23:37.510Z"
     },
     "assailant": {
       "name": "Assailant",
@@ -304,7 +304,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15464",
-      "ingestedAt": "2026-08-12T22:54:14.463Z"
+      "ingestedAt": "2026-08-15T08:22:32.930Z"
     },
     "auto-4-shorty": {
       "name": "Auto-4 Shorty",
@@ -339,7 +339,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16187",
-      "ingestedAt": "2026-08-12T22:50:11.288Z"
+      "ingestedAt": "2026-08-15T08:18:29.663Z"
     },
     "baseball-bat": {
       "name": "Baseball Bat",
@@ -363,7 +363,7 @@
         "HeavyStaminaConsumption": "10"
       },
       "sourceRevision": "15021",
-      "ingestedAt": "2026-08-12T22:50:12.757Z"
+      "ingestedAt": "2026-08-15T08:18:31.173Z"
     },
     "bear-traps": {
       "name": "Bear Traps",
@@ -388,7 +388,7 @@
         "HeavyMeleeDamage": "67"
       },
       "sourceRevision": "15182",
-      "ingestedAt": "2026-08-12T22:53:23.413Z"
+      "ingestedAt": "2026-08-15T08:21:41.885Z"
     },
     "beastface": {
       "name": "Beastface",
@@ -412,7 +412,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15705",
-      "ingestedAt": "2026-08-12T22:53:54.945Z"
+      "ingestedAt": "2026-08-15T08:22:13.422Z"
     },
     "berserker": {
       "name": "Berserker",
@@ -433,7 +433,7 @@
         "Type": "Scarce"
       },
       "sourceRevision": "15616",
-      "ingestedAt": "2026-08-12T22:54:39.978Z"
+      "ingestedAt": "2026-08-15T08:22:58.717Z"
     },
     "berthier-1892": {
       "name": "Berthier 1892",
@@ -468,7 +468,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15765",
-      "ingestedAt": "2026-08-12T22:49:54.739Z"
+      "ingestedAt": "2026-08-15T08:18:13.205Z"
     },
     "berthier-1892-deadeye": {
       "name": "Berthier 1892 Deadeye",
@@ -503,7 +503,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15763",
-      "ingestedAt": "2026-08-12T22:50:42.770Z"
+      "ingestedAt": "2026-08-15T08:19:01.193Z"
     },
     "berthier-1892-marksman": {
       "name": "Berthier 1892 Marksman",
@@ -538,7 +538,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15766",
-      "ingestedAt": "2026-08-12T22:50:44.308Z"
+      "ingestedAt": "2026-08-15T08:19:02.679Z"
     },
     "berthier-1892-riposte": {
       "name": "Berthier 1892 Riposte",
@@ -573,7 +573,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15764",
-      "ingestedAt": "2026-08-12T22:50:45.780Z"
+      "ingestedAt": "2026-08-15T08:19:04.196Z"
     },
     "big-dynamite-bundle": {
       "name": "Big Dynamite Bundle",
@@ -599,7 +599,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16069",
-      "ingestedAt": "2026-08-12T22:55:01.015Z"
+      "ingestedAt": "2026-08-15T08:23:19.483Z"
     },
     "blade-seer": {
       "name": "Blade Seer",
@@ -622,7 +622,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15634",
-      "ingestedAt": "2026-08-12T22:54:15.949Z"
+      "ingestedAt": "2026-08-15T08:22:34.430Z"
     },
     "blank-fire-decoys": {
       "name": "Blank Fire Decoys",
@@ -647,7 +647,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13984",
-      "ingestedAt": "2026-08-12T22:53:08.394Z"
+      "ingestedAt": "2026-08-15T08:21:26.952Z"
     },
     "blast-sense": {
       "name": "Blast Sense",
@@ -670,7 +670,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15635",
-      "ingestedAt": "2026-08-12T22:54:17.466Z"
+      "ingestedAt": "2026-08-15T08:22:35.933Z"
     },
     "bloodless": {
       "name": "Bloodless",
@@ -693,7 +693,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15607",
-      "ingestedAt": "2026-08-12T22:54:18.983Z"
+      "ingestedAt": "2026-08-15T08:22:37.439Z"
     },
     "bolt-thrower": {
       "name": "Bolt Thrower",
@@ -716,7 +716,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15465",
-      "ingestedAt": "2026-08-12T22:53:44.446Z"
+      "ingestedAt": "2026-08-15T08:22:02.901Z"
     },
     "bomb-lance": {
       "name": "Bomb Lance",
@@ -750,7 +750,7 @@
         "HeavyStaminaConsumption": "50"
       },
       "sourceRevision": "15026",
-      "ingestedAt": "2026-08-12T22:49:42.741Z"
+      "ingestedAt": "2026-08-15T08:18:01.126Z"
     },
     "bomb-launcher": {
       "name": "Bomb Launcher",
@@ -783,7 +783,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16194",
-      "ingestedAt": "2026-08-12T22:50:14.285Z"
+      "ingestedAt": "2026-08-15T08:18:32.655Z"
     },
     "bornheim-no-3": {
       "name": "Bornheim No. 3",
@@ -818,7 +818,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16283",
-      "ingestedAt": "2026-08-12T22:49:17.220Z"
+      "ingestedAt": "2026-08-15T08:17:35.605Z"
     },
     "bornheim-no-3-extended": {
       "name": "Bornheim No. 3 Extended",
@@ -853,7 +853,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16285",
-      "ingestedAt": "2026-08-12T22:50:47.305Z"
+      "ingestedAt": "2026-08-15T08:19:05.689Z"
     },
     "bornheim-no-3-match": {
       "name": "Bornheim No. 3 Match",
@@ -888,7 +888,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16287",
-      "ingestedAt": "2026-08-12T22:50:48.775Z"
+      "ingestedAt": "2026-08-15T08:19:07.191Z"
     },
     "bornheim-no-3-silencer": {
       "name": "Bornheim No. 3 Silencer",
@@ -923,7 +923,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16289",
-      "ingestedAt": "2026-08-12T22:50:50.319Z"
+      "ingestedAt": "2026-08-15T08:19:08.692Z"
     },
     "bulletgrubber": {
       "name": "Bulletgrubber",
@@ -946,7 +946,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15636",
-      "ingestedAt": "2026-08-12T22:53:41.427Z"
+      "ingestedAt": "2026-08-15T08:21:59.915Z"
     },
     "bulwark": {
       "name": "Bulwark",
@@ -969,7 +969,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15608",
-      "ingestedAt": "2026-08-12T22:54:20.477Z"
+      "ingestedAt": "2026-08-15T08:22:38.956Z"
     },
     "caldwell-conversion-pistol": {
       "name": "Conversion",
@@ -1004,7 +1004,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16153",
-      "ingestedAt": "2026-08-12T22:49:14.222Z"
+      "ingestedAt": "2026-08-15T08:17:32.637Z"
     },
     "caldwell-conversion-uppercut": {
       "name": "Uppercut",
@@ -1039,7 +1039,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16179",
-      "ingestedAt": "2026-08-12T22:49:29.219Z"
+      "ingestedAt": "2026-08-15T08:17:47.615Z"
     },
     "caldwell-pax": {
       "name": "Pax",
@@ -1074,7 +1074,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16266",
-      "ingestedAt": "2026-08-12T22:49:18.735Z"
+      "ingestedAt": "2026-08-15T08:17:37.126Z"
     },
     "caldwell-rival-78": {
       "name": "Rival 78",
@@ -1109,7 +1109,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15751",
-      "ingestedAt": "2026-08-12T22:49:44.256Z"
+      "ingestedAt": "2026-08-15T08:18:02.625Z"
     },
     "catalyst": {
       "name": "Catalyst",
@@ -1130,7 +1130,7 @@
         "Type": "Scarce"
       },
       "sourceRevision": "15637",
-      "ingestedAt": "2026-08-12T22:54:41.485Z"
+      "ingestedAt": "2026-08-15T08:22:59.954Z"
     },
     "cavalry-saber": {
       "name": "Cavalry Saber",
@@ -1154,7 +1154,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15966",
-      "ingestedAt": "2026-08-12T22:49:21.719Z"
+      "ingestedAt": "2026-08-15T08:17:40.129Z"
     },
     "centennial-pointman": {
       "name": "Centennial Pointman",
@@ -1189,7 +1189,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15434",
-      "ingestedAt": "2026-08-12T22:50:51.779Z"
+      "ingestedAt": "2026-08-15T08:19:10.208Z"
     },
     "centennial-shorty": {
       "name": "Centennial Shorty",
@@ -1224,7 +1224,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15214",
-      "ingestedAt": "2026-08-12T22:50:53.307Z"
+      "ingestedAt": "2026-08-15T08:19:11.684Z"
     },
     "centennial-shorty-silencer": {
       "name": "Centennial Shorty Silencer",
@@ -1259,7 +1259,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15215",
-      "ingestedAt": "2026-08-12T22:50:54.774Z"
+      "ingestedAt": "2026-08-15T08:19:13.207Z"
     },
     "centennial-sniper": {
       "name": "Centennial Sniper",
@@ -1294,7 +1294,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16151",
-      "ingestedAt": "2026-08-12T22:50:56.298Z"
+      "ingestedAt": "2026-08-15T08:19:14.695Z"
     },
     "centennial-trauma": {
       "name": "Centennial Trauma",
@@ -1329,7 +1329,7 @@
         "StaminaConsumption": "40"
       },
       "sourceRevision": "16152",
-      "ingestedAt": "2026-08-12T22:50:57.804Z"
+      "ingestedAt": "2026-08-15T08:19:16.216Z"
     },
     "chaos-bomb": {
       "name": "Chaos Bomb",
@@ -1354,7 +1354,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10096",
-      "ingestedAt": "2026-08-12T22:55:10.017Z"
+      "ingestedAt": "2026-08-15T08:23:28.496Z"
     },
     "choke-beetle": {
       "name": "Choke Beetle",
@@ -1381,7 +1381,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14806",
-      "ingestedAt": "2026-08-12T22:55:32.525Z"
+      "ingestedAt": "2026-08-15T08:23:51.059Z"
     },
     "choke-bombs": {
       "name": "Choke Bombs",
@@ -1408,7 +1408,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16047",
-      "ingestedAt": "2026-08-12T22:53:20.415Z"
+      "ingestedAt": "2026-08-15T08:21:38.889Z"
     },
     "chu-ko-nu": {
       "name": "Chu Ko Nu",
@@ -1443,7 +1443,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15216",
-      "ingestedAt": "2026-08-12T22:50:15.775Z"
+      "ingestedAt": "2026-08-15T08:18:34.166Z"
     },
     "combat-axe": {
       "name": "Combat Axe",
@@ -1467,7 +1467,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15042",
-      "ingestedAt": "2026-08-12T22:49:23.228Z"
+      "ingestedAt": "2026-08-15T08:17:41.609Z"
     },
     "concertina-bomb": {
       "name": "Concertina Bomb",
@@ -1492,7 +1492,7 @@
         "HeavyMeleeDamage": "112"
       },
       "sourceRevision": "15277",
-      "ingestedAt": "2026-08-12T22:55:13.018Z"
+      "ingestedAt": "2026-08-15T08:23:31.499Z"
     },
     "concertina-trip-mine": {
       "name": "Concertina Trip Mines",
@@ -1517,7 +1517,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16058",
-      "ingestedAt": "2026-08-12T22:53:12.911Z"
+      "ingestedAt": "2026-08-15T08:21:31.375Z"
     },
     "conduit": {
       "name": "Conduit",
@@ -1541,7 +1541,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15706",
-      "ingestedAt": "2026-08-12T22:54:05.470Z"
+      "ingestedAt": "2026-08-15T08:22:23.935Z"
     },
     "conversion-chain-pistol": {
       "name": "Conversion Chain Pistol",
@@ -1576,7 +1576,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16154",
-      "ingestedAt": "2026-08-12T22:50:59.309Z"
+      "ingestedAt": "2026-08-15T08:19:17.724Z"
     },
     "crossbow": {
       "name": "Crossbow",
@@ -1611,7 +1611,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15045",
-      "ingestedAt": "2026-08-12T22:49:39.730Z"
+      "ingestedAt": "2026-08-15T08:17:58.135Z"
     },
     "crossbow-deadeye": {
       "name": "Crossbow Deadeye",
@@ -1646,7 +1646,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15046",
-      "ingestedAt": "2026-08-12T22:51:00.786Z"
+      "ingestedAt": "2026-08-15T08:19:19.201Z"
     },
     "crown-king-auto-5": {
       "name": "Auto-5",
@@ -1681,7 +1681,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16186",
-      "ingestedAt": "2026-08-12T22:50:02.261Z"
+      "ingestedAt": "2026-08-15T08:18:20.649Z"
     },
     "dark-dynamite-satchel": {
       "name": "Dark Dynamite Satchel",
@@ -1706,7 +1706,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16070",
-      "ingestedAt": "2026-08-12T22:55:25.026Z"
+      "ingestedAt": "2026-08-15T08:23:43.514Z"
     },
     "dauntless": {
       "name": "Dauntless",
@@ -1729,7 +1729,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15609",
-      "ingestedAt": "2026-08-12T22:54:09.951Z"
+      "ingestedAt": "2026-08-15T08:22:28.425Z"
     },
     "death-cheat": {
       "name": "Death Cheat",
@@ -1752,7 +1752,7 @@
         "Type": "Burn , Scarce"
       },
       "sourceRevision": "15641",
-      "ingestedAt": "2026-08-12T22:54:43.025Z"
+      "ingestedAt": "2026-08-15T08:23:01.550Z"
     },
     "decoy-fuses": {
       "name": "Decoy Fuses",
@@ -1778,7 +1778,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15183",
-      "ingestedAt": "2026-08-12T22:53:09.917Z"
+      "ingestedAt": "2026-08-15T08:21:28.365Z"
     },
     "decoy-supply": {
       "name": "Decoy Supply",
@@ -1801,7 +1801,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15642",
-      "ingestedAt": "2026-08-12T22:54:21.962Z"
+      "ingestedAt": "2026-08-15T08:22:40.431Z"
     },
     "decoys": {
       "name": "Decoys",
@@ -1826,7 +1826,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10076",
-      "ingestedAt": "2026-08-12T22:53:06.899Z"
+      "ingestedAt": "2026-08-15T08:21:25.362Z"
     },
     "derringer-pennyshot": {
       "name": "Derringer Pennyshot",
@@ -1860,7 +1860,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16044",
-      "ingestedAt": "2026-08-12T22:53:21.914Z"
+      "ingestedAt": "2026-08-15T08:21:40.385Z"
     },
     "determination": {
       "name": "Determination",
@@ -1883,7 +1883,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15643",
-      "ingestedAt": "2026-08-12T22:53:48.931Z"
+      "ingestedAt": "2026-08-15T08:22:07.412Z"
     },
     "doctor": {
       "name": "Doctor",
@@ -1906,7 +1906,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15610",
-      "ingestedAt": "2026-08-12T22:53:29.410Z"
+      "ingestedAt": "2026-08-15T08:21:47.881Z"
     },
     "dolch-96": {
       "name": "Dolch 96",
@@ -1941,7 +1941,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15217",
-      "ingestedAt": "2026-08-12T22:49:33.724Z"
+      "ingestedAt": "2026-08-15T08:17:52.122Z"
     },
     "dolch-96-bullseye": {
       "name": "Dolch 96 Bullseye",
@@ -1976,7 +1976,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15218",
-      "ingestedAt": "2026-08-12T22:51:02.321Z"
+      "ingestedAt": "2026-08-15T08:19:20.703Z"
     },
     "dolch-96-claw": {
       "name": "Dolch 96 Claw",
@@ -2011,7 +2011,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16078",
-      "ingestedAt": "2026-08-12T22:51:03.804Z"
+      "ingestedAt": "2026-08-15T08:19:22.209Z"
     },
     "dolch-96-precision": {
       "name": "Dolch 96 Precision",
@@ -2046,7 +2046,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16206",
-      "ingestedAt": "2026-08-12T22:51:05.307Z"
+      "ingestedAt": "2026-08-15T08:19:23.696Z"
     },
     "drilling": {
       "name": "Drilling",
@@ -2081,7 +2081,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16155",
-      "ingestedAt": "2026-08-12T22:49:56.257Z"
+      "ingestedAt": "2026-08-15T08:18:14.636Z"
     },
     "drilling-hatchet": {
       "name": "Drilling Hatchet",
@@ -2116,7 +2116,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16157",
-      "ingestedAt": "2026-08-12T22:51:06.808Z"
+      "ingestedAt": "2026-08-15T08:19:25.226Z"
     },
     "drilling-shorty": {
       "name": "Drilling Shorty",
@@ -2151,7 +2151,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16156",
-      "ingestedAt": "2026-08-12T22:51:08.317Z"
+      "ingestedAt": "2026-08-15T08:19:26.704Z"
     },
     "dusters": {
       "name": "Dusters",
@@ -2175,7 +2175,7 @@
         "HeavyStaminaConsumption": "10"
       },
       "sourceRevision": "16066",
-      "ingestedAt": "2026-08-12T22:52:57.898Z"
+      "ingestedAt": "2026-08-15T08:21:16.363Z"
     },
     "dynamite-bundle": {
       "name": "Dynamite Bundle",
@@ -2201,7 +2201,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16068",
-      "ingestedAt": "2026-08-12T22:54:59.517Z"
+      "ingestedAt": "2026-08-15T08:23:17.996Z"
     },
     "dynamite-stick": {
       "name": "Dynamite Stick",
@@ -2227,7 +2227,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14715",
-      "ingestedAt": "2026-08-12T22:54:58.021Z"
+      "ingestedAt": "2026-08-15T08:23:16.477Z"
     },
     "fanning": {
       "name": "Fanning",
@@ -2250,7 +2250,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15466",
-      "ingestedAt": "2026-08-12T22:53:26.409Z"
+      "ingestedAt": "2026-08-15T08:21:44.896Z"
     },
     "fast-fingers": {
       "name": "Fast Fingers",
@@ -2273,7 +2273,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15644",
-      "ingestedAt": "2026-08-12T22:54:23.479Z"
+      "ingestedAt": "2026-08-15T08:22:41.953Z"
     },
     "fire-beetle": {
       "name": "Fire Beetle",
@@ -2299,7 +2299,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14807",
-      "ingestedAt": "2026-08-12T22:55:35.542Z"
+      "ingestedAt": "2026-08-15T08:23:54.061Z"
     },
     "fire-bomb": {
       "name": "Fire Bomb",
@@ -2325,7 +2325,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15394",
-      "ingestedAt": "2026-08-12T22:55:05.515Z"
+      "ingestedAt": "2026-08-15T08:23:24.017Z"
     },
     "first-aid-kit": {
       "name": "First Aid Kit",
@@ -2348,7 +2348,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15293",
-      "ingestedAt": "2026-08-12T22:52:53.406Z"
+      "ingestedAt": "2026-08-15T08:21:11.846Z"
     },
     "flame-rifle": {
       "name": "Flame Rifle",
@@ -2382,7 +2382,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15222",
-      "ingestedAt": "2026-08-12T22:50:32.280Z"
+      "ingestedAt": "2026-08-15T08:18:50.659Z"
     },
     "flare-pistol": {
       "name": "Flare Pistol",
@@ -2416,7 +2416,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16048",
-      "ingestedAt": "2026-08-12T22:53:02.409Z"
+      "ingestedAt": "2026-08-15T08:21:20.888Z"
     },
     "flash-bomb": {
       "name": "Flash Bomb",
@@ -2441,7 +2441,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10105",
-      "ingestedAt": "2026-08-12T22:55:11.504Z"
+      "ingestedAt": "2026-08-15T08:23:30.019Z"
     },
     "frag-bomb": {
       "name": "Frag Bomb",
@@ -2467,7 +2467,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14717",
-      "ingestedAt": "2026-08-12T22:55:02.526Z"
+      "ingestedAt": "2026-08-15T08:23:21.012Z"
     },
     "frontier-73c": {
       "name": "Frontier 73C",
@@ -2502,7 +2502,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16291",
-      "ingestedAt": "2026-08-12T22:49:41.253Z"
+      "ingestedAt": "2026-08-15T08:17:59.623Z"
     },
     "frontier-73c-marksman": {
       "name": "Frontier 73C Marksman",
@@ -2537,7 +2537,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16293",
-      "ingestedAt": "2026-08-12T22:51:09.810Z"
+      "ingestedAt": "2026-08-15T08:19:28.222Z"
     },
     "frontier-73c-silencer": {
       "name": "Frontier 73C Silencer",
@@ -2572,7 +2572,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16295",
-      "ingestedAt": "2026-08-12T22:51:11.330Z"
+      "ingestedAt": "2026-08-15T08:19:29.707Z"
     },
     "frontiersman": {
       "name": "Frontiersman",
@@ -2596,7 +2596,7 @@
         "ConditionalEffect": "Solo , Catalyst"
       },
       "sourceRevision": "15707",
-      "ingestedAt": "2026-08-12T22:53:33.904Z"
+      "ingestedAt": "2026-08-15T08:21:52.398Z"
     },
     "fusees": {
       "name": "Fusees",
@@ -2622,7 +2622,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14698",
-      "ingestedAt": "2026-08-12T22:53:03.892Z"
+      "ingestedAt": "2026-08-15T08:21:22.367Z"
     },
     "gator-legs": {
       "name": "Gator Legs",
@@ -2645,7 +2645,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15619",
-      "ingestedAt": "2026-08-12T22:54:24.974Z"
+      "ingestedAt": "2026-08-15T08:22:43.435Z"
     },
     "ghoul": {
       "name": "Ghoul",
@@ -2668,7 +2668,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15647",
-      "ingestedAt": "2026-08-12T22:53:47.451Z"
+      "ingestedAt": "2026-08-15T08:22:05.904Z"
     },
     "greyhound": {
       "name": "Greyhound",
@@ -2691,7 +2691,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15620",
-      "ingestedAt": "2026-08-12T22:53:35.429Z"
+      "ingestedAt": "2026-08-15T08:21:53.895Z"
     },
     "hand-crossbow": {
       "name": "Hand Crossbow",
@@ -2726,7 +2726,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "16235",
-      "ingestedAt": "2026-08-12T22:49:20.230Z"
+      "ingestedAt": "2026-08-15T08:17:38.608Z"
     },
     "haymaker": {
       "name": "Haymaker",
@@ -2761,7 +2761,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16189",
-      "ingestedAt": "2026-08-12T22:50:06.761Z"
+      "ingestedAt": "2026-08-15T08:18:25.180Z"
     },
     "heavy-knife": {
       "name": "Heavy Knife",
@@ -2785,7 +2785,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16046",
-      "ingestedAt": "2026-08-12T22:52:56.392Z"
+      "ingestedAt": "2026-08-15T08:21:14.869Z"
     },
     "hellfire-bomb": {
       "name": "Hellfire Bomb",
@@ -2810,7 +2810,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15398",
-      "ingestedAt": "2026-08-12T22:55:26.548Z"
+      "ingestedAt": "2026-08-15T08:23:45.025Z"
     },
     "hive-bomb": {
       "name": "Hive Bomb",
@@ -2835,7 +2835,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16074",
-      "ingestedAt": "2026-08-12T22:55:08.500Z"
+      "ingestedAt": "2026-08-15T08:23:26.998Z"
     },
     "homestead-78": {
       "name": "Homestead 78",
@@ -2870,7 +2870,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15736",
-      "ingestedAt": "2026-08-12T22:50:33.765Z"
+      "ingestedAt": "2026-08-15T08:18:52.186Z"
     },
     "hornskin": {
       "name": "Hornskin",
@@ -2893,7 +2893,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15611",
-      "ingestedAt": "2026-08-12T22:54:26.478Z"
+      "ingestedAt": "2026-08-15T08:22:44.949Z"
     },
     "hundred-hands": {
       "name": "Hundred Hands",
@@ -2916,7 +2916,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15468",
-      "ingestedAt": "2026-08-12T22:53:56.458Z"
+      "ingestedAt": "2026-08-15T08:22:14.944Z"
     },
     "hunting-bow": {
       "name": "Hunting Bow",
@@ -2951,7 +2951,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16269",
-      "ingestedAt": "2026-08-12T22:49:32.251Z"
+      "ingestedAt": "2026-08-15T08:17:50.611Z"
     },
     "infantry-73l": {
       "name": "Infantry 73L",
@@ -2986,7 +2986,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15263",
-      "ingestedAt": "2026-08-12T22:50:17.289Z"
+      "ingestedAt": "2026-08-15T08:18:35.650Z"
     },
     "infantry-73l-bayonet": {
       "name": "Infantry 73L Bayonet",
@@ -3021,7 +3021,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15262",
-      "ingestedAt": "2026-08-12T22:51:12.811Z"
+      "ingestedAt": "2026-08-15T08:19:31.228Z"
     },
     "infantry-73l-sniper": {
       "name": "Infantry 73L Sniper",
@@ -3056,7 +3056,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15261",
-      "ingestedAt": "2026-08-12T22:51:14.316Z"
+      "ingestedAt": "2026-08-15T08:19:32.715Z"
     },
     "iron-eye": {
       "name": "Iron Eye",
@@ -3079,7 +3079,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15591",
-      "ingestedAt": "2026-08-12T22:53:42.936Z"
+      "ingestedAt": "2026-08-15T08:22:01.407Z"
     },
     "katana": {
       "name": "Katana",
@@ -3103,7 +3103,7 @@
         "HeavyStaminaConsumption": "35"
       },
       "sourceRevision": "15067",
-      "ingestedAt": "2026-08-12T22:50:38.290Z"
+      "ingestedAt": "2026-08-15T08:18:56.659Z"
     },
     "kiteskin": {
       "name": "Kiteskin",
@@ -3127,7 +3127,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15704",
-      "ingestedAt": "2026-08-12T22:53:36.947Z"
+      "ingestedAt": "2026-08-15T08:21:55.676Z"
     },
     "knife": {
       "name": "Knife",
@@ -3151,7 +3151,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "16218",
-      "ingestedAt": "2026-08-12T22:52:54.891Z"
+      "ingestedAt": "2026-08-15T08:21:13.353Z"
     },
     "knuckle-knife": {
       "name": "Knuckle Knife",
@@ -3175,7 +3175,7 @@
         "HeavyStaminaConsumption": "21"
       },
       "sourceRevision": "16045",
-      "ingestedAt": "2026-08-12T22:53:18.929Z"
+      "ingestedAt": "2026-08-15T08:21:37.384Z"
     },
     "krag-bayonet": {
       "name": "Krag Bayonet",
@@ -3210,7 +3210,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15567",
-      "ingestedAt": "2026-08-12T22:51:15.802Z"
+      "ingestedAt": "2026-08-15T08:19:34.236Z"
     },
     "krag-m1894": {
       "name": "Krag",
@@ -3245,7 +3245,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15566",
-      "ingestedAt": "2026-08-12T22:49:57.743Z"
+      "ingestedAt": "2026-08-15T08:18:16.156Z"
     },
     "krag-silencer": {
       "name": "Krag Silencer",
@@ -3280,7 +3280,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16195",
-      "ingestedAt": "2026-08-12T22:51:17.316Z"
+      "ingestedAt": "2026-08-15T08:19:35.711Z"
     },
     "krag-sniper": {
       "name": "Krag Sniper",
@@ -3315,7 +3315,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15568",
-      "ingestedAt": "2026-08-12T22:51:18.803Z"
+      "ingestedAt": "2026-08-15T08:19:37.240Z"
     },
     "lebel-1886": {
       "name": "Lebel 1886",
@@ -3350,7 +3350,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15570",
-      "ingestedAt": "2026-08-12T22:50:00.752Z"
+      "ingestedAt": "2026-08-15T08:18:19.156Z"
     },
     "lebel-1886-aperture": {
       "name": "Lebel 1886 Aperture",
@@ -3385,7 +3385,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15571",
-      "ingestedAt": "2026-08-12T22:51:20.314Z"
+      "ingestedAt": "2026-08-15T08:19:38.744Z"
     },
     "lebel-1886-marksman": {
       "name": "Lebel 1886 Marksman",
@@ -3420,7 +3420,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15573",
-      "ingestedAt": "2026-08-12T22:51:21.805Z"
+      "ingestedAt": "2026-08-15T08:19:40.330Z"
     },
     "lebel-1886-talon": {
       "name": "Lebel 1886 Talon",
@@ -3455,7 +3455,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15572",
-      "ingestedAt": "2026-08-12T22:51:23.316Z"
+      "ingestedAt": "2026-08-15T08:19:41.729Z"
     },
     "lemat-carbine": {
       "name": "LeMat Carbine",
@@ -3490,7 +3490,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15077",
-      "ingestedAt": "2026-08-12T22:51:24.808Z"
+      "ingestedAt": "2026-08-15T08:19:43.247Z"
     },
     "lemat-carbine-marksman": {
       "name": "LeMat Carbine Marksman",
@@ -3525,7 +3525,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15078",
-      "ingestedAt": "2026-08-12T22:51:26.325Z"
+      "ingestedAt": "2026-08-15T08:19:44.741Z"
     },
     "lemat-mark-ii": {
       "name": "LeMat",
@@ -3560,7 +3560,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16190",
-      "ingestedAt": "2026-08-12T22:49:26.227Z"
+      "ingestedAt": "2026-08-15T08:17:44.609Z"
     },
     "levering": {
       "name": "Levering",
@@ -3583,7 +3583,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15592",
-      "ingestedAt": "2026-08-12T22:53:27.905Z"
+      "ingestedAt": "2026-08-15T08:21:46.381Z"
     },
     "lightfoot": {
       "name": "Lightfoot",
@@ -3606,7 +3606,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15622",
-      "ingestedAt": "2026-08-12T22:53:38.446Z"
+      "ingestedAt": "2026-08-15T08:21:56.894Z"
     },
     "liquid-fire-bomb": {
       "name": "Liquid Fire Bomb",
@@ -3632,7 +3632,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15396",
-      "ingestedAt": "2026-08-12T22:55:07.009Z"
+      "ingestedAt": "2026-08-15T08:23:25.493Z"
     },
     "machete": {
       "name": "Machete",
@@ -3656,7 +3656,7 @@
         "HeavyStaminaConsumption": "20"
       },
       "sourceRevision": "15079",
-      "ingestedAt": "2026-08-12T22:50:18.766Z"
+      "ingestedAt": "2026-08-15T08:18:37.170Z"
     },
     "magpie": {
       "name": "Magpie",
@@ -3680,7 +3680,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15708",
-      "ingestedAt": "2026-08-12T22:54:06.951Z"
+      "ingestedAt": "2026-08-15T08:22:25.422Z"
     },
     "mako-1895": {
       "name": "Mako 1895",
@@ -3715,7 +3715,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16297",
-      "ingestedAt": "2026-08-12T22:50:20.271Z"
+      "ingestedAt": "2026-08-15T08:18:38.649Z"
     },
     "mako-1895-aperture": {
       "name": "Mako 1895 Aperture",
@@ -3750,7 +3750,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16301",
-      "ingestedAt": "2026-08-12T22:51:27.805Z"
+      "ingestedAt": "2026-08-15T08:19:46.250Z"
     },
     "mako-1895-claw": {
       "name": "Mako 1895 Claw",
@@ -3785,7 +3785,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16299",
-      "ingestedAt": "2026-08-12T22:51:29.322Z"
+      "ingestedAt": "2026-08-15T08:19:47.739Z"
     },
     "marathon": {
       "name": "Marathon",
@@ -3820,7 +3820,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16303",
-      "ingestedAt": "2026-08-12T22:50:21.772Z"
+      "ingestedAt": "2026-08-15T08:18:40.174Z"
     },
     "marathon-swift": {
       "name": "Marathon Swift",
@@ -3855,7 +3855,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16305",
-      "ingestedAt": "2026-08-12T22:51:30.806Z"
+      "ingestedAt": "2026-08-15T08:19:49.257Z"
     },
     "martialist": {
       "name": "Martialist",
@@ -3878,7 +3878,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15602",
-      "ingestedAt": "2026-08-12T22:54:27.969Z"
+      "ingestedAt": "2026-08-15T08:22:46.441Z"
     },
     "martini-henry-deadeye": {
       "name": "Martini-Henry Deadeye",
@@ -3913,7 +3913,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16159",
-      "ingestedAt": "2026-08-12T22:51:32.318Z"
+      "ingestedAt": "2026-08-15T08:19:50.742Z"
     },
     "martini-henry-ic1": {
       "name": "Martini-Henry",
@@ -3948,7 +3948,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16388",
-      "ingestedAt": "2026-08-12T22:49:51.737Z"
+      "ingestedAt": "2026-08-15T08:18:10.157Z"
     },
     "martini-henry-ironside": {
       "name": "Martini-Henry Ironside",
@@ -3983,7 +3983,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16162",
-      "ingestedAt": "2026-08-12T22:51:33.833Z"
+      "ingestedAt": "2026-08-15T08:19:52.285Z"
     },
     "martini-henry-marksman": {
       "name": "Martini-Henry Marksman",
@@ -4018,7 +4018,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16161",
-      "ingestedAt": "2026-08-12T22:51:35.347Z"
+      "ingestedAt": "2026-08-15T08:19:53.744Z"
     },
     "martini-henry-riposte": {
       "name": "Martini-Henry Riposte",
@@ -4053,7 +4053,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16257",
-      "ingestedAt": "2026-08-12T22:51:36.839Z"
+      "ingestedAt": "2026-08-15T08:19:55.343Z"
     },
     "maynard-sniper": {
       "name": "Maynard Sniper",
@@ -4088,7 +4088,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15090",
-      "ingestedAt": "2026-08-12T22:50:23.294Z"
+      "ingestedAt": "2026-08-15T08:18:41.657Z"
     },
     "maynard-sniper-silencer": {
       "name": "Maynard Sniper Silencer",
@@ -4123,7 +4123,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15091",
-      "ingestedAt": "2026-08-12T22:51:38.336Z"
+      "ingestedAt": "2026-08-15T08:19:56.756Z"
     },
     "medical-pack": {
       "name": "Medical Pack",
@@ -4145,7 +4145,7 @@
         "HeavyMeleeDamage": "31"
       },
       "sourceRevision": "15196",
-      "ingestedAt": "2026-08-12T22:55:22.023Z"
+      "ingestedAt": "2026-08-15T08:23:40.507Z"
     },
     "mithridatist": {
       "name": "Mithridatist",
@@ -4203,7 +4203,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15582",
-      "ingestedAt": "2026-08-12T22:50:03.765Z"
+      "ingestedAt": "2026-08-15T08:18:22.178Z"
     },
     "mosin-nagant-bayonet": {
       "name": "Mosin-Nagant Bayonet",
@@ -4238,7 +4238,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15580",
-      "ingestedAt": "2026-08-12T22:51:45.827Z"
+      "ingestedAt": "2026-08-15T08:20:04.283Z"
     },
     "mosin-nagant-m1891": {
       "name": "Mosin-Nagant",
@@ -4273,7 +4273,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15579",
-      "ingestedAt": "2026-08-12T22:49:59.275Z"
+      "ingestedAt": "2026-08-15T08:18:17.637Z"
     },
     "mosin-nagant-sniper": {
       "name": "Mosin-Nagant Sniper",
@@ -4308,7 +4308,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15581",
-      "ingestedAt": "2026-08-12T22:51:47.334Z"
+      "ingestedAt": "2026-08-15T08:20:05.755Z"
     },
     "mosin-obrez": {
       "name": "Mosin Obrez",
@@ -4343,7 +4343,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16164",
-      "ingestedAt": "2026-08-12T22:50:24.772Z"
+      "ingestedAt": "2026-08-15T08:18:43.175Z"
     },
     "mosin-obrez-extended": {
       "name": "Mosin Obrez Extended",
@@ -4378,7 +4378,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16166",
-      "ingestedAt": "2026-08-12T22:51:39.825Z"
+      "ingestedAt": "2026-08-15T08:19:58.255Z"
     },
     "mosin-obrez-mace": {
       "name": "Mosin Obrez Mace",
@@ -4413,7 +4413,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "16165",
-      "ingestedAt": "2026-08-12T22:51:41.332Z"
+      "ingestedAt": "2026-08-15T08:19:59.749Z"
     },
     "mosin-obrez-match": {
       "name": "Mosin Obrez Match",
@@ -4448,7 +4448,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16167",
-      "ingestedAt": "2026-08-12T22:51:42.834Z"
+      "ingestedAt": "2026-08-15T08:20:01.267Z"
     },
     "mosin-obrez-sharpeye": {
       "name": "Mosin Obrez Sharpeye",
@@ -4483,7 +4483,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16310",
-      "ingestedAt": "2026-08-12T22:51:44.333Z"
+      "ingestedAt": "2026-08-15T08:20:02.756Z"
     },
     "nagant-m1895": {
       "name": "Nagant M1895",
@@ -4518,7 +4518,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16192",
-      "ingestedAt": "2026-08-12T22:49:12.711Z"
+      "ingestedAt": "2026-08-15T08:17:31.161Z"
     },
     "nagant-m1895-deadeye": {
       "name": "Nagant M1895 Deadeye",
@@ -4553,7 +4553,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15227",
-      "ingestedAt": "2026-08-12T22:51:48.838Z"
+      "ingestedAt": "2026-08-15T08:20:07.272Z"
     },
     "nagant-m1895-precision": {
       "name": "Nagant M1895 Precision",
@@ -4588,7 +4588,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15228",
-      "ingestedAt": "2026-08-12T22:51:50.345Z"
+      "ingestedAt": "2026-08-15T08:20:08.766Z"
     },
     "nagant-m1895-silencer": {
       "name": "Nagant M1895 Silencer",
@@ -4623,7 +4623,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15105",
-      "ingestedAt": "2026-08-12T22:51:51.839Z"
+      "ingestedAt": "2026-08-15T08:20:10.302Z"
     },
     "nagant-officer-carbine": {
       "name": "Officer Carbine",
@@ -4658,7 +4658,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15385",
-      "ingestedAt": "2026-08-12T22:49:30.744Z"
+      "ingestedAt": "2026-08-15T08:17:49.133Z"
     },
     "necromancer": {
       "name": "Necromancer",
@@ -4683,7 +4683,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15709",
-      "ingestedAt": "2026-08-12T22:53:53.439Z"
+      "ingestedAt": "2026-08-15T08:22:11.912Z"
     },
     "new-army": {
       "name": "New Army",
@@ -4718,7 +4718,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15106",
-      "ingestedAt": "2026-08-12T22:50:26.267Z"
+      "ingestedAt": "2026-08-15T08:18:44.654Z"
     },
     "new-army-swift": {
       "name": "New Army Swift",
@@ -4753,7 +4753,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16193",
-      "ingestedAt": "2026-08-12T22:51:53.351Z"
+      "ingestedAt": "2026-08-15T08:20:11.766Z"
     },
     "nitro-express": {
       "name": "Nitro Express",
@@ -4788,7 +4788,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15976",
-      "ingestedAt": "2026-08-12T22:50:05.274Z"
+      "ingestedAt": "2026-08-15T08:18:23.653Z"
     },
     "officer": {
       "name": "Officer",
@@ -4823,7 +4823,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15383",
-      "ingestedAt": "2026-08-12T22:50:27.776Z"
+      "ingestedAt": "2026-08-15T08:18:46.163Z"
     },
     "officer-brawler": {
       "name": "Officer Brawler",
@@ -4858,7 +4858,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "15384",
-      "ingestedAt": "2026-08-12T22:51:54.855Z"
+      "ingestedAt": "2026-08-15T08:20:13.285Z"
     },
     "officer-carbine-deadeye": {
       "name": "Officer Carbine Deadeye",
@@ -4893,7 +4893,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15386",
-      "ingestedAt": "2026-08-12T22:51:56.350Z"
+      "ingestedAt": "2026-08-15T08:20:14.774Z"
     },
     "packmule": {
       "name": "Packmule",
@@ -4916,7 +4916,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15651",
-      "ingestedAt": "2026-08-12T22:53:32.413Z"
+      "ingestedAt": "2026-08-15T08:21:50.940Z"
     },
     "pain-sense": {
       "name": "Pain Sense",
@@ -4940,7 +4940,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15710",
-      "ingestedAt": "2026-08-12T22:54:03.944Z"
+      "ingestedAt": "2026-08-15T08:22:22.424Z"
     },
     "pax-claw": {
       "name": "Pax Claw",
@@ -4975,7 +4975,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16267",
-      "ingestedAt": "2026-08-12T22:51:57.834Z"
+      "ingestedAt": "2026-08-15T08:20:16.285Z"
     },
     "pax-trueshot": {
       "name": "Pax Trueshot",
@@ -5010,7 +5010,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16268",
-      "ingestedAt": "2026-08-12T22:51:59.351Z"
+      "ingestedAt": "2026-08-15T08:20:17.778Z"
     },
     "physician": {
       "name": "Physician",
@@ -5033,7 +5033,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15613",
-      "ingestedAt": "2026-08-12T22:53:30.901Z"
+      "ingestedAt": "2026-08-15T08:21:49.667Z"
     },
     "pitcher": {
       "name": "Pitcher",
@@ -5056,7 +5056,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15603",
-      "ingestedAt": "2026-08-12T22:53:39.940Z"
+      "ingestedAt": "2026-08-15T08:21:58.404Z"
     },
     "poacher": {
       "name": "Poacher",
@@ -5079,7 +5079,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15653",
-      "ingestedAt": "2026-08-12T22:54:30.966Z"
+      "ingestedAt": "2026-08-15T08:22:49.442Z"
     },
     "poison-bomb": {
       "name": "Poison Bomb",
@@ -5105,7 +5105,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16236",
-      "ingestedAt": "2026-08-12T22:55:28.035Z"
+      "ingestedAt": "2026-08-15T08:23:46.526Z"
     },
     "poison-trip-mine": {
       "name": "Poison Trip Mines",
@@ -5131,7 +5131,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16056",
-      "ingestedAt": "2026-08-12T22:53:14.416Z"
+      "ingestedAt": "2026-08-15T08:21:32.877Z"
     },
     "poltergeist": {
       "name": "Poltergeist",
@@ -5154,7 +5154,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15654",
-      "ingestedAt": "2026-08-12T22:54:32.477Z"
+      "ingestedAt": "2026-08-15T08:22:50.962Z"
     },
     "quad-derringer": {
       "name": "Quad Derringer",
@@ -5188,7 +5188,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15187",
-      "ingestedAt": "2026-08-12T22:53:15.901Z"
+      "ingestedAt": "2026-08-15T08:21:34.375Z"
     },
     "quartermaster": {
       "name": "Quartermaster",
@@ -5211,7 +5211,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15655",
-      "ingestedAt": "2026-08-12T22:53:24.914Z"
+      "ingestedAt": "2026-08-15T08:21:43.386Z"
     },
     "railroad-hammer": {
       "name": "Railroad Hammer",
@@ -5235,7 +5235,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15119",
-      "ingestedAt": "2026-08-12T22:49:24.723Z"
+      "ingestedAt": "2026-08-15T08:17:43.128Z"
     },
     "rampage": {
       "name": "Rampage",
@@ -5257,7 +5257,7 @@
         "Type": "Burn , Scarce"
       },
       "sourceRevision": "15656",
-      "ingestedAt": "2026-08-12T22:54:44.479Z"
+      "ingestedAt": "2026-08-15T08:23:02.964Z"
     },
     "ranger-73-aperture": {
       "name": "Ranger 73 Aperture",
@@ -5292,7 +5292,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15380",
-      "ingestedAt": "2026-08-12T22:52:00.845Z"
+      "ingestedAt": "2026-08-15T08:20:19.302Z"
     },
     "ranger-73-swift": {
       "name": "Ranger 73 Swift",
@@ -5327,7 +5327,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15382",
-      "ingestedAt": "2026-08-12T22:52:02.357Z"
+      "ingestedAt": "2026-08-15T08:20:20.783Z"
     },
     "ranger-73-talon": {
       "name": "Ranger 73 Talon",
@@ -5362,7 +5362,7 @@
         "StaminaConsumption": "33"
       },
       "sourceRevision": "15381",
-      "ingestedAt": "2026-08-12T22:52:03.843Z"
+      "ingestedAt": "2026-08-15T08:20:22.307Z"
     },
     "recovery-shot": {
       "name": "Recovery Shot",
@@ -5384,7 +5384,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16075",
-      "ingestedAt": "2026-08-12T22:55:20.522Z"
+      "ingestedAt": "2026-08-15T08:23:39.036Z"
     },
     "regeneration-shot": {
       "name": "Regeneration Shot",
@@ -5407,7 +5407,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15288",
-      "ingestedAt": "2026-08-12T22:54:53.509Z"
+      "ingestedAt": "2026-08-15T08:23:12.000Z"
     },
     "regeneration-shot-weak": {
       "name": "Regeneration Shot (Weak)",
@@ -5430,7 +5430,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15286",
-      "ingestedAt": "2026-08-12T22:55:16.023Z"
+      "ingestedAt": "2026-08-15T08:23:34.504Z"
     },
     "relentless": {
       "name": "Relentless",
@@ -5452,7 +5452,7 @@
         "Type": "Burn , Scarce"
       },
       "sourceRevision": "15658",
-      "ingestedAt": "2026-08-12T22:54:45.976Z"
+      "ingestedAt": "2026-08-15T08:23:04.501Z"
     },
     "remedy": {
       "name": "Remedy",
@@ -5474,7 +5474,7 @@
         "Type": "Burn , Scarce"
       },
       "sourceRevision": "15659",
-      "ingestedAt": "2026-08-12T22:54:47.481Z"
+      "ingestedAt": "2026-08-15T08:23:05.968Z"
     },
     "resilience": {
       "name": "Resilience",
@@ -5497,7 +5497,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15660",
-      "ingestedAt": "2026-08-12T22:53:50.440Z"
+      "ingestedAt": "2026-08-15T08:22:08.914Z"
     },
     "rival-78-mace": {
       "name": "Rival 78 Mace",
@@ -5532,7 +5532,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "15754",
-      "ingestedAt": "2026-08-12T22:52:05.349Z"
+      "ingestedAt": "2026-08-15T08:20:23.781Z"
     },
     "rival-78-shorty": {
       "name": "Rival 78 Shorty",
@@ -5567,7 +5567,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16199",
-      "ingestedAt": "2026-08-12T22:52:06.851Z"
+      "ingestedAt": "2026-08-15T08:20:25.306Z"
     },
     "rival-78-trauma": {
       "name": "Rival 78 Trauma",
@@ -5602,7 +5602,7 @@
         "StaminaConsumption": "40"
       },
       "sourceRevision": "15752",
-      "ingestedAt": "2026-08-12T22:52:08.362Z"
+      "ingestedAt": "2026-08-15T08:20:26.787Z"
     },
     "romero-77": {
       "name": "Romero 77",
@@ -5637,7 +5637,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16173",
-      "ingestedAt": "2026-08-12T22:49:38.229Z"
+      "ingestedAt": "2026-08-15T08:17:56.615Z"
     },
     "romero-77-alamo": {
       "name": "Romero 77 Alamo",
@@ -5672,7 +5672,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16191",
-      "ingestedAt": "2026-08-12T22:52:09.860Z"
+      "ingestedAt": "2026-08-15T08:20:28.304Z"
     },
     "romero-77-hatchet": {
       "name": "Romero 77 Hatchet",
@@ -5707,7 +5707,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16170",
-      "ingestedAt": "2026-08-12T22:52:11.361Z"
+      "ingestedAt": "2026-08-15T08:20:29.795Z"
     },
     "romero-77-shorty": {
       "name": "Romero 77 Shorty",
@@ -5742,7 +5742,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16172",
-      "ingestedAt": "2026-08-12T22:52:12.846Z"
+      "ingestedAt": "2026-08-15T08:20:31.316Z"
     },
     "romero-77-talon": {
       "name": "Romero 77 Talon",
@@ -5777,7 +5777,7 @@
         "StaminaConsumption": "33"
       },
       "sourceRevision": "16171",
-      "ingestedAt": "2026-08-12T22:52:14.365Z"
+      "ingestedAt": "2026-08-15T08:20:32.800Z"
     },
     "salveskin": {
       "name": "Salveskin",
@@ -5800,7 +5800,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15614",
-      "ingestedAt": "2026-08-12T22:53:51.947Z"
+      "ingestedAt": "2026-08-15T08:22:10.430Z"
     },
     "scopesmith": {
       "name": "Scopesmith",
@@ -5823,7 +5823,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15604",
-      "ingestedAt": "2026-08-12T22:54:33.963Z"
+      "ingestedAt": "2026-08-15T08:22:52.447Z"
     },
     "scottfield-brawler": {
       "name": "Scottfield Brawler",
@@ -5858,7 +5858,7 @@
         "StaminaConsumption": "10"
       },
       "sourceRevision": "16262",
-      "ingestedAt": "2026-08-12T22:52:15.861Z"
+      "ingestedAt": "2026-08-15T08:20:34.318Z"
     },
     "scottfield-model-3": {
       "name": "Scottfield",
@@ -5893,7 +5893,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16261",
-      "ingestedAt": "2026-08-12T22:49:15.720Z"
+      "ingestedAt": "2026-08-15T08:17:34.101Z"
     },
     "scottfield-precision": {
       "name": "Scottfield Precision",
@@ -5928,7 +5928,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16264",
-      "ingestedAt": "2026-08-12T22:52:17.382Z"
+      "ingestedAt": "2026-08-15T08:20:35.793Z"
     },
     "scottfield-spitfire": {
       "name": "Scottfield Spitfire",
@@ -5963,7 +5963,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16263",
-      "ingestedAt": "2026-08-12T22:52:18.889Z"
+      "ingestedAt": "2026-08-15T08:20:37.349Z"
     },
     "scottfield-swift": {
       "name": "Scottfield Swift",
@@ -5998,7 +5998,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16265",
-      "ingestedAt": "2026-08-12T22:52:20.384Z"
+      "ingestedAt": "2026-08-15T08:20:38.801Z"
     },
     "serpent": {
       "name": "Serpent",
@@ -6022,7 +6022,7 @@
         "ConditionalEffect": "Solo"
       },
       "sourceRevision": "15711",
-      "ingestedAt": "2026-08-12T22:53:45.926Z"
+      "ingestedAt": "2026-08-15T08:22:04.408Z"
     },
     "shadow": {
       "name": "Shadow",
@@ -6043,7 +6043,7 @@
         "Type": "Scarce"
       },
       "sourceRevision": "15663",
-      "ingestedAt": "2026-08-12T22:54:48.978Z"
+      "ingestedAt": "2026-08-15T08:23:07.462Z"
     },
     "shadow-leap": {
       "name": "Shadow Leap",
@@ -6064,7 +6064,7 @@
         "Type": "Scarce"
       },
       "sourceRevision": "15772",
-      "ingestedAt": "2026-08-12T22:54:50.487Z"
+      "ingestedAt": "2026-08-15T08:23:08.996Z"
     },
     "shredder": {
       "name": "Shredder",
@@ -6099,7 +6099,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15144",
-      "ingestedAt": "2026-08-12T22:50:35.284Z"
+      "ingestedAt": "2026-08-15T08:18:53.659Z"
     },
     "silent-killer": {
       "name": "Silent Killer",
@@ -6122,7 +6122,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15664",
-      "ingestedAt": "2026-08-12T22:53:59.443Z"
+      "ingestedAt": "2026-08-15T08:22:17.940Z"
     },
     "slate": {
       "name": "Slate",
@@ -6157,7 +6157,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15749",
-      "ingestedAt": "2026-08-12T22:49:48.740Z"
+      "ingestedAt": "2026-08-15T08:18:07.203Z"
     },
     "slate-riposte": {
       "name": "Slate Riposte",
@@ -6192,7 +6192,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15750",
-      "ingestedAt": "2026-08-12T22:52:21.883Z"
+      "ingestedAt": "2026-08-15T08:20:40.317Z"
     },
     "sparks-lrr": {
       "name": "Sparks",
@@ -6227,7 +6227,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16389",
-      "ingestedAt": "2026-08-12T22:49:50.248Z"
+      "ingestedAt": "2026-08-15T08:18:08.625Z"
     },
     "sparks-pistol": {
       "name": "Sparks Pistol",
@@ -6262,7 +6262,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15448",
-      "ingestedAt": "2026-08-12T22:49:27.722Z"
+      "ingestedAt": "2026-08-15T08:17:46.140Z"
     },
     "sparks-pistol-silencer": {
       "name": "Sparks Pistol Silencer",
@@ -6297,7 +6297,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "16177",
-      "ingestedAt": "2026-08-12T22:52:23.376Z"
+      "ingestedAt": "2026-08-15T08:20:41.804Z"
     },
     "sparks-silencer": {
       "name": "Sparks Silencer",
@@ -6332,7 +6332,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16175",
-      "ingestedAt": "2026-08-12T22:52:24.890Z"
+      "ingestedAt": "2026-08-15T08:20:43.316Z"
     },
     "sparks-sniper": {
       "name": "Sparks Sniper",
@@ -6367,7 +6367,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16219",
-      "ingestedAt": "2026-08-12T22:52:26.389Z"
+      "ingestedAt": "2026-08-15T08:20:44.832Z"
     },
     "specter-1882": {
       "name": "Specter 1882",
@@ -6402,7 +6402,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16208",
-      "ingestedAt": "2026-08-12T22:49:47.256Z"
+      "ingestedAt": "2026-08-15T08:18:05.632Z"
     },
     "specter-1882-bayonet": {
       "name": "Specter 1882 Bayonet",
@@ -6437,7 +6437,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15743",
-      "ingestedAt": "2026-08-12T22:52:27.890Z"
+      "ingestedAt": "2026-08-15T08:20:46.321Z"
     },
     "specter-1882-shorty": {
       "name": "Specter 1882 Shorty",
@@ -6472,7 +6472,7 @@
         "StaminaConsumption": "20"
       },
       "sourceRevision": "15744",
-      "ingestedAt": "2026-08-12T22:52:29.395Z"
+      "ingestedAt": "2026-08-15T08:20:47.838Z"
     },
     "springfield-1866": {
       "name": "Springfield 1866",
@@ -6507,7 +6507,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16390",
-      "ingestedAt": "2026-08-12T22:49:35.250Z"
+      "ingestedAt": "2026-08-15T08:17:53.614Z"
     },
     "springfield-1866-bayonet": {
       "name": "Springfield 1866 Bayonet",
@@ -6542,7 +6542,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15757",
-      "ingestedAt": "2026-08-12T22:52:30.876Z"
+      "ingestedAt": "2026-08-15T08:20:49.320Z"
     },
     "springfield-1866-bullseye": {
       "name": "Springfield 1866 Bullseye",
@@ -6577,7 +6577,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15760",
-      "ingestedAt": "2026-08-12T22:52:32.384Z"
+      "ingestedAt": "2026-08-15T08:20:50.831Z"
     },
     "springfield-1866-marksman": {
       "name": "Springfield 1866 Marksman",
@@ -6612,7 +6612,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15756",
-      "ingestedAt": "2026-08-12T22:52:33.877Z"
+      "ingestedAt": "2026-08-15T08:20:52.332Z"
     },
     "springfield-1866-shorty": {
       "name": "Springfield 1866 Shorty",
@@ -6647,7 +6647,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15758",
-      "ingestedAt": "2026-08-12T22:52:35.378Z"
+      "ingestedAt": "2026-08-15T08:20:53.847Z"
     },
     "springfield-1866-striker": {
       "name": "Springfield 1866 Striker",
@@ -6682,7 +6682,7 @@
         "StaminaConsumption": "21"
       },
       "sourceRevision": "15759",
-      "ingestedAt": "2026-08-12T22:52:36.873Z"
+      "ingestedAt": "2026-08-15T08:20:55.426Z"
     },
     "spyglass": {
       "name": "Spyglass",
@@ -6705,7 +6705,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14704",
-      "ingestedAt": "2026-08-12T22:53:05.397Z"
+      "ingestedAt": "2026-08-15T08:21:23.863Z"
     },
     "stalker-beetle": {
       "name": "Stalker Beetle",
@@ -6731,7 +6731,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15340",
-      "ingestedAt": "2026-08-12T22:55:34.055Z"
+      "ingestedAt": "2026-08-15T08:23:52.530Z"
     },
     "stamina-shot": {
       "name": "Stamina Shot",
@@ -6754,7 +6754,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15201",
-      "ingestedAt": "2026-08-12T22:54:55.009Z"
+      "ingestedAt": "2026-08-15T08:23:13.482Z"
     },
     "stamina-shot-weak": {
       "name": "Stamina Shot (Weak)",
@@ -6777,7 +6777,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15202",
-      "ingestedAt": "2026-08-12T22:55:17.516Z"
+      "ingestedAt": "2026-08-15T08:23:36.026Z"
     },
     "steady-aim": {
       "name": "Steady Aim",
@@ -6800,7 +6800,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15697",
-      "ingestedAt": "2026-08-12T22:53:57.932Z"
+      "ingestedAt": "2026-08-15T08:22:16.421Z"
     },
     "sticky-bomb": {
       "name": "Sticky Bomb",
@@ -6826,7 +6826,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15432",
-      "ingestedAt": "2026-08-12T22:55:04.002Z"
+      "ingestedAt": "2026-08-15T08:23:22.500Z"
     },
     "surefoot": {
       "name": "Surefoot",
@@ -6849,7 +6849,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15624",
-      "ingestedAt": "2026-08-12T22:54:35.491Z"
+      "ingestedAt": "2026-08-15T08:22:53.951Z"
     },
     "terminus": {
       "name": "Terminus",
@@ -6884,7 +6884,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16232",
-      "ingestedAt": "2026-08-12T22:50:29.289Z"
+      "ingestedAt": "2026-08-15T08:18:47.662Z"
     },
     "terminus-shorty": {
       "name": "Terminus Shorty",
@@ -6919,7 +6919,305 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15748",
-      "ingestedAt": "2026-08-12T22:52:38.374Z"
+      "ingestedAt": "2026-08-15T08:20:56.827Z"
+    },
+    "the-chariot": {
+      "name": "The Chariot",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Chariot",
+      "infoboxTitle": "The Chariot",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nSwaps Locked and Unlocked Extraction Points for all teams (only in Bounty Hunt). Destroys 1 Health Chunk. Also reveals hidden Extraction Points to your team. This card has a 5 min global cooldown, and can’t be used during the last 5 min of a Mission.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13655",
+      "ingestedAt": "2026-08-15T08:23:55.525Z"
+    },
+    "the-devil": {
+      "name": "The Devil",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Devil",
+      "infoboxTitle": "The Devil",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nReduces the sway and spread (excluding shotguns) for weapons until your Hunter is downed, then destroys an additional Health Chunk.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "14797",
+      "ingestedAt": "2026-08-15T08:23:57.063Z"
+    },
+    "the-empress": {
+      "name": "The Empress",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Empress",
+      "infoboxTitle": "The Empress",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nGrants the Catalyst Trait, the Necromancer Trait, and one random Burn or Scarce Trait.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13654",
+      "ingestedAt": "2026-08-15T08:23:58.542Z"
+    },
+    "the-fool": {
+      "name": "The Fool",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Fool",
+      "infoboxTitle": "The Fool",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nCopies the last Tarot Card you used this Mission.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13657",
+      "ingestedAt": "2026-08-15T08:24:00.058Z"
+    },
+    "the-garden": {
+      "name": "The Garden",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Garden",
+      "infoboxTitle": "The Garden",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nFully heals and removes Bleeding, Burning, and Poison for you and your teammates.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13658",
+      "ingestedAt": "2026-08-15T08:24:01.547Z"
+    },
+    "the-hanged-man": {
+      "name": "The Hanged Man",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Hanged_Man",
+      "infoboxTitle": "The Hanged Man",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nAllows you to spectate the nearest enemy Hunter for a limited time. The spectated Hunter hears a warning afterwards.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "EffectDuration": "15",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13659",
+      "ingestedAt": "2026-08-15T08:24:03.053Z"
+    },
+    "the-high-priestess": {
+      "name": "The High Priestess",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_High_Priestess",
+      "infoboxTitle": "The High Priestess",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nIndicates the direction of the closest enemy Hunter for 30 seconds.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.7",
+        "EffectDuration": "30",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13798",
+      "ingestedAt": "2026-08-15T08:24:04.548Z"
+    },
+    "the-judgement": {
+      "name": "The Judgement",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Judgement",
+      "infoboxTitle": "The Judgement",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nDoubles time of all current buffs. Reduces your Hunter’s HP to 1.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13661",
+      "ingestedAt": "2026-08-15T08:24:06.062Z"
+    },
+    "the-magician": {
+      "name": "The Magician",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Magician",
+      "infoboxTitle": "The Magician",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nPlaces a Dark Sight Decoy at your location. Turns Clues in range red. Causes Heavy Bleeding on use.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13662",
+      "ingestedAt": "2026-08-15T08:24:07.566Z"
+    },
+    "the-moon": {
+      "name": "The Moon",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Moon",
+      "infoboxTitle": "The Moon",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nGrants 2 seconds of Dark Sight Boost",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13663",
+      "ingestedAt": "2026-08-15T08:24:09.063Z"
+    },
+    "the-pathfinder": {
+      "name": "The Pathfinder",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Pathfinder",
+      "infoboxTitle": "The Pathfinder",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nReveals all Clues discovered by any Hunter on your map for a short time.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.7",
+        "EffectDuration": "30",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13664",
+      "ingestedAt": "2026-08-15T08:24:10.554Z"
+    },
+    "the-sun": {
+      "name": "The Sun",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Sun",
+      "infoboxTitle": "The Sun",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nGrants an increased Regeneration buff for 90 seconds.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "EffectDuration": "90",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "14796",
+      "ingestedAt": "2026-08-15T08:24:12.063Z"
+    },
+    "the-tower": {
+      "name": "The Tower",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_Tower",
+      "infoboxTitle": "The Tower",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nKills Monsters and Wild Targets and damages Targets within a radius (65m). Your Hunter catches on fire.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13667",
+      "ingestedAt": "2026-08-15T08:24:13.560Z"
+    },
+    "the-world": {
+      "name": "The World",
+      "wikiUrl": "https://huntshowdown.wiki.gg/wiki/Consumables/The_World",
+      "infoboxTitle": "The World",
+      "selectedBy": "canonical-title",
+      "variantCount": 1,
+      "description": "← Tarot Cards\nReveals all Boss Targets and grants the rewards and effects of 1 Clue per Target.",
+      "dualWield": false,
+      "acquisition": null,
+      "acquisitionClasses": [],
+      "priceStated": "Scarce",
+      "purchasable": false,
+      "fields": {
+        "Price": "Scarce",
+        "Update": "Update 2.5",
+        "MeleeDamage": "13",
+        "HeavyMeleeDamage": "27"
+      },
+      "sourceRevision": "13668",
+      "ingestedAt": "2026-08-15T08:24:15.071Z"
     },
     "throwing-axes": {
       "name": "Throwing Axes",
@@ -6950,7 +7248,7 @@
         "ThrowStaminaConsumption": "20"
       },
       "sourceRevision": "16051",
-      "ingestedAt": "2026-08-12T22:53:00.892Z"
+      "ingestedAt": "2026-08-15T08:21:19.361Z"
     },
     "throwing-knives": {
       "name": "Throwing Knives",
@@ -6981,7 +7279,7 @@
         "ThrowStaminaConsumption": "15"
       },
       "sourceRevision": "14706",
-      "ingestedAt": "2026-08-12T22:52:59.394Z"
+      "ingestedAt": "2026-08-15T08:21:17.866Z"
     },
     "throwing-spear": {
       "name": "Throwing Spear",
@@ -7012,7 +7310,7 @@
         "ThrowStaminaConsumption": "34"
       },
       "sourceRevision": "15986",
-      "ingestedAt": "2026-08-12T22:53:17.429Z"
+      "ingestedAt": "2026-08-15T08:21:35.881Z"
     },
     "tool-box": {
       "name": "Tool Box",
@@ -7034,7 +7332,7 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15116",
-      "ingestedAt": "2026-08-12T22:55:31.036Z"
+      "ingestedAt": "2026-08-15T08:23:49.521Z"
     },
     "uppercut-deadeye": {
       "name": "Uppercut Deadeye",
@@ -7069,7 +7367,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16180",
-      "ingestedAt": "2026-08-12T22:52:39.889Z"
+      "ingestedAt": "2026-08-15T08:20:58.339Z"
     },
     "uppercut-precision": {
       "name": "Uppercut Precision",
@@ -7104,7 +7402,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16178",
-      "ingestedAt": "2026-08-12T22:52:41.378Z"
+      "ingestedAt": "2026-08-15T08:20:59.850Z"
     },
     "vandal-73c": {
       "name": "Vandal 73C",
@@ -7139,7 +7437,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16185",
-      "ingestedAt": "2026-08-12T22:50:30.772Z"
+      "ingestedAt": "2026-08-15T08:18:49.170Z"
     },
     "vandal-73c-bullseye": {
       "name": "Vandal 73C Bullseye",
@@ -7174,7 +7472,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16183",
-      "ingestedAt": "2026-08-12T22:52:42.882Z"
+      "ingestedAt": "2026-08-15T08:21:01.345Z"
     },
     "vandal-73c-striker": {
       "name": "Vandal 73C Striker",
@@ -7209,7 +7507,7 @@
         "StaminaConsumption": "21"
       },
       "sourceRevision": "16184",
-      "ingestedAt": "2026-08-12T22:52:44.380Z"
+      "ingestedAt": "2026-08-15T08:21:02.855Z"
     },
     "vetterli-71-bayonet": {
       "name": "Vetterli 71 Bayonet",
@@ -7244,7 +7542,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15171",
-      "ingestedAt": "2026-08-12T22:52:45.883Z"
+      "ingestedAt": "2026-08-15T08:21:04.354Z"
     },
     "vetterli-71-cyclone": {
       "name": "Vetterli 71 Cyclone",
@@ -7279,7 +7577,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15172",
-      "ingestedAt": "2026-08-12T22:52:47.387Z"
+      "ingestedAt": "2026-08-15T08:21:05.850Z"
     },
     "vetterli-71-deadeye": {
       "name": "Vetterli 71 Deadeye",
@@ -7314,7 +7612,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15173",
-      "ingestedAt": "2026-08-12T22:52:48.881Z"
+      "ingestedAt": "2026-08-15T08:21:07.341Z"
     },
     "vetterli-71-karabiner": {
       "name": "Vetterli 71",
@@ -7349,7 +7647,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15170",
-      "ingestedAt": "2026-08-12T22:49:45.742Z"
+      "ingestedAt": "2026-08-15T08:18:04.152Z"
     },
     "vetterli-71-marksman": {
       "name": "Vetterli 71 Marksman",
@@ -7384,7 +7682,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15174",
-      "ingestedAt": "2026-08-12T22:52:50.392Z"
+      "ingestedAt": "2026-08-15T08:21:08.865Z"
     },
     "vetterli-71-silencer": {
       "name": "Vetterli 71 Silencer",
@@ -7419,7 +7717,7 @@
         "HeavyStaminaConsumption": "25"
       },
       "sourceRevision": "15175",
-      "ingestedAt": "2026-08-12T22:52:51.884Z"
+      "ingestedAt": "2026-08-15T08:21:10.342Z"
     },
     "vigilant": {
       "name": "Vigilant",
@@ -7443,7 +7741,7 @@
         "ConditionalEffect": "Catalyst"
       },
       "sourceRevision": "15712",
-      "ingestedAt": "2026-08-12T22:54:11.462Z"
+      "ingestedAt": "2026-08-15T08:22:29.942Z"
     },
     "vigor": {
       "name": "Vigor",
@@ -7466,7 +7764,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15615",
-      "ingestedAt": "2026-08-12T22:54:36.979Z"
+      "ingestedAt": "2026-08-15T08:22:55.447Z"
     },
     "vitality-shot": {
       "name": "Vitality Shot",
@@ -7488,7 +7786,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15290",
-      "ingestedAt": "2026-08-12T22:54:52.001Z"
+      "ingestedAt": "2026-08-15T08:23:10.467Z"
     },
     "vitality-shot-weak": {
       "name": "Vitality Shot (Weak)",
@@ -7510,7 +7808,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15418",
-      "ingestedAt": "2026-08-12T22:55:14.514Z"
+      "ingestedAt": "2026-08-15T08:23:33.007Z"
     },
     "vulture": {
       "name": "Vulture",
@@ -7533,7 +7831,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15666",
-      "ingestedAt": "2026-08-12T22:54:00.945Z"
+      "ingestedAt": "2026-08-15T08:22:19.423Z"
     },
     "waxed-dynamite-stick": {
       "name": "Waxed Dynamite Stick",
@@ -7559,7 +7857,7 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14732",
-      "ingestedAt": "2026-08-12T22:55:23.543Z"
+      "ingestedAt": "2026-08-15T08:23:42.037Z"
     },
     "whispersmith": {
       "name": "Whispersmith",
@@ -7582,7 +7880,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15667",
-      "ingestedAt": "2026-08-12T22:54:02.450Z"
+      "ingestedAt": "2026-08-15T08:22:20.924Z"
     },
     "wildland": {
       "name": "Wildland",
@@ -7617,7 +7915,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15176",
-      "ingestedAt": "2026-08-12T22:50:36.773Z"
+      "ingestedAt": "2026-08-15T08:18:55.186Z"
     },
     "winfield-1876-centennial": {
       "name": "Centennial",
@@ -7652,7 +7950,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "16150",
-      "ingestedAt": "2026-08-12T22:49:53.258Z"
+      "ingestedAt": "2026-08-15T08:18:11.634Z"
     },
     "winfield-m1873": {
       "name": "Ranger 73",
@@ -7687,7 +7985,7 @@
         "StaminaConsumption": "25"
       },
       "sourceRevision": "15379",
-      "ingestedAt": "2026-08-12T22:49:36.733Z"
+      "ingestedAt": "2026-08-15T08:17:55.150Z"
     },
     "witness": {
       "name": "Witness",
@@ -7710,7 +8008,7 @@
         "Type": "Regular"
       },
       "sourceRevision": "15668",
-      "ingestedAt": "2026-08-12T22:54:38.484Z"
+      "ingestedAt": "2026-08-15T08:22:56.966Z"
     }
   }
 }

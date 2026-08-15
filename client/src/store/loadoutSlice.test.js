@@ -56,6 +56,32 @@ describe("addEquip", () => {
     expect(held(store.getState()).some((e) => e.i === bundle)).toBe(false);
   });
 
+  it("caps Tarot Cards at four per type, using four DIFFERENT cards (#37)", () => {
+    // Governing: ADR-0013 (Scarce items at zero cost), ADR-0015 (four per cap category),
+    // SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved".
+    //
+    // Four DIFFERENT cards on purpose. Four copies of one card would be rejected by the RETIRED
+    // per-item rule as readily as by the per-type rule in force, so such a test passes either way
+    // and proves nothing about which rule is running. Five distinct cards can only be capped by a
+    // per-type budget.
+    //
+    // This is also the assertion behind "no new modelling": `CONS_CAP_CATEGORIES` already declared
+    // "Tarot Cards" while the table held none, so admitting rows in #37 capped them with no change
+    // to calc.js or the reducer.
+    const store = makeStore();
+    const cards = CONS.map((c, i) => [c, i]).filter(([c]) => c[3] === "Tarot Cards");
+    expect(cards.length, "the fourteen were admitted by #37").toBe(14);
+    const [a, b, c, d, e] = cards.map(([, i]) => i);
+    [a, b, c, d].forEach((i) => store.dispatch(loadoutActions.addEquip({ t: "C", i })));
+    expect(held(store.getState())).toHaveLength(4);
+    // A FIFTH distinct card is refused — the budget is the category's, not the item's.
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: e }));
+    expect(held(store.getState())).toHaveLength(4);
+    expect(held(store.getState()).some((x) => x.i === e)).toBe(false);
+    // And the four that landed really are four different cards, not one repeated.
+    expect(new Set(held(store.getState()).map((x) => x.i)).size).toBe(4);
+  });
+
   it("rejects a duplicate tool (one per loadout)", () => {
     const store = makeStore();
     store.dispatch(loadoutActions.addEquip({ t: "T", i: 0 }));

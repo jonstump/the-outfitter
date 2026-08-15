@@ -1998,13 +1998,20 @@ test("formatCoverage: reports missing and not-an-item as separate columns", () =
 });
 
 test("runDiscovery: a live page the catalog excludes on purpose is not reported as missing", async () => {
-  // A Tarot Card is a live page whose price is the literal word "Scarce". Reporting it as missing
-  // is what made the consumables gap read as ~11 unknowns; separating it resolves them to zero.
-  const members = ["Consumables/Frag Bomb", "Consumables/The Chariot"];
+  // The mechanism: a live page whose price is the literal word "Scarce", and which the catalog does
+  // not carry, is bucketed as `unpurchasable` rather than `missing`. Reporting such pages as missing
+  // is what made the consumables gap read as ~11 unknowns; separating them resolved it to zero.
+  //
+  // The fixture is SYNTHETIC as of #37, and that is the point. It used to be a Tarot Card — the real
+  // excluded set — but the fourteen were admitted, so every live consumable page the wiki lists is
+  // now in the catalog and no real item exercises this path. The mechanism still has to work, because
+  // the next Scarce page the wiki adds will land here before anyone decides whether to admit it, so
+  // the test keeps a stand-in rather than being retired along with its last real subject.
+  const members = ["Consumables/Frag Bomb", "Consumables/Not A Catalog Item"];
   const fetchFn = async (url) => {
     if (decodeURIComponent(url).includes("Category:Consumables")) return okResponse(categoryPage(members));
     return okResponse(
-      '<div class="druid-infobox druid-container"><div><div class="druid-title">The Chariot</div></div>' +
+      '<div class="druid-infobox druid-container"><div><div class="druid-title">Not A Catalog Item</div></div>' +
         '<div class="druid-data druid-data-Price">Scarce</div></div>'
     );
   };
@@ -2014,7 +2021,7 @@ test("runDiscovery: a live page the catalog excludes on purpose is not reported 
   );
   const cons = report.consumables;
   assert.deepEqual(cons.missing.map((m) => m.page), [], "nothing purchasable is missing");
-  assert.deepEqual(cons.unpurchasable.map((u) => u.page), ["Consumables/The Chariot"]);
+  assert.deepEqual(cons.unpurchasable.map((u) => u.page), ["Consumables/Not A Catalog Item"]);
   assert.equal(cons.unpurchasable[0].priceStated, "Scarce");
 });
 
@@ -2030,15 +2037,21 @@ test("catalog.js states the roster boundary as a scope decision, not a purchasab
   // spec paragraph carries that reversal marked rather than rewritten; so does this header, because a
   // test whose stated authority contradicts its assertions is how the old rationale creeps back. (#161)
   //
-  // Asserted on the two things that stay true: the boundary names Tarot Cards as the excluded set, and
-  // it does NOT claim unpurchasability as the criterion. The duration half of the requirement is
-  // untouched by the amendment, and is still checked below.
+  // Amended again by #37 (2026-08-15), which admitted the fourteen. The boundary is no longer an
+  // exclusion at all, so "names the excluded set" and "records the current reason as a choice" have
+  // nothing left to assert — the scope choice was the third and last rationale, and it is now history
+  // rather than the operative reason. What survives is the part that was always load-bearing: the
+  // comment must not reassert purchasability as a criterion, and it must keep the retired rationales
+  // as history so a reader learns the boundary outlived them rather than trusting whichever one they
+  // find. Those are checked below, unchanged.
   const src = await readFile(path.join(__dirname, "..", "client", "src", "data", "catalog.js"), "utf8");
   const anchor = src.indexOf("export const CONS");
-  const boundary = src.slice(Math.max(0, anchor - 3200), anchor);
-  assert.match(boundary, /Tarot Card/i, "the excluded set is named");
+  const boundary = src.slice(Math.max(0, anchor - 4200), anchor);
+  assert.match(boundary, /Tarot Card/i, "the set the boundary is about is named");
   assert.match(boundary, /Scarce/, "and the wiki's own word for their price is quoted");
-  assert.match(boundary, /scope decision/i, "the current reason is recorded as a choice");
+  // The admission itself is recorded, so the comment states the CURRENT state rather than a stale
+  // exclusion. This replaces the "scope decision" assertion, which described the retired rationale.
+  assert.match(boundary, /ARE IN|admitted/i, "the current state — admitted — is recorded");
   // Both retired rationales are kept as history rather than deleted, so a reader learns the boundary
   // has outlived two reasons instead of trusting whichever one they find.
   assert.match(boundary, /permanence was never the criterion|limited-time/i);
