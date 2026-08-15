@@ -911,11 +911,23 @@ describe("grab ref lifetime (issue #417)", () => {
 
     // Randomize replaces the entire loadout. The grab ref MUST be cleared so the
     // next Enter does not move an item in the NEW grid the user never grabbed.
-    act(() => store.dispatch(loadoutActions.setLoadout(emptyLoadout())));
-    // Enter after Randomize: the grab is gone, so nothing moves.
+    //
+    // The replacement is deliberately NON-EMPTY, with its cell 0 occupied. Against an
+    // empty grid this test proves nothing: a surviving grab would dispatch
+    // moveEquip({ from: 0, to: 1 }) into a hole, #415's reducer guard would refuse it,
+    // and "all cells null" would hold either way. With cell 0 filled, a surviving grab
+    // produces a real move and the assertion below catches it.
+    const randomized = [
+      { t: "T", i: kit }, null, { t: "C", i: dynamite }, null,
+      null, null, null, null,
+    ];
+    act(() => store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), equip: randomized })));
+    // Enter after Randomize: the grab is gone, so the new grid is untouched.
     fireEvent.keyDown(grid, { key: "Enter" });
     const after = store.getState().loadout;
-    expect(after.equip.every((e) => e === null)).toBe(true);
+    expect(after.equip[0]).toEqual({ t: "T", i: kit });
+    expect(after.equip[1]).toBeNull();
+    expect(after.equip[2]).toEqual({ t: "C", i: dynamite });
   });
 
   it("a grab does not survive a Load — no item the user did not grab is moved", () => {
@@ -957,5 +969,30 @@ describe("grab ref lifetime (issue #417)", () => {
     // A subsequent Enter must not drop anything — the grab was cancelled.
     fireEvent.keyDown(grid, { key: "Enter" });
     expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+  });
+
+  // The pointer-identity half of #417. `onGridPointerUp` now matches `e.pointerId`
+  // against the grab's, the way `onGridPointerCancel` and `onLostPointerCapture`
+  // already did. Without this the guard is unexercised — it can be deleted later and
+  // nothing goes red, which is the state this test exists to end.
+  it("a pointerup from a DIFFERENT pointer does not end a grab it did not start", () => {
+    const { container, store } = renderPanel({ loadout: twoCell() });
+    const from = container.querySelector('[data-slot-index="0"]');
+    const to = container.querySelector('[data-slot-index="1"]');
+    fireEvent.pointerDown(from, { button: 0, pointerId: 1 });
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => to;
+    try {
+      // A second finger releases over cell 1. It must not complete finger 1's grab.
+      fireEvent.pointerUp(to, { pointerId: 2 });
+      expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+      // The grab is still live, so the ORIGINAL pointer's release still completes it.
+      fireEvent.pointerUp(to, { pointerId: 1 });
+    } finally {
+      document.elementFromPoint = orig;
+    }
+    const after = store.getState().loadout.equip;
+    expect(after[0]).toBeNull();
+    expect(after[1]).toEqual({ t: "C", i: vitality });
   });
 });
