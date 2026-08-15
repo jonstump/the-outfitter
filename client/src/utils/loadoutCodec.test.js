@@ -12,6 +12,7 @@ import {
   emptyLoadout,
   encodeShareUrl,
   fromData,
+  readHashLoadout,
   readStoredLoadout,
   toData,
 } from "./loadoutCodec.js";
@@ -269,8 +270,19 @@ describe("fromData (legacy index-based wire format)", () => {
     expect(dec.traits).toEqual([]);
   });
 
-  it("treats a payload with an unknown version as legacy", () => {
-    const legacy = { v: 0, w: [[1, -1], null], e: [], tr: [0] };
+  it("treats a payload with no v field as legacy", () => {
+    // Governing: issue #360. A genuine pre-versioning legacy record has no `v`
+    // field at all. `v: 0` is NOT the same as "no v" — it is a declared version
+    // this client does not know, and now returns a "cannot decode" result (see
+    // the issue #360 tests below).
+    const legacy = { w: [[1, -1], null], e: [], tr: [0] };
+    const dec = fromData(legacy);
+    expect(dec.weapons[0]).toEqual({ i: 1, a: -1 });
+    expect(dec.traits).toEqual([TRAITS[0][0]]);
+  });
+
+  it("treats a payload with v: null as legacy", () => {
+    const legacy = { v: null, w: [[1, -1], null], e: [], tr: [0] };
     const dec = fromData(legacy);
     expect(dec.weapons[0]).toEqual({ i: 1, a: -1 });
     expect(dec.traits).toEqual([TRAITS[0][0]]);
@@ -1201,5 +1213,63 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     });
     expect(dec.blocked).toHaveLength(8);
     expect(dec.equip.filter(Boolean)).toHaveLength(0);
+  });
+});
+
+// Governing: issue #26 (created the version envelope), issue #360 (unknown versions
+// must not fall through to the legacy positional decoder).
+//
+// fromData used to fall back to fromLegacy for ANY unrecognized `v` — including `v: 99`,
+// `v: "2"`, and a future `v: 4` on an old client. fromLegacy reads item references as
+// raw array positions, so a crafted `{v: 99, w: [[20, 1]], ...}` fabricated a real weapon
+// (Frontier 73C, $13) from a bare integer. Worse, once FORMAT_VERSION bumps to 4, every
+// old client opening a v4 share link would decode it through fromLegacy, persist the
+// fabricated result to localStorage, and silently overwrite the reader's stored build.
+describe("issue #360 — unknown versions do not route through the legacy decoder", () => {
+  it("a v:99 record produces a 'cannot decode' result, not a fabricated loadout", () => {
+    const result = fromData({ v: 99, w: [[20, 1], null], e: [["T", 1]], tr: [0], n: "x", b: 0 });
+    expect(result).toEqual({ ok: false, v: 99 });
+    expect(result).not.toHaveProperty("weapons");
+  });
+
+  it("a v:3 record still decodes correctly (known version)", () => {
+    const dec = fromData({ v: 3, w: [["nagant-m1895", 1], null], e: [], tr: [], n: "x", b: [] });
+    expect(dec.weapons[0]).toEqual({ i: 0, a: 1, d: false });
+  });
+
+  it("a v:'2' record (string) produces a 'cannot decode' result", () => {
+    const result = fromData({ v: "2", w: [["nagant-m1895", 1], null], e: [], tr: [], n: "x", b: [] });
+    expect(result).toEqual({ ok: false, v: "2" });
+  });
+
+  it("the specific fabrication case must not decode to a real weapon", () => {
+    // Before the fix, {v:3, w:[[20,1],null], e:[["T",1]], tr:[0]} decoded through
+    // fromLegacy to a Frontier 73C with a conjured trait and equipment item.
+    // (v:3 now routes to fromV3; the fabrication was from the old fallback.)
+    // v:99 still triggers the same shape, so it is the regression guard.
+    const result = fromData({ v: 99, w: [[20, 1], null], e: [["T", 1]], tr: [0], n: "x", b: 0 });
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty("weapons");
+    expect(result).not.toHaveProperty("equip");
+    expect(result).not.toHaveProperty("traits");
+  });
+
+  it("a record with no v field still decodes through fromLegacy (genuine legacy)", () => {
+    const dec = fromData({ w: [[0, -1], [16, 2]], e: [["T", 0], ["C", 3]], tr: [0], n: "Old", b: 0 });
+    expect(WEAPONS[dec.weapons[0].i][1]).toBe("Nagant M1895");
+    expect(dec.traits).toEqual(["quartermaster"]);
+  });
+
+  it("readHashLoadout returns null for an undecodable share link", () => {
+    // A share link carrying v:99 must not be fed to setLoadout. readHashLoadout
+    // returns null so the caller starts fresh rather than crashing or persisting.
+    const code = btoa(JSON.stringify({ v: 99, w: [null, null], e: [], tr: [], n: "x", b: [] }));
+    history.replaceState(null, "", "#L=" + code);
+    expect(readHashLoadout()).toBeNull();
+  });
+
+  it("readStoredLoadout returns null for an undecodable stored record", () => {
+    localStorage.setItem(LS_CUR, JSON.stringify({ v: 99, w: [null, null], e: [], tr: [], n: "x", b: [] }));
+    expect(readStoredLoadout()).toBeNull();
   });
 });
