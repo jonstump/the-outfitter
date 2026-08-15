@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import {
   FORMAT_VERSION,
   LEGACY_CONS_IDS,
@@ -942,5 +942,69 @@ describe("version-3 encoding (issue #332)", () => {
     const saved = toData(loaded);
     expect(saved.w[0]).toEqual([WEAPONS[PISTOL][0], AMMO_INDEX, false]);
     expect(JSON.parse(JSON.stringify(saved)).w[0][2]).toBe(false);
+  });
+});
+
+// Governing: issue #351. `frontier-73c` moved from `medium` to `compact` (commit
+// `e9b2c1d`) without a FORMAT_VERSION bump. A saved ammo selection is a bare index
+// into `AMMO[ammoClass]`, so a legacy record carrying `["frontier-73c", 1]` was written
+// against the pre-change `medium` pool (Spitzer, $60) but reads against the current
+// `compact` pool (High Velocity, $13). The legacy decoder remaps the index by round NAME;
+// Spitzer has no equivalent in `compact`, so it decodes to -1 (no variant) rather than to
+// a different round at a different price.
+describe("issue #351 — frontier-73c legacy ammo remap", () => {
+  const FRONTIER = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
+  const MEDIUM = AMMO.medium;
+  const COMPACT = AMMO.compact;
+
+  it("an unversioned legacy record naming Frontier 73C at ammo index 1 decodes to -1, not High Velocity", () => {
+    // Legacy weapon index 20 is `frontier-73c` (see LEGACY_WEAPON_IDS). A legacy record
+    // carrying [20, 1] was written against the pre-change `medium` pool, where index 1
+    // is Spitzer ($60). Spitzer has no equivalent in the current `compact` pool, so the
+    // remap yields -1 (no variant) rather than silently reading `compact[1]` (High Velocity).
+    const dec = fromData({
+      w: [[0, -1], [20, 1]],
+      e: [],
+      tr: [],
+      n: "",
+      b: 0,
+    });
+    expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: -1 });
+    expect(WEAPONS[dec.weapons[1].i][1]).toBe("Frontier 73C");
+  });
+
+  it("indices 0, 2, 3, 4 are unchanged by the remap — the round names exist in both pools", () => {
+    // FMJ, Dumdum, Incendiary, Poison exist in both `medium` and `compact` at the SAME
+    // index, so the remap is a no-op for them.
+    for (const i of [0, 2, 3, 4]) {
+      const dec = fromData({ w: [[0, -1], [20, i]], e: [], tr: [], n: "", b: 0 });
+      expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: i });
+      // The round name survives because the index is the same in both pools.
+      expect(AMMO[WEAPONS[FRONTIER][4]][i][0]).toBe(MEDIUM[i][0]);
+    }
+  });
+
+  it("a native v2 record carrying [frontier-73c, 1] still decodes to High Velocity — the remap must NOT reach it", () => {
+    // A v2 record is NOT legacy: it was written (or laundered) under versioning, so the
+    // index 1 means the current `compact` pool's index 1 (High Velocity). The remap
+    // applies ONLY to unversioned legacy records.
+    const dec = fromData({
+      v: 2,
+      w: [["nagant-m1895", -1], ["frontier-73c", 1]],
+      e: [],
+      tr: [],
+      n: "",
+      b: [],
+    });
+    expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: 1 });
+    expect(AMMO.compact[1][0]).toBe("High Velocity");
+  });
+
+  it("the remap is a no-op for a weapon other than frontier-73c", () => {
+    // A legacy record carrying a Nagant M1895 (compact, never re-classed) at index 1
+    // decodes to High Velocity — the Nagant's pool is `compact` and was never `medium`.
+    const dec = fromData({ w: [[0, 1], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: 0, a: 1 });
+    expect(AMMO[WEAPONS[0][4]][1][0]).toBe("High Velocity");
   });
 });

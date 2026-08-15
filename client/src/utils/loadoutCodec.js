@@ -17,6 +17,20 @@ export const LS_CUR = "hunt-outfitter-current";
 // Version 3 (ADR-0023): the weapon entry gains a third element, the dual-wield pair
 // flag — [weaponId, ammoIndex, d]. Version 2 records keep decoding; a pair is
 // expressible only from version 3 on.
+//
+// Known, closed-off defect (issue #351): `frontier-73c` moved from `medium` to `compact`
+// in commit `e9b2c1d` without a FORMAT_VERSION bump. A saved ammo selection is a bare
+// integer index into `AMMO[ammoClass]`, so a record written before the move that carries
+// `["frontier-73c", 1]` silently re-resolves to `compact[1]` (High Velocity, $13) instead
+// of `medium[1]` (Spitzer, $60). The unversioned LEGACY half is repaired by
+// `remapFrontierAmmo` below — unversioned records necessarily carry the pre-change
+// catalog bundle, so the era is deterministic. The v1 and v2 halves are PERMANENTLY
+// AMBIGUOUS and cannot be repaired: `toData` always stamps `v: FORMAT_VERSION` and the
+// store subscriber persists every decoded loadout before it renders, so any legacy record
+// opened even once since the version-2 bump is now an unmarked v2 record carrying
+// `["frontier-73c", 1]`, indistinguishable from a native v2 record that legitimately
+// means High Velocity. Do not attempt a blanket remap of all `["frontier-73c", 1]`
+// selections — post-`e9b2c1d` records legitimately mean High Velocity.
 export const FORMAT_VERSION = 3;
 
 // Stable catalog id lookup: id -> tuple (tuple[0] is the id, name is tuple[1]).
@@ -350,6 +364,28 @@ function resolveLegacyEquip(t, index) {
   return null;
 }
 
+// Governing: issue #351. Era-scoped ammo remap for `frontier-73c` in unversioned legacy
+// records only. The weapon's `ammoClass` moved from `medium` to `compact` (commit
+// `e9b2c1d`) without a FORMAT_VERSION bump, so a legacy ammo index was written against
+// the pre-change `medium` pool. Translate the index by round NAME: find the round at
+// the legacy index in `medium`, then find that round's index in the current `compact`
+// pool. Rounds that exist in both pools (FMJ, Dumdum, Incendiary, Poison) keep their
+// selection; Spitzer (`medium[1]`) has no equivalent in `compact`, so it decodes to -1
+// (no variant) rather than silently re-pointing to High Velocity.
+//
+// The remap is a no-op for any weapon other than `frontier-73c`, and for any index that
+// is out of range (boundedAmmo below still clamps the final value).
+const FRONTIER_73C_LEGACY_AMMO_CLASS = "medium";
+function remapFrontierAmmo(weaponIndex, legacyAmmoIndex) {
+  if (WEAPONS[weaponIndex][0] !== "frontier-73c") return legacyAmmoIndex;
+  const legacyPool = AMMO[FRONTIER_73C_LEGACY_AMMO_CLASS] || [];
+  if (!inRange(legacyAmmoIndex, legacyPool.length)) return legacyAmmoIndex;
+  const roundName = legacyPool[legacyAmmoIndex][0];
+  const currentPool = AMMO[WEAPONS[weaponIndex][4]] || [];
+  const currentIdx = currentPool.findIndex((v) => v[0] === roundName);
+  return currentIdx >= 0 ? currentIdx : -1;
+}
+
 function fromLegacy(d) {
   const slotWeapon = (k) => {
     const w = d.w && d.w[k];
@@ -360,7 +396,19 @@ function fromLegacy(d) {
     const id = aliasWeaponId(legacyId(LEGACY_WEAPON_IDS, w[0]));
     if (!id || !WEAPON_BY_ID.has(id)) return null;
     const i = indexOfItem(WEAPONS, id);
-    return { i, a: boundedAmmo(i, w[1]) };
+    // Governing: issue #351. `frontier-73c` moved from `medium` to `compact` in `e9b2c1d`
+    // without a FORMAT_VERSION bump, so a saved ammo index for this weapon in an
+    // UNVERSIONED legacy record was written against the pre-change `medium` pool, and
+    // reading it against the post-change `compact` pool silently re-points index 1 from
+    // Spitzer ($60) to High Velocity ($13). This era remap restores the user's selection
+    // by translating the legacy `medium` index to its equivalent in the current `compact`
+    // pool, matched by round NAME. Index 1 (Spitzer) has no equivalent in `compact` —
+    // there is no way to carry a round the current pool does not list — so it decodes to
+    // -1 (no variant) rather than to a different round at a different price. The remap
+    // applies ONLY to unversioned legacy records, which necessarily carry the pre-change
+    // catalog bundle; v1/v2 records are permanently ambiguous and cannot be repaired
+    // (see the header note above).
+    return { i, a: boundedAmmo(i, remapFrontierAmmo(i, w[1])) };
   };
   const raw = (d.e || []).filter((e) => e && (e[0] === "T" || e[0] === "C"));
   const equip = raw
