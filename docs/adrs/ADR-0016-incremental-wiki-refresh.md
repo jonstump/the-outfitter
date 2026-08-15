@@ -7,6 +7,32 @@ extends: [ADR-0002, ADR-0005]
 
 # ADR-0016: Detect Dataset Staleness in Two Tiers over Allowed HTML, Not the MediaWiki API
 
+> **Disposition confirmed 2026-08-15 — in scope; the ADR-0021 admission test does not apply, and needs
+> no spec of its own.**
+>
+> **Why the test does not apply.** ADR-0021 records that *a true fact about the game does not earn a
+> place in the UI on truth alone — it earns one by helping someone assemble a loadout*. That test governs
+> what reaches the UI. This decision reaches no UI at all: it is maintenance machinery telling the
+> maintainer that the wiki moved. Measuring it against a UI-admission test would be a category error, so
+> it is exempt by kind rather than passing on merit.
+>
+> **Its standing is data correctness**, which the app's whole surface rests on and which is the third of
+> SPEC-0005's desktop gates. It matters *more* after that data-audit remediation lands, not less —
+> without drift detection the dataset simply rots again and the next audit re-discovers the same class of
+> findings by hand.
+>
+> **State: the inputs exist, the detection does not.** `sourceRevision` is recorded per row (already
+> required by SPEC-0007 REQ "Provenance Is Recorded and Ids Are Never Wiki-Derived"), and
+> `wgCurRevisionId` and `CATEGORY_INDEX` are both parsed in `scripts/scrape-stats.mjs`. What is missing
+> is the comparison that uses them: no tier-1 membership diff, no tier-2 revision sweep, and no scheduled
+> job — `.github/workflows/ci.yml` fires on push and pull request only, with no `schedule:` trigger. The
+> expensive groundwork is done and the cheap part on top of it was never written.
+>
+> **No new spec.** SPEC-0007 already owns the scrape — REQ "Offline, Human-Invoked Stats Scrape" and the
+> provenance requirement that mandates the very revision identifier tier 2 compares against. This extends
+> that domain rather than opening a new capability, so it belongs in SPEC-0007 as an amendment. Do not
+> mint SPEC-0011 for it.
+
 ## Context and Problem Statement
 
 The committed datasets are a snapshot: 256 items in `itemStats.json` and 242 hunters in

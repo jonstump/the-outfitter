@@ -7,6 +7,37 @@ extends: [ADR-0005, ADR-0010]
 
 # ADR-0017: Model Trait Applicability as a Four-Axis Condition Vocabulary, Enforced Only as Advice
 
+> **Disposition confirmed 2026-08-15 — in scope, and the strongest pass of any ADR reviewed against the
+> admission test. Build it staged by axis, not in one story.**
+>
+> **Why it passes.** ADR-0021's test asks whether a fact earns UI by helping someone assemble a loadout.
+> Telling a player that Bulletgrubber does nothing with their Derringer is not trivia about the game —
+> it changes which trait they pick, which is the tool's entire job. Of the ADRs reviewed in this pass
+> (0018, 0019, 0020, 0021), this one sits closest to the test's core case.
+>
+> **State: entirely unbuilt.** `actionType`, `weaponList`, `attachment` and `itemKind` appear in zero
+> files across `client/src`, `data` and `scripts`; `itemStats.json` carries no `conditions` key; and
+> nothing in the UI surfaces a trait as inert.
+>
+> **Stage it by axis, because the axes differ sharply in cost and in risk.** This decision's advice is
+> only worth having if it is right — **wrong advice is worse than none in a loadout tool**, since a
+> player who is told a trait is inert will drop a trait that actually works. The four axes are not
+> equally safe, and this ADR says so itself:
+>
+> | Axis | Cost | Risk | Order |
+> |---|---|---|---|
+> | `itemKind` | free — resolves against `ammoClass: "none"`, `CONS[i][3] === "Throwable"` and `TOOL_GROUPS`, all of which exist; 9 traits | low | first |
+> | `weaponList` | small — 3 traits state their weapons as `{{Weapon|…}}` links, Bulletgrubber with a negative exception | low | second |
+> | `actionType` | 147 hand-assigned values, 130 sourced from page prose | medium | third |
+> | `attachment` | a 10-term mapping over variant names | **highest — this ADR calls it "the weakest axis" and records it as a hand-authored judgement about which terms denote an optic** | last, or not at all |
+>
+> `itemKind` alone delivers nine traits' worth of correct advice for essentially no work. `attachment`
+> is the axis most likely to call a working trait inert, so it should ship last on its own evidence —
+> or be dropped without blocking the rest.
+>
+> **The advice-never-a-block posture is unchanged**: `upTotal`, `capUsed`, `slotMax`, `TRAIT_MAX` and
+> the reducer's accept/reject logic stay untouched whatever ships.
+
 ## Context and Problem Statement
 
 Many Hunt traits do nothing unless the loadout carries a particular kind of weapon. Levering needs a
