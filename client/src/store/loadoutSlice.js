@@ -97,9 +97,8 @@ const loadoutSlice = createSlice({
       // could never fire, and an object payload would already have thrown at `WEAPONS[...]`
       // above. Writing `false` outright is the honest statement of what this route does.
       //
-      // The pair toggle and ITS refusal — both the stored-attribute check and the capacity
-      // check — arrive with the slot affordance in #333. This route stays pair-free until
-      // then, which is what the test below pins.
+      // The pair toggle is a SEPARATE reducer (`togglePair`), with its own refusal — the
+      // stored-attribute check and the capacity check both live there, not here.
       state.weapons[slot] = { i: weaponIndex, a: -1, d: false };
       // Re-derive the name only while the user has not taken ownership (SPEC-0003 REQ
       // "A Loadout's Name Is Derived From Its Weapons Until the User Owns It").
@@ -114,6 +113,29 @@ const loadoutSlice = createSlice({
     setAmmo(state, action) {
       const { slot, ammoIndex } = action.payload;
       if (state.weapons[slot]) state.weapons[slot].a = ammoIndex;
+    },
+    // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot",
+    // REQ "The Pair Flag Is Refused Wherever the Data Does Not Permit It".
+    //
+    // The interactive pair toggle, driven by the slot affordance (#333). Refuses ON ITS
+    // OWN — the affordance's locked state is the visible half, but this guard is the
+    // enforcement, exactly as addWeapon's capMax check refuses an over-budget weapon.
+    // Two independent refusals:
+    //   - the stored attribute must permit the pair (dualWieldFor === true);
+    //   - the paired entry's occupied size (weaponSize, the shared +1) must fit under
+    //     capMax alongside the other entry.
+    // Computing the cost with `weaponSize(state.weapons[slot]) + (1)` via the shared
+    // `weaponSize({ ...w, d: true })` keeps this route and the affordance's enabled
+    // state unable to disagree about what a pair costs. `setLoadout` does NOT enforce
+    // capacity — for pairs or singles — so this is the one place an interactive write
+    // is budget-checked. An already-paired weapon is never shrunk by toggling when it
+    // sits over capacity (e.g. after Quartermaster is removed).
+    togglePair(state, action) {
+      const slot = action.payload;
+      const w = state.weapons[slot];
+      if (!w || dualWieldFor(WEAPONS[w.i][0]) !== true) return;
+      if (weaponSize({ ...w, d: true }) + weaponSize(state.weapons[1 - slot] || null) > capMax(state)) return;
+      state.weapons[slot] = { ...w, d: !w.d };
     },
     addEquip(state, action) {
       const { t, i } = action.payload;

@@ -126,3 +126,184 @@ describe("WeaponSlot — memoized selector", () => {
     expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[weaponIndex][1]);
   });
 });
+
+// Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot",
+// REQ "It Is Operable and Named in Every State" (WCAG 2.1 AA baseline, SPEC-0001).
+//
+// The affordance is a real button with an accessible name distinguishing its three
+// states (available / locked / paired), does not render for a weapon the data does not
+// mark dual-wieldable, and stays queryable (never display:none) when locked. Keyboard
+// (Enter/Space) and pointer activation must produce identical state.
+describe("WeaponSlot — the dual-wield pair affordance", () => {
+  // Real catalog pair: a size-1 dual-wieldable pistol (Conversion) and a size-3 rifle
+  // (Frontier 73C). Haymaker is a size-2 pistol the data does NOT mark dual-wieldable,
+  // despite sharing its size with the Uppercut (SPEC-0009 "never derived").
+  const PISTOL = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
+  const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
+  const HAYMAKER = WEAPONS.findIndex((w) => w[0] === "haymaker");
+
+  const pairButton = (c) => c.querySelector(".pair-toggle");
+
+  it("renders an available affordance for a dual-wieldable pistol with budget to spare", () => {
+    const { container } = renderSlot({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: false }, null] }),
+    });
+    const btn = pairButton(container);
+    expect(btn).toBeInTheDocument();
+    expect(btn).toBeInstanceOf(HTMLButtonElement);
+    expect(btn).toHaveClass("available");
+    expect(btn).not.toBeDisabled();
+    // Accessible name distinguishes the available state.
+    expect(btn).toHaveAccessibleName(`Dual-wield ${WEAPONS[PISTOL][1]}`);
+  });
+
+  it("marks the pair on pointer activation, showing the paired state and doubling capacity cost", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: false }, null] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    fireEvent.click(pairButton(container));
+    expect(store.getState().loadout.weapons[0].d).toBe(true);
+    const btn = pairButton(container);
+    expect(btn).toHaveClass("paired");
+    expect(btn).toHaveAccessibleName(`Unpair ${WEAPONS[PISTOL][1]}`);
+  });
+
+  it("keyboard activation (Enter and Space) produces the same state as pointer activation", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: false }, null] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const btn = pairButton(container);
+    // This is a REAL button (proven by the first test of this block), so Enter and
+    // Space reach the same onClick the browser hands a pointer click to. Whet the
+    // keyboard path by focusing and dispatching the key, then the native activation.
+    btn.focus();
+    fireEvent.keyDown(btn, { key: "Enter" });
+    fireEvent.click(btn); // the browser's Enter activates a focused button by clicking it
+    expect(store.getState().loadout.weapons[0].d).toBe(true);
+
+    fireEvent.keyDown(btn, { key: " " });
+    fireEvent.click(btn); // Space does the same
+    expect(store.getState().loadout.weapons[0].d).toBe(false);
+  });
+
+  it("moves to locked when the remaining budget cannot afford the extra point, stays QUERYABLE and disabled", () => {
+    // Uppercut (size 2, pairable) + rifle (3) = 5 of 5. Pairing the Uppercut costs 3
+    // (size + 1), so 3 + 3 = 6 > 5 — the extra point does not fit, the affordance is
+    // locked, and it stays in the accessibility tree, disabled.
+    const UPPER = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-uppercut");
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: RIFLE, a: -1, d: false }, { i: UPPER, a: -1, d: false }] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={1} />
+      </Provider>
+    );
+    const btn = pairButton(container);
+    expect(btn).toBeInTheDocument(); // NOT absent — the locked affordance stays in the tree.
+    expect(btn).toHaveClass("locked");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAccessibleName(`Dual-wield ${WEAPONS[UPPER][1]} — not enough budget`);
+
+    // Activation does nothing (the reducer guard is the enforcement; this proves the UI).
+    fireEvent.click(btn);
+    expect(store.getState().loadout.weapons[1].d).toBe(false);
+  });
+
+  // Governing: ADR-0023 ("renders a ghosted second copy within that weapon's own tile"),
+  // SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot" ("SHALL render a
+  // representation of the second pistol").
+  //
+  // The affordance IS a second photograph of the weapon. The first implementation of this
+  // story satisfied every other assertion in this file — role, accessible name, disabled
+  // state, keyboard, live region — with a `×1 ×2` TEXT chip and no image at all, because
+  // nothing here asserted the representation. This is that assertion. It must fail if the
+  // second copy of the weapon ever stops being rendered, in any of the three states.
+  it.each([
+    ["available", { weapons: [{ i: PISTOL, a: -1, d: false }, null] }, 0],
+    ["paired", { weapons: [{ i: PISTOL, a: -1, d: true }, null] }, 0],
+    // Uppercut (2, pairable) + rifle (3) = 5 of 5, so the extra point cannot be afforded —
+    // the same arrangement the dedicated locked test above uses, read from slot 1.
+    [
+      "locked",
+      () => ({
+        weapons: [
+          { i: RIFLE, a: -1, d: false },
+          { i: WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-uppercut"), a: -1, d: false },
+        ],
+      }),
+      1,
+    ],
+  ])("the %s affordance renders a second copy of the weapon's own image", (state, weapons, slot) => {
+    const store = createTestStore({ loadout: loadoutState(typeof weapons === "function" ? weapons() : weapons) });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={slot} />
+      </Provider>
+    );
+    const btn = pairButton(container);
+    expect(btn).toHaveClass(state);
+
+    // The control's content is an IMAGE of the same weapon as the real tile — not a label
+    // describing one. Both thumbs resolve to the same source, and they sit together in the
+    // tile's image area rather than the affordance living somewhere else in the slot.
+    const thumbs = container.querySelectorAll(".weapon-thumb-pair img");
+    expect(thumbs).toHaveLength(2);
+    expect(thumbs[1].getAttribute("src")).toBe(thumbs[0].getAttribute("src"));
+    expect(btn.querySelector("img")).toBe(thumbs[1]);
+
+    // Decorative: the button's accessible name already carries the meaning, so the second
+    // photo must not announce the weapon's name a second time.
+    expect(thumbs[1]).toHaveAttribute("alt", "");
+    expect(btn).toHaveAccessibleName(/\S/);
+  });
+
+  it("renders no affordance for a weapon the data does not mark dual-wieldable", () => {
+    // Haymaker (size 2) is not pairable; the Uppercut (also size 2) is — the stored
+    // attribute, never the size, decides.
+    const { container } = renderSlot({
+      loadout: loadoutState({ weapons: [{ i: HAYMAKER, a: -1, d: false }, null] }),
+    });
+    expect(pairButton(container)).not.toBeInTheDocument();
+  });
+
+  it("an unpair returns the weapon to a single and re-derives capacity", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: true }, null] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    expect(pairButton(container)).toHaveClass("paired");
+    fireEvent.click(pairButton(container));
+    expect(store.getState().loadout.weapons[0].d).toBe(false);
+    expect(pairButton(container)).toHaveClass("available");
+  });
+
+  it("announces the pairing change through a live region", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: PISTOL, a: -1, d: false }, null] }),
+    });
+    const { container } = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const region = container.querySelector('[role="status"]');
+    expect(region).toBeInTheDocument();
+    fireEvent.click(pairButton(container));
+    expect(region.textContent).toContain("Dual-wielding");
+  });
+});

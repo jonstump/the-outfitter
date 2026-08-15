@@ -333,13 +333,19 @@ applies to it in full. The requirements below are the parts specific to this con
 ### Requirement: The Pair Affordance Lives on the Weapon Slot
 
 A weapon that may be dual wielded SHALL present its pair affordance on that weapon's own slot, not in
-the item picker. The affordance SHALL render a representation of the second pistol in one of three
-states:
+the item picker.
 
-- **Available** — the budget has room for the extra point, and activating the affordance SHALL mark
-  the pair.
-- **Locked** — the budget has no room, and activating the affordance SHALL do nothing.
-- **Paired** — the pair is marked, and activating the affordance SHALL return the weapon to a single.
+The affordance SHALL render **the weapon's own image a second time**, within that weapon's tile and
+beside the first copy, so that a pair is shown as two weapons rather than described in words. A
+textual stand-in — a label, a count, a badge — SHALL NOT satisfy this requirement. It carries one of
+three states:
+
+- **Available** — the budget has room for the extra point. The second copy SHALL be ghosted and SHALL
+  carry a plus sign, and activating the affordance SHALL mark the pair.
+- **Locked** — the budget has no room. The second copy SHALL be visibly greyed out, and activating
+  the affordance SHALL do nothing.
+- **Paired** — the pair is marked. The second copy SHALL render at full strength, matching the first,
+  and activating the affordance SHALL return the weapon to a single.
 
 The affordance SHALL NOT be rendered for a weapon the stored attribute does not permit.
 
