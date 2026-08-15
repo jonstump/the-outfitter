@@ -96,6 +96,95 @@ describe("addEquip", () => {
   });
 });
 
+// Governing: issue #352, ADR-0009 (fixed eight-cell grid), ADR-0015 (per-type caps).
+//
+// `moveEquip` had zero test coverage and a defect: when `from` was empty and `to` was
+// filled, `moving` bound to `equip[to]` and BOTH cells were assigned it, duplicating
+// the item. The dead `moving === null` guard could never fire because `moving` was
+// read from the destination. This suite exercises all four occupancy combinations
+// (empty→empty, empty→filled, filled→empty, filled→filled) plus the regression: a
+// duplicate must never survive a move.
+describe("moveEquip — the four occupancy combinations", () => {
+  const KNIFE = TOOLS.findIndex((t) => t[0] === "knife");
+  const equip = (cells) => [...cells, ...Array(8 - cells.length).fill(null)];
+
+  it("empty→empty is a no-op", () => {
+    const store = makeStore(loadoutState({ equip: equip([null, null]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 1 }));
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[1]).toBeNull();
+  });
+
+  it("empty→filled is REFUSED (no duplication): the filled cell stays, the empty cell stays empty", () => {
+    // The defect: `moving` bound to `equip[to]` and both cells were assigned it,
+    // duplicating the item. The guard now requires an occupant at `from`.
+    const store = makeStore(loadoutState({ equip: equip([null, { t: "T", i: KNIFE }]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 1 }));
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[1]).toEqual({ t: "T", i: KNIFE });
+    // No duplication — exactly one item is held.
+    expect(held(store.getState())).toHaveLength(1);
+  });
+
+  it("filled→empty moves the item", () => {
+    const store = makeStore(loadoutState({ equip: equip([{ t: "T", i: KNIFE }, null]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 1 }));
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[1]).toEqual({ t: "T", i: KNIFE });
+    expect(held(store.getState())).toHaveLength(1);
+  });
+
+  it("filled→filled swaps the two items (a permutation)", () => {
+    const VITALITY = CONS.findIndex((c) => c[0] === "vitality-shot");
+    const store = makeStore(
+      loadoutState({
+        equip: equip([{ t: "T", i: KNIFE }, { t: "C", i: VITALITY }]),
+      })
+    );
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 1 }));
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toEqual({ t: "C", i: VITALITY });
+    expect(s[1]).toEqual({ t: "T", i: KNIFE });
+    expect(held(store.getState())).toHaveLength(2);
+  });
+
+  it("from===to is a no-op", () => {
+    const store = makeStore(loadoutState({ equip: equip([{ t: "T", i: KNIFE }, null]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 0 }));
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "T", i: KNIFE });
+  });
+
+  it("dragged off the grid (to: -1) unequips the source cell", () => {
+    const store = makeStore(loadoutState({ equip: equip([{ t: "T", i: KNIFE }, null]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: -1 }));
+    expect(store.getState().loadout.equip[0]).toBeNull();
+    expect(held(store.getState())).toHaveLength(0);
+  });
+
+  it("dragged off the grid from an EMPTY cell is a no-op", () => {
+    const store = makeStore(loadoutState({ equip: equip([null, { t: "T", i: KNIFE }]) }));
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: -1 }));
+    // The source is empty, so nothing is unequipped — the other cell is untouched.
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "T", i: KNIFE });
+    expect(held(store.getState())).toHaveLength(1);
+  });
+
+  it("a move involving a blocked cell is refused", () => {
+    const store = makeStore(
+      loadoutState({
+        equip: equip([{ t: "T", i: KNIFE }, null]),
+        blocked: [1],
+      })
+    );
+    store.dispatch(loadoutActions.moveEquip({ from: 0, to: 1 }));
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "T", i: KNIFE });
+    expect(store.getState().loadout.equip[1]).toBeNull();
+  });
+});
+
 describe("addWeapon", () => {
   it("enforces the weapon capacity cap using tuple cost (index 2)", () => {
     const store = makeStore();
