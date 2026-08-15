@@ -725,7 +725,7 @@ export const TRAITS = [
   ["gator-legs", "Gator Legs", 3, "Mobility"],
   ["hornskin", "Hornskin", 3, "Medical"],
   ["martialist", "Martialist", 2, "Combat"],
-  ["mithridatist", "Mithridatist", 3, "Medical"],
+  ["mithridatist", "Mithridatist", 2, "Medical"],
   ["poacher", "Poacher", 1, "Stealth"],
   ["poltergeist", "Poltergeist", 2, "Utility"],
   ["scopesmith", "Scopesmith", 2, "Combat"],
