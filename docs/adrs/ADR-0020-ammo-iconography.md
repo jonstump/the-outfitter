@@ -7,6 +7,21 @@ extends: [ADR-0002]
 
 # ADR-0020: Give Ammo an Image Tier from Allowed Paths, and Leave the SVG Fallback Group-Level
 
+> **Disposition confirmed 2026-08-15 — wanted, and deliberately not specced yet.** This decision stands
+> and will get a governing spec, but not now. Per Jon it is *"something I want to do shortly after
+> shipping the desktop app once the ammo data is fixed"* — so it is sequenced behind two things:
+>
+> 1. **The ammo data is fixed.** SPEC-0010 replaces the ten shared ammo pools with per-weapon rows
+>    carrying stable ids; drawing images for ammo that is about to be re-modelled would key them to
+>    identifiers that are on their way out.
+> 2. **The desktop app ships.** SPEC-0005 is itself `status: blocked` behind four product-completeness
+>    gates, so this sits behind those too.
+>
+> **Until then, its absence is intentional.** An accepted ADR with no spec is normally a gap worth
+> raising; this one is not, and `/sdd:audit`, `/sdd:check` and any drift review MUST NOT report it as
+> unplanned work or missing coverage. Revisit when SPEC-0010 has landed and desktop distribution is
+> unblocked.
+
 ## Context and Problem Statement
 
 Image coverage for everything the app models is complete. Running the app's own `slugify()` over every
