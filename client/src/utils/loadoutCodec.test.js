@@ -1008,3 +1008,198 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
     expect(AMMO[WEAPONS[0][4]][1][0]).toBe("High Velocity");
   });
 });
+
+// Governing: issue #418 (PR 2 of #353), ADR-0009, ADR-0015, SPEC-0006
+// REQ "Capacity Rules Are Stated Once and Preserved".
+//
+// `boundedEquip` clamps a decoded equipment grid to the shared capacity rules: at
+// most `slotMax` items (8 minus blocked cells) and at most four per consumable cap
+// category. Applied by ALL four decoders so no decode route can skip it — the same
+// all-write-paths discipline `boundedTraits` uses for the fifteen-trait cap.
+describe("boundedEquip — decode clamps the equipment grid (issue #418)", () => {
+  const STICK = CONS.findIndex((c) => c[0] === "dynamite-stick");
+  const BUNDLE = CONS.findIndex((c) => c[0] === "dynamite-bundle");
+  const SHOT = CONS.findIndex((c) => c[0] === "vitality-shot");
+
+  // Helper: build an equip payload of N copies of one consumable, padded to 8.
+  const equipPayload = (...items) => {
+    const e = [...items, ...Array(8 - items.length).fill(null)];
+    return e.map((x) => (x ? ["C", CONS[x][0]] : null));
+  };
+
+  // The over-category payload: 5 Dynamite Sticks (all Throwables, 5 > 4).
+  const overCategory = equipPayload(STICK, STICK, STICK, STICK, STICK);
+
+  // Legacy positional payloads use indices into LEGACY_CONS_IDS, not id pairs.
+  // dynamite-stick is legacy index 4, so 5 copies = [4, 4, 4, 4, 4, null, null, null].
+  const legacyOverCategory = [4, 4, 4, 4, 4].map((i) => ["C", i]);
+  const legacyOverCategoryPadded = [...legacyOverCategory, ...Array(8 - legacyOverCategory.length).fill(null)];
+
+  // The over-slot payload: 7 different tools (no per-category cap applies to tools),
+  // with 2 blocked cells → slotMax 6, 7 > 6.
+  const toolPayload = () => {
+    const ids = ["knife", "heavy-knife", "dusters", "throwing-knives", "flare-pistol", "fusees", "spyglass"];
+    const e = ids.map((id) => ["T", id]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  // Legal: 4 Dynamite Sticks, no overflow.
+  const legal = equipPayload(STICK, STICK, STICK, STICK);
+
+  // A versioned wrapper for each decoder.
+  const v3 = (e, opts = {}) => ({
+    v: 3,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blocked || [],
+  });
+  const v2 = (e, opts = {}) => ({
+    v: 2,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blocked || [],
+  });
+  const v1 = (e, opts = {}) => ({
+    v: 1,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blockedCount || 0,
+  });
+  const legacy = (e) => ({
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: 0,
+  });
+
+  // Legacy tool payloads use positional indices into LEGACY_TOOL_IDS.
+  // knife=0, heavy-knife=1, dusters=3, throwing-knives=4, flare-pistol=7, fusees=8, spyglass=10
+  const legacyToolPayload = () => {
+    const indices = [0, 1, 3, 4, 7, 8, 10];
+    const e = indices.map((i) => ["T", i]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  // Legacy legal: 4 × dynamite-stick (legacy index 4).
+  const legacyLegal = () => {
+    const e = [4, 4, 4, 4].map((i) => ["C", i]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  it.each([
+    ["v3", v3(overCategory)],
+    ["v2", v2(overCategory)],
+    ["v1", v1(overCategory)],
+    ["legacy", legacy(legacyOverCategoryPadded)],
+  ])("clamps an over-category record (%s: 5 Throwables → 4)", (_label, payload) => {
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(4);
+    // All four are Dynamite Sticks (the first four survive — the clamp drops from the end).
+    expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
+    // The 5th cell is now a hole.
+    expect(dec.equip[4]).toBeNull();
+  });
+
+  it.each([
+    ["v3", v3(toolPayload(), { blocked: [6, 7] })],
+    ["v2", v2(toolPayload(), { blocked: [6, 7] })],
+    ["v1", v1(toolPayload(), { blockedCount: 2 })],
+  ])("clamps an over-slot record (%s: 7 items, slotMax 6 → 6)", (_label, payload) => {
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(6);
+    expect(dec.equip[6]).toBeNull();
+  });
+
+  // Legacy is excluded from the row set above rather than early-returning inside it:
+  // its `b` is a trailing COUNT, and these seven tools carry `b: 0`, so slotMax is 8
+  // and seven items are legal. Asserting "no clamp" under a title that says "clamps
+  // to 6" would describe the opposite of what it checks.
+  it("leaves a legacy record of 7 tools untouched — slotMax is 8 with no blocked count", () => {
+    const dec = fromData(legacy(legacyToolPayload()));
+    expect(dec.equip.filter(Boolean)).toHaveLength(7);
+  });
+
+  it.each([
+    ["v3", v3(legal)],
+    ["v2", v2(legal)],
+    ["v1", v1(legal)],
+    ["legacy", legacy(legacyLegal())],
+  ])("leaves a legal grid untouched (%s: 4 Throwables)", (_label, payload) => {
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(4);
+    expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
+  });
+
+  it("the clamp is deterministic — the same record decodes to the same loadout", () => {
+    const payload = v2(overCategory);
+    const dec1 = fromData(payload);
+    const dec2 = fromData(payload);
+    expect(dec1.equip).toEqual(dec2.equip);
+  });
+
+  // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly" — "Decoding SHALL
+  // be total: ... no input SHALL produce a blocked list containing a duplicate or an
+  // out-of-range index."
+  //
+  // The out-of-range half was enforced; the duplicate half was not. Nine copies of `0`
+  // are nine individually valid indices, so `b` decoded to a nine-element list and the
+  // clamp's `8 - blocked.length` went NEGATIVE. A loop dropping items until the count
+  // fell below a negative bound could never finish — an infinite loop inside the
+  // decoder, reachable from a share link, which freezes the tab rather than blanking
+  // it the way issue #201 did. These pin the input, which is where the fix belongs.
+  it.each([
+    ["duplicates", [0, 0, 0, 0, 0, 0, 0, 0, 0], [0]],
+    ["duplicates mixed with distinct", [3, 3, 5, 5, 5, 3], [3, 5]],
+    ["out-of-range mixed with duplicates", [9, 2, 2, -1, 2, 99], [2]],
+  ])("decodes a v2 record whose blocked list carries %s, deduplicated", (_label, b, expected) => {
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], null, null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b,
+    });
+    expect(dec.blocked).toEqual(expected);
+    // And the grid still decodes — the item survives, because slotMax is now positive.
+    expect(dec.equip.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("decodes a v3 record with a duplicate-laden blocked list the same way", () => {
+    const dec = fromData({
+      v: 3,
+      w: [null, null],
+      e: [["T", "knife"], null, null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [7, 7, 7, 7, 7, 7, 7, 7, 7],
+    });
+    expect(dec.blocked).toEqual([7]);
+    expect(dec.equip.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("clamps to an empty grid when every cell is blocked, without spinning", () => {
+    // slotMax 0: nothing may be held. The clamp drops every item and stops, rather
+    // than looping on a grid it can no longer make smaller.
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], ["T", "dusters"], null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [0, 1, 2, 3, 4, 5, 6, 7],
+    });
+    expect(dec.blocked).toHaveLength(8);
+    expect(dec.equip.filter(Boolean)).toHaveLength(0);
+  });
+});

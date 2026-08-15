@@ -1,5 +1,5 @@
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
-import { TRAIT_MAX } from "./calc.js";
+import { TRAIT_MAX, capCategory, equipOverCapacity } from "./calc.js";
 
 export const LS_CUR = "hunt-outfitter-current";
 
@@ -94,6 +94,75 @@ function boundedTraits(ids) {
   return ids.slice(0, TRAIT_MAX);
 }
 
+/**
+ * The blocked-cell list a decoded loadout is allowed to keep: in-range integers,
+ * each appearing once.
+ *
+ * Governing: ADR-0009, SPEC-0006 REQ "Version 1 Records Migrate Losslessly" —
+ * "Decoding SHALL be total: ... no input SHALL produce a blocked list containing a
+ * duplicate or an out-of-range index." The out-of-range half was already enforced;
+ * the DUPLICATE half was not, and a record carrying nine copies of `0` decoded to a
+ * nine-element blocked list. That was silent until `boundedEquip` started dividing
+ * the grid by it: `8 - blocked.length` went negative, and a loop that drops items
+ * until the count falls below a negative bound never terminates. Deduplicating here
+ * closes the spec gap and removes the negative bound at its source, rather than
+ * bounding the loop that tripped over it.
+ */
+function boundedBlocked(b) {
+  if (!Array.isArray(b)) return [];
+  return [...new Set(b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8))];
+}
+
+/**
+ * The equipment grid a decoded loadout is allowed to keep: at most `slotMax` items
+ * (8 minus blocked cells) and at most four per consumable cap category.
+ *
+ * Governing: ADR-0009 (eight-cell grid), ADR-0015 (four per cap category),
+ * SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved", issue #353/#418.
+ *
+ * Decode clamps rather than throws, for the same reason `boundedTraits` does: the
+ * store subscriber persists a decoded loadout BEFORE it renders, so a decoder that
+ * refused an over-cap grid would write the record it rejects and then fail on it on
+ * every later visit. Clamping keeps the record loadable and self-correcting — the
+ * next save writes the clamped grid back.
+ *
+ * The clamp is DETERMINISTIC: it drops the highest-numbered occupied cell first, so
+ * the earliest items survive and the same record always decodes to the same loadout.
+ * For a category overflow it drops the last item OF THAT CATEGORY, so the earliest
+ * four of each survive and items of other categories are never disturbed.
+ *
+ * Both rules are read through `equipOverCapacity` (calc.js) — one loop, not two, so
+ * there is no second copy of the slot arithmetic. An earlier revision hand-rolled
+ * `8 - blocked.length` for the slot pass; with a blocked list that was never
+ * deduplicated, that bound could go negative and the loop spun forever on an empty
+ * grid. `boundedBlocked` fixes the input, and driving the whole clamp from
+ * `equipOverCapacity` means the arithmetic exists once, in `slotMax`.
+ *
+ * TERMINATION is structural rather than a counter: every iteration nulls exactly one
+ * occupied cell, the grid holds at most eight, and `dropLast` returning false — the
+ * over-capacity report names a category with nothing left to drop — exits instead of
+ * spinning. So the loop cannot outlive the items it is removing.
+ */
+function dropLast(equip, category) {
+  for (let k = equip.length - 1; k >= 0; k--) {
+    const e = equip[k];
+    if (!e) continue;
+    if (category !== null && (e.t !== "C" || capCategory(e.i) !== category)) continue;
+    equip[k] = null;
+    return true;
+  }
+  return false;
+}
+
+function boundedEquip(equip, blocked) {
+  const result = [...equip];
+  const loadout = { equip: result, blocked: Array.isArray(blocked) ? blocked : [] };
+  for (let over = equipOverCapacity(loadout); over; over = equipOverCapacity(loadout)) {
+    if (!dropLast(result, over.kind === "category" ? over.category : null)) break;
+  }
+  return result;
+}
+
 export function emptyLoadout() {
   // Governing: ADR-0009 (fixed eight-cell sparse grid, `null` = empty),
   // SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
@@ -164,7 +233,7 @@ function fromV1(d) {
     // empty holes of the sparse model (ADR-0009, SPEC-0006 REQ "Version 1 Records
     // Migrate Losslessly"). Trailing holes are stripped so `Block 7` cannot block a
     // cell that is empty anyway.
-    equip: [...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8),
+    equip: boundedEquip([...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8), v1BlockedCells(d.b)),
     // Traits are stored by stable catalog id (see catalog.js) — pass the ids
     // straight through rather than re-mapping to current array positions, then
     // clamp to the cap (see boundedTraits; fromLegacy clamps the same way).
@@ -435,7 +504,7 @@ function fromLegacy(d) {
     // the record carried, holes padded behind it, and the blocked count lifted to the
     // cells the count meant. (SPEC-0006 REQ "Version 1 Records Migrate Losslessly",
     // applied to the legacy shape through the shared v1 semantics.)
-    equip: [...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8),
+    equip: boundedEquip([...equip, ...Array(8 - equip.length).fill(null)].slice(0, 8), v1BlockedCells(d.b)),
     // Legacy encodings reference traits by array position; translate to the stable
     // catalog id the store now keys on (see catalog.js's trait tuple shape), then clamp
     // to the cap — AFTER the translation, so the fifteen counted are fifteen that survived.
@@ -484,16 +553,18 @@ function fromV2(d) {
     rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
   );
 
+  const blocked = boundedBlocked(d.b);
+
   return {
     weapons,
-    equip,
+    equip: boundedEquip(equip, blocked),
     traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
     // Blocked cells travel as their own array. Malformed values decay to none at
     // all (the well-formed empty grid, not an exception), and out-of-range indices
     // are dropped rather than clamped — a clamp would move the block the record
     // actually declared.
-    blocked: Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [],
+    blocked,
   };
 }
 
@@ -539,16 +610,18 @@ function fromV3(d) {
     rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
   );
 
+  const v3blocked = boundedBlocked(d.b);
+
   return {
     weapons,
-    equip,
+    equip: boundedEquip(equip, v3blocked),
     traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
     name: d.n || "",
     // Blocked cells travel as their own array. Malformed values decay to none at
     // all (the well-formed empty grid, not an exception), and out-of-range indices
     // are dropped rather than clamped — a clamp would move the block the record
     // actually declared.
-    blocked: Array.isArray(d.b) ? d.b.filter((c) => Number.isInteger(c) && c >= 0 && c < 8) : [],
+    blocked: v3blocked,
   };
 }
 
