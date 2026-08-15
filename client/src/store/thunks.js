@@ -65,7 +65,16 @@ export function loadSavedThunk(record) {
 export function shareThunk() {
   return (dispatch, getState) => {
     const { loadout } = getState();
-    const url = encodeShareUrl(loadout);
+    // Governing: issue #358. encodeShareUrl can throw on a loadout name carrying code
+    // points above U+00FF (if the UTF-8-safe path is somehow bypassed). Wrap the call
+    // so a future encode failure dispatches a message rather than throwing silently.
+    let url;
+    try {
+      url = encodeShareUrl(loadout);
+    } catch {
+      dispatch(uiActions.setMessage("Could not generate a share link for this loadout."));
+      return;
+    }
     const done = () => dispatch(uiActions.setMessage("Share link copied to clipboard."));
     const fallback = () => dispatch(uiActions.setMessage("Share code is in the address bar — copy the URL."));
     if (navigator.clipboard && navigator.clipboard.writeText) {

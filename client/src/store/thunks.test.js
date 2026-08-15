@@ -6,7 +6,7 @@ import { encodeShareUrl, toData } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
 import savedLoadoutsReducer, { saveCurrent } from "./savedLoadoutsSlice.js";
-import { loadSavedThunk, randomizeThunk } from "./thunks.js";
+import { loadSavedThunk, randomizeThunk, shareThunk } from "./thunks.js";
 
 // Governing: issue #27 (randomize's payload must satisfy setLoadout's shape
 // validation — a shape mismatch used to throw inside the reducer and crashed the
@@ -327,6 +327,26 @@ describe("fresh vs loaded save addressing (triple vs id)", () => {
       expect(body).not.toHaveProperty("id");
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+// Governing: issue #358. `shareThunk` had no try/catch around `encodeShareUrl`, so an encode
+// failure (e.g. `btoa` throwing on non-Latin-1 characters) escaped uncaught and the Share
+// button did nothing — no toast, no error. The thunk now wraps the call so a failure
+// dispatches a `setMessage` instead of throwing silently.
+describe("shareThunk error handling (issue #358)", () => {
+  it("dispatches a message when encodeShareUrl throws", () => {
+    const store = makeStore();
+    // Force encodeShareUrl to throw by stubbing btoa (which encodeShareUrl calls internally).
+    const realBtoa = globalThis.btoa;
+    vi.stubGlobal("btoa", () => { throw new Error("encode failed"); });
+    try {
+      store.dispatch(shareThunk());
+      expect(store.getState().ui.message).toContain("Could not generate");
+    } finally {
+      vi.unstubAllGlobals();
+      globalThis.btoa = realBtoa;
     }
   });
 });
