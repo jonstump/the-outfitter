@@ -115,8 +115,17 @@ export default function WeaponSlot({ slot }) {
                 type="button"
                 className={`pair-toggle ${pairState}`}
                 aria-label={pairLabel}
-                disabled={pairState === "locked"}
-                onClick={() => dispatch(loadoutActions.togglePair(slot))}
+                aria-disabled={pairState === "locked" || undefined}
+                onClick={() => {
+                  // Governing: issue #401, ADR-0023 ("keyboard-reachable ... in all three
+                  // states"). aria-disabled keeps the locked control focusable: a native
+                  // disabled button is skipped by Tab, so a keyboard-only user could never
+                  // reach the control that says WHY pairing is unavailable. An aria-disabled
+                  // button still fires click events, so the locked state returns early — the
+                  // reducer guard remains the real enforcement and stays untouched.
+                  if (pairState === "locked") return;
+                  dispatch(loadoutActions.togglePair(slot));
+                }}
               >
                 {/* alt="" — the button's aria-label already names the control in all three
                     states, so the second photo is decorative to assistive tech and must not

@@ -13,16 +13,19 @@ related: [ADR-0005]
 > decoder (#396), the costing and stored-attribute gate (#397), the wire-format encode (#398) and the
 > pair affordance (#399) are all merged. The status is now caught up with the code.
 >
-> **One confirmation criterion is not yet met, and is deliberately left standing rather than softened:**
+> **All confirmation criteria are now met.** One was left standing unmet for two days rather than
+> softened:
 >
 > > The affordance is keyboard-reachable and carries an accessible name in all three states (ghost,
 > > plus, locked).
 >
-> The locked state uses the native `disabled` attribute, which keeps it in the accessibility tree but
-> removes it from the tab order, so a keyboard-only user cannot reach it to discover *why* pairing is
-> unavailable. That is tracked by #401. It is recorded here as an open criterion because amending a
-> confirmation to match what shipped would convert a real gap into a false pass — the criterion is
-> correct and the code is what needs to move.
+> The locked state used the native `disabled` attribute, which keeps it in the accessibility tree but
+> removes it from the tab order, so a keyboard-only user could not reach it to discover *why* pairing
+> was unavailable. Rather than amend the confirmation to match what had shipped — which would have
+> converted a real gap into a false pass — the criterion was recorded as open and the code moved to it:
+> #401 swapped the native attribute for `aria-disabled`, keeping the control focusable and announced as
+> disabled, with an early return in the click handler because an `aria-disabled` button still fires
+> events. The `togglePair` reducer guard remains the enforcement.
 
 ## Context and Problem Statement
 

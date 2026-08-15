@@ -196,10 +196,12 @@ describe("WeaponSlot — the dual-wield pair affordance", () => {
     expect(store.getState().loadout.weapons[0].d).toBe(false);
   });
 
-  it("moves to locked when the remaining budget cannot afford the extra point, stays QUERYABLE and disabled", () => {
+  it("moves to locked when the remaining budget cannot afford the extra point, stays queryable, focusable and aria-disabled", () => {
     // Uppercut (size 2, pairable) + rifle (3) = 5 of 5. Pairing the Uppercut costs 3
     // (size + 1), so 3 + 3 = 6 > 5 — the extra point does not fit, the affordance is
-    // locked, and it stays in the accessibility tree, disabled.
+    // locked. It stays in the tab order (aria-disabled, not the native attribute), so a
+    // keyboard-only user can reach the control whose accessible name says WHY pairing
+    // is unavailable (issue #401, ADR-0023 "all three states").
     const UPPER = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-uppercut");
     const store = createTestStore({
       loadout: loadoutState({ weapons: [{ i: RIFLE, a: -1, d: false }, { i: UPPER, a: -1, d: false }] }),
@@ -212,10 +214,23 @@ describe("WeaponSlot — the dual-wield pair affordance", () => {
     const btn = pairButton(container);
     expect(btn).toBeInTheDocument(); // NOT absent — the locked affordance stays in the tree.
     expect(btn).toHaveClass("locked");
-    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-disabled", "true");
+    expect(btn).not.toBeDisabled(); // focusable: the native attribute would skip Tab
     expect(btn).toHaveAccessibleName(`Dual-wield ${WEAPONS[UPPER][1]} — not enough budget`);
 
-    // Activation does nothing (the reducer guard is the enforcement; this proves the UI).
+    // The point of the story — this fails with `disabled`:
+    btn.focus();
+    expect(document.activeElement).toBe(btn);
+    // And the accessible name is actually reachable: the reason lives on the control.
+    expect(btn).toHaveAccessibleName(/not enough budget/);
+
+    // Activation — pointer and keyboard — does nothing. With aria-disabled the click
+    // REACHES the handler, so this proves the early return (and, underneath, the
+    // reducer guard, which is the real enforcement).
+    fireEvent.click(btn);
+    expect(store.getState().loadout.weapons[1].d).toBe(false);
+    btn.focus();
+    fireEvent.keyDown(btn, { key: "Enter" });
     fireEvent.click(btn);
     expect(store.getState().loadout.weapons[1].d).toBe(false);
   });

@@ -401,10 +401,10 @@ now shipped in four merged stories: the v3 decoder (#396), the pair cost and the
 `FORMAT_VERSION` is 3 and the decoder registry holds v3, v2, v1 and a legacy fallback.
 
 The status is `approved` rather than `implemented` because named work on this spec is still open, not
-because anything below is unbuilt: tests for the affordance (#334), the amendments this version bump
-owes SPEC-0003, SPEC-0006 and SPEC-0007 (#335), a correctness defect where an over-capacity loadout
-cannot be un-paired (#400), and the locked affordance's keyboard reachability (#401). Move it to
-`implemented` when those close.
+because anything below is unbuilt: tests for the affordance (#334) and the amendments this version bump
+owes SPEC-0003, SPEC-0006 and SPEC-0007 (#335). Move it to `implemented` when those close. Two
+correctness follow-ups that used to sit on this list have closed — an over-capacity loadout that could
+not be un-paired (#400) and the locked affordance's keyboard reachability (#401).
 
 > Call graphs below were generated from the codebase **before** any Part B work and have not been
 > regenerated — the mapping beneath them has been brought up to date by hand, but the mermaid graph
@@ -439,7 +439,7 @@ Part B requirements are implemented; the functions listed are the ones that carr
 
 **REQ "The Pair Affordance Lives on the Weapon Slot"**: `WeaponSlot()`, `buildRows()`, and the `togglePair()` reducer in `loadoutSlice.js` — which owns the refusal, both the stored-attribute check and the capacity check
 
-**REQ "The Pair Affordance Is Operable and Named in Every State"**: `WeaponSlot()` — the `pair-toggle` button and its `role="status"` live region. The locked state is not yet keyboard-reachable (#401), and the live region can announce an un-pair the store refused (#400).
+**REQ "The Pair Affordance Is Operable and Named in Every State"**: `WeaponSlot()` — the `pair-toggle` button and its `role="status"` live region. The locked state carries `aria-disabled` rather than the native attribute, so it stays in the tab order while still announcing as disabled (#401); the live region is driven by a `useRef`/`useEffect` pair watching the stored flag, so it can only describe a transition the reducer actually made (#400).
 
 ### Call Graph
 
