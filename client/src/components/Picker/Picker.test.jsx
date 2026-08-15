@@ -3,7 +3,7 @@ import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
 import Picker from "./Picker.jsx";
 import EquipmentPanel from "../EquipmentPanel/EquipmentPanel.jsx";
-import { CONS, TOOLS, TRAITS } from "../../data/catalog.js";
+import { CONS, TOOLS, TRAITS, WEAPONS } from "../../data/catalog.js";
 import * as itemStats from "../../data/itemStats.js";
 import { descriptionFor } from "../../data/itemStats.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
@@ -287,5 +287,41 @@ describe("Picker survives and reacts to a removal through the ✕ gesture (issue
     // It lands in the HOLE (cell 0), not appended at the end.
     expect(s[0]).toEqual({ t: "T", i: kitIdx });
     expect(s[1]).toBeNull();
+  });
+});
+
+// Governing: issue #355. The Conversion pistol and Conversion Chain Pistol were
+// mis-typed `medium` in the catalog; the wiki confirms both are `compact`. After
+// the fix, the picker's `Compact` ammo filter chip includes both Conversion weapons,
+// and the `Medium` chip no longer does.
+describe("Picker ammo filter reflects Conversion's correct compact class (issue #355)", () => {
+  const CONV = WEAPONS.find((w) => w[0] === "caldwell-conversion-pistol");
+  const CHAIN = WEAPONS.find((w) => w[0] === "conversion-chain-pistol");
+
+  it("the catalog now classifies both Conversion variants as compact", () => {
+    expect(CONV[4]).toBe("compact");
+    expect(CHAIN[4]).toBe("compact");
+  });
+
+  it("the Compact ammo filter chip includes both Conversion weapons", () => {
+    const { getAllByRole } = renderPicker({
+      loadout: loadoutState({ weapons: [null, null] }),
+      ui: { tab: "Weapons", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+    });
+    const chips = getAllByRole("button").filter((b) => b.textContent === "Compact");
+    fireEvent.click(chips[0]);
+    const rows = getAllByRole("button").filter((b) => b.textContent.includes("Conversion"));
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("the Medium ammo filter chip no longer includes either Conversion weapon", () => {
+    const { getAllByRole } = renderPicker({
+      loadout: loadoutState({ weapons: [null, null] }),
+      ui: { tab: "Weapons", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+    });
+    const chips = getAllByRole("button").filter((b) => b.textContent === "Medium");
+    fireEvent.click(chips[0]);
+    const rows = getAllByRole("button").filter((b) => b.textContent.includes("Conversion"));
+    expect(rows).toEqual([]);
   });
 });
