@@ -14,8 +14,12 @@ extends: [ADR-0002]
 > 1. **The ammo data is fixed.** SPEC-0010 replaces the ten shared ammo pools with per-weapon rows
 >    carrying stable ids; drawing images for ammo that is about to be re-modelled would key them to
 >    identifiers that are on their way out.
-> 2. **The desktop app ships.** SPEC-0005 is itself `status: blocked` behind four product-completeness
+> 2. **The desktop app ships.** SPEC-0005 is itself `status: blocked` behind seven product-completeness
 >    gates, so this sits behind those too.
+>
+> Note that item 1 is now item 2's gate as well: the ammo data became the seventh SPEC-0005 gate on
+> 2026-08-15, so SPEC-0010 blocks the desktop ship, which in turn blocks this. The order is unchanged —
+> ammo data, then desktop, then these icons — but the two prerequisites are no longer independent.
 >
 > **Until then, its absence is intentional.** An accepted ADR with no spec is normally a gap worth
 > raising; this one is not, and `/sdd:audit`, `/sdd:check` and any drift review MUST NOT report it as
