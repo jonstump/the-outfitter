@@ -39,10 +39,11 @@ loadouts the game itself allows is half-baked, and a desktop user cannot be rede
 a web user can. Do not re-derive this list from the requirements below — the requirements are the *work*,
 these four are the *gate*.
 
-- [x] **Dual-wield pair support — shipped.** SPEC-0009 / ADR-0023, merged as #397, #398, #399. The two
-      correctness follow-ups have since closed as well (#400 un-pairing refused over capacity, #401 the
-      locked affordance not keyboard-reachable). Epic #327 is still open — tests (#334) and the
-      cross-spec amendments (#335) remain — but the capability exists and works.
+- [x] **Dual-wield pair support — shipped, and this gate is fully clear.** SPEC-0009 / ADR-0023, merged
+      as #397, #398, #399, with the two correctness follow-ups (#400 un-pairing refused over capacity,
+      #401 the locked affordance not keyboard-reachable), the affordance's tests (#334) and the
+      cross-spec amendments (#335) all closed behind them. Epic #327 closed 2026-08-15 with all eleven
+      stories done, and SPEC-0009 moved to `implemented`.
 - [ ] **Tarot card support — not shipped.** The fourteen Tarot Cards are not catalog rows (#37, ADR-0013),
       and admitting them changes the consumable cap categories (#350; SPEC-0006 already anticipates
       "Tarot Cards the fourth category once admitted"). Until this lands the catalog is visibly missing
