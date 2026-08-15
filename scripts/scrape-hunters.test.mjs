@@ -455,6 +455,42 @@ describe("variant parsing — both infobox shapes", () => {
   });
 });
 
+describe("description tidying (#354)", () => {
+  // stripTags turns every tag into a space, which reproduces the item scrape's original bug
+  // (issue #354, same root as parseDescription's "an inline link leaves no gap before
+  // punctuation" in scrape-stats.test.mjs) one level up: a caption that links mid-sentence reads
+  // back with a stray space before the punctuation or possessive apostrophe that follows the link.
+  const captionHtml = (caption) => `<html><head>
+<script>RLCONF={"wgPageName":"Hunters/Test_Hunter","wgCurRevisionId":1,"wgRevisionId":1};</script>
+</head><body><div class="mw-parser-output">
+<div class="druid-infobox druid-container" id="druid-container-1"><div><div class="druid-title">Test Hunter</div></div>
+<div class="druid-section-container"><div class="druid-main-image"><a href="/wiki/File:Hunter_Test.png" class="image"><img alt="Hunter Test.png" src="/images/thumb/Hunter_Test.png/256px-x.png" /></a><div class="druid-main-image-caption">${caption}</div></div></div>
+</div></body></html>`;
+
+  it("closes the gap an inline link leaves before punctuation", () => {
+    const html = captionHtml('Escaped Stillwater Bayou <a href="/wiki/Foo">alive</a> .');
+    assert.equal(parseVariants(html)[0].description, "Escaped Stillwater Bayou alive.");
+  });
+
+  it("closes the gap an inline link leaves before a possessive apostrophe", () => {
+    const html = captionHtml('Beaten at <a href="/wiki/Huff">Huff</a>\'s hands.');
+    assert.equal(parseVariants(html)[0].description, "Beaten at Huff's hands.");
+  });
+
+  it("leaves a legitimate space before an opening quote alone", () => {
+    const html = captionHtml("He said 'hello' to no one.");
+    assert.equal(parseVariants(html)[0].description, "He said 'hello' to no one.");
+  });
+
+  it("folds a stray acute accent standing in for an apostrophe", () => {
+    // luna-wolf and mama-maye's wiki source carries U+00B4 ACUTE ACCENT where every other
+    // hunter's prose uses U+2019 RIGHT SINGLE QUOTATION MARK — a contributor's input method
+    // mangling an apostrophe, not a real diacritic in this corpus.
+    const html = captionHtml("Following her son´s footsteps.");
+    assert.equal(parseVariants(html)[0].description, "Following her son’s footsteps.");
+  });
+});
+
 describe("Source parsing", () => {
   it("maps each tab to its own verbatim Source", () => {
     assert.deepEqual(parseSources(MULTI_VARIANT_HTML), {

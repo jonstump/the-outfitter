@@ -561,6 +561,31 @@ export function decodeEntities(text) {
 }
 
 /**
+ * Close the gap tag-stripping leaves before punctuation and possessive apostrophes.
+ *
+ * A prose-to-text pass that turns every tag into a space is right for infobox values — it keeps
+ * `<a>Compact</a><img>` from becoming one word — and wrong for prose, where wiki bodies link mid
+ * sentence: `restored by <a>First Aid Kit</a>.` reads back as "restored by First Aid Kit ." and
+ * `<a>Huff</a>'s hands` as "Huff 's hands". Both fixes are scoped narrowly (trailing punctuation;
+ * an apostrophe immediately before an `s`) so a legitimate space before an opening quote is left
+ * alone. Shared by the item and hunter scrapes, both of which turn tags into spaces before handing
+ * prose to this function — moved here rather than duplicated when the hunter roster scrape (#354)
+ * became the second consumer.
+ *
+ * Also folds U+00B4 ACUTE ACCENT to the apostrophe the rest of the wiki's prose already uses
+ * (U+2019). It has no other role in this corpus — every instance found in the hunter roster stood
+ * in for an apostrophe a contributor's input method mangled, not a real diacritic — so the swap is
+ * unconditional rather than context-sensitive.
+ */
+export function tidyProse(text) {
+  return text
+    .replace(/´/g, "’")
+    .replace(/\s+([,;:.!?%])/g, "$1")
+    .replace(/\s+(['’]s\b)/g, "$1")
+    .trim();
+}
+
+/**
  * Pull a value out of the page's RLCONF blob.
  *
  * This is where the canonical page title and the current revision id live. Reading them from
