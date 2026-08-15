@@ -740,8 +740,26 @@ describe("the ✕ remove control (issue #303)", () => {
   });
 });
 
+// Governing: SPEC-0001 (WCAG 2.1 AA baseline), issue #419 (same defect class as
+// #400, which these two tests mirror). A live region INSERTED together with its
+// content is silent — assistive tech has nothing mounted to observe a change
+// against — so `equip-announcer` must already be in the tree before the first
+// rejected drop, not created on demand by the handler that rejects it. The
+// mounted-and-empty case is the load-bearing half: a test that only checks the
+// SECOND rejection would pass even if the first one announced nothing, which is
+// exactly the bug #419 reports.
 describe("announcements to assistive technology", () => {
-  it("announces a rejected keyboard drop", () => {
+  it("the grid announcer is mounted as soon as the panel renders, carrying no message", () => {
+    const pre = loadoutState({ equip: [{ t: "C", i: vitality }, null, null, null, null, null, null, null] });
+    const { container } = renderPanel({ loadout: pre });
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    expect(announcer).toBeInTheDocument();
+    expect(announcer).toHaveAttribute("role", "status");
+    expect(announcer).toHaveAttribute("aria-live", "polite");
+    expect(announcer).toHaveTextContent("");
+  });
+
+  it("announces the FIRST rejected keyboard drop, with the region already in the tree", () => {
     const pre = loadoutState({ equip: [{ t: "C", i: vitality }, null, null, null, null, null, null, null] });
     const store = createTestStore({ loadout: pre });
     const r = render(
@@ -750,12 +768,16 @@ describe("announcements to assistive technology", () => {
       </Provider>
     );
     const c0 = keyboardCell(r.container, 0);
+    const announcer = r.container.querySelector('[data-testid="equip-announcer"]');
+    // Confirm the region predates the rejection — the exact ordering the defect
+    // class violates.
+    expect(announcer).toBeInTheDocument();
+    expect(announcer).toHaveTextContent("");
     // Grab cell 0, arrow LEFT — an edge no-op in the wide arrangement (cell 0's
-    // column is the first), which the grid root announces.
+    // column is the first), which the grid root announces. This is the FIRST
+    // rejection of this render, the one the create-on-demand form left silent.
     fireEvent.keyDown(c0, { key: " " });
     fireEvent.keyDown(c0, { key: "ArrowLeft" });
-    const announcer = r.container.querySelector('[data-testid="equip-announcer"]');
-    expect(announcer).toBeInTheDocument();
     expect(announcer.textContent).toMatch(/cannot drop|blocked|edge/i);
   });
 });

@@ -60,20 +60,16 @@ export function arrowTarget(from, key, arrangement) {
   return target;
 }
 
-/**
- * Announce a rejected keyboard drop to assistive technology, without a live region
- * staying in the DOM after the announcement (it would re-read on every later change).
- */
-export function announceFailure(root, message) {
-  if (!root) return;
-  let region = root.querySelector('[data-testid="equip-announcer"]');
-  if (!region) {
-    region = document.createElement("div");
-    region.setAttribute("data-testid", "equip-announcer");
-    region.setAttribute("role", "status");
-    region.setAttribute("aria-live", "polite");
-    region.className = "sr-only";
-    root.appendChild(region);
-  }
-  region.textContent = message;
-}
+// Governing: issue #419 (same defect class as #400), SPEC-0006 REQ "Keyboard
+// Equivalence for Every Pointer Gesture", SPEC-0001 (WCAG 2.1 AA baseline).
+//
+// A rejected-keyboard-drop `announceFailure` used to live here as a DOM-manipulating
+// helper that created the `[data-testid="equip-announcer"]` live region on first use
+// and filled it in the same synchronous block — inserting a live region together with
+// its content is silent to assistive tech, so the FIRST rejected drop of a page
+// session announced nothing. EquipmentPanel.jsx is this module's only caller, so the
+// fix retires the DOM-manipulating helper entirely: the panel now owns the announced
+// message as React state (`gridAnnounceMessage`) and renders the live region
+// permanently, exactly as it already does for `overCapMessage` /
+// `equip-overcap-announcer`. Rejecting an arrow at the grid edge just calls the
+// panel's own setter — see EquipmentPanel.jsx.
