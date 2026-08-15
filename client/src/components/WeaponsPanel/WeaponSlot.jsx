@@ -1,5 +1,5 @@
 import { useDispatch, useSelector } from "react-redux";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
 import { dualWieldFor } from "../../data/itemStats.js";
 import { selectWeaponSlot } from "../../store/selectors.js";
@@ -22,6 +22,28 @@ export default function WeaponSlot({ slot }) {
   // loadout are selected unconditionally.
   const [announced, setAnnounced] = useState("");
   const l = useSelector((s) => s.loadout);
+  // Governing: issue #400, SPEC-0001 WCAG 2.1 AA baseline.
+  //
+  // The live region is driven by the STORE, never by the click that asked for the
+  // change: the old onClick announced from the pre-dispatch state, so a refused
+  // dispatch (an over-capacity loadout refusing an un-pair) still told the screen
+  // reader the pair was undone — assistive tech reporting the opposite of the truth.
+  // This ref/effect pair announces only a CHANGE in the stored flag, so the region
+  // can never describe a transition the reducer did not make. `prevPair` starts null
+  // so the first render (a loadout that decodes with a pair already set) is silent.
+  const prevPair = useRef(null);
+  useEffect(() => {
+    const paired = w?.d === true;
+    const name = w ? WEAPONS[w.i][1] : null;
+    if (prevPair.current === null || !name) {
+      prevPair.current = paired;
+      return;
+    }
+    if (prevPair.current !== paired) {
+      setAnnounced(paired ? `Dual-wielding ${name}.` : `${name} is no longer dual-wielded.`);
+      prevPair.current = paired;
+    }
+  }, [w]);
 
   if (!w) {
     return (
@@ -94,11 +116,7 @@ export default function WeaponSlot({ slot }) {
                 className={`pair-toggle ${pairState}`}
                 aria-label={pairLabel}
                 disabled={pairState === "locked"}
-                onClick={() => {
-                  dispatch(loadoutActions.togglePair(slot));
-                  if (pairState === "available") setAnnounced(`Dual-wielding ${def[1]}.`);
-                  else if (pairState === "paired") setAnnounced(`${def[1]} is no longer dual-wielded.`);
-                }}
+                onClick={() => dispatch(loadoutActions.togglePair(slot))}
               >
                 {/* alt="" — the button's aria-label already names the control in all three
                     states, so the second photo is decorative to assistive tech and must not

@@ -665,4 +665,70 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
       }
     }
   });
+
+  // Governing: issue #400. The toggle is dispatched DIRECTLY — #333's acceptance criterion
+  // ("the toggle reducer refuses an over-budget pair on its own, tested by dispatching the
+  // action directly rather than through the button") was delivered as a disabled-button
+  // click in #399, which is a DOM no-op and proves nothing about the guard.
+  describe("togglePair — direct dispatch", () => {
+    it("refuses an over-budget pair on its own, leaving the weapon a single", () => {
+      // The issue's own repro shape: a size-1 pairable pistol (Conversion) + a size-4
+      // rifle (Springfield) = 5 of 5, no slack. Marking the pair costs size + 1 = 2,
+      // so 2 + 4 = 6 > capMax 5 — refused, and capUsed stays 5.
+      const size4 = WEAPONS.findIndex((w) => w[2] === 4);
+      const store = makeStore();
+      store.dispatch(loadoutActions.addWeapon(size4));
+      store.dispatch(loadoutActions.addWeapon(PISTOL));
+      let s = store.getState().loadout;
+      expect(capUsed(s)).toBe(5);
+      expect(capMax(s)).toBe(5);
+
+      // Direct dispatch of the toggle — the affordance's disabled button is not involved.
+      store.dispatch(loadoutActions.togglePair(1));
+      s = store.getState().loadout;
+      expect(s.weapons[1].d).toBe(false);
+      expect(capUsed(s)).toBe(5);
+    });
+
+    it("refuses to mark a pair for a weapon the data does not allow, by stored attribute not size", () => {
+      // Haymaker is size 2 and NOT pairable; the Uppercut is also size 2 and IS pairable.
+      // The stored attribute decides — never the size (SPEC-0009 "never derived").
+      expect(dualWieldFor(WEAPONS[HAYMAKER][0])).not.toBe(true);
+      const store = makeStore();
+      store.dispatch(loadoutActions.addWeapon(HAYMAKER));
+      store.dispatch(loadoutActions.togglePair(0));
+      const s = store.getState().loadout;
+      expect(s.weapons[0].d).toBe(false);
+      expect(capUsed(s)).toBe(WEAPONS[HAYMAKER][2]);
+    });
+
+    it("regression: un-pairing succeeds while over capacity, and is never refused", () => {
+      // The bug (#400): the capacity guard previously forced d:true in BOTH directions,
+      // so an un-pair was costed as a pair and silently dropped when capUsed already
+      // exceeded capMax — the one situation where un-pairing is the fix. Reachable via
+      // removeTrait(Quartermaster) (no clamp) or an over-budget decoded save.
+      const size4 = WEAPONS.findIndex((w) => w[2] === 4);
+      const store = makeStore({
+        weapons: [{ i: PISTOL, a: -1, d: true }, { i: size4, a: -1, d: false }],
+        traits: [QM],
+        equip: [],
+      });
+      let s = store.getState().loadout;
+      expect(capUsed(s)).toBe(6);
+      expect(capMax(s)).toBe(6); // quartermaster
+
+      // Remove Quartermaster: capMax falls to 5 while occupied capacity stays at 6 — the
+      // loadout is now over capacity, and un-pairing must still succeed.
+      store.dispatch(loadoutActions.removeTrait(QM));
+      s = store.getState().loadout;
+      expect(capMax(s)).toBe(5);
+      expect(capUsed(s)).toBe(6);
+      expect(s.weapons[0].d).toBe(true);
+
+      store.dispatch(loadoutActions.togglePair(0));
+      s = store.getState().loadout;
+      expect(s.weapons[0].d).toBe(false);
+      expect(capUsed(s)).toBe(5); // size-1 single instead of the 2-point pair
+    });
+  });
 });

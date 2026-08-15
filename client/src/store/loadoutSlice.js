@@ -124,17 +124,19 @@ const loadoutSlice = createSlice({
     //   - the stored attribute must permit the pair (dualWieldFor === true);
     //   - the paired entry's occupied size (weaponSize, the shared +1) must fit under
     //     capMax alongside the other entry.
-    // Computing the cost with `weaponSize(state.weapons[slot]) + (1)` via the shared
-    // `weaponSize({ ...w, d: true })` keeps this route and the affordance's enabled
-    // state unable to disagree about what a pair costs. `setLoadout` does NOT enforce
-    // capacity — for pairs or singles — so this is the one place an interactive write
-    // is budget-checked. An already-paired weapon is never shrunk by toggling when it
-    // sits over capacity (e.g. after Quartermaster is removed).
+    // The capacity guard applies ONLY when marking a pair (`!w.d`). Un-pairing only ever
+    // lowers occupied capacity, so it never needs a budget check — and must NOT get one:
+    // an over-capacity loadout (e.g. after Quartermaster is removed, or via a decoded
+    // save) is exactly when un-pairing is the fix (issue #400).
+    // Computing the cost via the shared `weaponSize({ ...w, d: true })` keeps this route
+    // and the affordance's enabled state unable to disagree about what a pair costs.
+    // `setLoadout` does NOT enforce capacity — for pairs or singles — so this is the one
+    // place an interactive write is budget-checked.
     togglePair(state, action) {
       const slot = action.payload;
       const w = state.weapons[slot];
       if (!w || dualWieldFor(WEAPONS[w.i][0]) !== true) return;
-      if (weaponSize({ ...w, d: true }) + weaponSize(state.weapons[1 - slot] || null) > capMax(state)) return;
+      if (!w.d && weaponSize({ ...w, d: true }) + weaponSize(state.weapons[1 - slot] || null) > capMax(state)) return;
       state.weapons[slot] = { ...w, d: !w.d };
     },
     addEquip(state, action) {
