@@ -157,6 +157,8 @@ The cost is that "is cell *n* blocked" is a linear scan rather than an index. Ei
 
 The v2 branch is *stricter* than v1's, not looser: `e` must be exactly eight elements, and `b` must be unique in-range integers. A sparse array of the wrong length is precisely the input that would render items in the wrong cells, so it is the one thing the validator must not wave through.
 
+*(Updated 2026-08-15: it is now **three** shapes, not two — v3 arrived with SPEC-0009. The choice above is unchanged and was the right one; what v3 demonstrated is that "branches on `data.v`" has to mean **`>= 2`, not `== 2`**, for anything v3 inherits. Version 3 alters only the weapon entry, so it reuses v2's equipment grid and blocked array wholesale; an equality check instead routed v3 down the v1 packed path, where a `null` grid hole and an array `b` each fail, breaking every save from a v3 client. That was #329. The rationale for permanence holds a fortiori at three versions, and will at four — SPEC-0010 schedules v4 — which is why the validator is a validator of every defined shape rather than a translator between adjacent ones.)*
+
 ## Architecture
 
 The change is concentrated in the client store and codec; the server contributes one validator branch. What follows is every module that reads or writes equipment state, annotated with what this capability does to it.
@@ -205,6 +207,8 @@ graph TD
     style CODEC fill:#4a3a2d,color:#fff
     style VAL fill:#4a2d2d,color:#fff
 ```
+
+*(Read the version labels above as this capability's delta, not as current state — reviewed 2026-08-15. `FORMAT_VERSION` is now **3** and `db.json` holds a mix of v1, v2 and v3. The diagram is deliberately left at v2 because it documents what SPEC-0006 changed; v3 added the weapon-entry flag under SPEC-0009 and touched none of the nodes or edges drawn here — `CODEC` gained a `fromV3`, `VAL` gained a version-aware weapon check, and the equipment grid path is byte-for-byte the one shown.)*
 
 The new `placement.js` is the answer to the six-consumers problem: every question about where an item may go is asked there, by the reducer, the picker, the drag sensors, and the randomizer alike.
 

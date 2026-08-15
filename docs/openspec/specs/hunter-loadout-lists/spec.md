@@ -952,7 +952,7 @@ All data-file operations in this capability MUST follow structured data access p
 Payload validation SHALL be an **allowlist**, not a required-fields check. The server SHALL reject any `data` object carrying a key the wire format does not define, and SHALL bound the named fields on both sides rather than only below.
 
 - The set of accepted `data` keys SHALL be declared as a named constant and SHALL be exactly the keys the client encoder emits
-- A tuple inside a known field SHALL be required to have its **exact** length — a floor alone (`>= 2`) is the same hole wearing the shape of a defined field
+- A tuple inside a known field SHALL be required to have its **exact** length — a floor alone (`>= 2`) is the same hole wearing the shape of a defined field. *(amended 2026-08-15 for wire format version 3, per SPEC-0009 and ADR-0023. The exact length is the one **the payload's own declared version** defines, not a single fixed count: a weapon slot is `[ref, ammo]` at v1 and v2 and `[ref, ammo, d]` at v3, so the validator dispatches on `data.v` and applies that version's count. This does not loosen the rule — "exact" still binds as tightly as before, and the floor is still forbidden; the version is what selects which exact length applies. An equipment entry is unchanged at v3.)*
 - A rejected payload SHALL be a `400`, and **nothing SHALL be persisted** under the attempted name
 - Type checks on individual fields SHALL survive allowlisting — a key being permitted SHALL NOT be taken as evidence its value is well-shaped
 
@@ -970,8 +970,10 @@ This requirement governs the **stored** shape. It does not constrain what a futu
 
 #### Scenario: An over-long tuple inside a known field is refused
 
-- **WHEN** a write carries a weapon slot or an equipment entry with more elements than the format defines
+- **WHEN** a write carries a weapon slot or an equipment entry with more elements than the payload's declared version defines
 - **THEN** the response SHALL be a `400`
+
+*(**WHEN** amended 2026-08-15 for wire format version 3. It previously read "more elements than the format defines", which was written when a weapon slot was two elements at every version and so implied one count for all of them. Version 3 makes the weapon slot three, and the scenario is unchanged in force — an over-long entry is still a `400` — but "the format" is now read as the payload's own `v`. A three-element weapon slot is over-long at v1 and v2 and exactly right at v3; the scenario refuses it in the first case and not the second, which is the behaviour `isValidData` implements. See SPEC-0009 REQ "The Weapon Entry Is Validated at an Exact Element Count", which owns the count itself.)*
 
 ### Requirement: One Owner Cannot Accumulate Records Without Bound
 

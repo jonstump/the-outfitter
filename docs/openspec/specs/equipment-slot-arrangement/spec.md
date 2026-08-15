@@ -291,6 +291,12 @@ Items SHALL continue to be referenced by stable catalog id rather than by array 
 
 A v2 payload whose `e` is not exactly eight elements long SHALL be treated as malformed rather than padded or truncated, because a sparse array of the wrong length renders items in the wrong cells.
 
+> **Widened 2026-08-15 to cover version 3** *(per SPEC-0009 and ADR-0023, which extend this spec rather than replace it — the wire-format version model stays owned here)*.
+>
+> `FORMAT_VERSION` is now `3`. Version 3 changes the **weapon entry only**, from `[ref, ammo]` to `[ref, ammo, d]` where `d` marks a dual-wielded pair; it changes nothing about the equipment grid. Every rule this requirement states about `e` and `b` therefore holds unchanged at v3, and SHALL be read as **"version 2 or later"** rather than "version 2 exactly": `e` is exactly eight elements each `null` or a `[t, id]` pair, `b` is unique integers in `0..7`, and the encoder emits the current version for every write.
+>
+> The requirement is not renamed, because it is still the requirement that made cell position part of the format; v3 inherits that encoding rather than restating it. Reading these rules as v2-exactly is the specific mistake that broke saves from a v3 client (#329) — an equality check sent v3 down the v1 packed path, where a `null` grid hole and an array `b` both fail. `isValidData` gates on `data.v >= 2` for exactly this reason.
+
 #### Scenario: An encoded loadout round-trips its cell positions
 
 - **WHEN** a loadout with items in cells 1, 4, and 8 and cell 6 blocked is encoded and then decoded
@@ -310,6 +316,14 @@ The frozen legacy tables (`LEGACY_WEAPON_IDS`, `LEGACY_TOOL_IDS`, `LEGACY_CONS_I
 An item that no longer resolves against the catalog SHALL continue to be dropped, and dropping it SHALL leave the surviving items in the cells the record meant them to occupy rather than closing the gap.
 
 Decoding SHALL be total: no input SHALL produce an equipment array that is not exactly eight elements long, and no input SHALL produce a blocked list containing a duplicate or an out-of-range index.
+
+> **Widened 2026-08-15 to cover version 3** *(per SPEC-0009 and ADR-0023)*.
+>
+> The decoder registry now holds **v3, v2, v1 and the legacy fallback**. Nothing above is withdrawn: the v1-to-v2 lift is unchanged, the frozen legacy tables remain untouchable by this capability, a dropped item still leaves its neighbours where the record meant them to be, and decoding is still total.
+>
+> One clarification the added version forces. A v1 or legacy record's weapon entries carry no `d`, and lifting one SHALL supply the single — not a pair — because the record was written by a format in which the pair could not be expressed, and inventing one would change what the loadout costs. That the lift is *lossless* means it preserves what the record said; a v1 record said "one pistol", and it still does after the lift.
+>
+> "Migrate losslessly" continues to name the whole ladder rather than the single v1 step, which is why the requirement is not renamed.
 
 #### Scenario: A v1 record decodes to the cells it used to render in
 
@@ -378,6 +392,26 @@ Every guard the validator applies today SHALL survive: item references SHALL sti
 A payload that satisfies neither version's shape SHALL be rejected with a 400 and SHALL NOT be written.
 
 The client half of this capability MUST NOT be released before the validator accepts v2, because a v2 payload against today's validator is a 400 on every save.
+
+> **Widened 2026-08-15: "both versions" is now three** *(per SPEC-0009 and ADR-0023)*.
+>
+> The validator accepts **v1, v2 and v3**, permanently and side by side, on the same reasoning that made it accept two: there is no moment at which every stored record carries the newest version, because a record is only rewritten when its owner re-saves it. The requirement's name is deliberately **not** changed — `/sdd:check` and the governing comments in `server/src/routes/loadouts.js` both trace on the name, and renaming it would silently break that trace for a count that will move again at v4 (SPEC-0010). Read "Both Versions" as "every version the format has defined".
+>
+> What v3 adds is confined to the weapon entry: `w` slots are validated at an **exact** element count that depends on the declared version — two at v1 and v2, three at v3 with the third element a boolean. The equipment grid and blocked array are gated on `data.v >= 2`, so v3 reuses the v2 branch rather than getting one of its own. The v3 branch, like the v2 branch before it, adds guards rather than relaxing any.
+>
+> The sequencing constraint above resolved the same way for v3 as for v2: the server's version-aware weapon check shipped in #329, before the client began emitting v3.
+
+#### Scenario: A v3 payload is accepted
+
+- **WHEN** a save request carries `v: 3` with an eight-element `e`, a `b` array, and a weapon slot of `[ref, ammo, d]`
+- **THEN** the record SHALL be persisted and returned
+
+#### Scenario: A v3 weapon slot is refused at an older version
+
+- **WHEN** a save request declares `v: 2` but carries a three-element weapon slot
+- **THEN** the request SHALL be rejected with a 400 — the declared version selects the exact count, and a later version's shape SHALL NOT be accepted under an earlier one
+
+*(both scenarios added 2026-08-15 with the widening above)*
 
 #### Scenario: A v2 payload is accepted
 
