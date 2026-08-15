@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { statFieldFor } from "./itemStats.js";
+import { statFieldFor, statsFor } from "./itemStats.js";
 import {
   CONS,
   CONS_CAP_CATEGORIES,
@@ -486,11 +486,14 @@ describe("the TRAIT_GROUPS taxonomy rationale", () => {
 // Governing: ADR-0013 (Scarce items are selectable at zero cost), SPEC-0007 REQ "Roster Coverage Is
 // Reported Against the Wiki's Own Categories". Closes the documentation half of #161 and #37.
 //
-// The roster boundary above CONS, made checkable. Prose alone has already failed twice here: the
-// exclusion was first justified as "a limited-time event item" (077e747), whose own revisit trigger
-// fired at Update 2.8.1, and then as "unpurchasable with Hunt Dollars", which ADR-0013 turned into a
-// cost of zero. A comment cannot notice when its reason expires; a test can at least make the
-// decision visible to whoever changes the data.
+// The roster boundary above CONS, made checkable. Prose alone failed three times here: the exclusion
+// was justified as "a limited-time event item" (077e747), whose own revisit trigger fired at Update
+// 2.8.1; then as "unpurchasable with Hunt Dollars", which ADR-0013 turned into a cost of zero; then
+// as a bare scope choice, which #37 reversed. A comment cannot notice when its reason expires; a test
+// can at least make the decision visible to whoever changes the data.
+//
+// These now assert ADMISSION rather than exclusion (#37). The shape is deliberately the same — the
+// point was never which way the boundary ran, it was that the boundary is pinned rather than argued.
 describe("the Tarot Card roster boundary", () => {
   // The fourteen, from a discovery crawl rather than from memory. Each states its price as the
   // literal word "Scarce", which is why they land in the coverage report's `unpurchasable` bucket.
@@ -500,19 +503,44 @@ describe("the Tarot Card roster boundary", () => {
     "The Sun", "The Tower", "The World",
   ];
 
-  it("keeps all fourteen out of CONS", () => {
-    const present = TAROT_CARDS.filter((name) => CONS.some((c) => c[1] === name));
-    expect(present, "adding a Tarot Card means revisiting the boundary comment above CONS").toEqual([]);
+  it("carries all fourteen in CONS, under their own cap category and group", () => {
+    const missing = TAROT_CARDS.filter((name) => !CONS.some((c) => c[1] === name));
+    expect(missing, "the fourteen were admitted by #37 — a missing one is a regression").toEqual([]);
+    // Type is the cap key and group is the picker heading; both must be the Tarot Cards value, or
+    // the cards fall back into another category's budget or another group's list.
+    const rows = CONS.filter((c) => TAROT_CARDS.includes(c[1]));
+    expect(rows.map((c) => c[3])).toEqual(Array(14).fill("Tarot Cards"));
+    expect(rows.map((c) => c[4])).toEqual(Array(14).fill("Tarot Cards"));
+    expect(CONS_CAP_CATEGORIES).toContain("Tarot Cards");
+    expect(CONS_GROUPS).toContain("Tarot Cards");
   });
 
   it("accounts for the full gap against the wiki's 54 consumable pages", () => {
-    // 30 rows + 14 Tarot Cards + 10 tombstones = 54, and 0 actually missing. Pinning the row count
-    // means a future addition has to restate the arithmetic rather than quietly breaking it.
-    expect(CONS).toHaveLength(30);
-    expect(CONS.length + TAROT_CARDS.length + 10).toBe(54);
+    // 44 rows + 10 tombstones = 54, and 0 actually missing. The fourteen moved from the gap into the
+    // table (#37), so the arithmetic that used to read 30 + 14 + 10 now reads 44 + 10. Pinning the
+    // row count means a future addition has to restate the arithmetic rather than quietly breaking it.
+    expect(CONS).toHaveLength(44);
+    expect(CONS.length + 10).toBe(54);
   });
 
-  it("is a scope decision, not an unpurchasability rule", () => {
+  it("pairs every card's cost of 0 with the scrape's own Scarce evidence, in both directions", () => {
+    // The assertion that replaces "is a scope decision, not an unpurchasability rule" (#37). Same
+    // predicate itemStats.test.js applies to the twelve Scarce rows that preceded these: a wiki page
+    // stating its price as the literal word "Scarce" is refused by the strict parser and recorded as
+    // `purchasable: false`, which is what makes a hand-authored 0 evidenced rather than asserted.
+    const evidencedUnpurchasable = (record) =>
+      Boolean(record) &&
+      ((record.acquisitionClasses ?? []).includes("Scarce") || record.purchasable === false);
+    const rows = CONS.filter((c) => TAROT_CARDS.includes(c[1]));
+    expect(rows, "neither direction can pass vacuously").toHaveLength(14);
+    // Forward: a card costs 0, so it must be evidenced. Catches a price that quietly appears.
+    expect(rows.filter((c) => c[2] === 0).map((c) => c[0]).filter((id) => !evidencedUnpurchasable(statsFor(id)))).toEqual([]);
+    // Reverse: a card is evidenced unpurchasable, so it must cost 0. Catches a re-scrape that leaves
+    // a stale non-zero cost nothing else objects to.
+    expect(rows.filter((c) => evidencedUnpurchasable(statsFor(c[0]))).filter((c) => c[2] !== 0).map((c) => c[0])).toEqual([]);
+  });
+
+  it("keeps the twelve older Scarce rows, which is the precedent the cards rest on", () => {
     // The assertion that keeps the retired rationale from creeping back. If "unpurchasable" were the
     // criterion, these twelve rows could not exist — they are Scarce items carried at cost 0 under
     // ADR-0013, and itemStats.test.js asserts that pairing in both directions.

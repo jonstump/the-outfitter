@@ -115,16 +115,21 @@ The cost is that inertia, auto-scroll, and drag-image rendering become ours to w
 
 ### The consumable cap is per category, read from a declared list *(added 2026-08-12, per ADR-0015)*
 
-**Choice**: the consumable cap counts by `CONS[i][3]` (`Shot`, `Throwable`, `Placeable`, plus Tarot Cards
-once admitted), not by `CONS` index. The set of cap categories is a **declared constant**, not derived
-from the `type` values present in the catalog. `consCount(loadout, consIndex)` — which counts entries
-whose `i` matches one index — is replaced rather than supplemented.
+**Choice**: the consumable cap counts by `CONS[i][3]` (`Shot`, `Throwable`, `Placeable` and `Tarot
+Cards`), not by `CONS` index. The set of cap categories is a **declared constant**, not derived from
+the `type` values present in the catalog. `consCount(loadout, consIndex)` — which counts entries whose
+`i` matches one index — is replaced rather than supplemented. *(This read "plus Tarot Cards once
+admitted" until 2026-08-15, when #37 admitted the fourteen.)*
 
 **Rationale**: ADR-0015 established that the game caps four *per category*, so the per-item count
 under-constrains by a factor of up to two on eight cells. Two consequences shape the design. Declaring
 the categories rather than inferring them means Tarot Cards are capped by the same mechanism the moment
 rows exist, which turns their admission into a data change rather than a mechanism change — and removes
-the argument the `CONS` boundary comment made for keeping them out. And keeping the per-item cap
+the argument the `CONS` boundary comment made for keeping them out. *(Both halves of that prediction
+came true on 2026-08-15. #37 admitted the fourteen and the diff touched `catalog.js` and tests only —
+no change to `calc.js`, the reducer or the picker — and the boundary comment's own scope argument was
+what the issue cited in reversing itself. Recorded because a rationale that was later exercised is
+stronger evidence than one that was only argued.)* And keeping the per-item cap
 alongside would be dead code: four of one item is already four of its type, so per-type subsumes it.
 
 Reusing `type` rather than adding a `capCategory` column is deliberate. A parallel column would hold
@@ -138,8 +143,10 @@ persisted (`toData()` stores only `["C", id]`), so promoting it needs no `FORMAT
   creates a two-field ambiguity for every future reader.
 - *Enforce both caps, per item and per type*: the per-item rule can never bind first, so it would be
   unreachable code asserting a rule the game does not have.
-- *Infer the categories from the rows present*: silently leaves an empty category uncapped, which is
-  exactly the Tarot Card case.
+- *Infer the categories from the rows present*: silently leaves an empty category uncapped, which was
+  exactly the Tarot Card case until #37 admitted them on 2026-08-15. The alternative stays rejected on
+  the same grounds — the next empty declared category will have the same problem, and the whole point
+  of the declared list is that it does not wait for rows to exist.
 
 ### `blocked` is an index array, not a boolean array of eight
 

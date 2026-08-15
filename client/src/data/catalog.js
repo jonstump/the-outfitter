@@ -429,50 +429,47 @@ export const TOOLS = [
 // regrouping cannot invalidate a saved loadout or a share link.
 export const TOOL_GROUPS = ["Decoys", "Medical", "Melee", "Sidearms", "Throwing", "Traps", "Utility"];
 
-// ROSTER BOUNDARY — why this table is 30 rows against the wiki's 54.
+// ROSTER BOUNDARY — why this table is 44 rows against the wiki's 54.
 //
 // The accounting, from a discovery crawl (`node scripts/scrape-stats.mjs --discover`), which resolves
-// the 24-page difference exactly:
+// the 10-page difference exactly:
 //
-//   14  Tarot Cards       — live pages, each stating its price as the literal word "Scarce". Found
-//                           in-world at Bileweaver compounds, Postal Supply, Clockmaker's Supply and
-//                           Sealed Hoards.
 //   10  removed items     — Proof Vapours, Wormseed Shots, Reliquaries. Pages still exist; the
 //                           items do not.
 //    0  actually missing  — the consumable roster is COMPLETE. (#163)
 //
-// TAROT CARDS ARE OUT BY A SCOPE DECISION, AND NOT BECAUSE THEY CANNOT BE BOUGHT. That distinction is
-// the whole point of this comment, because the obvious reason is now the wrong one:
+// TAROT CARDS ARE IN, as of #37. The fourteen are live pages each stating a price of the literal word
+// "Scarce", found in-world at Bileweaver compounds, Postal Supply, Clockmaker's Supply and Sealed
+// Hoards. They are ordinary rows costing 0 under ADR-0013, exactly like the twelve Scarce rows that
+// preceded them — four weapons (Flame Rifle, Homestead 78, Shredder, Wildland) and eight traits
+// (Berserker, Catalyst, Death Cheat, Rampage, Relentless, Remedy, Shadow, Shadow Leap).
 //
-// ADR-0013 admits Scarce items as catalog rows costing zero — a Scarce item comes only from a match,
-// so a player who owns one can field it, and a builder that cannot represent it is wrong about what
-// the player can take. Twelve such rows are in this file today: four weapons (Flame Rifle, Homestead
-// 78, Shredder, Wildland) and eight traits (Berserker, Catalyst, Death Cheat, Rampage, Relentless,
-// Remedy, Shadow, Shadow Leap). So "unpurchasable with Hunt Dollars" cannot be why anything is
-// excluded — twelve unpurchasable items are included, and `itemStats.test.js` asserts each pairs a
-// cost of 0 with the scrape's own Scarce evidence, in both directions.
-//
-// This boundary has now outlived TWO rationales, which is the reason it is written down rather than
-// re-derived:
+// This boundary outlived THREE rationales before it fell, which is why the history stays written down
+// rather than re-derived — each reason looked sufficient until it wasn't:
 //
 //   1. "A limited-time event item rather than a permanent roster addition" (077e747). That framing
 //      carried its own revisit trigger and Update 2.8.1 fired it — Tarot Cards are permanent.
 //   2. "Unpurchasable with Hunt Dollars", correct until ADR-0013 (2026-08-12) made unpurchasability
 //      a cost of zero rather than a ground for exclusion. SPEC-0007 marks that reversal rather than
 //      rewriting it, for the same reason this comment does.
+//   3. A bare scope choice, once the first two expired — which is the weakest of the three, because
+//      it rested on nothing but itself. What ended it: a loadout built here could not be the loadout
+//      a player fields, since Tarot Cards occupy equipment cells this table could not fill. That was
+//      recorded as an accepted consequence and it was the wrong trade for a builder whose whole job
+//      is expressing what the player can take. #37 reversed it; the desktop distribution gate
+//      (SPEC-0005) named it as a blocker.
 //
-// What remains is a scope choice, made deliberately and dated: Tarot Cards stay out for now. If that
-// is revisited they are ordinary rows costing 0, exactly like the twelve above, and the per-item
-// consumable cap (#155, SPEC-0008) means their own 4-per-loadout cap category needs no new modelling
-// — what is capped is the specific item, so a fourth Tarot Card is bounded by the same rule as a
-// fourth Frag Bomb.
+// The cap needs no new modelling, but NOT for the reason an earlier draft of this comment gave. It
+// claimed the cap is per specific item, so a fourth Tarot Card would be bounded like a fourth Frag
+// Bomb. ADR-0015 reversed that — the cap is per TYPE. The conclusion survives for the opposite
+// reason: `CONS_CAP_CATEGORIES` below already declares "Tarot Cards", deliberately and with no rows,
+// which is precisely what SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved" requires — a
+// declared category with no rows is capped by the same mechanism the moment rows are admitted. (That
+// earlier draft also cited SPEC-0008, Loadout Randomization; the cap lives in SPEC-0006.)
 //
-// The accepted limit while they are out: a loadout built here cannot be quite the loadout a player
-// fields, because Tarot Cards occupy equipment cells this table cannot fill. That is a stated
-// consequence of the choice, not a defect.
-//
-// `catalog.test.js` names the fourteen, so adding one fails a test until whoever adds it revisits the
-// decision above rather than inheriting it by accident.
+// `catalog.test.js` names the fourteen and asserts each pairs its cost of 0 with the scrape's own
+// Scarce evidence, in both directions — the same assertion `itemStats.test.js` applies to the twelve
+// rows above. A card carried at 0 with no evidence fails.
 export const CONS = [
   ["vitality-shot", "Vitality Shot", 85, "Shot", "Shots"],
   ["regeneration-shot", "Regeneration Shot", 105, "Shot", "Shots"],
@@ -512,9 +509,28 @@ export const CONS = [
   ["choke-beetle", "Choke Beetle", 22, "Throwable", "Gas"],
   ["stalker-beetle", "Stalker Beetle", 45, "Throwable", "Utility"],
   ["fire-beetle", "Fire Beetle", 57, "Throwable", "Fire"],
+  // The fourteen Tarot Cards (#37), appended for the same reason the Update 2.8 block above is:
+  // legacy index-based encodings resolve positionally, so a row may be added at the end and never
+  // inserted. Cost 0 under ADR-0013 — each page states its price as the literal word "Scarce", which
+  // the strict parser refuses and records as `purchasable: false`, and that record is the evidence
+  // `itemStats.test.js` demands for every hand-authored zero.
+  ["the-chariot", "The Chariot", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-devil", "The Devil", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-empress", "The Empress", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-fool", "The Fool", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-garden", "The Garden", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-hanged-man", "The Hanged Man", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-high-priestess", "The High Priestess", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-judgement", "The Judgement", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-magician", "The Magician", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-moon", "The Moon", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-pathfinder", "The Pathfinder", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-sun", "The Sun", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-tower", "The Tower", 0, "Tarot Cards", "Tarot Cards"],
+  ["the-world", "The World", 0, "Tarot Cards", "Tarot Cards"],
 ];
 
-export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility"];
+export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility", "Tarot Cards"];
 
 /**
  * THE declared cap-category list — the vocabulary `CONS[i][3]` (`type`) draws from, and the one
@@ -562,7 +578,10 @@ export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Car
  * `CONS_CAP_CATEGORIES`, and using this subset instead is how Tarot Cards would slip the cap on
  * the day rows are admitted.
  */
-export const CONS_TYPES = ["Shot", "Throwable", "Placeable"];
+// Every cap category that HAS rows must appear here, or its badge falls back to Throwable's colour
+// and reads as a category it is not. "Tarot Cards" joined on 2026-08-15 when #37 admitted the
+// fourteen — the palette test anticipated exactly this and permits the lists reaching equal length.
+export const CONS_TYPES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
 
 /**
  * Badge colour per consumable type, in one place because there were two copies of the switch.
@@ -581,6 +600,9 @@ export const CONS_TYPE_COLOR = {
   Shot: "#7a8a5c",
   Throwable: "#a5674a",
   Placeable: "#7f96a3",
+  // Muted violet — distinct from the olive/rust/slate above at badge size, and the one hue in the
+  // equipment palette not already spoken for (#37).
+  "Tarot Cards": "#7d6a93",
 };
 
 /** The tool badge colour, alongside the consumable ones so the equipment palette reads as one set. */
@@ -923,6 +945,11 @@ const CONS_THUMBS = {
   Fire: "M46 4l8 12-6 4 10 6-14 14-14-10 8-4-8-10 10-2z",
   Gas: "M20 24l10-8 10 8-10 8zM40 20l10-8 10 8-10 8zM60 24l10-8 10 8-10 8z",
   Utility: "M30 4h4v32h-4zM34 6h26l-8 7 8 7H34z",
+  // A card standing on its short edge with a star at centre — the group is the fourteen Tarot
+  // Cards (#37), and the silhouette has to read as a CARD rather than a bomb or a bottle at the
+  // picker's tile size. `consThumb` falls back to Utility for an unrecognised group, so a group
+  // without an entry here renders as a wrench and is indistinguishable from Utility (#37 review).
+  "Tarot Cards": "M32 4h24v40H32zM44 14l3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1z",
 };
 
 export function toolThumb(tool) {
