@@ -1,5 +1,5 @@
 ---
-status: approved
+status: implemented
 date: 2026-08-13
 implements: [ADR-0023]
 requires: [SPEC-0007]
@@ -400,11 +400,16 @@ now shipped in four merged stories: the v3 decoder (#396), the pair cost and the
 (#397), the wire-format encode at version 3 (#398), and the pair affordance on the weapon slot (#399).
 `FORMAT_VERSION` is 3 and the decoder registry holds v3, v2, v1 and a legacy fallback.
 
-The status is `approved` rather than `implemented` because named work on this spec is still open, not
-because anything below is unbuilt: tests for the affordance (#334) and the amendments this version bump
-owes SPEC-0003, SPEC-0006 and SPEC-0007 (#335). Move it to `implemented` when those close. Two
-correctness follow-ups that used to sit on this list have closed — an over-capacity loadout that could
-not be un-paired (#400) and the locked affordance's keyboard reachability (#401).
+**The status moved to `implemented` on 2026-08-15**, when the last of the named work closed. The list
+that held it at `approved` is now empty: the affordance's tests (#334), the amendments this version bump
+owed SPEC-0003, SPEC-0006 and SPEC-0007 (#335), an over-capacity loadout that could not be un-paired
+(#400), and the locked affordance's keyboard reachability (#401) have all merged. Epic #327 closed with
+them, all eleven stories done.
+
+**`implemented` describes this capability as specified, and nothing more.** It is not a claim that the
+weapon-slot model is finished — SPEC-0010 raises the wire format to v4 and replaces the shared ammo
+pools, and this spec's own call graphs below are still pre-#396 and unregenerated. Read each
+requirement's text rather than this word before assuming a behaviour is live.
 
 > Call graphs below were generated from the codebase **before** any Part B work and have not been
 > regenerated — the mapping beneath them has been brought up to date by hand, but the mermaid graph
