@@ -10,6 +10,14 @@ implements: [ADR-0002]
 
 This capability formalizes the requirements for sourcing and rendering per-item imagery across all four catalog categories in The Outfitter's loadout builder — Weapons, Tools, Traits, and Consumables. It realizes ADR-0002 (which supersedes ADR-0001): item imagery is now primarily sourced by a bounded, ethically-run scrape of huntshowdown.wiki.gg, downloaded once (or re-run periodically as the catalog changes) and self-hosted as static assets — not fetched live at runtime, not hotlinked. The app's existing in-house SVG silhouettes (`THUMBS` + `weaponThumb()` in `client/src/data/catalog.js`, today rendering only Weapons) are retained, but their role changes: they become the fallback tier for any item that doesn't yet have a scraped image, across *all four* categories — including Weapons, whose SVG-only treatment is no longer preserved as a permanent end state now that ADR-0001 is superseded.
 
+**Implementation status.** `status: implemented` describes the **imagery capability only** — the scrape,
+the self-hosted assets, the SVG fallback chain, the fixed-aspect containers and the attribution. It does
+**not** cover the "Accessibility Requirements" section below, which this spec marks MANDATORY and which
+the app does not yet meet. That gap is epic #81, with stories #91 (accessible names, form labels,
+heading structure), #92 (widget state, disabled affordances, status announcements) and #93 (text
+contrast and focus visibility). Read `implemented` as "the imagery is delivered", never as "this whole
+document is satisfied".
+
 ## Requirements
 
 ### Requirement: Ethical, Self-Hosted Image Sourcing
@@ -96,11 +104,24 @@ All UI components produced by this spec MUST meet WCAG 2.1 Level AA conformance 
 
 ### ARIA Landmarks
 
-Page structure elements MUST include ARIA landmark roles:
-- `role="banner"` on the site header
-- `role="navigation"` on navigation regions
-- `role="main"` on the primary content area
-- `role="contentinfo"` on the site footer
+Page structure elements MUST expose the standard landmarks — `banner` on the site header,
+`navigation` on any navigation region, `main` on the primary content area, and `contentinfo` on the
+site footer.
+
+**An implicit landmark satisfies this requirement.** *(Revised 2026-08-15.)* This previously required
+the explicit `role="…"` attribute in every case. That wording was wrong: `<header>`, `<nav>`, `<main>`
+and `<footer>` carry those roles natively, and adding a redundant `role` to an HTML5 sectioning element
+is discouraged practice rather than better accessibility. What matters is that the landmark reaches
+assistive technology, not which mechanism puts it there.
+
+The app satisfies three of the four this way today — `<header className="app-header">`
+(`Header.jsx`), `<main className="app-main">` (`App.jsx`, with a second in `ErrorBoundary.jsx` on a
+mutually exclusive render, so no duplicate landmark), and `<footer className="app-footer">`
+(`App.jsx`). There is no navigation region, so `navigation` does not apply; it becomes required if one
+is ever introduced.
+
+An explicit `role` remains correct where no semantic element fits — a landmark on a `<div>`, for
+instance.
 
 ### Icon-Only Controls
 
