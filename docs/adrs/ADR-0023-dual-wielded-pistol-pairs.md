@@ -1,12 +1,28 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-13
+accepted: 2026-08-15
 decision-makers: Jon Stump
 extends: [ADR-0009, ADR-0014]
 related: [ADR-0005]
 ---
 
 # ADR-0023: Model a Dual-Wielded Pair as a Flag on One Weapon Entry, Costed at Size Plus One
+
+> **Accepted 2026-08-15.** This spent two days at `proposed` while its implementation shipped — the v3
+> decoder (#396), the costing and stored-attribute gate (#397), the wire-format encode (#398) and the
+> pair affordance (#399) are all merged. The status is now caught up with the code.
+>
+> **One confirmation criterion is not yet met, and is deliberately left standing rather than softened:**
+>
+> > The affordance is keyboard-reachable and carries an accessible name in all three states (ghost,
+> > plus, locked).
+>
+> The locked state uses the native `disabled` attribute, which keeps it in the accessibility tree but
+> removes it from the tab order, so a keyboard-only user cannot reach it to discover *why* pairing is
+> unavailable. That is tracked by #401. It is recorded here as an open criterion because amending a
+> confirmation to match what shipped would convert a real gap into a false pass — the criterion is
+> correct and the code is what needs to move.
 
 ## Context and Problem Statement
 

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 date: 2026-08-13
 implements: [ADR-0023]
 requires: [SPEC-0007]
@@ -395,8 +395,21 @@ region rather than only rendered.
 
 ## Implementation
 
-> Call graphs generated from the current codebase, before any Part B work. Re-run
-> `/sdd:spec --update SPEC-0009` after implementation to refresh.
+**Implementation status, 2026-08-15.** Part A was codification of code that already existed. Part B has
+now shipped in four merged stories: the v3 decoder (#396), the pair cost and the stored-attribute gate
+(#397), the wire-format encode at version 3 (#398), and the pair affordance on the weapon slot (#399).
+`FORMAT_VERSION` is 3 and the decoder registry holds v3, v2, v1 and a legacy fallback.
+
+The status is `approved` rather than `implemented` because named work on this spec is still open, not
+because anything below is unbuilt: tests for the affordance (#334), the amendments this version bump
+owes SPEC-0003, SPEC-0006 and SPEC-0007 (#335), a correctness defect where an over-capacity loadout
+cannot be un-paired (#400), and the locked affordance's keyboard reachability (#401). Move it to
+`implemented` when those close.
+
+> Call graphs below were generated from the codebase **before** any Part B work and have not been
+> regenerated — the mapping beneath them has been brought up to date by hand, but the mermaid graph
+> still shows the pre-#396 shape and omits `fromV3`, `togglePair` and the affordance's edges. Re-run
+> `/sdd:spec --update SPEC-0009` to refresh it.
 
 ### Requirement-to-Function Mapping
 
@@ -410,22 +423,23 @@ Part A requirements map onto code that already exists — that is what makes the
 
 **REQ "The Weapon Budget Is Enforced at Every Write Path"**: functions `buildRows()` → `capMax()`; `addWeapon()` → `capMax()`; `randomizeThunk()` → `randomizeLoadout()` → `totalCost()`
 
-Part B requirements have no implementation yet; the functions listed are the ones the work will
-change:
+Part B requirements are implemented; the functions listed are the ones that carry them:
 
-**REQ "Dual-Wieldability Is a Stored Attribute, Never Derived"**: `dualWieldFor()` → `statsFor()` — exists and is currently unconsumed (#256)
+**REQ "Dual-Wieldability Is a Stored Attribute, Never Derived"**: `dualWieldFor()` → `statsFor()` — now consumed by `togglePair()` and `WeaponSlot()`, which is the first consumer the stat seam has had (#256 covers the rest of it)
 
 **REQ "A Pair Costs Its Weapon's Size Plus One"**: `capUsed()`
 
 **REQ "A Pair Carries One Weapon's Ammo and Doubles Only the Weapon Price"**: `totalCost()`
 
-**REQ "Wire Format Version 3 Encodes the Pair Flag"**: `toData()`, and a new `fromV3()` beside `fromV2()`
+**REQ "Wire Format Version 3 Encodes the Pair Flag"**: `toData()` and `fromV3()`, registered beside `fromV2()` in the `DECODERS` table
 
 **REQ "Version 2 and Version 1 Records Continue to Decode"**: `fromData()` → `fromV2()` / `fromV1()` / `fromLegacy()` → `promoteToWeaponSlots()`
 
 **REQ "The Weapon Entry Is Validated at an Exact Element Count"**: `isValidData()` → `isIsland()`
 
-**REQ "The Pair Affordance Lives on the Weapon Slot"**: `WeaponSlot()`, `buildRows()`
+**REQ "The Pair Affordance Lives on the Weapon Slot"**: `WeaponSlot()`, `buildRows()`, and the `togglePair()` reducer in `loadoutSlice.js` — which owns the refusal, both the stored-attribute check and the capacity check
+
+**REQ "The Pair Affordance Is Operable and Named in Every State"**: `WeaponSlot()` — the `pair-toggle` button and its `role="status"` live region. The locked state is not yet keyboard-reachable (#401), and the live region can announce an un-pair the store refused (#400).
 
 ### Call Graph
 
