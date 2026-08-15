@@ -118,6 +118,7 @@ import {
   readRlconf,
   recordResult,
   resolveWikiPath,
+  tidyProse,
 } from "./lib/wiki.mjs";
 
 // Re-exported so the test file and any future consumer import the shared definitions through this
@@ -1006,19 +1007,6 @@ export function parseDescription(html) {
     paragraphs.push(text);
   }
   return paragraphs.length === 0 ? null : paragraphs.join("\n");
-}
-
-/**
- * Close the gap an inline link leaves before punctuation.
- *
- * `textContent` replaces every tag with a space, which is right for infobox values — it keeps
- * `<a>Compact</a><img>` from becoming one word — and wrong for prose, where wiki bodies link mid
- * sentence: `restored by <a>First Aid Kit</a>.` reads back as "restored by First Aid Kit ." and
- * `<b>SOLO</b>:` as "SOLO :". Applied here rather than in `textContent` because that helper is shared
- * with the field parse, and loosening it there would rewrite stat values to fix a prose artifact.
- */
-function tidyProse(text) {
-  return text.replace(/\s+([,;:.!?%])/g, "$1").trim();
 }
 
 /**

@@ -109,6 +109,7 @@ import {
   isAllowedByRobots,
   readRlconf,
   slugify,
+  tidyProse,
 } from "./lib/wiki.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -340,10 +341,16 @@ function collectTabbed(container, pattern) {
  * because the caption is the last element in a segment, that cut consumes its closing tag — a
  * regex requiring `</div>` silently returns null for the LAST variant on every page, which is the
  * kind of off-by-one that produces a dataset that looks fine until you read the final row.
+ *
+ * `tidyProse` runs here, not inside `stripTags` itself (#354). `stripTags` is shared with the
+ * infobox `Source` parse, and loosening its tag-to-space behaviour there would rewrite the
+ * verbatim classification strings that field is supposed to preserve untouched. The caption is
+ * prose — a hunter's bio — so it gets the same punctuation/apostrophe cleanup the item scrape's
+ * `parseDescription` already applies to trait and weapon descriptions.
  */
 function extractCaption(segment, className) {
   const m = segment.match(new RegExp(`<div class="${className}">([\\s\\S]*?)(?:</div>|$)`));
-  return m ? stripTags(m[1]) || null : null;
+  return m ? tidyProse(stripTags(m[1])) || null : null;
 }
 
 /**
