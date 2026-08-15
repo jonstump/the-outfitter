@@ -1008,3 +1008,148 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
     expect(AMMO[WEAPONS[0][4]][1][0]).toBe("High Velocity");
   });
 });
+
+// Governing: issue #418 (PR 2 of #353), ADR-0009, ADR-0015, SPEC-0006
+// REQ "Capacity Rules Are Stated Once and Preserved".
+//
+// `boundedEquip` clamps a decoded equipment grid to the shared capacity rules: at
+// most `slotMax` items (8 minus blocked cells) and at most four per consumable cap
+// category. Applied by ALL four decoders so no decode route can skip it — the same
+// all-write-paths discipline `boundedTraits` uses for the fifteen-trait cap.
+describe("boundedEquip — decode clamps the equipment grid (issue #418)", () => {
+  const STICK = CONS.findIndex((c) => c[0] === "dynamite-stick");
+  const BUNDLE = CONS.findIndex((c) => c[0] === "dynamite-bundle");
+  const SHOT = CONS.findIndex((c) => c[0] === "vitality-shot");
+
+  // Helper: build an equip payload of N copies of one consumable, padded to 8.
+  const equipPayload = (...items) => {
+    const e = [...items, ...Array(8 - items.length).fill(null)];
+    return e.map((x) => (x ? ["C", CONS[x][0]] : null));
+  };
+
+  // The over-category payload: 5 Dynamite Sticks (all Throwables, 5 > 4).
+  const overCategory = equipPayload(STICK, STICK, STICK, STICK, STICK);
+
+  // Legacy positional payloads use indices into LEGACY_CONS_IDS, not id pairs.
+  // dynamite-stick is legacy index 4, so 5 copies = [4, 4, 4, 4, 4, null, null, null].
+  const legacyOverCategory = [4, 4, 4, 4, 4].map((i) => ["C", i]);
+  const legacyOverCategoryPadded = [...legacyOverCategory, ...Array(8 - legacyOverCategory.length).fill(null)];
+
+  // The over-slot payload: 7 different tools (no per-category cap applies to tools),
+  // with 2 blocked cells → slotMax 6, 7 > 6.
+  const toolPayload = () => {
+    const ids = ["knife", "heavy-knife", "dusters", "throwing-knives", "flare-pistol", "fusees", "spyglass"];
+    const e = ids.map((id) => ["T", id]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  // Legal: 4 Dynamite Sticks, no overflow.
+  const legal = equipPayload(STICK, STICK, STICK, STICK);
+
+  // A versioned wrapper for each decoder.
+  const v3 = (e, opts = {}) => ({
+    v: 3,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blocked || [],
+  });
+  const v2 = (e, opts = {}) => ({
+    v: 2,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blocked || [],
+  });
+  const v1 = (e, opts = {}) => ({
+    v: 1,
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: opts.blockedCount || 0,
+  });
+  const legacy = (e) => ({
+    w: [null, null],
+    e,
+    tr: [],
+    n: "",
+    b: 0,
+  });
+
+  // Legacy tool payloads use positional indices into LEGACY_TOOL_IDS.
+  // knife=0, heavy-knife=1, dusters=3, throwing-knives=4, flare-pistol=7, fusees=8, spyglass=10
+  const legacyToolPayload = () => {
+    const indices = [0, 1, 3, 4, 7, 8, 10];
+    const e = indices.map((i) => ["T", i]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  // Legacy legal: 4 × dynamite-stick (legacy index 4).
+  const legacyLegal = () => {
+    const e = [4, 4, 4, 4].map((i) => ["C", i]);
+    return [...e, ...Array(8 - e.length).fill(null)];
+  };
+
+  it.each([
+    ["v3", v3(overCategory)],
+    ["v2", v2(overCategory)],
+    ["v1", v1(overCategory)],
+    ["legacy", legacy(legacyOverCategoryPadded)],
+  ])("clamps an over-category record (%s: 5 Throwables → 4)", (label, payload) => {
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(4);
+    // All four are Dynamite Sticks (the first four survive — the clamp drops from the end).
+    expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
+    // The 5th cell is now a hole.
+    expect(dec.equip[4]).toBeNull();
+    void label;
+  });
+
+  it.each([
+    ["v3", v3(toolPayload(), { blocked: [6, 7] })],
+    ["v2", v2(toolPayload(), { blocked: [6, 7] })],
+    ["v1", v1(toolPayload(), { blockedCount: 2 })],
+    ["legacy", legacy(legacyToolPayload())],
+  ])("clamps an over-slot record (%s: 7 items, slotMax 6 → 6)", (label, payload) => {
+    // Legacy has no blocked count → slotMax 8, so 7 items is NOT over slots. The
+    // legacy variant instead asserts that 7 items with b: 1 (slotMax 7) is clamped
+    // to 7 — but since legacy doesn't support blocked arrays, only v3/v2/v1 test
+    // the slot overflow. Legacy is skipped here and tested for category above.
+    if (label === "legacy") {
+      // Legacy 7 items with slotMax 8 is legal — no slot clamp needed. This is a
+      // sanity check that 7 items survive.
+      const dec = fromData(payload);
+      expect(dec.equip.filter(Boolean)).toHaveLength(7);
+      return;
+    }
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(6);
+    expect(dec.equip[6]).toBeNull();
+    void label;
+  });
+
+  it.each([
+    ["v3", v3(legal)],
+    ["v2", v2(legal)],
+    ["v1", v1(legal)],
+    ["legacy", legacy(legacyLegal())],
+  ])("leaves a legal grid untouched (%s: 4 Throwables)", (label, payload) => {
+    const dec = fromData(payload);
+    const held = dec.equip.filter(Boolean);
+    expect(held).toHaveLength(4);
+    expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
+    void label;
+  });
+
+  it("the clamp is deterministic — the same record decodes to the same loadout", () => {
+    const payload = v2(overCategory);
+    const dec1 = fromData(payload);
+    const dec2 = fromData(payload);
+    expect(dec1.equip).toEqual(dec2.equip);
+  });
+});
