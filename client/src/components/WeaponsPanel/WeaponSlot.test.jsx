@@ -165,6 +165,8 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
     expect(btn).not.toBeDisabled();
     // It is in the tab order (indexed as a real focusable control).
     expect(btn.tabIndex).toBe(0);
+    // The state class too — see the note on the locked test below.
+    expect(btn).toHaveClass("available");
   });
 
   it("renders the locked affordance when the budget has no room, keeping role and name", () => {
@@ -191,6 +193,17 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
     expect(document.activeElement).toBe(btn);
     // Accessible name conveys WHY pairing is unavailable (issue #401).
     expect(btn).toHaveAccessibleName(/not enough budget/);
+    // The state class is asserted ON AN ELEMENT FOUND BY ROLE, which is a different
+    // thing from querying by class: getByRole still fails if the button becomes a div,
+    // so this composes with the role query rather than weakening it. It is asserted
+    // because `pairState` is what global.css keys the whole visual channel off —
+    // `.locked` is opacity 0.22 + grayscale(1) + a dotted border, `.available` is the
+    // gold-bordered ghost carrying the plus sign, `.paired` is full colour. ADR-0023
+    // specifies "a plus sign when the budget has room for the extra slot, a locked
+    // state when it does not", so the distinction is part of the decision. Nothing in
+    // CI measures a rendered pixel, so without this a miswired ternary could render
+    // locked identically to available and no test would notice.
+    expect(btn).toHaveClass("locked");
   });
 
   it("renders the paired affordance when the pair is marked", () => {
@@ -198,6 +211,8 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
     const btn = screen.getByRole("button", { name: `Unpair ${WEAPONS[PISTOL][1]}` });
     expect(btn).toBeInstanceOf(HTMLButtonElement);
     expect(btn).not.toBeDisabled();
+    // The state class too — see the note on the locked test above.
+    expect(btn).toHaveClass("paired");
   });
 
   it("renders NO affordance for a weapon the data does not mark dual-wieldable", () => {
@@ -378,8 +393,6 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
       `Dual-wield ${WEAPONS[UPPER][1]} — not enough budget`,
     ],
   ])("the %s affordance renders a second copy of the weapon's own image", (state, weapons, slot, name) => {
-    // `state` names the case for the test title; it is intentionally not otherwise used.
-    void state;
     const store = createTestStore({ loadout: loadoutState(weapons) });
     const { container } = render(
       <Provider store={store}>
@@ -390,6 +403,9 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
     // real button no matter which state it is in.
     const btn = screen.getByRole("button", { name });
     expect(btn).toBeInstanceOf(HTMLButtonElement);
+    // `state` names the case in the title AND is the class the component must carry,
+    // so this row's parameter is checked rather than merely labelling the case.
+    expect(btn).toHaveClass(state);
     const thumbs = container.querySelectorAll(".weapon-thumb-pair img");
     expect(thumbs).toHaveLength(2);
     expect(thumbs[1].getAttribute("src")).toBe(thumbs[0].getAttribute("src"));
