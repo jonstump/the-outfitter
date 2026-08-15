@@ -171,6 +171,12 @@ const loadoutSlice = createSlice({
     // onto an occupied cell swaps the two; dropping onto the origin cell is a no-op.
     // Blocked cells are not part of the grid's permutation space (a block is outside
     // the loadout), so any move involving one is rejected rather than swapped.
+    //
+    // Governing: issue #352. The source cell MUST be occupied — a move from an empty
+    // cell is not a permutation and used to duplicate the destination item into both
+    // cells (`moving` bound to `equip[to]`, then both assigned it). The guard is
+    // stated once, here, so the reducer and the grab-ref lifetime cannot disagree
+    // about whether a move is real.
     moveEquip(state, action) {
       const { from, to } = action.payload;
       if (from === to) return;
@@ -183,9 +189,13 @@ const loadoutSlice = createSlice({
       }
       if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= 8 || to < 0 || to >= 8) return;
       if (state.blocked.includes(from) || state.blocked.includes(to)) return;
-      if (state.equip[from] === null && state.equip[to] === null) return;
-      const moving = state.equip[from] === null ? state.equip[to] : state.equip[from];
-      if (moving === null) return;
+      // The source must be occupied — a move from an empty cell is not a permutation.
+      // This guard replaces the dead `moving === null` check below, which could never
+      // fire because `moving` was read from the destination when `from` was empty.
+      if (state.equip[from] === null) return;
+      // Dropping onto an empty cell moves the item; dropping onto an occupied cell
+      // swaps the two. Both are permutations — the set of equipped items is unchanged.
+      const moving = state.equip[from];
       state.equip[from] = state.equip[to];
       state.equip[to] = moving;
     },
