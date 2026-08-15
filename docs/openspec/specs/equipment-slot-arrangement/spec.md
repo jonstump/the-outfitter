@@ -28,7 +28,7 @@ Four changes follow from that one decision, and they are not separable:
 
 **Item imagery is unchanged and inherited.** Every cell that depicts an item — an ordinary tile or a stack anchor — renders through the same shared container and the same scraped-image-then-SVG-fallback chain that SPEC-0001 (Equipment Iconography) specifies. This capability changes which cell a tile is drawn in and how many tiles a run of identical consumables produces; it changes nothing about how the image inside a tile is resolved.
 
-**Duplicate consumables are already legal, and the cap is per type** *(revised 2026-08-12, per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md))*. Two Vitality Shots is a valid loadout and consumes two of eight cells. What bounds repeats is the **cap category** — `CONS[i][3]`, holding `Shot`, `Throwable` and `Placeable`, with Tarot Cards the fourth category once admitted — and four consumables of one category is the limit however they are distributed across specific items. So four Dynamite Sticks **do** block a Dynamite Bundle: both are `Throwable`, and the fourth Stick exhausts that budget.
+**Duplicate consumables are already legal, and the cap is per type** *(revised 2026-08-12, per [ADR-0015](../../../adrs/ADR-0015-consumable-cap-per-type.md))*. Two Vitality Shots is a valid loadout and consumes two of eight cells. What bounds repeats is the **cap category** — `CONS[i][3]`, holding `Shot`, `Throwable`, `Placeable` and `Tarot Cards` *(the fourth admitted 2026-08-15 by #37; this clause read "once admitted" until then)* — and four consumables of one category is the limit however they are distributed across specific items. So four Dynamite Sticks **do** block a Dynamite Bundle: both are `Throwable`, and the fourth Stick exhausts that budget.
 
 This paragraph previously stated the opposite — four copies of one *specific* consumable, with `type` "descriptive and not a rules input", and two different consumables never sharing a budget. That was correct against `consCount()` as implemented and against SPEC-0007's prohibition, but wrong against the game: Update 2.8 restricts consumables to "4 instances of the same type (Throwables, Placeables, Shots and Tarot Cards)", confirmed by an in-game Arsenal observation on 2026-08-12. ADR-0015 records the reversal and the evidence. **`type` is therefore a rules input**, and SPEC-0007's `MUST NOT` against using it as a cap key is withdrawn by the same decision. This capability changes how repeats read; ADR-0015 changes what bounds them.
 
@@ -239,10 +239,10 @@ Capacity SHALL be expressed as a single predicate — **a free, unblocked cell e
 The three existing game rules SHALL be preserved exactly:
 
 - At most one of each specific Tool per loadout.
-- At most four consumables of any one **cap category**, counted across all cells regardless of adjacency and regardless of which specific items make up the four. The cap category is `CONS[i][3]` (`Shot`, `Throwable`, `Placeable`, and Tarot Cards once admitted). Consumables sharing a `type` SHALL share one budget. *(Revised per ADR-0015; this rule previously read "four copies of any one specific consumable" and asserted that two different consumables never share a budget.)*
+- At most four consumables of any one **cap category**, counted across all cells regardless of adjacency and regardless of which specific items make up the four. The cap category is `CONS[i][3]` (`Shot`, `Throwable`, `Placeable` and `Tarot Cards`) *(the last admitted 2026-08-15 by #37; previously written as "once admitted")*. Consumables sharing a `type` SHALL share one budget. *(Revised per ADR-0015; this rule previously read "four copies of any one specific consumable" and asserted that two different consumables never share a budget.)*
 - At most eight occupied cells, of which blocked cells are not available.
 
-The cap SHALL be read from a **declared list of cap categories** rather than inferred from the `type` values present in `CONS`, so a category with no rows yet — Tarot Cards today — is capped by the same mechanism the moment rows are admitted, with no new modelling.
+The cap SHALL be read from a **declared list of cap categories** rather than inferred from the `type` values present in `CONS`, so a category with no rows yet is capped by the same mechanism the moment rows are admitted, with no new modelling. *(The example this sentence carried — "Tarot Cards today" — was spent on 2026-08-15 when #37 admitted the fourteen. The rule is unchanged and the example is removed rather than replaced: every declared category now holds rows, so naming one would be naming an ordinary case. What the clause guarantees is unchanged, and is now demonstrated by the scenario below rather than promised by it.)*
 
 A `CONS` row whose `type` falls outside the declared cap categories SHALL be treated as a data error rather than silently escaping the cap.
 
@@ -270,8 +270,12 @@ The picker's enabled/disabled state for an item SHALL be derived from the same p
 
 #### Scenario: A cap category with no catalog rows is still capped
 
-- **WHEN** the declared cap categories include Tarot Cards and no `CONS` row carries that `type`
-- **THEN** the cap mechanism SHALL require no change when such rows are admitted, and the four-per-category limit SHALL apply to them on admission
+- **WHEN** rows are admitted to a declared cap category that previously held none
+- **THEN** the four-per-category limit SHALL apply to them on admission, and the cap mechanism SHALL require no change
+
+*(**WHEN** amended 2026-08-15, and the guarantee is now a fulfilled one rather than a forward-looking one. It previously read "the declared cap categories include Tarot Cards and no `CONS` row carries that `type`" — true when written, and false from #37, which admitted the fourteen Tarot Cards. Tarot Cards was the only empty declared category, so the original clause had no other subject to point at: it would have become unsatisfiable, and an unreachable scenario is worse than a wrong one because nothing fails to report it.*
+
+*The scenario is rewritten against the admission **event** rather than retired, because the property it guards is what made that admission cheap. #37 exercised it for real and is the evidence: fourteen rows entered a category `CONS_CAP_CATEGORIES` already declared, and `calc.js`, the reducer and the picker were untouched — a data change, not a mechanism change. The requirement above is unchanged; only its demonstration moved from promise to record.)*
 
 #### Scenario: A full grid with holes is still full
 
