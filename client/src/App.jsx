@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { loadoutActions } from "./store/loadoutSlice.js";
+import { uiActions } from "./store/uiSlice.js";
 import { fetchLists } from "./store/loadoutListsSlice.js";
 import { fetchFavorites } from "./store/hunterFavoritesSlice.js";
 import { fetchSaved } from "./store/savedLoadoutsSlice.js";
@@ -19,6 +20,14 @@ export default function App() {
   useEffect(() => {
     const hydrated = readHashLoadout() || readStoredLoadout();
     if (hydrated) dispatch(loadoutActions.setLoadout(hydrated));
+    // Governing: issue #359. Surface a one-time notice when decode dropped an ammo
+    // selection that was valid when the record was written but no longer resolves
+    // (e.g. dolch-96/nitro-express moved to the empty `special` pool). The decoder
+    // correctly clamps to -1, but without this the cost silently changed and the
+    // player was never told their saved choice vanished.
+    if (hydrated?.decodeNotices?.some((n) => n.kind === "ammo-dropped")) {
+      dispatch(uiActions.setMessage("This build's ammo selection is no longer available."));
+    }
     dispatch(fetchSaved());
     dispatch(fetchLists());
     // Favorites are fetched on boot, not on picker-open: this is what makes them survive a

@@ -174,7 +174,7 @@ export function emptyLoadout() {
   // Governing: ADR-0009 (fixed eight-cell sparse grid, `null` = empty),
   // SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
   // Malformed decodes land here as the well-formed empty grid rather than throwing.
-  return { weapons: [null, null], equip: Array(8).fill(null), traits: [], blocked: [], name: "" };
+  return { weapons: [null, null], equip: Array(8).fill(null), traits: [], blocked: [], name: "", decodeNotices: [] };
 }
 
 // loadout -> compact wire shape, e.g. for localStorage / share links / saved records.
@@ -651,7 +651,8 @@ const MAX_KNOWN_VERSION = 3;
 // compact wire shape -> loadout, dropping anything that no longer resolves against the catalog.
 //
 // Governing: issue #26 (created the version envelope), issue #360 (unknown versions
-// must not fall through to the legacy positional decoder).
+// must not fall through to the legacy positional decoder), issue #359 (surface a
+// notice when a decoded ammo selection was silently dropped).
 //
 // Selection is by declared version, never by shape. Three cases:
 //   1. `v` matches a known decoder → decode through it.
@@ -669,12 +670,38 @@ const MAX_KNOWN_VERSION = 3;
 export function fromData(d) {
   if (!d || typeof d !== "object") return emptyLoadout();
   // Case 2: genuine legacy records carry no `v` field (or explicitly null).
-  if (d.v === undefined || d.v === null) return fromLegacy(d);
+  if (d.v === undefined || d.v === null) return withDecodeNotices(fromLegacy(d), d);
   // Case 1: a known version with a matching decoder.
   const decoder = DECODERS.find((x) => d.v === x.v);
-  if (decoder) return decoder.decode(d);
-  // Case 3: a version this client does not know, or a malformed `v` type.
+  if (decoder) return withDecodeNotices(decoder.decode(d), d);
+  // Case 3: a version this client does not know, or a malformed `v` type. There is no
+  // decoded `weapons` array to compare notices against, so this case skips
+  // withDecodeNotices entirely.
   return { ok: false, v: d.v };
+}
+
+// Governing: issue #359. Detect ammo selections that were valid when the record was
+// written but no longer resolve (the pool shrank, e.g. dolch-96/nitro-express moved
+// to the empty `special` pool). The decoders correctly clamp to -1 via boundedAmmo,
+// but nothing told the player their saved choice vanished and the cost silently dropped.
+// This post-pass compares the raw record's ammo indices against the decoded values:
+// a raw index >= 0 that decoded to -1 means the selection was dropped because the pool
+// can no longer hold it — distinct from a raw -1 (no selection was ever made).
+function withDecodeNotices(result, d) {
+  const notices = [];
+  if (Array.isArray(d.w)) {
+    for (let k = 0; k < d.w.length && k < 2; k++) {
+      const entry = d.w[k];
+      if (!entry || !Array.isArray(entry)) continue;
+      const rawAmmo = entry[1];
+      const decoded = result.weapons[k];
+      if (rawAmmo >= 0 && decoded && decoded.a === -1) {
+        notices.push({ kind: "ammo-dropped", slot: k });
+      }
+    }
+  }
+  result.decodeNotices = notices;
+  return result;
 }
 
 /**
