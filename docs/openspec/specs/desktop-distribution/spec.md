@@ -81,13 +81,17 @@ is by some distance the largest gate on this list.
       equipment panel's over-capacity surface in #416 and the `boundedEquip` decode clamp in #421, in
       that order — the spec's own "warn before clamping" sequence.
 
+      **#419 has since closed too** — the grid's rejected-drop announcement was silent on the first
+      rejection because the live region was created and filled in one synchronous block; PR #430
+      mounted it permanently. It was filed 2026-08-15 out of the #416 review and is the same defect
+      class #400 fixed on the weapon slot.
+
       **What remains is why this stays unchecked:** #241 (click-to-remove preserved by reference and
-      colliding), #363 (grid capacity derived in three places, two of them dead), #382 (the loadout shape
-      guard accepts an equipment array shorter than eight cells), and #419 (the grid's rejected-drop
-      announcement is silent the first time — filed 2026-08-15 out of the #416 review). None is a
-      blocker in the sense the two closed ones were, but "sound" is the bar this gate sets, and a
-      capacity rule with two dead derivations and a shape guard that accepts a short array are not
-      soundness a desktop build should be sealed around.
+      colliding), #363 (grid capacity derived in three places, two of them dead), and #382 (the loadout
+      shape guard accepts an equipment array shorter than eight cells). None is a blocker in the sense
+      the closed ones were, but "sound" is the bar this gate sets, and a capacity rule with two dead
+      derivations and a shape guard that accepts a short array are not soundness a desktop build should
+      be sealed around.
 
 - [ ] **The rebrand to "Backwater Outfitters" — not started, and it goes first.** #424. The app is
       branded "The Outfitter" in-app and across the docs; the name is changing. This gates the desktop
