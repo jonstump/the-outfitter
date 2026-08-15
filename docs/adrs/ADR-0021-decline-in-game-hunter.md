@@ -6,7 +6,11 @@ extends: [ADR-0006]
 related: [ADR-0012]
 ---
 
-# ADR-0021: Decline the In-Game Hunter Entity, and Disclose That Health Chunks Spend Trait Points
+# ADR-0021: Decline the In-Game Hunter Entity
+
+> **Amended 2026-08-15.** The title previously read "…, and Disclose That Health Chunks Spend Trait
+> Points". That disclosure is now declined too — see the amendment in Decision Outcome. This ADR adopts
+> nothing and requires no code.
 
 ## Context and Problem Statement
 
@@ -90,15 +94,33 @@ to.
 discipline.** "No recruitment cost" was a scoping choice in 2026; it is now also a factual statement —
 there is no per-hunter recruitment cost to model, because recruitment is a flat 100 Hunt Dollars.
 
-**The disclosure is the whole of what is adopted.** When the Upgrade Point budget is enabled, the app
-must make clear that the trait total is not the only claim on those points: restoring a lost health
-chunk costs 1 point for a small chunk and 2 for a big one. **The app computes nothing from this** — it
-does not track chunks, does not subtract them, and does not ask the user how many they have lost.
-Consistent with ADR-0019's rule, this is a stated fact rendered as such.
+**Amended 2026-08-15 — the disclosure is declined as well, and nothing in this ADR is now adopted.**
+This is a loadout tool. It exists to build loadouts, not to capture every aspect of a hunter, and
+health-chunk economics are outside that boundary — the app is not concerned with chunks forming part of
+the trait-point total. The paragraph below is kept as the original record of what was adopted in August
+2026 and is **no longer in force**: there is nothing to build, and this is a decision about the
+product's scope rather than a deferral, so it MUST NOT be re-planned, re-filed, or reported as an
+unimplemented obligation by `/sdd:audit`, `/sdd:check`, or any drift review. Issue #404 was filed
+against the superseded text and closed as not planned.
 
-**Nothing is derived and no state is added.** `upTotal`, `totalCost`, `capUsed`, `slotMax` and
-`TRAIT_MAX` are untouched. `uiSlice`'s `upBudget` gains no companion field. A user who wants to reserve
-points for chunks does what they already do with any other unmodelled cost: enters a smaller budget.
+The reasoning generalises past this ADR: a true fact about the game does not earn a place in the UI on
+truth alone — it earns one by helping someone assemble a loadout. That test is what this amendment
+applies, and it is the test to apply to the next "we could also disclose…" proposal.
+
+> ~~**The disclosure is the whole of what is adopted.** When the Upgrade Point budget is enabled, the
+> app must make clear that the trait total is not the only claim on those points: restoring a lost
+> health chunk costs 1 point for a small chunk and 2 for a big one. **The app computes nothing from
+> this** — it does not track chunks, does not subtract them, and does not ask the user how many they
+> have lost. Consistent with ADR-0019's rule, this is a stated fact rendered as such.~~
+>
+> ~~**Nothing is derived and no state is added.** `upTotal`, `totalCost`, `capUsed`, `slotMax` and
+> `TRAIT_MAX` are untouched. `uiSlice`'s `upBudget` gains no companion field. A user who wants to
+> reserve points for chunks does what they already do with any other unmodelled cost: enters a smaller
+> budget.~~
+
+**What survives is the decline.** The in-game hunter entity is not built, `upTotal`, `totalCost`,
+`capUsed`, `slotMax` and `TRAIT_MAX` stay untouched, and `uiSlice`'s `upBudget` gains no companion
+field — which is now the whole of this ADR's effect on the code: none.
 
 ### Consequences
 
