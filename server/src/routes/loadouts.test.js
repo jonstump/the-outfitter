@@ -176,6 +176,21 @@ describe("loadouts API", () => {
     expect(stored.data.tr).toHaveLength(20);
   });
 
+  // Governing: issue #357. Duplicate trait ids inflate the decoded loadout's upgrade-point
+  // total and burn the trait budget. The same distinctness check that rejects a duplicate
+  // blocked-cell array (line 154 of loadouts.js) applies to `tr`: fifteen DISTINCT traits.
+  it("rejects a trait list carrying duplicate ids", async () => {
+    const app = makeApp();
+    const token = `duptr-${Date.now()}`;
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", token)
+      .send({ name: `__test__duptr-${Date.now()}`, data: { ...validData, tr: ["quartermaster", "quartermaster"] } });
+    expect(res.status).toBe(400);
+    await db.read();
+    expect(db.data.loadouts.some((l) => l.name.startsWith("__test__duptr-"))).toBe(false);
+  });
+
   // --- REQ "Loadout Identity Is Scoped to Its List" — id-addressed writes (#314) -------
   //
   // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List". A
