@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { selectEquipCount, selectEquipOverCapacity } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
@@ -44,6 +44,18 @@ export default function EquipmentPanel() {
   const grabRef = useRef(null);
   const gridRef = useRef(null);
 
+  // Governing: issue #417 (PR 2 of #352). The grab ref is cleared by pointerup,
+  // pointercancel, lost capture, and the ✕ removal effect — but by nothing that
+  // REPLACES the loadout. Randomize and Load both replace it, and a grab that
+  // survives either no longer refers to the grid the user grabbed from: the origin
+  // cell may now hold a different item (or none). Post-#415 the reducer guard
+  // prevents duplication, but a move that SUCCEEDS still moves an item the user
+  // never grabbed. Clear the ref whenever the equip array's IDENTITY changes, so
+  // a grab never outlives the loadout that created it.
+  useEffect(() => {
+    grabRef.current = null;
+  }, [loadout.equip]);
+
   const onGridPointerMove = (e) => {
     if (!grabRef.current || grabRef.current.mode !== "pointer") return;
     e.preventDefault();
@@ -51,6 +63,10 @@ export default function EquipmentPanel() {
   const onGridPointerUp = (e) => {
     const grab = grabRef.current;
     if (!grab || grab.mode !== "pointer") return;
+    // Governing: issue #417. Match the pointer identity the same way the cancel
+    // and lost-capture handlers do, so a pointerup from a DIFFERENT gesture (e.g.
+    // a second finger) does not end a grab it did not start.
+    if (grab.pointerId !== e.pointerId) return;
     // The pointerdown cell captured the pointer, so EVERY event for this pointer is
     // retargeted to the source cell — `e.target` is always the origin, never the
     // cell under the cursor (issue #302, Defect B). Resolve the drop target from the
