@@ -130,8 +130,18 @@ export function consCategoryCount(loadout, consIndex) {
  * Vitality Shots plus one more is four of `Shot` — and any fifth `Shot` (even a
  * different specific item) is rejected.
  */
+/**
+ * The per-cap-category consumable ceiling (ADR-0015). Named rather than inlined
+ * because it is read from two directions — `consAllowed` asks "is there room for
+ * one more" (`< CONS_CAP`) and `equipOverCapacity` asks "are we past it"
+ * (`> CONS_CAP`). ADR-0015 already moved this rule once (four per specific item →
+ * four per type) and SPEC-0006 anticipates Tarot Cards becoming a fourth cap
+ * category, so a second copy of the literal is a drift waiting to happen.
+ */
+export const CONS_CAP = 4;
+
 export function consAllowed(loadout, consIndex) {
-  return consCategoryCount(loadout, consIndex) < 4;
+  return consCategoryCount(loadout, consIndex) < CONS_CAP;
 }
 
 export function slotMax(loadout) {
@@ -166,23 +176,26 @@ export function consCount(loadout, consIndex) {
  * produces a loadout the game refuses, and the equipment panel must surface it
  * rather than pricing the build confidently. Returns null when the grid is legal.
  *
- * Reads through `heldItems`, `slotMax`, and `capCategoryOf` — the SAME predicates
- * the reducer and picker use — so the warning cannot disagree with the rules.
+ * Reads through `heldItems`, `slotMax`, `consCategoryCount` and `CONS_CAP` — the
+ * SAME counter and the SAME ceiling `consAllowed` is built on — so the warning
+ * cannot disagree with the reducer's rules. #353 asks for exactly this ("drive it
+ * from `consAllowed` / `capCategoryOf` rather than re-deriving the rule"): counting
+ * categories here with a second literal `4` would have been a copy of the cap that
+ * the next change to ADR-0015 could miss.
  */
 export function equipOverCapacity(loadout) {
-  const held = heldItems(loadout).length;
+  const items = heldItems(loadout);
   const max = slotMax(loadout);
-  if (held > max) return { kind: "slots", held, max };
-  // Per-category count: four per `CONS_CAP_CATEGORIES` entry, the same list the
-  // reducer's `consAllowed` reads. An undeclared type collapses to one shared
-  // budget, so two unknown types share the four-slot cap rather than minting eight.
-  const counts = new Map();
-  for (const e of heldItems(loadout)) {
+  if (items.length > max) return { kind: "slots", held: items.length, max };
+  // `consCategoryCount` resolves each item's cap category and counts the whole
+  // grid for it, so asking once per held consumable is enough — an over-cap
+  // category necessarily contains at least one held item that reports it. An
+  // undeclared type collapses to one shared budget inside `capCategoryOf`, so two
+  // unknown types share the ceiling rather than minting one each.
+  for (const e of items) {
     if (e.t !== "C") continue;
-    const cat = capCategory(e.i);
-    const n = (counts.get(cat) || 0) + 1;
-    counts.set(cat, n);
-    if (n > 4) return { kind: "category", category: cat, held: n, max: 4 };
+    const n = consCategoryCount(loadout, e.i);
+    if (n > CONS_CAP) return { kind: "category", category: capCategory(e.i), held: n, max: CONS_CAP };
   }
   return null;
 }
