@@ -47,7 +47,11 @@ export default function EquipmentSlot({ index, run, grabRef }) {
   // are handled at the grid root so the grab is one state machine instead of eight.
   const handleKeyDown = (e) => {
     if (e.key === "Escape" || e.key === "Esc") {
-      if (ref.current && ref.current.from === index) {
+      // Governing: issue #417. Compare against the grab's ORIGIN, not `from`:
+      // the arrow keys move `from` away from the origin cell (EquipmentPanel's
+      // onGridKeyDown), so Escape on the origin cell (which keeps focus) must
+      // still release the grab even after arrowing.
+      if (ref.current && ref.current.origin === index) {
         ref.current = null;
         e.preventDefault();
       }

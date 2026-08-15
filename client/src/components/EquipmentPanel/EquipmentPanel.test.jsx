@@ -8,6 +8,8 @@ import { equipRuns } from "../../utils/stacking.js";
 import { CSS_RULES, parseStylesheet, readGlobalCss, restingDeclaration } from "../../test/cssRules.js";
 import { consCategoryCount, totalCost } from "../../utils/calc.js";
 import { ARRANGEMENT_PROPERTY } from "./gridMove.js";
+import { emptyLoadout } from "../../utils/loadoutCodec.js";
+import { loadoutActions } from "../../store/loadoutSlice.js";
 import { existsSync, readFileSync } from "node:fs";
 
 // Covers: SPEC-0006 REQ "The Grid Renders as Two Ranks of Four" (issue #282),
@@ -410,7 +412,9 @@ describe("touch drag contract", () => {
     const orig = document.elementFromPoint;
     document.elementFromPoint = () => target;
     try {
-      fireEvent.pointerUp(target, {});
+      // pointerId: 1 matches the pointerDown calls above; onGridPointerUp now checks
+      // the pointer identity the same way cancel and lost-capture do (issue #417).
+      fireEvent.pointerUp(target, { pointerId: 1 });
     } finally {
       document.elementFromPoint = orig;
     }
@@ -878,5 +882,117 @@ describe("over-capacity surface (issue #353)", () => {
     // Both channels carry the SAME message — the sighted and announced surfaces
     // are rendered from one string and cannot drift apart.
     expect(container.querySelector(".over-capacity-warning").textContent).toBe(region.textContent);
+  });
+});
+
+// Governing: issue #417 (PR 2 of #352), ADR-0009. The grab ref used to outlive the
+// loadout that created it — Randomize and Load both replace the equip array, but
+// nothing cleared the ref, so a grab that survived either no longer referred to
+// the grid the user grabbed from. Post-#415 the reducer guard prevents duplication,
+// but a move that SUCCEEDS still moves an item the user never grabbed. These tests
+// assert the grab is cleared when the loadout is replaced, and that Escape releases
+// a grab that has been moved by the arrow keys.
+describe("grab ref lifetime (issue #417)", () => {
+  const twoCell = () =>
+    loadoutState({
+      equip: [
+        { t: "C", i: vitality }, null, { t: "T", i: kit }, null,
+        null, null, null, null,
+      ],
+    });
+
+  it("a grab does not survive Randomize — no item the user did not grab is moved", () => {
+    const { container, store } = renderPanel({ loadout: twoCell() });
+    // Grab cell 0, arrow to cell 1 (the grab now points at cell 1).
+    fireEvent.keyDown(keyboardCell(container, 0), { key: " " });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    expect(store.getState().loadout.equip).toEqual(twoCell().equip); // nothing moved yet
+
+    // Randomize replaces the entire loadout. The grab ref MUST be cleared so the
+    // next Enter does not move an item in the NEW grid the user never grabbed.
+    //
+    // The replacement is deliberately NON-EMPTY, with its cell 0 occupied. Against an
+    // empty grid this test proves nothing: a surviving grab would dispatch
+    // moveEquip({ from: 0, to: 1 }) into a hole, #415's reducer guard would refuse it,
+    // and "all cells null" would hold either way. With cell 0 filled, a surviving grab
+    // produces a real move and the assertion below catches it.
+    const randomized = [
+      { t: "T", i: kit }, null, { t: "C", i: dynamite }, null,
+      null, null, null, null,
+    ];
+    act(() => store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), equip: randomized })));
+    // Enter after Randomize: the grab is gone, so the new grid is untouched.
+    fireEvent.keyDown(grid, { key: "Enter" });
+    const after = store.getState().loadout;
+    expect(after.equip[0]).toEqual({ t: "T", i: kit });
+    expect(after.equip[1]).toBeNull();
+    expect(after.equip[2]).toEqual({ t: "C", i: dynamite });
+  });
+
+  it("a grab does not survive a Load — no item the user did not grab is moved", () => {
+    const { container, store } = renderPanel({ loadout: twoCell() });
+    fireEvent.keyDown(keyboardCell(container, 0), { key: " " });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+
+    // Load a saved record that has a different grid. The grab ref MUST be cleared.
+    act(() =>
+      store.dispatch(
+        loadoutActions.setLoadout({
+          weapons: [null, null],
+          equip: [{ t: "T", i: 1 }, null, null, null, null, null, null, null],
+          traits: [],
+          blocked: [],
+          name: "Saved",
+        })
+      )
+    );
+    // Enter after Load: the grab is gone, so the loaded grid is untouched.
+    fireEvent.keyDown(grid, { key: "Enter" });
+    const after = store.getState().loadout;
+    expect(after.equip[0]).toEqual({ t: "T", i: 1 });
+    expect(after.equip[1]).toBeNull();
+  });
+
+  it("Escape releases a grab that has been moved by the arrow keys", () => {
+    // The bug: Escape checked `ref.current.from === index`, but the arrow keys move
+    // `from` away from the origin cell. Escape on the origin cell (which keeps focus)
+    // must still release the grab — compare against `origin`, not `from`.
+    const { container, store } = renderPanel({ loadout: twoCell() });
+    const cell = keyboardCell(container, 0);
+    fireEvent.keyDown(cell, { key: " " }); // grab cell 0
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // grab now at cell 1
+    // Escape on the ORIGIN cell (cell 0 still has focus).
+    fireEvent.keyDown(cell, { key: "Escape" });
+    // A subsequent Enter must not drop anything — the grab was cancelled.
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+  });
+
+  // The pointer-identity half of #417. `onGridPointerUp` now matches `e.pointerId`
+  // against the grab's, the way `onGridPointerCancel` and `onLostPointerCapture`
+  // already did. Without this the guard is unexercised — it can be deleted later and
+  // nothing goes red, which is the state this test exists to end.
+  it("a pointerup from a DIFFERENT pointer does not end a grab it did not start", () => {
+    const { container, store } = renderPanel({ loadout: twoCell() });
+    const from = container.querySelector('[data-slot-index="0"]');
+    const to = container.querySelector('[data-slot-index="1"]');
+    fireEvent.pointerDown(from, { button: 0, pointerId: 1 });
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => to;
+    try {
+      // A second finger releases over cell 1. It must not complete finger 1's grab.
+      fireEvent.pointerUp(to, { pointerId: 2 });
+      expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+      // The grab is still live, so the ORIGINAL pointer's release still completes it.
+      fireEvent.pointerUp(to, { pointerId: 1 });
+    } finally {
+      document.elementFromPoint = orig;
+    }
+    const after = store.getState().loadout.equip;
+    expect(after[0]).toBeNull();
+    expect(after[1]).toEqual({ t: "C", i: vitality });
   });
 });
