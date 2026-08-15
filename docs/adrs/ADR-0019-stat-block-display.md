@@ -7,6 +7,15 @@ extends: [ADR-0005]
 
 # ADR-0019: Display the Scraped Stat Block, Never Compute From It, and Phase It Around the Ammo Delta
 
+> **Disposition confirmed 2026-08-15 — in scope, and wanted.** Reviewed against the admission test
+> ADR-0021 records: *a true fact about the game does not earn a place in the UI on truth alone — it earns
+> one by helping someone assemble a loadout.* Stat blocks pass it. Per Jon: *"yes we want stat blocks. It
+> is a thing myself and others want to see. It does in fact help with creating a loadout."*
+>
+> **Still unimplemented.** `statsFor()` has no consumer anywhere outside its own module, which is the
+> whole of #256 — the scraped stat seam has been sitting unconsumed since it landed. This ADR is also
+> governed by no spec; that gap, not the decision, is what remains open.
+
 ## Context and Problem Statement
 
 ADR-0005 justified the stat scrape partly on a benefit it has never collected:

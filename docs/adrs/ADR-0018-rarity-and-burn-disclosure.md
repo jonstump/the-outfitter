@@ -8,6 +8,34 @@ related: [ADR-0006]
 
 # ADR-0018: Surface Acquisition Class as Colour-plus-Text, and Disclose Burn Traits Rather Than Simulate Them
 
+> **Disposition confirmed 2026-08-15 — in scope, with the visual channel refined and one prerequisite.**
+> Reviewed against the admission test ADR-0021 records, and it passes: "cannot be bought" versus "costs
+> 0" changes what a player believes they can afford while building, which is loadout work rather than
+> trivia.
+>
+> **The visual channel will be an icon, not the game's spur colour.** This decision already held that
+> "the colour is the part that is optional", so substituting a Scarce/Burn icon — sourced the same way
+> the app sources every other image, under ADR-0002 — is a refinement rather than a reversal. The icons
+> attach to items the data tags with those attributes.
+>
+> **The two halves have different prerequisites, and should not be planned as one story:**
+>
+> - **The label wording is broken today and depends on nothing.** `TraitsPanel.jsx:36` composes
+>   `` `${name}, ${up} upgrade point${…}. Activate to remove.` ``, so a Scarce trait is announced as "0
+>   upgrade points" — the false claim this ADR was written to fix — while the visible `trait-cell-up`
+>   span is `aria-hidden="true"`. An icon does not fix this: the label is composed separately, so a
+>   Scarce icon would sit beside a screen reader still asserting a price. Related: #362.
+> - **The icon half needs the weapon tagging fixed first.** `acquisitionClasses` is populated for traits
+>   only — 58 entries, `Regular` 49 / `Scarce` 8 / `Burn` 5 — and empty for the other 198. The four
+>   Scarce *weapons* (Flame Rifle, Homestead 78, Shredder, Wildland) carry `acquisitionClasses: []` and
+>   are identifiable only by costing 0 in `catalog.js`, which is exactly the coupling ADR-0013 declined
+>   when it kept rarity out of the cost field. An icon keyed on `acquisitionClasses` would render on the
+>   8 Scarce traits and silently skip the 4 Scarce weapons. Fix the scrape first; tracked by #392.
+>
+> Whether the 198 empty entries are legitimately not-applicable (tools and consumables may have no
+> acquisition axis on the wiki) is unverified, and worth settling while the scrape is open rather than
+> assumed.
+
 ## Context and Problem Statement
 
 ADR-0013 is titled, correctly, *"Model Scarce Items as Selectable at Zero Cost, **and Keep Rarity Out
