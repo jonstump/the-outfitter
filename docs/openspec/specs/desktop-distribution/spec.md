@@ -140,14 +140,21 @@ is by some distance the largest gate on this list.
       the app cannot express**, and **137 of 140 weapons wrong in at least one direction**. A player
       pricing a build against this is pricing a build the game will not sell them.
 
-      **Scope is unsettled in the same way the data-audit gate's is, and should be decided the same
-      way.** SPEC-0010 is not one change: #339–#341 make ammo catalog rows with stable ids and scrape
-      per-weapon compatibility, price and slot count; #344 switches the readers so the corrected data
-      is what the app actually shows; #342, #343 and #345 carry the wire format to version 4 with a
-      legacy migration; #346–#347 add the second ammo control; #348 amends four other specs. The
-      narrow reading — "the app no longer shows wrong ammo" — is roughly #339–#341 plus #344. The
-      second ammo control is the genuinely separable tail, because a single control offering the right
-      rounds is *accurate* for every weapon and merely *incomplete* for the 32 that hold two.
+      **Scope is unsettled in the same way the data-audit gate's is, but the room to narrow it is much
+      smaller than it first appears.** The stories' own dependency chain, read from their bodies rather
+      than from their numbering, is `#339 → #340 → #341 → #342 → #343 → #344`. #339 freezes the
+      index-to-id table and #340 makes ammo catalog rows; #341 scrapes per-weapon compatibility, price
+      and slot count; #342 accepts version 4 at the payload boundary and #343 is the version-4 decoder,
+      which is where #339's resolver is finally wired in; #344 then switches every reader, and its body
+      declares itself blocked by **both** #341 and #343. So "the app stops showing wrong ammo" cannot
+      skip the wire-format bump — #345 almost certainly joins it too, since reading version 4 while
+      writing version 3 is incoherent.
+
+      That leaves **#346–#347** (the second ammo control) and **#348** (the cross-spec amendments) as
+      the only genuinely separable work: seven of ten stories are the narrow reading, not four. The
+      second control is separable on its own merits — a single control offering the right rounds is
+      *accurate* for every weapon and merely *incomplete* for the 32 that hold two — so it is the one
+      piece that could follow the desktop ship without the app displaying anything false.
 
       **#431 is a spec defect and should be settled before #341 scrapes anything.** SPEC-0010 models
       slot count and family membership as independent properties, but for the seven dual-family
