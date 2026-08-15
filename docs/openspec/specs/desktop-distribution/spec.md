@@ -51,10 +51,21 @@ these four are the *gate*.
 - [ ] **The data audit is worked down — partially done.** The audit itself has happened; the remediation
       has not. It is what produced the #351–#394 sweep, which is why the tracker is carrying so many data
       and catalog tickets. The gate is those findings closed, not the audit re-run.
-- [ ] **Equipment slot drag and drop is sound — shipped, not settled.** SPEC-0006 direct manipulation
-      landed, but open tickets still cover it, two of them blockers: #352 (`moveEquip` duplicates an item
-      when the source cell is empty), #353 (no decoder enforces any equipment rule), plus #241, #363 and
-      #382.
+- [ ] **Equipment slot drag and drop is sound — shipped, not settled. The two blockers have cleared;
+      the gate has not.** SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
+      bullet called blockers are closed: **#352** (`moveEquip` duplicated an item from an empty source
+      cell) took the reducer guard in #415 and the grab-ref lifetime, Escape-origin guard and
+      pointer-identity check in #420; **#353** (no decoder enforced any equipment rule) took the
+      equipment panel's over-capacity surface in #416 and the `boundedEquip` decode clamp in #421, in
+      that order — the spec's own "warn before clamping" sequence.
+
+      **What remains is why this stays unchecked:** #241 (click-to-remove preserved by reference and
+      colliding), #363 (grid capacity derived in three places, two of them dead), #382 (the loadout shape
+      guard accepts an equipment array shorter than eight cells), and #419 (the grid's rejected-drop
+      announcement is silent the first time — filed 2026-08-15 out of the #416 review). None is a
+      blocker in the sense the two closed ones were, but "sound" is the bar this gate sets, and a
+      capacity rule with two dead derivations and a shape guard that accepts a short array are not
+      soundness a desktop build should be sealed around.
 
 **This list is Jon's, stated 2026-08-14, and supersedes an earlier reconstruction.** A previous revision
 of this section guessed at SPEC-0002, server embeddability and the wire format. Those are parts of this
