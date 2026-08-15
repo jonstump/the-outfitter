@@ -2,7 +2,7 @@
 status: blocked
 date: 2026-08-10
 blocked-since: 2026-08-14
-blocked-by: [dual-wield-pairs, tarot-cards, data-audit-remediation, equipment-drag-and-drop]
+blocked-by: [dual-wield-pairs, tarot-cards, data-audit-remediation, equipment-drag-and-drop, rebrand, app-icon]
 implements: [ADR-0008]
 ---
 
@@ -37,20 +37,40 @@ what actually gates shipping. What gates shipping is whether the app is worth in
 desktop build that is missing catalog items, carries data still known to be wrong, and cannot express
 loadouts the game itself allows is half-baked, and a desktop user cannot be redeployed out of it the way
 a web user can. Do not re-derive this list from the requirements below — the requirements are the *work*,
-these four are the *gate*.
+these six are the *gate*.
+
+**Amended 2026-08-15 — two gates added, and the count is now six.** The rebrand and the application icon
+were part of the intent from the start and were simply not written down on 2026-08-14. They are recorded
+here rather than left in conversation, which is the whole purpose of this section. Both are cheap; neither
+is optional, and both are *ordering* constraints on everything else — see "Sequencing" below.
 
 - [x] **Dual-wield pair support — shipped, and this gate is fully clear.** SPEC-0009 / ADR-0023, merged
       as #397, #398, #399, with the two correctness follow-ups (#400 un-pairing refused over capacity,
       #401 the locked affordance not keyboard-reachable), the affordance's tests (#334) and the
       cross-spec amendments (#335) all closed behind them. Epic #327 closed 2026-08-15 with all eleven
       stories done, and SPEC-0009 moved to `implemented`.
-- [ ] **Tarot card support — not shipped.** The fourteen Tarot Cards are not catalog rows (#37, ADR-0013),
-      and admitting them changes the consumable cap categories (#350; SPEC-0006 already anticipates
-      "Tarot Cards the fourth category once admitted"). Until this lands the catalog is visibly missing
-      items a player expects to place.
-- [ ] **The data audit is worked down — partially done.** The audit itself has happened; the remediation
-      has not. It is what produced the #351–#394 sweep, which is why the tracker is carrying so many data
-      and catalog tickets. The gate is those findings closed, not the audit re-run.
+- [x] **Tarot card support — shipped 2026-08-15, and this gate is clear.** #37 admitted the fourteen
+      cards as ordinary `CONS` rows costing zero (PR #426) and #350's SPEC-0006 amendment landed in the
+      same release, as both tickets required. The cap needed no change at all — `CONS_CAP_CATEGORIES`
+      had declared `"Tarot Cards"` with no rows precisely so admission would be free, which is SPEC-0006
+      REQ "Capacity Rules Are Stated Once and Preserved" paying out exactly as designed. Two steps
+      neither ticket listed were caught first and shipped with it: `CONS_TYPES` plus a fourth badge
+      colour (the tests require a distinct one per category with rows), and a scrape re-run, without
+      which the cost-0/Scarce assertion would have had no data to assert against — `itemStats.json`
+      went 256 to 270 rows.
+- [ ] **The data audit is worked down — begun, not finished.** The audit itself has happened; the
+      remediation is under way. It is what produced the #351–#394 sweep, which is why the tracker is
+      carrying so many data and catalog tickets. As of 2026-08-15, five of the 42 are closed — #351,
+      #352 and #353 (all three blockers) and #354, on their merits, plus #376 as a duplicate — leaving
+      37, none of them a blocker. The gate is those findings closed, not the audit re-run.
+
+      **This gate's granularity is not stated, and the two readings differ by months.** Read strictly,
+      "the sweep closed" means all 42, of which 28 are documentation, provenance and test-coverage debt
+      no desktop user could ever observe. Read by severity — blockers plus should-fix plus #366 — it is
+      13, of which 9 remain. The severity reading is the one that matches this section's own stated bar
+      ("carries data still known to be wrong"); the strict reading is roughly four times the work.
+      **Settle this before the burn-down goes further**, because the two answers put the desktop build
+      weeks apart or months apart, and picking one silently is how it gets picked wrongly.
 - [ ] **Equipment slot drag and drop is sound — shipped, not settled. The two blockers have cleared;
       the gate has not.** SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
       bullet called blockers are closed: **#352** (`moveEquip` duplicated an item from an empty source
@@ -67,7 +87,56 @@ these four are the *gate*.
       capacity rule with two dead derivations and a shape guard that accepts a short array are not
       soundness a desktop build should be sealed around.
 
-**This list is Jon's, stated 2026-08-14, and supersedes an earlier reconstruction.** A previous revision
+- [ ] **The rebrand to "Backwater Outfitters" — not started, and it goes first.** #424. The app is
+      branded "The Outfitter" in-app and across the docs; the name is changing. This gates the desktop
+      build by *ordering* rather than by size: an installed application carries its name in the
+      installer, the bundle identifier and the artifact filenames, and a desktop user cannot be
+      renamed out of it the way a web page can be redeployed. Doing it before the packaging work is
+      nearly free; doing it after a build ships is not doing it at all.
+
+      **The copy rename is low-risk. A grep for the name is not.** The surface is 40 files and 80
+      occurrences, almost all prose — but the same grep hits identifiers that are not brand, and
+      renaming those fails *silently*, with no error and no way for a user to recover. These MUST NOT
+      be renamed by this work: `hunt-outfitter-token` (`client/src/api/loadouts.js`) — the ownership
+      token SPEC-0003 scopes every saved loadout by, so a new key makes a user's own server-side
+      loadouts unreachable and undeletable; `hunt-outfitter-current`
+      (`client/src/utils/loadoutCodec.js`) and `hunt-outfitter-selected-list`
+      (`client/src/store/uiSlice.js`) — a new key reads empty, so every returning user opens to a blank
+      build; `OUTFITTER_DB_FILE` (`server/src/db.js`, `.env.example`, `server/package.json`) — the env
+      var every deployment sets, and the exact seam the Per-User Data Directory requirement below
+      relies on; and `render.yaml`'s service name `the-outfitter` and disk name `outfitter-data` —
+      renaming a persistent disk provisions a new empty volume and strands the deployed data. The
+      npm workspace names (`@the-outfitter/client`, `@the-outfitter/server`) are safe to change but
+      are internal plumbing rather than brand, so leaving them is the smaller diff.
+
+      **The rule: rename display strings and prose; leave every storage key, env var, deployment name
+      and package name exactly as it is.** #424's own wording is "everywhere the name shows up to a
+      user or a reader of the docs", which is correct — this bullet exists so that a grep is not
+      mistaken for that instruction.
+
+- [ ] **The application icon — not started, and the app has no mark at all.** #428. This is not
+      "replace the placeholder": verified against `main` = `1a5791e`, there is no `<link rel="icon">`
+      in `client/index.html` and no `favicon.*` anywhere in the repo, so the page renders the browser's
+      default document glyph. A packaged build with no icon ships the framework's default Electron
+      logo, which reads to a user as someone else's application.
+
+      Every packaging target in "Reproducible Three-Platform Release Artifacts" names an icon, and an
+      NSIS installer, a DMG and a Linux desktop entry all display it before the app runs. The
+      deliverable is one high-resolution master plus the web wiring; electron-builder generates the
+      `.icns`, `.ico` and PNG sets from that master, so this is not three hand-made icon sets. The web
+      favicon must come from the same mark — the hosted app and the desktop app are one product.
+
+      **Not SPEC-0001 "Equipment Iconography".** That governs the in-app item artwork under
+      `client/public/images/`, which is shipped, generated by the image scrape, and unrelated. Do not
+      conflate the two, and do not let this work touch that tree.
+
+**Sequencing.** The last two gates constrain each other and everything downstream: **#424 (rebrand) →
+#428 (icon) → SPEC-0005's own packaging work.** A mark designed around "The Outfitter" would be redrawn
+for "Backwater Outfitters", and the release pipeline references both the name and the icon paths, so
+retrofitting either into that config costs more than doing them first. The other four gates are
+independent of this chain and of each other.
+
+**This list is Jon's, stated 2026-08-14 and extended 2026-08-15, and supersedes an earlier reconstruction.** A previous revision
 of this section guessed at SPEC-0002, server embeddability and the wire format. Those are parts of this
 spec's own work, not gates on starting it, and that guess is exactly what this file now exists to
 prevent. If the gate changes, edit it here.
