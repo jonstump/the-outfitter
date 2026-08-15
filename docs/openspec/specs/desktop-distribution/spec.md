@@ -1,6 +1,8 @@
 ---
-status: approved
+status: blocked
 date: 2026-08-10
+blocked-since: 2026-08-14
+blocked-by: [dual-wield-pairs, tarot-cards, data-audit-remediation, equipment-drag-and-drop]
 implements: [ADR-0008]
 ---
 
@@ -20,7 +22,52 @@ The decision rests on the desktop backend *being* `server/src/`, not resembling 
 
 Two factual corrections accompany the amendment. **Windows signing does not reliably remove the SmartScreen warning**: SmartScreen keys on reputation, and a new OV certificate has none, so signed builds keep warning until downloads accumulate — only EV certificates carry instant reputation. **Signing credentials can no longer be a file in CI secrets**: publicly-trusted code-signing certificates, OV included, must keep private keys on a hardware token or cloud HSM, so CI signing means a cloud signing service (Azure Trusted Signing, SSL.com eSigner, DigiCert KeyLocker) rather than a committed or uploaded certificate.
 
-**Implementation status.** Nothing in this capability is implemented. No `desktop/` workspace exists; `server/src/index.js` still calls `app.listen()` at module scope.
+## Blocked — do not plan, do not audit as a gap
+
+**This spec is deliberately unplanned. Its absence from the issue tracker is the intended state, not an
+oversight.** It has no epic, no stories and no project board *by decision*, and it MUST NOT be flagged as
+missing work by `/sdd:audit`, `/sdd:check`, a drift review, or any planning pass. Do not run `/sdd:plan
+SPEC-0005` until every item below has shipped. This note exists because the blocked status has been stated
+in conversation more than once and kept evaporating — it is recorded here, in `CLAUDE.md`, and in the
+session memory so that it survives.
+
+**The bar is product completeness, not technical readiness.** Every requirement in this spec is about
+*packaging* — the loopback boundary, the per-user data directory, the release artifacts. None of them is
+what actually gates shipping. What gates shipping is whether the app is worth installing: an installed
+desktop build that is missing catalog items, carries data still known to be wrong, and cannot express
+loadouts the game itself allows is half-baked, and a desktop user cannot be redeployed out of it the way
+a web user can. Do not re-derive this list from the requirements below — the requirements are the *work*,
+these four are the *gate*.
+
+- [x] **Dual-wield pair support — shipped.** SPEC-0009 / ADR-0023, merged as #397, #398, #399. Two
+      follow-ups remain open (#400 un-pairing is refused over capacity, #401 the locked affordance is not
+      keyboard-reachable) and epic #327 is still open, but the capability exists.
+- [ ] **Tarot card support — not shipped.** The fourteen Tarot Cards are not catalog rows (#37, ADR-0013),
+      and admitting them changes the consumable cap categories (#350; SPEC-0006 already anticipates
+      "Tarot Cards the fourth category once admitted"). Until this lands the catalog is visibly missing
+      items a player expects to place.
+- [ ] **The data audit is worked down — partially done.** The audit itself has happened; the remediation
+      has not. It is what produced the #351–#394 sweep, which is why the tracker is carrying so many data
+      and catalog tickets. The gate is those findings closed, not the audit re-run.
+- [ ] **Equipment slot drag and drop is sound — shipped, not settled.** SPEC-0006 direct manipulation
+      landed, but open tickets still cover it, two of them blockers: #352 (`moveEquip` duplicates an item
+      when the source cell is empty), #353 (no decoder enforces any equipment rule), plus #241, #363 and
+      #382.
+
+**This list is Jon's, stated 2026-08-14, and supersedes an earlier reconstruction.** A previous revision
+of this section guessed at SPEC-0002, server embeddability and the wire format. Those are parts of this
+spec's own work, not gates on starting it, and that guess is exactly what this file now exists to
+prevent. If the gate changes, edit it here.
+
+**Implementation status.** Nothing in this capability is implemented. No `desktop/` workspace exists;
+`server/src/index.js` still calls `app.listen()` at module scope.
+
+`status: blocked` is a deliberate local extension to the SDD vocabulary (`draft`, `review`, `approved`,
+`implemented`, `deprecated`), chosen because none of those five can express "approved and correct, but
+not to be worked or planned yet". Nothing in the plugin rejects an unrecognised status, and `/sdd:prime`
+treats every status except `superseded`, `deprecated` and `rejected` as authoritative — which is right,
+since the decision here still governs. The approval this spec received on 2026-08-10 stands; only its
+readiness to be planned has changed.
 
 ## Requirements
 
