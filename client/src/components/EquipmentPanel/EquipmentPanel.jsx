@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { selectEquipCount, selectEquipOverCapacity } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import EquipmentSlot from "./EquipmentSlot.jsx";
 import { equipRuns } from "../../utils/stacking.js";
-import { announceFailure, arrowTarget, readArrangement } from "./gridMove.js";
+import { arrowTarget, readArrangement } from "./gridMove.js";
 
 // Governing: ADR-0009 (fixed eight-cell grid, no quantity field), SPEC-0006
 // REQ "The Grid Renders as Two Ranks of Four", REQ "Repeated Consumables Read
@@ -43,6 +43,13 @@ export default function EquipmentPanel() {
   const runs = equipRuns(loadout.equip);
   const grabRef = useRef(null);
   const gridRef = useRef(null);
+  // Governing: issue #419 (same defect class as #400), SPEC-0006 REQ "Keyboard
+  // Equivalence for Every Pointer Gesture". The panel owns the rejected-drop message
+  // the same way it owns `overCapMessage` below, rather than a helper reaching into
+  // the DOM to create the live region on first use — a region inserted together with
+  // its content is silent to assistive tech, so DOM-creation-on-demand meant the
+  // FIRST rejected drop of a page session announced nothing.
+  const [gridAnnounceMessage, setGridAnnounceMessage] = useState("");
 
   // Governing: issue #417 (PR 2 of #352). The grab ref is cleared by pointerup,
   // pointercancel, lost capture, and the ✕ removal effect — but by nothing that
@@ -129,7 +136,7 @@ export default function EquipmentPanel() {
         // The arrow left the grid — an edge no-op in EITHER arrangement. The grab
         // survives (the user may still drop with a later arrow / Enter), matching the
         // pointer grab, which also survives an off-grid release.
-        announceFailure(gridRef.current, "At the edge of the grid");
+        setGridAnnounceMessage("At the edge of the grid");
         e.preventDefault();
         return;
       }
@@ -196,6 +203,24 @@ export default function EquipmentPanel() {
         aria-atomic="true"
       >
         {overCapMessage}
+      </div>
+      {/* A SECOND, DISTINCT live region for rejected keyboard drops (an arrow that
+          would leave the grid) — kept separate from `equip-overcap-announcer` above
+          because the two conditions are unrelated and merging them would make one
+          announcement clobber the other. Mounted permanently for the same reason:
+          inserting a live region together with its content is silent to assistive
+          tech, so this has to already be in the tree before the FIRST rejected drop
+          of a page session, not created on demand by the handler that rejects it.
+          Governing: issue #419 (same defect class as #400), SPEC-0006 REQ "Keyboard
+          Equivalence for Every Pointer Gesture", SPEC-0001 (WCAG 2.1 AA baseline). */}
+      <div
+        data-testid="equip-announcer"
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {gridAnnounceMessage}
       </div>
     </div>
   );
