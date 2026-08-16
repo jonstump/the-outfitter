@@ -9,11 +9,12 @@
       one"), ADR-0008, SPEC-0005 REQ "Reproducible Three-Platform Release Artifacts".
       Both files are generated from client/public/favicon.svg (the single master; see its
       own provenance comment) — favicon.ico for browsers without SVG favicon support,
-      favicon.svg preferred by the rest. sizes="any" on the .ico entry is what lets a
-      modern browser skip it in favor of the SVG rather than picking whichever tag is
-      listed first.
+      favicon.svg preferred by the rest. sizes="32x32" on the .ico entry (not "any" —
+      that value is deprecated for this exact purpose: it made Chrome download both the
+      ICO and the SVG instead of picking one) is what lets a modern browser prefer the
+      SVG rather than fetching whichever tag is listed first.
     -->
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
