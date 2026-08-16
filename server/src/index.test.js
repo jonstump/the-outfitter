@@ -35,7 +35,7 @@ const CLIENT_DIST = path.join(REPO_ROOT, "client", "dist");
 // reverse proxy forwards them, Origin alongside — because the bug lived precisely in the gap
 // between what the code assumed a browser sends and what one actually sends.
 
-const SITE = "the-outfitter.example.com";
+const SITE = "backwater-outfitters.example.com";
 const PORT = 4399;
 // Governing: issue #199. A second instance, configured as the topologies that have NO proxy
 // in front — docker-compose's published port, the Procfile VM. The distinction is the whole

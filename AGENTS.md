@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guide for working in **The Outfitter** — a Hunt: Showdown loadout builder (pick weapons,
+Guide for working in **Backwater Outfitters** — a Hunt: Showdown loadout builder (pick weapons,
 equipment, and traits, then save and share builds). Client + API are served as a **single
 process on one origin** by design; see Deployment.
 

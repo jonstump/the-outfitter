@@ -166,5 +166,5 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`The Outfitter server listening on http://localhost:${PORT}`);
+  console.log(`Backwater Outfitters server listening on http://localhost:${PORT}`);
 });

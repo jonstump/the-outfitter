@@ -1,7 +1,10 @@
-# The Outfitter
+# Backwater Outfitters
 
 A Hunt: Showdown loadout builder — pick weapons, equipment, and traits, then save and share your builds.
 
+<!-- The live URL is unchanged (issue #424): it's the render.yaml service name's own
+     hostname, which MUST NOT be renamed — renaming it would point this link at a service
+     Render has never provisioned. -->
 **Try it:** <https://the-outfitter.onrender.com/>
 
 ## Stack

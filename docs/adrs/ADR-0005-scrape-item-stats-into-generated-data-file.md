@@ -13,7 +13,7 @@ ADR-0002 established that huntshowdown.wiki.gg is a legitimate source for this f
 
 The catalog itself (`client/src/data/catalog.js`) still carries only what the budget math needs: an id, a name, a cost, a size/UP value, an ammo class, and a group. A user picking between the Sparks LRR and the Mosin-Nagant M1891 sees two names and two prices — not damage, not effective range, not rate of fire, not which ammo variants the weapon actually accepts, not what a Concertina Bomb does. Every one of those facts is already on the wiki page the scrape script visits to grab the image.
 
-Should The Outfitter also scrape structured stat data, prose descriptions, and per-weapon ammo compatibility from those same pages — and if so, where does that data live, who wins when it disagrees with the hand-authored catalog, and does the stat scrape belong inside the existing image script or beside it?
+Should Backwater Outfitters also scrape structured stat data, prose descriptions, and per-weapon ammo compatibility from those same pages — and if so, where does that data live, who wins when it disagrees with the hand-authored catalog, and does the stat scrape belong inside the existing image script or beside it?
 
 The last question is not cosmetic, and it is best understood by looking past the immediate work to where this is headed.
 

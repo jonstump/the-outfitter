@@ -8,7 +8,7 @@ implements: [ADR-0004]
 
 ## Overview
 
-This capability formalizes how The Outfitter's developer environment is pinned, enforced, and documented. It realizes [ADR-0004](../../../adrs/ADR-0004-developer-environment-consistency.md), which chose host-side pinning — a version manager, `engines` enforcement, a single install command, and a lockfile-integrity check — over containerized development, on the grounds that this app has no database, cache, or native dependency and that a Docker Compose dev profile would not deliver the dev/prod topology parity that appears to justify it.
+This capability formalizes how Backwater Outfitters' developer environment is pinned, enforced, and documented. It realizes [ADR-0004](../../../adrs/ADR-0004-developer-environment-consistency.md), which chose host-side pinning — a version manager, `engines` enforcement, a single install command, and a lockfile-integrity check — over containerized development, on the grounds that this app has no database, cache, or native dependency and that a Docker Compose dev profile would not deliver the dev/prod topology parity that appears to justify it.
 
 The gap this capability closes is concrete. Node 20 was pinned in four places (`.nvmrc`, `.github/workflows/ci.yml`, and twice in `Dockerfile`) with no mechanism keeping them in sync, and nothing read any of them automatically — the machine ADR-0004 was authored on resolves `node` to v24.13.1. The README instructs `npm install` while CI and the production image run `npm ci`, permitting lockfile drift that surfaces only as a CI failure on an unrelated pull request. No `.env.example` existed, so the four environment variables the app reads were discoverable only by grepping source.
 

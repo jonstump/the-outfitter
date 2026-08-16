@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in The Outfitter is broken or behaves unexpectedly.
+description: Something in Backwater Outfitters is broken or behaves unexpectedly.
 title: "[area] "
 labels: ["bug"]
 body:

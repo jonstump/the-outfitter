@@ -2,7 +2,7 @@
 
 ## Context
 
-The Outfitter is an npm-workspaces monorepo with two workspaces: a React 18 + Redux Toolkit client built by Vite (ADR-0003) and an Express + lowdb API server. Onboarding today is `npm install` followed by `npm run dev`, which starts Vite on 5173 proxying `/api` to Express on 4100.
+Backwater Outfitters is an npm-workspaces monorepo with two workspaces: a React 18 + Redux Toolkit client built by Vite (ADR-0003) and an Express + lowdb API server. Onboarding today is `npm install` followed by `npm run dev`, which starts Vite on 5173 proxying `/api` to Express on 4100.
 
 Nothing in the repository enforces the toolchain that setup assumes. `.nvmrc` records Node 20, `.github/workflows/ci.yml` hardcodes `node-version: "20"`, and `Dockerfile` hardcodes `node:20-alpine` in both its `client-build` and `runtime` stages — four independent declarations of one fact, none of them read automatically, and no `engines` field anywhere to make a mismatch fail. The machine ADR-0004 was authored on resolves `node` to v24.13.1. Separately, the README's `npm install` diverges from the `npm ci` used by CI and both image stages, so a local install can rewrite `package-lock.json` and produce a CI failure on an unrelated pull request. Four environment variables (`PORT`, `NODE_ENV`, `CORS_ORIGIN`, `VITE_API_URL`) are read by the app and documented nowhere.
 
