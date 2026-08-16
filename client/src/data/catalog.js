@@ -790,11 +790,10 @@ export const TOOL_COLOR = "#8a6f42";
 //     is why 8 Scarce traits are IN this table. Reusing that ground would contradict the row above.
 //
 // What actually disqualifies them: the Event index cannot be trusted to describe the live roster.
-// `Traits/Shadow Crush` appears to have been replaced by `Traits/Shadow Leap` with neither page
-// saying so — and a silent replacement is exactly what the tombstone classifier (#164) cannot
-// detect, because it reads pages for stated removals. All Ears is the same shape caught only
-// because its page happens to state its removal outright. So the classifier's silence over an
-// Event page is not evidence the trait is real.
+// A page can go stale silently — retired or superseded without saying so — and that is exactly what
+// the tombstone classifier (#164) cannot detect, because it reads pages for stated removals. All Ears
+// is the same shape caught only because its page happens to state its removal outright. So the
+// classifier's silence over an Event page is not evidence the trait is real.
 //
 // The 11 Event-only traits state no cost anywhere, so adding them would also mean inventing budget
 // data that SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids. Signee
@@ -804,12 +803,21 @@ export const TOOL_COLOR = "#8a6f42";
 // cost" does not exist in this data at all, and the cost-0 invariant test has no ambiguous case.
 //
 // REVISIT WHEN: a page-level liveness signal exists for Event traits that does not depend on a page
-// stating its own removal — or when Shadow Crush is resolved either way, since it is the concrete
-// case this boundary was drawn around. New rows go on the end (see the note above the additions).
+// stating its own removal. New rows go on the end (see the note above the additions).
 //
-// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ "Acquisition
-// Class Is Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored,
-// Never Inferred". Refs #157, #164, #231.
+// 2026-08-16 (#394): this comment used to name `Traits/Shadow Crush` as a case of "appears to have
+// been replaced by `Traits/Shadow Leap`", and the REVISIT trigger above named resolving that case as
+// an alternate way to fire. ADR-0018 read both pages and refuted the premise — Shadow Crush (Event,
+// Offensive, one event appearance) and Shadow Leap (Scarce, Movement, four update-history rows) are
+// two different traits, not one replaced by the other, so that half of the trigger could never fire.
+// Struck deliberately, not by oversight: the hold-back's sole surviving ground is the page-level
+// liveness signal above. Whether the 17 held-back traits should ship is a separate decision this fix
+// does not make.
+//
+// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), ADR-0018 (refuted the Shadow
+// Crush/Shadow Leap premise, narrowed the REVISIT trigger), SPEC-0007 REQ "Acquisition Class Is
+// Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored, Never
+// Inferred". Refs #157, #164, #231, #394.
 
 // UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1). This paragraph
 // is about COSTS ONLY and has never claimed roster completeness — the boundary block above is what
