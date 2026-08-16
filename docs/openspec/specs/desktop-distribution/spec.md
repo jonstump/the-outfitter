@@ -60,11 +60,11 @@ is by some distance the largest gate on this list.
       colour (the tests require a distinct one per category with rows), and a scrape re-run, without
       which the cost-0/Scarce assertion would have had no data to assert against — `itemStats.json`
       went 256 to 270 rows.
-- [ ] **The data audit is worked down — 41 of 42 closed, one PR from done.** The audit itself has
-      happened; the remediation is nearly complete. It is what produced the #351–#394 sweep, which is
-      why the tracker carried so many data and catalog tickets. As of 2026-08-16, 41 of the 42 are
-      closed; only **#388** (nice-to-have, test fixture honesty) remains, with PR #488 open and
-      awaiting merge. The gate is those findings closed, not the audit re-run.
+- [x] **The data audit is worked down — clear, 42 of 42 closed.** The #351–#394 sweep is fully closed
+      as of 2026-08-16, via PR #488 for the last remaining item, #388 (test fixture honesty — labeled
+      two synthetic `obtainable: false` fixtures as deliberately testing a currently-unreachable
+      branch and added a domain-pinning regression test). The gate is those findings closed, not the
+      audit re-run, and they are.
 
       **This gate's granularity was never formally settled, and by 2026-08-16 the question became
       moot rather than resolved.** Read strictly, "the sweep closed" means all 42, of which 28 are
