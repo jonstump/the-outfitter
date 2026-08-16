@@ -344,7 +344,18 @@ export function parseInfoboxFields(infoboxHtml) {
     const block = sliceBalancedDiv(infoboxHtml, match.index);
     if (block === null) continue;
     const inner = block.replace(/^<div\b[^>]*>/i, "").replace(/<\/div>$/i, "");
-    const value = textContent(inner);
+    // Governing: #368, SPEC-0007, ADR-0018, ADR-0019.
+    //
+    // `textContent` turns every tag into a space, so a multi-valued field whose markup links each
+    // value separately — e.g. Type's `<a>Burn</a> , <a>Scarce</a>` — reads back as "Burn , Scarce",
+    // a space before the comma. `tidyProse` is applied here rather than by loosening `textContent`
+    // itself: `textContent` is shared by every infobox field including `Source`, and this dataset
+    // deliberately keeps that extraction narrow (see `textContent`'s own docstring above — the same
+    // function reading `Price` and `Size` correctly is why it stays untouched). Tidying the value
+    // AFTER extraction, per field, fixes the punctuation spacing without changing what `textContent`
+    // decides to keep or drop, and covers `fields.Type` (hence `acquisition`, which reads `fields.Type`
+    // in `acquisitionOf` below) along with every other infobox field for free.
+    const value = tidyProse(textContent(inner));
     for (const name of names) {
       // First occurrence wins: a field repeated within one infobox is a markup quirk, and taking
       // the last would silently prefer whichever the page happened to render second.

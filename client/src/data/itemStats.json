@@ -2788,7 +2788,7 @@
       "description": "You will not lose your Hunter if you fail to extract, but equipment and missing Health Chunks will be lost.",
       "dualWield": false,
       "ammo": null,
-      "acquisition": "Burn , Scarce",
+      "acquisition": "Burn, Scarce",
       "acquisitionClasses": [
         "Scarce",
         "Burn"
@@ -2798,7 +2798,7 @@
       "fields": {
         "StackLimit": "1",
         "Category": "Supportive",
-        "Type": "Burn , Scarce"
+        "Type": "Burn, Scarce"
       },
       "sourceRevision": "15641",
       "ingestedAt": "2026-08-16T06:57:12.647Z"
@@ -4057,7 +4057,7 @@
         "Unlock": "Bloodline Rank 47",
         "Category": "Supportive",
         "Type": "Regular",
-        "ConditionalEffect": "Solo , Catalyst"
+        "ConditionalEffect": "Solo, Catalyst"
       },
       "sourceRevision": "15707",
       "ingestedAt": "2026-08-16T06:56:03.572Z"
@@ -8640,7 +8640,7 @@
       "description": "Killing an enemy Hunter while at least one Health Chunk is empty triggers a Restoration for your Hunter.",
       "dualWield": false,
       "ammo": null,
-      "acquisition": "Burn , Scarce",
+      "acquisition": "Burn, Scarce",
       "acquisitionClasses": [
         "Scarce",
         "Burn"
@@ -8649,7 +8649,7 @@
       "purchasable": null,
       "fields": {
         "Category": "Supportive",
-        "Type": "Burn , Scarce"
+        "Type": "Burn, Scarce"
       },
       "sourceRevision": "15656",
       "ingestedAt": "2026-08-16T06:57:14.158Z"
@@ -8989,7 +8989,7 @@
       "description": "Your Hunter won't lose a Health Chunk when downed.",
       "dualWield": false,
       "ammo": null,
-      "acquisition": "Burn , Scarce",
+      "acquisition": "Burn, Scarce",
       "acquisitionClasses": [
         "Scarce",
         "Burn"
@@ -8998,7 +8998,7 @@
       "purchasable": null,
       "fields": {
         "Category": "Supportive",
-        "Type": "Burn , Scarce"
+        "Type": "Burn, Scarce"
       },
       "sourceRevision": "15658",
       "ingestedAt": "2026-08-16T06:57:15.645Z"
@@ -9012,7 +9012,7 @@
       "description": "While using Dark Sight, interact with a Trait Spur within range to trigger a Restoration effect for your team. (25m) Also applies to Beetle view.",
       "dualWield": false,
       "ammo": null,
-      "acquisition": "Burn , Scarce",
+      "acquisition": "Burn, Scarce",
       "acquisitionClasses": [
         "Scarce",
         "Burn"
@@ -9021,7 +9021,7 @@
       "purchasable": null,
       "fields": {
         "Category": "Supportive",
-        "Type": "Burn , Scarce"
+        "Type": "Burn, Scarce"
       },
       "sourceRevision": "15659",
       "ingestedAt": "2026-08-16T06:57:17.154Z"

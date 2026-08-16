@@ -38,6 +38,30 @@ describe("the generated dataset", () => {
     }
   });
 
+  // Governing: SPEC-0007, ADR-0018, ADR-0019 (#368)
+  //
+  // `descriptionFor`'s own suite below pins this same predicate on `description`, because that is
+  // the field a `textContent`-then-tag-stripped multi-valued infobox row reads back with a space
+  // before its comma — `<a>Burn</a> , <a>Scarce</a>` becomes "Burn , Scarce". The guard used to stop
+  // there, which is why it missed nine (field, item) hits: `acquisition` and `fields.Type` for
+  // death-cheat, rampage, relentless and remedy ("Burn , Scarce"), and `fields.ConditionalEffect` for
+  // frontiersman ("Solo , Catalyst"). `acquisition` and `fields.Type` are documented in SPEC-0007
+  // (`equipment-catalog-dataset/spec.md`, "Acquisition Class Is Captured") as harmless precisely
+  // because rarity is read from `acquisitionClasses`, never from these strings — but that only holds
+  // if every reader actually does that, and this test cannot verify a rendering convention. Fixing
+  // the scrape (`parseInfoboxFields` in scripts/scrape-stats.mjs) so the strings themselves are tidy
+  // is what lets this run at zero rather than at "four known, one new" forever.
+  it("never leaves a space before punctuation in acquisition or any infobox field", () => {
+    const offenders = [];
+    for (const [id, record] of Object.entries(ITEM_STATS)) {
+      if (/\s[,;:.!?]/.test(record.acquisition ?? "")) offenders.push(`${id}: acquisition`);
+      for (const [name, value] of Object.entries(record.fields ?? {})) {
+        if (typeof value === "string" && /\s[,;:.!?]/.test(value)) offenders.push(`${id}: fields.${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   // Governing: SPEC-0007 REQ "Catalog Write-Through Is Bounded, Reviewable, and Opt-In"
   //
   // The reverse direction of the id check above, on VALUES rather than keys. #195 reconciled the
