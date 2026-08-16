@@ -19,21 +19,20 @@ import { slugify } from "../../utils/slugify.js";
 // can add, replace, or re-extension images without any code change here ever being required to
 // pick them up. See the longer note in client/src/data/catalog.js.
 
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
+// `png` leads because the committed scrape tree is all avif/png (zero jpg/jpeg/webp as of
+// #391's audit) — every other order costs two wasted requests (each a 200 carrying the SPA's
+// index document, per server/src/index.js's static-then-catch-all ordering, not a 404) before
+// reaching the extension that actually exists. The rest of the chain stays: it exists so the
+// scrape can re-extension its output without a code change here (see the file-level note above).
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
 
-// Hunter portraits are AVIF and only AVIF: SPEC-0004's scrape encodes the one portrait per
-// hunter with no format fallback chain, so every other extension is a guaranteed 404 for this
-// category.
-//
-// This is a per-CATEGORY ordering hint, not the per-item `IMAGES` manifest the note above rejects
-// — it says nothing about which hunters exist, and the scrape can still add, replace or remove
-// assets with no change here. The ordering earns its keep: the picker renders the full roster, so
-// a shared chain would cost either one wasted request per item image (avif first) or several per
-// portrait (avif last). Neither is acceptable at roster scale, and a category split costs nothing.
-const EXTENSIONS_BY_CATEGORY = { hunters: ["avif"] };
-
+// Hunter portraits never reach this: HunterPortrait always calls ItemThumb with `sources`
+// (its own AVIF candidate list, derived in data/hunters.js), and candidateSources() below
+// returns `sources` before category-derived extensions are ever consulted. A former
+// `EXTENSIONS_BY_CATEGORY` per-category ordering hint lived here for that case and was dead
+// code — removed by #391 rather than kept describing traffic that cannot occur.
 export function extensionsFor(category) {
-  return EXTENSIONS_BY_CATEGORY[category] ?? IMAGE_EXTENSIONS;
+  return IMAGE_EXTENSIONS;
 }
 
 // Re-exported, not redefined. This component is the READER end of the asset-path contract;

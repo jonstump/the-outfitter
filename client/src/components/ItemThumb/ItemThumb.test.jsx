@@ -11,9 +11,14 @@ import ItemThumb, { extensionsFor, slugify } from "./ItemThumb.jsx";
 // EquipmentSlot, TraitsPanel, PickerRow). It has no `IMAGES` manifest to look up — see the note at
 // the top of ItemThumb.jsx and catalog.js — instead it optimistically renders an <img> pointed at
 // the guessed scraped-image URL and only swaps to the SVG fallback once every known extension has
-// 404'd via the browser's onError event. jsdom never actually loads <img src>, so both the
-// "photo renders" and "cascades to SVG fallback" behaviors are driven explicitly here with
-// fireEvent.error rather than relying on real network success/failure.
+// failed to load (a 200 carrying the SPA's index document in production, not a 404 — the server
+// registers express.static ahead of an SPA catch-all, so a missing asset still answers 200
+// text/html; only the real image's content-type differs). jsdom never actually loads <img src>,
+// so both the "photo renders" and "cascades to SVG fallback" behaviors are driven explicitly here
+// with fireEvent.error rather than relying on real network success/failure.
+//
+// `png` leads the chain (#391): the committed scrape tree is all avif/png, so jpg/jpeg first
+// cost two wasted requests per item thumbnail before reaching the extension that exists.
 
 const SVG_PATH = "M10 12h44v7H30l-5 14H13l5-14h-8z";
 
@@ -30,13 +35,15 @@ describe("slugify", () => {
 });
 
 describe("ItemThumb", () => {
-  it("renders the scraped image as the primary tier when a category is given", () => {
+  it("renders the scraped image as the primary tier when a category is given, trying png first", () => {
     const { container } = render(
       <ItemThumb category="weapons" name="Nagant M1895" svgPath={SVG_PATH} />
     );
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.jpg");
+    // png leads (#391): the committed scrape tree is avif/png only, so png-first avoids two
+    // wasted requests per item thumbnail that jpg/jpeg-first used to cost.
+    expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.png");
     expect(img).toHaveAttribute("alt", "Nagant M1895");
     // No SVG fallback yet — the photo tier hasn't failed.
     expect(container.querySelector("svg")).not.toBeInTheDocument();
@@ -47,15 +54,15 @@ describe("ItemThumb", () => {
       <ItemThumb category="weapons" name="Nagant M1895" svgPath={SVG_PATH} />
     );
     let img = container.querySelector("img");
+    expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.png");
+
+    fireEvent.error(img);
+    img = container.querySelector("img");
     expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.jpg");
 
     fireEvent.error(img);
     img = container.querySelector("img");
     expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.jpeg");
-
-    fireEvent.error(img);
-    img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", "/images/weapons/nagant-m1895.png");
 
     fireEvent.error(img);
     img = container.querySelector("img");
@@ -108,31 +115,30 @@ describe("ItemThumb", () => {
 });
 
 describe("hunter portraits (SPEC-0004 assets)", () => {
-  it("requests the AVIF the scrape actually writes, first try", () => {
-    // SPEC-0004 encodes portraits as AVIF only. Walking jpg/jpeg/png/webp first would cost four
-    // guaranteed 404s per portrait on a picker that renders the whole roster.
-    const { container } = render(
-      <ItemThumb category="hunters" name="bad-hand" alt="" svgPath={SVG_PATH} />
-    );
-    expect(container.querySelector("img")).toHaveAttribute("src", "/images/hunters/bad-hand.avif");
-  });
-
+  // Real hunter portraits never go through category-derived extensions at all: HunterPortrait
+  // always calls ItemThumb with `sources` (its own AVIF candidate list from data/hunters.js),
+  // and candidateSources() returns `sources` before category is ever consulted (see the
+  // "explicit source chain" describe block below, and HunterPortrait.jsx's own comments).
+  //
+  // A `category="hunters"` extension-ordering special case used to exist here for this
+  // category, but #391 found it dead: no call site ever reaches it, and it's been removed
+  // along with its now-false rationale comment. `extensionsFor` no longer varies by category.
   it("falls straight to the silhouette when the portrait is absent", () => {
     // SPEC-0003 requires a hunter with no portrait asset to render the placeholder, not a broken
     // image — and to get there in one step, not five.
     const { container } = render(
-      <ItemThumb category="hunters" name="no-art" alt="" svgPath={SVG_PATH} />
+      <ItemThumb sources={["/images/hunters/no-art.avif"]} name="no-art" alt="" svgPath={SVG_PATH} />
     );
     fireEvent.error(container.querySelector("img"));
     expect(container.querySelector("img")).not.toBeInTheDocument();
     expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
-  it("leaves every other category's chain untouched", () => {
-    expect(extensionsFor("weapons")).toEqual(["jpg", "jpeg", "png", "webp"]);
-    expect(extensionsFor("traits")).toEqual(["jpg", "jpeg", "png", "webp"]);
-    expect(extensionsFor(undefined)).toEqual(["jpg", "jpeg", "png", "webp"]);
-    expect(extensionsFor("hunters")).toEqual(["avif"]);
+  it("no longer carries a per-category extension override — 'hunters' gets the same chain as everything else", () => {
+    expect(extensionsFor("weapons")).toEqual(["png", "jpg", "jpeg", "webp"]);
+    expect(extensionsFor("traits")).toEqual(["png", "jpg", "jpeg", "webp"]);
+    expect(extensionsFor(undefined)).toEqual(["png", "jpg", "jpeg", "webp"]);
+    expect(extensionsFor("hunters")).toEqual(["png", "jpg", "jpeg", "webp"]);
   });
 });
 

@@ -36,7 +36,7 @@ describe("PickerRow", () => {
   it("renders the scraped image as the primary tier when showThumb is true", () => {
     const { container } = render(<PickerRow row={makeRow()} showThumb />);
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.png`);
     expect(container.querySelector(".picker-row-thumb")).toBeInTheDocument();
   });
 

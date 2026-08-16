@@ -1129,14 +1129,14 @@ const drawn = (id) => [...previewOf(id).querySelectorAll("img")].map((img) => im
 // only place the tool/consumable split is observable from outside, so pinning it is what
 // stops TOOLS/toolThumb being substituted for CONS/consThumb without a test noticing
 // (SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback").
-const SPARKS = `/images/weapons/${slugify("Sparks")}.jpg`;
-const CONVERSION = `/images/weapons/${slugify("Conversion")}.jpg`;
-const FIRST_AID = `/images/tools/${slugify("First Aid Kit")}.jpg`;
-const KNIFE = `/images/tools/${slugify("Knife")}.jpg`;
-const VITALITY = `/images/consumables/${slugify("Vitality Shot")}.jpg`;
-const DYNAMITE = `/images/consumables/${slugify("Dynamite Stick")}.jpg`;
-const THROWING_KNIVES = `/images/tools/${slugify("Throwing Knives")}.jpg`;
-const QUARTERMASTER = `/images/traits/${slugify("Quartermaster")}.jpg`;
+const SPARKS = `/images/weapons/${slugify("Sparks")}.png`;
+const CONVERSION = `/images/weapons/${slugify("Conversion")}.png`;
+const FIRST_AID = `/images/tools/${slugify("First Aid Kit")}.png`;
+const KNIFE = `/images/tools/${slugify("Knife")}.png`;
+const VITALITY = `/images/consumables/${slugify("Vitality Shot")}.png`;
+const DYNAMITE = `/images/consumables/${slugify("Dynamite Stick")}.png`;
+const THROWING_KNIVES = `/images/tools/${slugify("Throwing Knives")}.png`;
+const QUARTERMASTER = `/images/traits/${slugify("Quartermaster")}.png`;
 
 // Two weapons, five equipment, one trait — every category occupied and none of them full.
 const LOADED = v1({

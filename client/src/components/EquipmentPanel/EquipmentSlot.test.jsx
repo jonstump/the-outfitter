@@ -30,7 +30,7 @@ describe("EquipmentSlot — Tool entry", () => {
     });
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/tools/${slugify(def[1])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/tools/${slugify(def[1])}.png`);
   });
 
   it("falls back to the SVG icon once every extension fails to load", () => {
@@ -63,7 +63,7 @@ describe("EquipmentSlot — Consumable entry", () => {
     });
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/consumables/${slugify(def[1])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/consumables/${slugify(def[1])}.png`);
   });
 
   it("falls back to the SVG icon once every extension fails to load", () => {

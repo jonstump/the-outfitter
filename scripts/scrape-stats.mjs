@@ -344,7 +344,18 @@ export function parseInfoboxFields(infoboxHtml) {
     const block = sliceBalancedDiv(infoboxHtml, match.index);
     if (block === null) continue;
     const inner = block.replace(/^<div\b[^>]*>/i, "").replace(/<\/div>$/i, "");
-    const value = textContent(inner);
+    // Governing: #368, SPEC-0007, ADR-0018, ADR-0019.
+    //
+    // `textContent` turns every tag into a space, so a multi-valued field whose markup links each
+    // value separately — e.g. Type's `<a>Burn</a> , <a>Scarce</a>` — reads back as "Burn , Scarce",
+    // a space before the comma. `tidyProse` is applied here rather than by loosening `textContent`
+    // itself: `textContent` is shared by every infobox field including `Source`, and this dataset
+    // deliberately keeps that extraction narrow (see `textContent`'s own docstring above — the same
+    // function reading `Price` and `Size` correctly is why it stays untouched). Tidying the value
+    // AFTER extraction, per field, fixes the punctuation spacing without changing what `textContent`
+    // decides to keep or drop, and covers `fields.Type` (hence `acquisition`, which reads `fields.Type`
+    // in `acquisitionOf` below) along with every other infobox field for free.
+    const value = tidyProse(textContent(inner));
     for (const name of names) {
       // First occurrence wins: a field repeated within one infobox is a markup quirk, and taking
       // the last would silently prefer whichever the page happened to render second.
@@ -1202,8 +1213,15 @@ export function findAmmoCategoryDisagreements(entries) {
   return [...flagged.values()];
 }
 
-/** "Weapons/Mako_1895/Claw" -> "Weapons/Mako_1895" — the base weapon a variant subpage belongs to. */
-function ammoSiblingGroupKey(wikiPath) {
+/**
+ * "Weapons/Mako_1895/Claw" -> "Weapons/Mako_1895" — the base weapon a variant subpage belongs to.
+ *
+ * Shared by two checks: the ammo sibling-price disagreement check below, and
+ * findDuplicateVariantDescriptions (#370). Both group a base weapon page with its variant subpages
+ * the same way — by the wiki path's first two segments — so one grouping function serves both
+ * rather than each keeping its own copy.
+ */
+function wikiFamilyGroupKey(wikiPath) {
   const parts = String(wikiPath ?? "").split("/");
   return parts.length > 2 ? parts.slice(0, 2).join("/") : (wikiPath ?? null);
 }
@@ -1224,7 +1242,7 @@ function ammoSiblingGroupKey(wikiPath) {
 export function findAmmoSiblingPriceDisagreements(entries) {
   const groups = new Map();
   for (const entry of entries) {
-    const key = ammoSiblingGroupKey(entry.wikiPath);
+    const key = wikiFamilyGroupKey(entry.wikiPath);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(entry);
   }
@@ -1252,6 +1270,56 @@ export function findAmmoSiblingPriceDisagreements(entries) {
         if (observations.length < 2) continue;
         const distinct = new Set(observations.map((o) => `${o.price}|${o.scarce}`));
         if (distinct.size > 1) flagged.push({ group: key, roundId, observations });
+      }
+    }
+  }
+  return flagged;
+}
+
+/**
+ * Flags a variant subpage whose description is byte-identical to its own base weapon's — #370
+ * (finding S5-F8): `marathon` and `marathon-swift` carried the same prose while their committed
+ * stats disagree (ReloadSpeed 19.2 vs 10, cost 68 vs 95), and it was the only byte-identical
+ * description pair in the whole file. Reported, not thrown: 34 of 35 multi-row weapon families
+ * already give every member distinct prose, so a hard failure would block a legitimate future case
+ * (a variant that genuinely reuses its base's description) for no benefit. This mirrors REQ "The
+ * Scrape Observes and Does Not Decide" in spirit — surfaced for review, never resolved by the
+ * scrape itself, and never used to invent or alter prose.
+ *
+ * Grouped the same way findAmmoSiblingPriceDisagreements groups siblings — by `wikiFamilyGroupKey`,
+ * the wiki path's first two segments — so a family is every page nested under one base weapon page.
+ * Only a variant is ever compared, and only against its OWN base (never a variant against a
+ * sibling variant, and never a lone base with no variants against anything): a base with no members
+ * to compare, or a family missing its base entry (e.g. a partial `--only`/`--limit` run that
+ * happened not to visit the base page), is skipped rather than guessed at.
+ *
+ * `entries` is `{ id, item, url, wikiPath, description }` for every weapon this run scraped —
+ * broader than `ammoEntries` (which only covers weapons with an Ammo Types section), because a
+ * description-only variant still needs this check.
+ */
+export function findDuplicateVariantDescriptions(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = wikiFamilyGroupKey(entry.wikiPath);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+
+  const flagged = [];
+  for (const [key, members] of groups) {
+    if (members.length < 2) continue;
+    const base = members.find((m) => wikiFamilyGroupKey(m.wikiPath) === m.wikiPath);
+    if (!base || base.description === null || base.description === undefined) continue;
+    for (const variant of members) {
+      if (variant === base) continue;
+      if (variant.description != null && variant.description === base.description) {
+        flagged.push({
+          group: key,
+          baseId: base.id,
+          variantId: variant.id,
+          description: variant.description,
+          url: variant.url,
+        });
       }
     }
   }
@@ -2128,6 +2196,10 @@ export async function runStatsScrape(options, deps) {
   // local to this run rather than persisted, matching SPEC-0007's Open Question 3 posture that the
   // dataset should not grow a second shape just to carry a review-only signal.
   const ammoEntries = [];
+  // Same posture as ammoEntries, for findDuplicateVariantDescriptions (#370): the wiki path used for
+  // family grouping is not persisted to itemStats.json, so it is kept local to this run. Broader
+  // than ammoEntries — every weapon, not just ones with an Ammo Types section.
+  const descriptionEntries = [];
 
   for (const target of items) {
     try {
@@ -2149,6 +2221,15 @@ export async function runStatsScrape(options, deps) {
             categories: result.categories,
             ammoType: result.fields?.AmmoType ?? null,
             ammo: record.ammo,
+          });
+        }
+        if (target.category === "weapons") {
+          descriptionEntries.push({
+            id: result.id,
+            item: target.name,
+            url: result.url,
+            wikiPath: target.wikiPath,
+            description: record.description,
           });
         }
       }
@@ -2290,6 +2371,9 @@ export async function runStatsScrape(options, deps) {
   // `records`.
   const ammoCategoryDisagreements = findAmmoCategoryDisagreements(ammoEntries);
   const ammoSiblingPriceDisagreements = findAmmoSiblingPriceDisagreements(ammoEntries);
+  // #370: a variant subpage whose description is byte-identical to its base's. Reported, not
+  // fatal — see findDuplicateVariantDescriptions for why.
+  const duplicateVariantDescriptions = findDuplicateVariantDescriptions(descriptionEntries);
 
   log({
     level: "info",
@@ -2308,6 +2392,9 @@ export async function runStatsScrape(options, deps) {
     ...(ammoSiblingPriceDisagreements.length
       ? { ammoSiblingPriceDisagreements: ammoSiblingPriceDisagreements.length }
       : {}),
+    ...(duplicateVariantDescriptions.length
+      ? { duplicateVariantDescriptions: duplicateVariantDescriptions.length }
+      : {}),
     ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
@@ -2316,6 +2403,7 @@ export async function runStatsScrape(options, deps) {
   summary.dualWieldUnresolved = dualWieldUnresolved;
   summary.ammoCategoryDisagreements = ammoCategoryDisagreements;
   summary.ammoSiblingPriceDisagreements = ammoSiblingPriceDisagreements;
+  summary.duplicateVariantDescriptions = duplicateVariantDescriptions;
   summary.datasetPath = written;
   summary.droppedIds = dropped;
   summary.catalogPlan = catalogPlan;
@@ -2402,6 +2490,17 @@ export function formatSummary(summary) {
       for (const o of d.observations) {
         lines.push(`      ${o.id} ("${o.item}") — price ${JSON.stringify(o.price)}, scarce ${o.scarce} — ${o.url}`);
       }
+    }
+  }
+  // #370: a variant's description exactly repeats its base's — either a genuine wiki content gap
+  // or a scrape fallback bug, flagged either way for a human to check the live pages.
+  if (summary.duplicateVariantDescriptions?.length > 0) {
+    lines.push(
+      `  ${summary.duplicateVariantDescriptions.length} DUPLICATE VARIANT DESCRIPTION(S) — a variant ` +
+        `subpage's description is byte-identical to its base weapon's:`
+    );
+    for (const d of summary.duplicateVariantDescriptions) {
+      lines.push(`    ${d.variantId} (base: ${d.baseId}, family: ${d.group}) — ${d.url}`);
     }
   }
   if (summary.droppedIds?.length > 0) {

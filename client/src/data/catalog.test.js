@@ -231,7 +231,28 @@ describe("catalog id uniqueness and slug style", () => {
   });
 });
 
-describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", () => {
+// Governing: issue #379 (finding S2-F9, P3, CONFIRMED — docs/audits/adversarial-data-qa-2026-08-14.md,
+// § "P3 — unverifiable / rot risk"). Related: #36, #37, #40, #377.
+//
+// This block used to be titled "data accuracy (verified against huntshowdown.wiki.gg, Update
+// 2.8.1)". That overclaimed provenance: the assertions below are literal tuples copied once from
+// catalog.js, with no URL, no revision, and no read through `statFieldFor` off the scraped dataset
+// backing them. What they actually are is a REGRESSION PIN on hand-authored values corrected in
+// #36/#37/#40 — useful for catching a silent drift back to the old, wrong data (see the audit
+// finding above), but not a live check against the wiki. Contrast the "the TRAIT_GROUPS taxonomy
+// rationale" describe block further down in this file, which re-derives its claims through
+// `statFieldFor` off the generated itemStats.json and so is entitled to say "verified".
+//
+// Do not delete this block on the strength of that distinction — as a change detector it's still
+// doing real work. The fix for #379 was the title, not the assertions.
+//
+// Provenance note, current as of #379 (verify before trusting, don't just copy this forward): the
+// "adds the missing consumables and Weak-shot variants (#37)" test below is still the only
+// assertion anywhere in this repo pinning consumable `type` (CONS[i][3]) against the wiki — #377
+// (open, unmerged as of #379) tracks that gap. The equivalent claim for weapon `ammoClass` does
+// NOT hold: loadoutCodec.test.js independently pins `WEAPONS[FRONTIER][4]` (compact) and
+// `WEAPONS[KATANA_WEAPON][4]` (none) outside this block.
+describe("hand-authored data regression pins (corrected per #36/#37/#40; not live-verified against the wiki — see #379)", () => {
   it("reflects the Update 2.8 trait UP-cost rebalance", () => {
     expect(entry(TRAITS, "Frontiersman")[2]).toBe(6);
     expect(entry(TRAITS, "Quartermaster")[2]).toBe(8);
