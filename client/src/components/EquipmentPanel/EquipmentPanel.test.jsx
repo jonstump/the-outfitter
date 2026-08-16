@@ -442,7 +442,7 @@ describe("touch drag contract", () => {
     // focusable grip would be a tab stop that does nothing on Enter.
     expect(handle).not.toHaveAttribute("tabindex");
     expect(handle.tagName).toBe("SPAN");
-    // SPEC-0006 § Icon-Only Controls: "The drag handle, the remove target, and any
+    // SPEC-0006 § Icon-Only Controls: "The drag handle, the remove control, and any
     // control that renders as an icon or a bare glyph SHALL carry an `aria-label`
     // naming its purpose and the item it acts on."
     //

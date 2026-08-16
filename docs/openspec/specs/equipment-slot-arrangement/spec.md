@@ -605,7 +605,7 @@ The position a cell exposes SHALL be its index in the eight-cell set — "cell 3
 
 ### Icon-Only Controls
 
-The drag handle, the remove target, and any control that renders as an icon or a bare glyph SHALL carry an `aria-label` naming its purpose and the item it acts on. A held cell of a stack SHALL carry an accessible name identifying which stack holds it, not merely that it is occupied.
+The drag handle, the remove control, and any control that renders as an icon or a bare glyph SHALL carry an `aria-label` naming its purpose and the item it acts on. A held cell of a stack SHALL carry an accessible name identifying which stack holds it, not merely that it is occupied.
 
 ### Dynamic Content Regions
 
