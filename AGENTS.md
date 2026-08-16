@@ -89,31 +89,35 @@ Style/rules that matter a great deal:
 - **Items are referenced by stable slug `id`, never by array position.** The wire format
   (`utils/loadoutCodec.js`), localStorage, saved loadout records, and share URLs all key on
   `id`. Reordering/inserting/removing entries is safe **only** because ids are stable.
-- **`AMMO` now carries a stable id too (issue #340), and is no longer the exception to the rule
-  above — every category in this file, `AMMO` included, is addressed by id.** What has NOT
-  changed yet is the *wire format itself*: `utils/loadoutCodec.js` still stores and reads a saved
-  ammo selection as a **bare index into `AMMO[ammoClass]`**, not by the new id, so inserting,
-  removing, or reordering a variant inside a pool still silently re-points every saved selection
-  in that class today, and **nothing errors** — the cost line just changes. Appending to the END
-  of a pool, or populating a pool that was previously empty, is still the one safe structural
-  edit; anything else still needs a `FORMAT_VERSION` bump + saved-selection migration, on the same
-  terms as changing a weapon's `ammoClass`. Wiring the decoder to resolve a selection by id — the
-  change that actually retires this hazard — is tracked separately (issue #343); until it lands,
-  edit `AMMO` with the same caution this file has always asked for. The full detail (and the
-  reasoning for why ids alone don't yet close the gap) is spelled out in a WIRE-FORMAT GATE
-  comment at the top of `catalog.js` — read it before editing any pool.
-- The `AMMO` pool table in `catalog.js` is **never written by a scrape** (wiki has no per-pool
-  source page) — that stays true. Per-weapon ammo compatibility, price and slot data is a
-  different story: it comes from a scrape as of issue #341, read from each weapon page's own
-  `== Ammo Types ==` section into `client/src/data/itemStats.json`, never into `AMMO` itself.
+- **`AMMO` is now a plain display-grouping fallback with no rules authority at all — the
+  historical foot-gun this section used to warn about is retired, not merely reduced.** As of
+  issue #344, no code path that decides ammo compatibility, price, or slot count reads
+  `AMMO[ammoClass]` — those all come from each weapon's own scraped `ammo` record in
+  `client/src/data/itemStats.json` (`ammoSlotsFor`/`ammoRoundFor` in `client/src/data/itemStats.js`),
+  never from the shared class pool. And as of issue #345, the wire format itself stores an
+  ammo selection as a **stable id string**, not a positional index — see "The loadout wire
+  format" below. Inserting, removing, or reordering a row inside `AMMO` today changes nothing
+  about what any weapon can equip, what it costs, or what a saved loadout decodes to. The
+  WIRE-FORMAT GATE comment at the top of `catalog.js` describing the old bare-index hazard is
+  now historical background, not a live caution — it predates #344/#345 and should be read as
+  "why the model changed," not as an editing constraint.
+- Per-weapon ammo compatibility, price, and slot data comes from a scrape (issue #341), read
+  from each weapon page's own `== Ammo Types ==` section into `client/src/data/itemStats.json`,
+  never into `AMMO`. The `AMMO` pool table in `catalog.js` itself is still **never written by a
+  scrape** (wiki has no per-pool source page) and remains hand-authored — that part stays true.
 
 ## The loadout wire format (`client/src/utils/loadoutCodec.js`)
 
-- `FORMAT_VERSION = 3` (ADR-0023). Bump it when `toData()`'s shape changes so `fromData()` can
-  migrate old encodings instead of misreading them. A version-3 weapon entry is
-  `[weaponId, ammoIndex, d]` — the third element is the dual-wield pair flag, always a
-  boolean on the wire. Decoders are selected by declared version; v2/v1/legacy records still
-  decode with no pair flag at all (they could not express one).
+- `FORMAT_VERSION = 4` (ADR-0014, SPEC-0010, issue #345). Bump it when `toData()`'s shape
+  changes so `fromData()` can migrate old encodings instead of misreading them. A version-4
+  weapon entry is `[weaponId, [ammoId0, ammoId1], d]` — the ammo element is a two-slot array
+  of stable ids (each an id string or `null` for an explicitly empty slot), and the third
+  element is the dual-wield pair flag, always a boolean on the wire. Versions 1–3 stored ammo
+  as a **bare index into `AMMO[ammoClass]`** instead — `[weaponId, ammoIndex, d]` at v3, two
+  elements (no pair flag) at v1/v2 — and still decode via a frozen index-to-id snapshot
+  (`client/src/data/ammoIds.js`, issue #339), never the live `AMMO` table. Decoders are
+  selected by declared version; v2/v1/legacy records still decode with no pair flag at all
+  (they could not express one).
 - Equipment is a **fixed eight-cell sparse grid**: `e` is a length-8 array where **index IS the
   cell and `null` IS an empty cell**; `b` is an array of blocked cell indices. This is
   ADR-0009. A removal empties only that cell — never a packed `splice`.
@@ -124,9 +128,11 @@ Style/rules that matter a great deal:
   (`weaponSize` in `utils/calc.js`) and doubles only the weapon's price in `totalCost`.
 - **Decoders clamp rather than throw.** The store's localStorage `subscribe` persists a decoded
   loadout *before* it is rendered, so a decoder that refused would write the very record it
-  rejects and then fail on it on every visit. Bounds like the ammo-variant index and the
-  15-trait cap are applied in the decoder (`boundedAmmo`, `boundedTraits`) so nothing bad can
-  persist.
+  rejects and then fail on it on every visit. The pre-v4 ammo index and the 15-trait cap are
+  applied in the decoder (`boundedAmmo`, `boundedTraits`) so nothing bad can persist; a v4
+  ammo id that no longer names a real round isn't bounded at decode time at all (there's no
+  index to clamp) — it degrades where it's actually consumed, via `ammoRoundFor` returning
+  null.
 - Loadout shape invariants (fixed capacities) are also validated by `loadoutSlice.js`
   (`isValidLoadoutShape`) and all cost/capacity predicates live once in `utils/calc.js`
   (`TRAIT_MAX = 15`, `capMax`, `consAllowed`, `hasFreeCell`, `heldItems`, `weaponSize`) — **import
