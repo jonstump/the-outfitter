@@ -50,8 +50,15 @@ export function loadSavedThunk(record) {
     // carry the record's id as `savedId` so a subsequent save addresses this record
     // instead of matching on the name triple. `fromData` decodes the wire payload and
     // knows nothing about record ids; the id is attached alongside its result.
-    dispatch(loadoutActions.setLoadout({ ...fromData(record.data), savedId: record.id }));
-    dispatch(uiActions.setMessage(`Loaded “${record.name}”.`));
+    const decoded = fromData(record.data);
+    dispatch(loadoutActions.setLoadout({ ...decoded, savedId: record.id }));
+    // Governing: issue #359. Surface a notice when decode dropped an ammo selection
+    // that was valid when the record was saved but no longer resolves.
+    if (decoded.decodeNotices?.some((n) => n.kind === "ammo-dropped")) {
+      dispatch(uiActions.setMessage(`Loaded “${record.name}”. This build's ammo selection is no longer available.`));
+    } else {
+      dispatch(uiActions.setMessage(`Loaded “${record.name}”.`));
+    }
   };
 }
 

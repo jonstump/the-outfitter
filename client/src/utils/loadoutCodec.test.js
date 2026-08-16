@@ -1311,3 +1311,51 @@ describe("issue #360 — unknown versions do not route through the legacy decode
     expect(readStoredLoadout()).toBeNull();
   });
 });
+
+// Governing: issue #359. `boundedAmmo` correctly returns -1 for weapons whose pool shrank
+// (dolch-96, nitro-express moved to the empty `special` pool), but nothing told the player
+// their saved ammo choice vanished and the cost silently dropped. The decoder now attaches
+// a `decodeNotices` array to the result so the UI can surface a one-time notice.
+describe("issue #359 — ammo-drop notice when decode drops a saved selection", () => {
+  const DOLCH = WEAPONS.findIndex((w) => w[0] === "dolch-96");
+  const NITRO = WEAPONS.findIndex((w) => w[0] === "nitro-express");
+  const NAGANT = WEAPONS.findIndex((w) => w[0] === "nagant-m1895");
+
+  it("a record naming dolch-96 with ammo index 2 decodes with the ammo dropped and a notice", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", 2], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1, d: false });
+    expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
+  });
+
+  it("a record naming nitro-express with ammo index 0 decodes with the ammo dropped and a notice", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["nitro-express", 0], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: NITRO, a: -1, d: false });
+    expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
+  });
+
+  it("a record naming dolch-96 with ammo index -1 decodes silently — no notice", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", -1], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1, d: false });
+    expect(dec.decodeNotices).toEqual([]);
+  });
+
+  it("a weapon on a non-empty pool with a valid index does not raise a notice", () => {
+    // Nagant M1895 draws from `compact` (5 variants). Index 1 is valid, so no notice.
+    const dec = fromData({ v: FORMAT_VERSION, w: [["nagant-m1895", 1], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: 1, d: false });
+    expect(dec.decodeNotices).toEqual([]);
+  });
+
+  it("a legacy record naming dolch-96 with ammo index 2 also raises the notice", () => {
+    // Legacy records carry positional indices, but the post-pass compares the raw entry's
+    // ammo index against the decoded value, so legacy drops are detected too.
+    const dolchLegacy = LEGACY_WEAPON_IDS.indexOf("dolch-96");
+    const dec = fromData({ w: [[dolchLegacy, 2], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1 });
+    expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
+  });
+
+  it("an empty loadout has no decodeNotices", () => {
+    expect(emptyLoadout().decodeNotices).toEqual([]);
+  });
+});
