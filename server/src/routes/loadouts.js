@@ -44,6 +44,18 @@ const isRef = (v, bound) => (isNonnegInt(v) && v < bound) || isId(v);
 const isIsland = (v, bound) => Array.isArray(v) && v.length === 2 && isRef(v[0], bound) && Number.isInteger(v[1]);
 const isIslandV3 = (v, bound) =>
   Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && Number.isInteger(v[1]) && typeof v[2] === "boolean";
+// Governing: SPEC-0009 (established the exact-count + isIslandV3 pattern this extends),
+// SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape", issue #342.
+//
+// Version 4 keeps v3's exact three-element count and its boolean pair flag unchanged; the
+// only thing that changes is the ammo element's TYPE. Versions 1-3 carry ammo as a catalog
+// index (`Number.isInteger`); version 4 carries it as a stable id string in the
+// `ammo-{class}-{name}` slug convention #339/#340 already established on the catalog. `isId`
+// is the same bounded-identifier check `isRef` already uses for every other string
+// reference, reused rather than reinvented so the length/character-set bound stays in one
+// place. The weapon ref (element 0) and the pair flag (element 2) are untouched from v3.
+const isIslandV4 = (v, bound) =>
+  Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && isId(v[1]) && typeof v[2] === "boolean";
 
 // Governing: issue #198.
 //
@@ -124,7 +136,13 @@ function isValidData(data) {
   // Exactly two entries per tuple, not "at least". A floor with no ceiling accepted a slot
   // carrying any amount of trailing junk, which was then stored — the same unbounded-growth
   // hole as an unknown key, wearing the shape of a field the format does define.
-  const weaponValid = (slot) => slot === null || (data.v === 3 ? isIslandV3(slot, WIRE_CATEGORIES.w) : isIsland(slot, WIRE_CATEGORIES.w));
+  const weaponValid = (slot) =>
+    slot === null ||
+    (data.v === 4
+      ? isIslandV4(slot, WIRE_CATEGORIES.w)
+      : data.v === 3
+        ? isIslandV3(slot, WIRE_CATEGORIES.w)
+        : isIsland(slot, WIRE_CATEGORIES.w));
   if (!data.w.every(weaponValid)) return reject("w");
   if (!Array.isArray(data.e)) return reject("e");
   if (isV2OrLater) {
