@@ -61,8 +61,11 @@ function attempt({ blockedArray, upBudgetOn, upBudget }) {
   const rem = cap - weaponSize({ i: i1, d: false });
   const w2c = WEAPONS.map((w, i) => i).filter((i) => weaponSize({ i, d: false }) <= rem);
   const i2 = w2c.length ? w2c[Math.floor(Math.random() * w2c.length)] : null;
+  // Governing: issue #384 (mirrors the AMMO-lookup guard in calc.js:152)
   const mkAmmo = (i) =>
-    Math.random() < 0.3 && AMMO[WEAPONS[i][4]].length ? Math.floor(Math.random() * AMMO[WEAPONS[i][4]].length) : -1;
+    Math.random() < 0.3 && (AMMO[WEAPONS[i][4]] || []).length
+      ? Math.floor(Math.random() * (AMMO[WEAPONS[i][4]] || []).length)
+      : -1;
   const weapons = [{ i: i1, a: mkAmmo(i1), d: false }, i2 === null ? null : { i: i2, a: mkAmmo(i2), d: false }];
 
   // Starter tool resolved by stable catalog id so a future reorder of TOOLS
