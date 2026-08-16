@@ -255,7 +255,8 @@ export const WEAPONS = [
   //
   // Known one-time cost of this correction (PR #116 review): a weapon's selected ammo is
   // persisted as a bare INDEX into AMMO[ammoClass] (loadoutCodec.js `w.a`, read back by
-  // calc.js's `AMMO[WEAPONS[w.i][4]][w.a][1]`), not as an ammo id. AMMO.medium and AMMO.compact
+  // calc.js's `AMMO[WEAPONS[w.i][4]][w.a][2]` — cost moved from [1] to [2] when #340 gave
+  // every row a stable id at [0]), not as an ammo id. AMMO.medium and AMMO.compact
   // are both length 5, so no bounds check trips — an already-saved loadout with this weapon and
   // an ammo variant selected silently re-resolves to the same index in the other pool. Index 1
   // is the worst case: Spitzer ($60) becomes High Velocity ($13). Accepted rather than migrated,
