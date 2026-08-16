@@ -178,10 +178,16 @@ describe("wire-format round-trips (v2, v1, pre-versioning, malformed)", () => {
 // no hash. Bounding it at decode is what stops it being persisted at all.
 //
 // Asserted against BOTH decoders. The v1 decoder had no bound whatsoever; the legacy one
-// had a fixed `inRange(w[1], 5)`, which is not the same rule — `special` (Dolch 96, Nitro
-// Express) has no purchasable variants at all, so 5 still admitted a crashing value there.
+// had a fixed `inRange(w[1], 5)`, which is not the same rule — `none` (melee weapons) has
+// no purchasable variants at all, so 5 still admitted a crashing value there.
+//
+// Governing: issue #340. This block used to draw its "zero variants" weapon from `special`
+// (Dolch 96) — true before #340, when `AMMO.special` was empty. #340 populated `special` with
+// nine rows (Bomb Launcher/Chu Ko Nu's real prices, Dolch/Nitro's Scarce rounds at 0; see the
+// block comment above AMMO.special in catalog.js), so a `special`-class weapon no longer has
+// zero variants. `none` (melee) is the pool that is still, and remains, genuinely empty.
 describe("out-of-range ammo indices decode to no variant selected", () => {
-  const DOLCH = WEAPONS.findIndex((t) => t[0] === "dolch-96"); // `special` pool: zero variants
+  const MELEE = WEAPONS.findIndex((t) => t[0] === "cavalry-saber"); // `none` pool: zero variants
   // Frontier 73C, after #243 retired its duplicate. Any five-variant `compact` weapon serves here;
   // what the test needs is a pool with enough variants that index 2 is legitimately in range.
   const WINFIELD = WEAPONS.findIndex((t) => t[0] === "frontier-73c"); // `compact`: five
@@ -200,21 +206,21 @@ describe("out-of-range ammo indices decode to no variant selected", () => {
 
   it("v1 rejects any variant on a weapon whose pool is empty", () => {
     // The case a fixed bound of 5 would have let through.
-    expect(v1(DOLCH, 2).weapons[0]).toEqual({ i: DOLCH, a: -1, d: false });
+    expect(v1(MELEE, 2).weapons[0]).toEqual({ i: MELEE, a: -1, d: false });
   });
 
   it("legacy rejects a variant on a weapon whose pool is empty", () => {
-    const dec = fromData({ w: [[LEGACY_WEAPON_IDS.indexOf("dolch-96"), 2], null], e: [], tr: [] });
+    const dec = fromData({ w: [[LEGACY_WEAPON_IDS.indexOf("cavalry-saber"), 2], null], e: [], tr: [] });
     // Legacy is unversioned and lands in the legacy decoder, which leaves `d` absent.
-    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1 });
+    expect(dec.weapons[0]).toEqual({ i: MELEE, a: -1 });
   });
 
   it("never persists a decoded loadout that a re-encode would reintroduce the fault through", () => {
     // The round trip is the mechanism that made this permanent: whatever fromData returns is
     // what toData writes to localStorage. If the bound held on decode but not through the
     // re-encode, the next read would poison the store again.
-    const decoded = v1(DOLCH, 9999);
-    expect(fromData(toData(decoded)).weapons[0]).toEqual({ i: DOLCH, a: -1, d: false });
+    const decoded = v1(MELEE, 9999);
+    expect(fromData(toData(decoded)).weapons[0]).toEqual({ i: MELEE, a: -1, d: false });
   });
 });
 
@@ -1082,8 +1088,9 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
     for (const i of [0, 2, 3, 4]) {
       const dec = fromData({ w: [[0, -1], [20, i]], e: [], tr: [], n: "", b: 0 });
       expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: i });
-      // The round name survives because the index is the same in both pools.
-      expect(AMMO[WEAPONS[FRONTIER][4]][i][0]).toBe(MEDIUM[i][0]);
+      // The round name survives because the index is the same in both pools. [1] is name (issue
+      // #340 added a stable id at [0], shifting name from [0] to [1]).
+      expect(AMMO[WEAPONS[FRONTIER][4]][i][1]).toBe(MEDIUM[i][1]);
     }
   });
 
@@ -1100,7 +1107,7 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
       b: [],
     });
     expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: 1 });
-    expect(AMMO.compact[1][0]).toBe("High Velocity");
+    expect(AMMO.compact[1][1]).toBe("High Velocity"); // [1] is name — see the #340 note above
   });
 
   it("the remap is a no-op for a weapon other than frontier-73c", () => {
@@ -1108,7 +1115,7 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
     // decodes to High Velocity — the Nagant's pool is `compact` and was never `medium`.
     const dec = fromData({ w: [[0, 1], null], e: [], tr: [], n: "", b: 0 });
     expect(dec.weapons[0]).toEqual({ i: 0, a: 1 });
-    expect(AMMO[WEAPONS[0][4]][1][0]).toBe("High Velocity");
+    expect(AMMO[WEAPONS[0][4]][1][1]).toBe("High Velocity"); // [1] is name — see the #340 note above
   });
 });
 
@@ -1365,23 +1372,33 @@ describe("issue #360 — unknown versions do not route through the legacy decode
   });
 });
 
-// Governing: issue #359. `boundedAmmo` correctly returns -1 for weapons whose pool shrank
-// (dolch-96, nitro-express moved to the empty `special` pool), but nothing told the player
-// their saved ammo choice vanished and the cost silently dropped. The decoder now attaches
-// a `decodeNotices` array to the result so the UI can surface a one-time notice.
+// Governing: issue #359 (updated for issue #340). `boundedAmmo` correctly returns -1 for a weapon
+// whose ammo index no longer resolves, but nothing told the player their saved ammo choice
+// vanished and the cost silently dropped. The decoder now attaches a `decodeNotices` array to the
+// result so the UI can surface a one-time notice.
+//
+// This block originally demonstrated the drop with dolch-96/nitro-express at small indices,
+// because both drew from `special`, which was empty at the time — any index was a drop. #340
+// populated `special` with nine rows (see the block comment above AMMO.special in catalog.js), so
+// dolch-96/nitro-express at a SMALL index (0, 2) now legitimately resolve to a real row instead of
+// dropping — the shared-pool limitation the catalog.js comment already flags (these two weapons
+// don't really offer Bomb Launcher's or Chu Ko Nu's rounds, but the class pool doesn't know that
+// yet). The drop scenario this describe block exists to cover is still real and still needs
+// covering; it now needs an index PAST the end of the pool (9999) to demonstrate it, same as the
+// out-of-range-index describe block above already does for a different weapon.
 describe("issue #359 — ammo-drop notice when decode drops a saved selection", () => {
   const DOLCH = WEAPONS.findIndex((w) => w[0] === "dolch-96");
   const NITRO = WEAPONS.findIndex((w) => w[0] === "nitro-express");
   const NAGANT = WEAPONS.findIndex((w) => w[0] === "nagant-m1895");
 
-  it("a record naming dolch-96 with ammo index 2 decodes with the ammo dropped and a notice", () => {
-    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", 2], null], e: [], tr: [], n: "", b: 0 });
+  it("a record naming dolch-96 with an out-of-range ammo index decodes with the ammo dropped and a notice", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", 9999], null], e: [], tr: [], n: "", b: 0 });
     expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1, d: false });
     expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
   });
 
-  it("a record naming nitro-express with ammo index 0 decodes with the ammo dropped and a notice", () => {
-    const dec = fromData({ v: FORMAT_VERSION, w: [["nitro-express", 0], null], e: [], tr: [], n: "", b: 0 });
+  it("a record naming nitro-express with an out-of-range ammo index decodes with the ammo dropped and a notice", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["nitro-express", 9999], null], e: [], tr: [], n: "", b: 0 });
     expect(dec.weapons[0]).toEqual({ i: NITRO, a: -1, d: false });
     expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
   });
@@ -1399,11 +1416,20 @@ describe("issue #359 — ammo-drop notice when decode drops a saved selection", 
     expect(dec.decodeNotices).toEqual([]);
   });
 
-  it("a legacy record naming dolch-96 with ammo index 2 also raises the notice", () => {
+  // Dolch 96 at index 2 is now #340's own regression guard rather than a drop case: `special`
+  // gained a row at that index (Steel Ball), so a saved selection there survives — the direct
+  // opposite of what this test asserted before #340, and worth pinning both ways.
+  it("a record naming dolch-96 with ammo index 2 now resolves — the shared special pool has a row there since #340", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", 2], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: 2, d: false });
+    expect(dec.decodeNotices).toEqual([]);
+  });
+
+  it("a legacy record naming dolch-96 with an out-of-range ammo index also raises the notice", () => {
     // Legacy records carry positional indices, but the post-pass compares the raw entry's
     // ammo index against the decoded value, so legacy drops are detected too.
     const dolchLegacy = LEGACY_WEAPON_IDS.indexOf("dolch-96");
-    const dec = fromData({ w: [[dolchLegacy, 2], null], e: [], tr: [], n: "", b: 0 });
+    const dec = fromData({ w: [[dolchLegacy, 9999], null], e: [], tr: [], n: "", b: 0 });
     expect(dec.weapons[0]).toEqual({ i: DOLCH, a: -1 });
     expect(dec.decodeNotices).toContainEqual({ kind: "ammo-dropped", slot: 0 });
   });

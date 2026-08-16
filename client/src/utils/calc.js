@@ -219,7 +219,9 @@ export function totalCost(loadout) {
     // costing nothing. Cost is a pure function of a loadout the user can also have built
     // in-session; it should not be the thing that decides a build is unrenderable.
     const variant = w.a >= 0 ? (AMMO[WEAPONS[w.i][4]] || [])[w.a] : null;
-    if (variant) t += variant[1];
+    // variant[2] is cost — issue #340 gave every AMMO row a stable id at variant[0] (matching
+    // every other catalog category), shifting name to [1] and cost to [2].
+    if (variant) t += variant[2];
   });
   loadout.equip.forEach((e) => {
     if (!e) return; // empty cell — ADR-0009 holes are not items

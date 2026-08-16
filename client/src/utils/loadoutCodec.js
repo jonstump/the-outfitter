@@ -452,13 +452,19 @@ function resolveLegacyEquip(t, index) {
 // The remap is a no-op for any weapon other than `frontier-73c`, and for any index that
 // is out of range (boundedAmmo below still clamps the final value).
 const FRONTIER_73C_LEGACY_AMMO_CLASS = "medium";
+// Mechanical fix, not a decode-logic change (issue #340): AMMO rows gained a stable `id` at
+// position 0, shifting round NAME from [0] to [1] (cost moved to [2]) — see the AMMO tuple shape
+// note in catalog.js's header. This function's name-based matching has to read the new position or
+// every match silently fails (comparing one pool's id string against another pool's, which can
+// never be equal), which is exactly the "unavoidable case" #340's scope note asks to flag: what
+// index a legacy selection resolves to is unchanged, only where the name lives within the tuple.
 function remapFrontierAmmo(weaponIndex, legacyAmmoIndex) {
   if (WEAPONS[weaponIndex][0] !== "frontier-73c") return legacyAmmoIndex;
   const legacyPool = AMMO[FRONTIER_73C_LEGACY_AMMO_CLASS] || [];
   if (!inRange(legacyAmmoIndex, legacyPool.length)) return legacyAmmoIndex;
-  const roundName = legacyPool[legacyAmmoIndex][0];
+  const roundName = legacyPool[legacyAmmoIndex][1];
   const currentPool = AMMO[WEAPONS[weaponIndex][4]] || [];
-  const currentIdx = currentPool.findIndex((v) => v[0] === roundName);
+  const currentIdx = currentPool.findIndex((v) => v[1] === roundName);
   return currentIdx >= 0 ? currentIdx : -1;
 }
 
