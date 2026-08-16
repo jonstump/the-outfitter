@@ -323,6 +323,12 @@ A v2 payload whose `e` is not exactly eight elements long SHALL be treated as ma
 >
 > The requirement is not renamed, because it is still the requirement that made cell position part of the format; v3 inherits that encoding rather than restating it. Reading these rules as v2-exactly is the specific mistake that broke saves from a v3 client (#329) — an equality check sent v3 down the v1 packed path, where a `null` grid hole and an array `b` both fail. `isValidData` gates on `data.v >= 2` for exactly this reason.
 
+> **Widened 2026-08-16 to cover version 4** *(per SPEC-0010, ADR-0014 and issue #348, which extend this spec rather than replace it — the wire-format version model stays owned here)*.
+>
+> `FORMAT_VERSION` is now `4`. Version 4 changes the **weapon entry's ammo element only**, from a single integer index to a two-element array of stable identifiers or `null` — see SPEC-0010 REQ "Wire Format Version 4 References Rounds by Stable Id". It changes nothing about `e` or `b`. Every rule this requirement states therefore holds unchanged at v4, and "version 2 or later" now reads as "version 2, 3 or 4" — the equipment grid and blocked array are identical across all three.
+>
+> This is the same shape SPEC-0009 left the requirement in at v3: the wire-format version model is widened again rather than replaced, and the requirement keeps its name for the reason stated there.
+
 #### Scenario: An encoded loadout round-trips its cell positions
 
 - **WHEN** a loadout with items in cells 1, 4, and 8 and cell 6 blocked is encoded and then decoded
@@ -350,6 +356,12 @@ Decoding SHALL be total: no input SHALL produce an equipment array that is not e
 > One clarification the added version forces. A v1 or legacy record's weapon entries carry no `d`, and lifting one SHALL supply the single — not a pair — because the record was written by a format in which the pair could not be expressed, and inventing one would change what the loadout costs. That the lift is *lossless* means it preserves what the record said; a v1 record said "one pistol", and it still does after the lift.
 >
 > "Migrate losslessly" continues to name the whole ladder rather than the single v1 step, which is why the requirement is not renamed.
+
+> **Widened 2026-08-16 to cover version 4** *(per SPEC-0010, ADR-0014 and issue #348)*.
+>
+> The decoder registry now holds **v4, v3, v2, v1 and the legacy fallback**. Nothing above is withdrawn: the v1-to-v2 lift is unchanged, the frozen legacy tables remain untouchable by this capability, a dropped item still leaves its neighbours where the record meant them to be, and decoding is still total.
+>
+> A v1, v2, v3 or legacy record's weapon entries carry ammo as a bare pool index, not a stable id — that is the shape `fromV4` does not read. Lifting one to current semantics goes through the frozen index-to-id table SPEC-0010 REQ "Every Legacy Ammo Selection Migrates to the Round It Named" commits alongside the decoder, not through `fromV4` itself; an index that cannot be resolved decodes to "no round chosen" rather than a different round. This is the ammo-side sibling of the pair-flag clarification above: what a record could not have expressed, the lift does not invent.
 
 #### Scenario: A v1 record decodes to the cells it used to render in
 
@@ -427,6 +439,12 @@ The client half of this capability MUST NOT be released before the validator acc
 >
 > The sequencing constraint above resolved the same way for v3 as for v2: the server's version-aware weapon check shipped in #329, before the client began emitting v3.
 
+> **Widened 2026-08-16: it is now four** *(per SPEC-0010, ADR-0014 and issue #348)*.
+>
+> The validator accepts **v1, v2, v3 and v4**, permanently and side by side — the "count that will move again at v4" clause above has now happened, and the requirement's name is unchanged for the same reason. What v4 adds is confined further than v3 was: the weapon entry's element count stays three, unchanged from v3, and only the `ammo` element's *type* narrows, from an integer to a two-entry array of bounded identifier strings or `null` (`isAmmoSlotArray`, `isIslandV4` in `server/src/routes/loadouts.js`). The equipment grid and blocked array are unaffected and stay on the `data.v >= 2` branch.
+>
+> `isIslandV4` was widened in place rather than superseded by a v5, because nothing had ever emitted the single-id v4 shape an earlier story first shipped — see SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape" for why that widening was safe.
+
 #### Scenario: A v3 payload is accepted
 
 - **WHEN** a save request carries `v: 3` with an eight-element `e`, a `b` array, and a weapon slot of `[ref, ammo, d]`
@@ -438,6 +456,18 @@ The client half of this capability MUST NOT be released before the validator acc
 - **THEN** the request SHALL be rejected with a 400 — the declared version selects the exact count, and a later version's shape SHALL NOT be accepted under an earlier one
 
 *(both scenarios added 2026-08-15 with the widening above)*
+
+#### Scenario: A v4 payload is accepted
+
+- **WHEN** a save request carries `v: 4` with an eight-element `e`, a `b` array, and a weapon slot of `[ref, [ammoId, ammoId], d]`
+- **THEN** the record SHALL be persisted and returned
+
+#### Scenario: A v4 weapon slot's ammo element rejects an integer
+
+- **WHEN** a save request declares `v: 4` but carries a weapon slot whose `ammo` element is an integer rather than a two-entry array
+- **THEN** the request SHALL be rejected with a 400 — the declared version selects the expected `ammo` shape, and an earlier version's shape SHALL NOT be accepted under a later one
+
+*(both scenarios added 2026-08-16 with the widening above)*
 
 #### Scenario: A v2 payload is accepted
 
