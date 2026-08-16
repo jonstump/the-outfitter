@@ -13,8 +13,6 @@ const selectLoadout = (state) => state.loadout;
 
 export const selectWeaponCount = createSelector([selectLoadout], (l) => l.weapons.filter(Boolean).length);
 
-export const selectSlotMax = createSelector([selectLoadout], (l) => 8 - (Array.isArray(l.blocked) ? l.blocked.length : 0));
-
 export const selectCapMax = createSelector([selectLoadout], capMax);
 
 export const selectCapUsed = createSelector([selectLoadout], capUsed);

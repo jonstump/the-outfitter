@@ -147,8 +147,14 @@ export function consAllowed(loadout, consIndex) {
   return consCategoryCount(loadout, consIndex) < CONS_CAP;
 }
 
+// Governing: ADR-0009, SPEC-0006, issue #363. Counts DISTINCT blocked cells, the same
+// way `hasFreeCell` does above — a duplicate index in `blocked` (e.g. `[0, 0]`) must
+// not cost a slot that isn't actually blocked. `boundedBlocked` (loadoutCodec.js)
+// already dedupes before any decoded loadout reaches here; the gap this closes is
+// `loadoutSlice`'s bulk-load reducer, which validates blocked cells are in-range but
+// never dedupes them, so a duplicate can still reach `slotMax`/`equipOverCapacity` live.
 export function slotMax(loadout) {
-  return 8 - (Array.isArray(loadout.blocked) ? loadout.blocked.length : 0);
+  return 8 - new Set(loadout.blocked || []).size;
 }
 
 /**
