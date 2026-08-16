@@ -129,7 +129,18 @@ export const WEAPONS = [
   // is the worst case: Spitzer ($60) becomes High Velocity ($13). Accepted rather than migrated,
   // because it needs a FORMAT_VERSION bump to fix properly and the affected set is loadouts that
   // both use this weapon and picked a non-default ammo. Changing ANY weapon's ammoClass has this
-  // shape — see ADR-0005's amendment, since the scraper is allowed to write ammoClass through.
+  // shape — see ADR-0005's amendment.
+  //
+  // scrape-stats.mjs sorts every catalog field into three tiers, not two (issue #372, correcting
+  // this comment's earlier claim that the scraper "is allowed to write ammoClass through" — it is
+  // not, today, by three independent barriers: planCatalogWrites' allow-list, a type barrier, and
+  // scrape-stats.test.mjs's assertion that the planned label set is exactly ["cost"]):
+  //   - Written now — CATALOG_FIELD_MAP: `cost`, `size`, `up`.
+  //   - Gated pending a FORMAT_VERSION bump and a saved-selection migration — GATED_CATALOG_FIELDS:
+  //     `ammoClass`, `name`.
+  //   - Never derived, in any category — NEVER_DERIVED: `group`, `type`, `AMMO`.
+  // `ammoClass` sits in the gated tier. The Frontier 73C incident above (issue #351) is exactly the
+  // failure GATED_CATALOG_FIELDS exists to prevent from happening again via an automated write.
   ["frontier-73c", "Frontier 73C", 3, 41, "compact", "Rifles"],
   ["bomb-lance", "Bomb Lance", 3, 199, "none", "Melee"],
   ["caldwell-rival-78", "Rival 78", 4, 170, "shotgun", "Shotguns"],
