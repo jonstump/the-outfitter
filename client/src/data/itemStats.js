@@ -56,6 +56,72 @@ export function dualWieldFor(id) {
 }
 
 /**
+ * The Scarce/Burn rarity classes evidenced for a catalog id, as a SET — never a scalar,
+ * because a trait can be both (Death Cheat, Rampage, Relentless and Remedy all carry
+ * `Type: "Burn,Scarce"` on the wiki).
+ *
+ * Governing: ADR-0018 (Surface Acquisition Class as Colour-plus-Text, and Disclose Burn
+ * Traits Rather Than Simulate Them), amended 2026-08-16 per #392's Confirmation #1 reader
+ * split. Issue #362.
+ *
+ * TRAIT rows read the scraped `acquisitionClasses` set directly — SPEC-0007 requires
+ * every trait record to carry it. NON-TRAIT rows (weapons, tools, consumables) never
+ * carry `acquisitionClasses`; that field is scoped to traits by specification, not
+ * omitted by accident, so their `scarce` evidence comes from `purchasable === false`
+ * instead — the strict scrape parser's own record that `priceStated`/`fields.Price` held
+ * the literal string `"Scarce"` rather than a number. This is the same fallback
+ * `itemStats.test.js`'s `evidencedUnpurchasable` helper already checks; this function
+ * makes it a reusable reader rather than a test-only helper.
+ *
+ * One function serves both row kinds without being told which kind it was called for:
+ * `acquisitionClasses` is always `[]` for a non-trait row, so the `purchasable` fallback
+ * can only ever ADD evidence, never contradict a trait's own set — and it does not
+ * misfire the other way either: Necromancer is `Burn`, costs 4, and carries
+ * `purchasable: true`, so `scarce` correctly stays false for it.
+ *
+ * Returns `{ scarce, burn }`, both `false` for an unknown id or an item with neither
+ * class (e.g. every Regular trait).
+ */
+export function rarityFor(id) {
+  const record = statsFor(id);
+  const classes = record?.acquisitionClasses ?? [];
+  return {
+    scarce: classes.includes("Scarce") || record?.purchasable === false,
+    burn: classes.includes("Burn"),
+  };
+}
+
+/**
+ * Short text for a rarity set, in the game's own vocabulary ("Scarce", "Burn"), or null
+ * for an item with neither class. This is the TEXT CHANNEL ADR-0018 requires — the
+ * badge/cost text a caller substitutes for a hand-authored `0` so it stops reading as an
+ * ordinary price. Joined rather than collapsed to one word when a trait is both, per
+ * `rarityFor`'s doc comment.
+ */
+export function rarityLabel(id) {
+  const { scarce, burn } = rarityFor(id);
+  const parts = [];
+  if (scarce) parts.push("Scarce");
+  if (burn) parts.push("Burn");
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/**
+ * The spur colours the game itself uses for rarity — blue for Scarce, red for Burn —
+ * the OPTIONAL visual half of ADR-0018's colour-plus-text treatment ("Never colour
+ * alone", the text channel above is load-bearing on its own). Both are measured against
+ * `--panel` (#1a1510), the picker row background, the same way `CONS_TYPE_COLOR` in
+ * catalog.js documents its own badge contrast: Scarce blue clears 5.81:1, and Burn reuses
+ * `--red-bright`'s hex value (4.95:1) directly, rather than inventing a second red the app
+ * doesn't already use elsewhere for a "notable/consumed" meaning. Both clear WCAG 2.1 SC
+ * 1.4.3 (4.5:1 for the small badge text they colour).
+ */
+export const RARITY_COLOR = {
+  scarce: "#7a93bd",
+  burn: "#c96b5b",
+};
+
+/**
  * The scraped description for a catalog id, or null.
  *
  * Governing: ADR-0005 (the "and Descriptions" half of its title), SPEC-0007 REQ "Generated,

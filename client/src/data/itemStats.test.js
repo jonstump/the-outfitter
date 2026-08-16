@@ -6,6 +6,8 @@ import {
   ammoSlotsFor,
   descriptionFor,
   dualWieldFor,
+  rarityFor,
+  rarityLabel,
   statFieldFor,
   statsFor,
 } from "./itemStats.js";
@@ -379,6 +381,83 @@ describe("a zero cost is evidenced as unpurchasable", () => {
     const scarceTraits = TRAITS.filter((t) => (statsFor(t[0])?.acquisitionClasses ?? []).includes("Scarce"));
     expect(scarceTraits.length).toBeGreaterThan(0);
     expect(scarceTraits.filter((t) => t[2] !== 0).map((t) => t[0])).toEqual([]);
+  });
+});
+
+// Governing: ADR-0018 (amended by #392), issue #362. Enumerates all twelve zero-cost rows by
+// name rather than sampling — the issue's own warning is that a reader keyed on
+// `acquisitionClasses` alone silently covers only 8 of the 12, so a sample could pass while the
+// four weapons stayed broken. Read directly off `itemStats.json` on 2026-08-16, matching
+// ADR-0018's own count (49 Regular/8 Scarce/5 Burn traits; the 4 Scarce weapons named in the
+// #392 amendment).
+describe("rarityFor / rarityLabel", () => {
+  const SCARCE_TRAITS = [
+    "berserker",
+    "catalyst",
+    "death-cheat",
+    "rampage",
+    "relentless",
+    "remedy",
+    "shadow",
+    "shadow-leap",
+  ];
+  const BURN_TRAITS = ["death-cheat", "necromancer", "rampage", "relentless", "remedy"];
+  const SCARCE_WEAPONS = ["flame-rifle", "homestead-78", "shredder", "wildland"];
+
+  it("has exactly eight Scarce traits in the dataset, matching ADR-0018's own count", () => {
+    const scarce = TRAITS.filter((t) => rarityFor(t[0]).scarce).map((t) => t[0]).sort();
+    expect(scarce).toEqual([...SCARCE_TRAITS].sort());
+  });
+
+  it("has exactly five Burn traits in the dataset, matching ADR-0018's own count", () => {
+    const burn = TRAITS.filter((t) => rarityFor(t[0]).burn).map((t) => t[0]).sort();
+    expect(burn).toEqual([...BURN_TRAITS].sort());
+  });
+
+  it("marks all eight Scarce traits scarce via acquisitionClasses", () => {
+    for (const id of SCARCE_TRAITS) {
+      expect(rarityFor(id).scarce, id).toBe(true);
+    }
+  });
+
+  it("marks all four Scarce weapons scarce via purchasable, though none carry acquisitionClasses", () => {
+    // The case #392 exists for: these four have NO acquisitionClasses to read (the field is
+    // trait-only by spec), so a reader that only checks acquisitionClasses silently misses them.
+    for (const id of SCARCE_WEAPONS) {
+      expect(statsFor(id)?.acquisitionClasses ?? [], id).toEqual([]);
+      expect(rarityFor(id).scarce, id).toBe(true);
+    }
+  });
+
+  it("never marks Necromancer scarce, even though it is Burn — Burn does not imply free", () => {
+    expect(rarityFor("necromancer")).toEqual({ scarce: false, burn: true });
+  });
+
+  it("marks a Regular trait as neither scarce nor burn", () => {
+    expect(rarityFor("quartermaster")).toEqual({ scarce: false, burn: false });
+  });
+
+  it("labels a Scarce-only item as just 'Scarce'", () => {
+    expect(rarityLabel("berserker")).toBe("Scarce");
+    expect(rarityLabel("flame-rifle")).toBe("Scarce");
+  });
+
+  it("labels a trait that is both Scarce and Burn as a joined set, not a scalar", () => {
+    // The case ADR-0018's Confirmation #2 names directly.
+    expect(rarityLabel("death-cheat")).toBe("Scarce · Burn");
+  });
+
+  it("labels a Burn-only trait as just 'Burn'", () => {
+    expect(rarityLabel("necromancer")).toBe("Burn");
+  });
+
+  it("returns null for a Regular item", () => {
+    expect(rarityLabel("quartermaster")).toBeNull();
+  });
+
+  it("returns false/false and null for an unknown id, never throwing", () => {
+    expect(rarityFor("no-such-item")).toEqual({ scarce: false, burn: false });
+    expect(rarityLabel("no-such-item")).toBeNull();
   });
 });
 

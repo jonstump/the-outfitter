@@ -197,6 +197,67 @@ describe("TraitsPanel cell detail", () => {
   });
 });
 
+// Governing: ADR-0018 (amended by #392), issue #362. `TraitsPanel.jsx:36` (before this fix)
+// composed `${up} upgrade points` unconditionally, so a Scarce trait — cost 0 because it cannot
+// be bought, not because it's free — was announced as "Berserker, 0 upgrade points". The visible
+// `trait-cell-up` span is aria-hidden, so this aria-label is the ONLY place a screen reader
+// learns the cost; ADR-0018 names this exact composition as "the current FALSE claim". Enumerated
+// by name, not sampled, matching the same eight rows `itemStats.test.js`'s `rarityFor` suite pins.
+describe("TraitsPanel rarity disclosure (issue #362)", () => {
+  const SCARCE_TRAITS = [
+    "berserker",
+    "catalyst",
+    "death-cheat",
+    "rampage",
+    "relentless",
+    "remedy",
+    "shadow",
+    "shadow-leap",
+  ];
+
+  it("no longer announces a plain zero cost for an equipped Berserker", () => {
+    const def = TRAITS.find((t) => t[0] === "berserker");
+    const { getByRole } = renderPanel([def[0]]);
+    const btn = getByRole("button", { name: new RegExp(def[1], "i") });
+    expect(btn).not.toHaveAccessibleName(/0 upgrade points?/i);
+    expect(btn).toHaveAccessibleName(/Scarce/i);
+  });
+
+  it("announces Scarce, not a cost, for all eight Scarce traits", () => {
+    for (const id of SCARCE_TRAITS) {
+      const def = TRAITS.find((t) => t[0] === id);
+      const { getByRole, unmount } = renderPanel([def[0]]);
+      const btn = getByRole("button", { name: new RegExp(def[1], "i") });
+      expect(btn, def[1]).not.toHaveAccessibleName(/0 upgrade points?/i);
+      expect(btn, def[1]).toHaveAccessibleName(/Scarce/i);
+      unmount();
+    }
+  });
+
+  it("announces both Scarce and consumption for a trait that is both (Death Cheat)", () => {
+    const def = TRAITS.find((t) => t[0] === "death-cheat");
+    const { getByRole } = renderPanel([def[0]]);
+    const btn = getByRole("button", { name: new RegExp(def[1], "i") });
+    expect(btn).toHaveAccessibleName(/Scarce/i);
+    expect(btn).toHaveAccessibleName(/consumed on use/i);
+  });
+
+  it("keeps the real point cost and adds a Burn disclosure for Necromancer (Burn but not Scarce)", () => {
+    const def = TRAITS.find((t) => t[0] === "necromancer");
+    const { getByRole } = renderPanel([def[0]]);
+    const btn = getByRole("button", { name: new RegExp(def[1], "i") });
+    expect(btn).toHaveAccessibleName(new RegExp(`${def[2]} upgrade points?`, "i"));
+    expect(btn).toHaveAccessibleName(/consumed on use/i);
+  });
+
+  it("leaves a Regular trait's accessible name untouched", () => {
+    const def = TRAITS.find((t) => t[0] === "quartermaster");
+    const { getByRole } = renderPanel([def[0]]);
+    const btn = getByRole("button", { name: new RegExp(def[1], "i") });
+    expect(btn).toHaveAccessibleName(new RegExp(`${def[2]} upgrade points?\\. Activate to remove\\.`, "i"));
+  });
+});
+
 describe("TraitsPanel grid geometry", () => {
   // These pin structure, not pixels. The 3x5 shape, the tooltip's open direction, and the
   // clipping behaviour were all verified in a browser — nothing here measures a rendered

@@ -74,4 +74,18 @@ describe("PickerRow", () => {
     fireEvent.click(getByRole("button"));
     expect(row.onAdd).toHaveBeenCalledTimes(1);
   });
+
+  // Governing: ADR-0018, issue #362. costColor is the OPTIONAL spur-colour half of the
+  // rarity treatment Picker.jsx sets on a Scarce weapon row; undefined must leave the
+  // default `.picker-row-cost` gold (declared in global.css) alone rather than forcing an
+  // inline colour on every ordinary row.
+  it("applies costColor as an inline style when the row provides one", () => {
+    const { getByText } = render(<PickerRow row={makeRow({ costStr: "Scarce", costColor: "#7a93bd" })} showThumb />);
+    expect(getByText("Scarce")).toHaveStyle({ color: "#7a93bd" });
+  });
+
+  it("leaves the cost span with no inline colour when the row provides none", () => {
+    const { getByText } = render(<PickerRow row={makeRow()} showThumb />);
+    expect(getByText(`$${def[3]}`)).not.toHaveAttribute("style");
+  });
 });

@@ -131,6 +131,70 @@ describe("Picker Traits-tab point badge", () => {
   });
 });
 
+// Governing: ADR-0018 (amended by #392), issue #362. Enumerated by name, not sampled — the
+// issue's own warning is that a reader keyed on `acquisitionClasses` alone silently covers only
+// 8 of these 12 rows, so a sampled test could pass while the four weapons stayed broken. These
+// ids were confirmed against the live dataset in `itemStats.test.js`'s `rarityFor` suite, which
+// pins the same twelve-row enumeration this describe block renders.
+describe("Picker rarity disclosure (issue #362)", () => {
+  const traitsUi = { tab: "Traits", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" };
+  const weaponsUi = { tab: "Weapons", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" };
+  const rowFor = (buttons, name) => buttons.find((b) => b.textContent.includes(name));
+
+  const SCARCE_TRAITS = [
+    "berserker",
+    "catalyst",
+    "death-cheat",
+    "rampage",
+    "relentless",
+    "remedy",
+    "shadow",
+    "shadow-leap",
+  ];
+  const SCARCE_WEAPONS = ["flame-rifle", "homestead-78", "shredder", "wildland"];
+
+  it("badges every one of the eight Scarce traits with a rarity indication, never a bare 0 pts", () => {
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({ traits: [] }), ui: traitsUi });
+    const buttons = getAllByRole("button");
+    for (const id of SCARCE_TRAITS) {
+      const def = TRAITS.find((t) => t[0] === id);
+      const row = rowFor(buttons, def[1]);
+      expect(row, def[1]).toBeTruthy();
+      const badge = row.querySelector(".picker-row-badge");
+      expect(badge.textContent, def[1]).not.toMatch(/^0 pts?$/);
+      expect(badge.textContent, def[1]).toMatch(/Scarce/);
+      // No aria-label override exists on this row (PickerRow.jsx), so the accessible name is the
+      // composed visible text — asserting it directly is what would have caught a fix that only
+      // changed the badge's colour and not its text.
+      expect(row).not.toHaveAccessibleName(/\b0 pts\b/);
+    }
+  });
+
+  it("shows a Scarce cost string for every one of the four Scarce weapons, never a bare $0", () => {
+    // These four are the case #392 exists for: none carries `acquisitionClasses` (empty by
+    // spec, trait-only), so a reader keyed on that field alone silently skips exactly these rows.
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({}), ui: weaponsUi });
+    const buttons = getAllByRole("button");
+    for (const id of SCARCE_WEAPONS) {
+      const def = WEAPONS.find((w) => w[0] === id);
+      const row = rowFor(buttons, def[1]);
+      expect(row, def[1]).toBeTruthy();
+      const cost = row.querySelector(".picker-row-cost");
+      expect(cost.textContent, def[1]).not.toBe("$0");
+      expect(cost.textContent, def[1]).toMatch(/Scarce/);
+      expect(row).not.toHaveAccessibleName(/\$0\b/);
+    }
+  });
+
+  it("leaves an ordinary weapon's dollar cost untouched", () => {
+    const { getAllByRole } = renderPicker({ loadout: loadoutState({}), ui: weaponsUi });
+    const buttons = getAllByRole("button");
+    const nagant = WEAPONS.find((w) => w[0] === "nagant-m1895");
+    const row = rowFor(buttons, nagant[1]);
+    expect(row.querySelector(".picker-row-cost")).toHaveTextContent(`$${nagant[3]}`);
+  });
+});
+
 // Governing: ADR-0009 (index is the cell, `null` is an empty cell), SPEC-0006 REQ
 // "Equipment Occupies a Fixed Eight-Cell Grid".
 //
