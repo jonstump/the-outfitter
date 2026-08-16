@@ -166,6 +166,34 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
     expect(entry(WEAPONS, "Nitro Express")[4]).toBe("special");
   });
 
+  // Governing: issue #373. Related: #361, #233, #254.
+  // The comment above AMMO.special in catalog.js justifies the pool's emptiness by
+  // saying every "special"-class weapon has no purchasable round — as a DERIVED claim,
+  // not a fixed roster, so it can't go stale the way the six-weapon prose enumeration
+  // did (#233 named six; #254 added three Dolch variants the comment never mentioned).
+  // This pins that invariant: it passes against today's nine special-class weapons and
+  // would fail the moment a weapon with a purchasable round were given ammoClass "special".
+  it("keeps AMMO.special empty for as long as every special-class weapon has it (#373)", () => {
+    const specialWeapons = WEAPONS.filter((w) => w[4] === "special").map((w) => w[0]);
+    expect(specialWeapons.sort()).toEqual(
+      [
+        "dolch-96",
+        "dolch-96-bullseye",
+        "dolch-96-claw",
+        "dolch-96-precision",
+        "nitro-express",
+        "bomb-launcher",
+        "chu-ko-nu",
+        "flame-rifle",
+        "shredder",
+      ].sort(),
+    );
+    // The substantive claim: as long as any weapon is "special"-class, the pool it draws
+    // from must stay empty, because none of those weapons' rounds are purchasable.
+    expect(specialWeapons.length).toBeGreaterThan(0);
+    expect(AMMO.special).toEqual([]);
+  });
+
   it("moves beetles to Consumables and adds Fire Beetle (#38)", () => {
     expect(TOOLS.some((t) => t[1] === "Choke Beetle")).toBe(false);
     expect(TOOLS.some((t) => t[1] === "Stalker Beetle")).toBe(false);
