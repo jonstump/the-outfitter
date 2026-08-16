@@ -427,8 +427,8 @@ function promoteToWeaponSlots(weapons, ids) {
 // Resolve a legacy equipment slot to its current { t, i }.
 //
 // The lookup crosses categories on purpose. Tools and Consumables share one equipment
-// pool (loadoutSlice's slotMax), and the data-accuracy update moved items between the
-// two — the beetles out of Tools, Choke Bomb's duplicate out of Consumables. What the
+// slot array, and the data-accuracy update moved items between the two — the beetles
+// out of Tools, Choke Bomb's duplicate out of Consumables. What the
 // record meant is the item, not the shelf it sat on, so an id found in the other
 // category is a correct restore rather than a swap. Anything that resolves to no id at
 // all is dropped, never remapped to a neighbouring position.

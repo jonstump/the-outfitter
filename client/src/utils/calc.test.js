@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QM, WEAPONS } from "../data/catalog.js";
-import { capMax, capUsed, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
+import { capMax, capUsed, equipOverCapacity, hasFreeCell, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -92,6 +92,42 @@ describe("upTotal / slotMax", () => {
     // of blocked cells.
     expect(slotMax(loadoutWith({}))).toBe(8);
     expect(slotMax(loadoutWith({ blocked: [0, 1, 2] }))).toBe(5);
+  });
+
+  // Governing: ADR-0009, SPEC-0006, issue #363. `slotMax` used to count
+  // `blocked.length` (array length) rather than distinct cells, so a duplicated
+  // blocked index cost a slot that wasn't actually blocked — disagreeing with
+  // `hasFreeCell`, the predicate every other capacity consumer uses. `slotMax` now
+  // dedupes via `Set`, the same convention `hasFreeCell` already applies.
+  it("counts distinct blocked cells, not array length — matches hasFreeCell", () => {
+    const dup = loadoutWith({ equip: Array(8).fill(null), blocked: [0, 0] });
+    expect(slotMax(dup)).toBe(7);
+    expect(hasFreeCell(dup)).toBe(true); // 7 free cells — agrees with slotMax's 7-slot max.
+
+    // Control: distinct blocked cells are unaffected by the dedup.
+    const distinct = loadoutWith({ equip: Array(8).fill(null), blocked: [0, 1] });
+    expect(slotMax(distinct)).toBe(6);
+  });
+});
+
+// Governing: ADR-0009, SPEC-0006, issue #363. The disagreement issue #363 reports is
+// visible through `equipOverCapacity` (the exported function `selectEquipOverCapacity`
+// and the decoder's `boundedEquip` actually call), not just in `slotMax` isolation —
+// so pin the agreement at that level too.
+describe("equipOverCapacity agrees with hasFreeCell on duplicate blocked cells", () => {
+  it("does not report over-capacity for 7 held items against a duplicated blocked cell", () => {
+    // blocked: [0, 0] names one distinct blocked cell, so 7 cells are free/held-able.
+    // Before the fix, slotMax's `blocked.length` (2) reported a max of 6, and 7 held
+    // items would have falsely tripped the "slots" branch.
+    const lo = loadoutWith({
+      equip: [
+        { t: "T", i: 0 }, { t: "T", i: 0 }, { t: "T", i: 0 }, { t: "T", i: 0 },
+        { t: "T", i: 0 }, { t: "T", i: 0 }, { t: "T", i: 0 }, null,
+      ],
+      blocked: [0, 0],
+    });
+    expect(hasFreeCell(lo)).toBe(true);
+    expect(equipOverCapacity(lo)).toBeNull();
   });
 });
 
