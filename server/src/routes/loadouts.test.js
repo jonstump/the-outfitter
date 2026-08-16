@@ -809,6 +809,154 @@ describe("loadouts API", () => {
     expect(Object.keys(stored.data).sort()).toEqual(["b", "e", "n", "tr", "v", "w"].sort());
   });
 
+  // --- The version-4 wire format (SPEC-0010, issue #342) -----------------------------
+  //
+  // Governing: SPEC-0009 (established the exact-count + isIslandV3 pattern this extends),
+  // SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape".
+  //
+  // Version 4 keeps v3's exact three-element weapon entry and its boolean pair flag
+  // unchanged; the only change is a TYPE change on the ammo element (index 1): a bounded
+  // identifier string (the `ammo-{class}-{name}` slug #339/#340 established) rather than a
+  // catalog index. The count stays an EQUALITY, same as v3 (issue #198) — these pin the
+  // acceptance and the two mistakes most likely to slip past review: relaxing the count to
+  // a minimum, and loosening rather than replacing the ammo type check.
+  const v4Data = (overrides = {}) => ({
+    v: 4,
+    // [ref, ammoId, d] — the v4 weapon entry: ammo is now a stable id string.
+    w: [["nagant-m1895", "ammo-medium-fmj", false], null],
+    e: [["T", 0], null, null, null, null, null, null, null],
+    tr: ["quartermaster"],
+    n: "x",
+    b: [],
+    ...overrides,
+  });
+
+  it("accepts a v4 payload with a string ammo identifier in the weapon entry", async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-accept")
+      .send({ name: `__test__v4accept${Date.now()}`, data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }) });
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a four-element weapon entry under version 4, naming the w field and persisting nothing", async () => {
+    const app = makeApp();
+    // This is the test that fails if someone relaxed the equality check to `>= 3` instead of
+    // keeping it exact — a v4 entry with trailing junk must be rejected, not truncated.
+    await db.read();
+    const before = db.data.loadouts.length;
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-four")
+      .send({
+        name: "__test__v4four",
+        data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true, "trailing"], null] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.w/);
+
+    // Assert the stored record COUNT is unchanged, not merely that the response was an
+    // error — a partial write that stored some fields would still leave the response a 4xx.
+    await db.read();
+    expect(db.data.loadouts.length).toBe(before);
+    expect(db.data.loadouts.some((l) => l.name === "__test__v4four")).toBe(false);
+  });
+
+  it("rejects a v4 payload with an integer in the ammo position", async () => {
+    const app = makeApp();
+    // This is the test that fails if the ammo type check was loosened (e.g. to accept both
+    // a string and a number) instead of being replaced outright — version 4 defines the
+    // ammo element as an identifier string, and an integer there is a version-3 shape
+    // wearing a version-4 label.
+    await db.read();
+    const before = db.data.loadouts.length;
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-int-ammo")
+      .send({
+        name: "__test__v4intammo",
+        data: v4Data({ w: [["nagant-m1895", -1, true], null] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.w/);
+    await db.read();
+    expect(db.data.loadouts.length).toBe(before);
+  });
+
+  it("rejects a v4 payload with an overlong or empty ammo identifier, on the same bound as any other reference", async () => {
+    const app = makeApp();
+    // `isId` is the same bounded-identifier check `isRef` already applies to every other
+    // string reference: non-empty and at most 100 characters. Ammo gets no special-cased
+    // bound of its own.
+    for (const badAmmo of ["x".repeat(101), ""]) {
+      const name = `__test__v4ammobound${badAmmo.length}`;
+      const res = await request(app)
+        .post("/api/loadouts")
+        .set("x-loadout-token", "v4-ammo-bound")
+        .send({ name, data: v4Data({ w: [["nagant-m1895", badAmmo, true], null] }) });
+      expect(res.status, `ammo id of length ${badAmmo.length} must be rejected`).toBe(400);
+      expect(res.body.error).toMatch(/data\.w/);
+      await db.read();
+      expect(db.data.loadouts.some((l) => l.name === name)).toBe(false);
+    }
+  });
+
+  it("rejects a two-element weapon entry declared as version 4", async () => {
+    const app = makeApp();
+    // The count is decided by the version DECLARED: a v4 payload whose entry omits the pair
+    // flag (the v1/v2 two-element shape) is malformed for v4.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-short")
+      .send({
+        name: "__test__v4short",
+        data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj"], null] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.w/);
+  });
+
+  it("still validates a version-3 payload under version 3's rules and a version-2 payload under version 2's, alongside version 4", async () => {
+    const app = makeApp();
+    // A v3 payload's ammo element is still an integer, and a v2 payload's weapon entry is
+    // still two elements — accepting v4's string-ammo shape must not disturb either.
+    const v3 = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v3-still-valid")
+      .send({ name: `__test__v3stillvalid${Date.now()}`, data: v3Data() });
+    expect(v3.status).toBe(201);
+
+    const v2 = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v2-still-valid")
+      .send({
+        name: `__test__v2stillvalid${Date.now()}`,
+        data: {
+          v: 2,
+          w: [["nagant-m1895", -1], null],
+          e: [["T", 0], null, null, null, null, null, null, null],
+          tr: ["quartermaster"],
+          n: "x",
+          b: [],
+        },
+      });
+    expect(v2.status).toBe(201);
+
+    // And a v3 payload carrying a string ammo id (v4's shape) is still rejected under v3's
+    // own rules — the dispatch is keyed on the DECLARED version, not on whichever shape a
+    // slot happens to match.
+    const v3WithStringAmmo = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v3-string-ammo")
+      .send({
+        name: "__test__v3stringammo",
+        data: v3Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }),
+      });
+    expect(v3WithStringAmmo.status).toBe(400);
+    expect(v3WithStringAmmo.body.error).toMatch(/data\.w/);
+  });
+
   it("caps how many loadouts one owner can accumulate, without blocking updates", async () => {
     const app = makeApp();
     const token = `cap-${Date.now()}`;
