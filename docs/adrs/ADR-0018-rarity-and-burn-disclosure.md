@@ -36,6 +36,38 @@ related: [ADR-0006]
 > acquisition axis on the wiki) is unverified, and worth settling while the scrape is open rather than
 > assumed.
 
+> **Amended 2026-08-16 per #392 — the weapon-tagging prerequisite above is settled, and not by fixing
+> the scrape.** The disposition note above (2026-08-15) named `acquisitionClasses` emptiness for the
+> four Scarce weapons as a prerequisite needing the scrape fixed, tracked by #392. #392's investigation
+> found the premise half-wrong: `acquisitionClasses` is scoped to **traits only**, by SPEC-0007's own
+> "Acquisition Class Is Captured So Roster Membership Is Checkable" requirement
+> (`equipment-catalog-dataset/spec.md:268`, "Every scraped **trait** record SHALL carry the set of
+> acquisition classes..."). Extending it to weapons would need both a scrape change and a SPEC-0007
+> amendment — the expensive option the issue declined in favour of this one.
+>
+> The cheaper fix: evidence for the four Scarce weapons (Flame Rifle, Homestead 78, Shredder, Wildland)
+> already exists in `itemStats.json`, just in a different field. Read directly from
+> `client/src/data/itemStats.json` on 2026-08-16 and confirmed for all four: each carries
+> `acquisitionClasses: []` and `acquisition: null`, but also `priceStated: "Scarce"` and
+> `fields.Price: "Scarce"` (the literal string, not a number). The strict parser that reads
+> `priceStated` already refuses that literal string as a price and records `purchasable: false` for
+> exactly this reason — all four also carry `purchasable: false`. `itemStats.test.js`'s "a zero cost is
+> evidenced as unpurchasable" suite already treats `purchasable === false` as equivalent evidence to
+> `acquisitionClasses` containing `Scarce` (its `evidencedUnpurchasable` helper checks
+> `(record.acquisitionClasses ?? []).includes("Scarce") || record.purchasable === false`). This decision's
+> rarity reader follows the same split:
+>
+> - **Trait rows**: rarity sources from `acquisitionClasses`, unchanged.
+> - **Non-trait rows** (weapons, tools, consumables): rarity sources from `purchasable === false`
+>   (equivalently, `priceStated`/`fields.Price === "Scarce"`), because `acquisitionClasses` is empty for
+>   every one of them by specification, not by omission.
+>
+> This also resolves the "whether the 198 empty entries are legitimately not-applicable" question left
+> open above, for the 4 rows Confirmation #1 needs: they are not not-applicable, they are evidenced by a
+> different field than the one the ADR originally named. The remaining 194 empty non-trait entries are
+> untouched by this amendment — whether each of *those* is legitimately rarity-free or simply unpriced
+> stays open. See Confirmation #1 below for the resulting reader logic.
+
 ## Context and Problem Statement
 
 ADR-0013 is titled, correctly, *"Model Scarce Items as Selectable at Zero Cost, **and Keep Rarity Out
@@ -192,6 +224,16 @@ page-level liveness signal — as the real condition.
    whose cost is zero-by-rarity.** The second half is the assertion that matters, because it is the
    current false claim, and it is testable against the composed accessible label rather than the
    visual.
+
+   > **Amended 2026-08-16 per #392.** "Renders a rarity" reads `acquisitionClasses` for **trait** rows
+   > only — that field is empty for every non-trait row by specification (SPEC-0007 scopes it to
+   > traits), including 4 of the 12 zero-cost rows this confirmation covers: Flame Rifle, Homestead 78,
+   > Shredder, Wildland. For **non-trait** rows, the source is `purchasable === false` (backed by
+   > `priceStated`/`fields.Price` equalling the literal string `"Scarce"`, which the scrape's strict
+   > parser refuses as a price). A reader keyed on `acquisitionClasses` alone satisfies this confirmation
+   > for only 8 of the 12 rows; the other 4 need the `purchasable` path, or the second half of this
+   > confirmation — no "0 upgrade points" on a zero-by-rarity row — fails for exactly those four. See
+   > the amendment above Context and Problem Statement for the evidence and full reasoning.
 2. **Rarity renders as a set.** A trait whose `acquisitionClasses` holds both `Burn` and `Scarce`
    surfaces both. A test with Death Cheat catches a scalar regression.
 3. **Every Burn trait's disclosure is present**, keyed off `acquisitionClasses` containing `Burn` — so
@@ -325,4 +367,6 @@ graph TD
   2026-08-12, recorded in `docs/reports/suggested-adrs.md` § E, § E4 and § 3.3, arrives on `main` with
   **#266**. Every quotation there was string-matched against source rather than retyped.
 * **Related issues**: #157 (trait roster), #164 (tombstone classification — the liveness problem behind
-  the Event hold-back), #230 (`acquisitionClasses` captured per item).
+  the Event hold-back), #230 (`acquisitionClasses` captured per item), #392 (settled the non-trait
+  rarity source as `purchasable`/`priceStated` rather than `acquisitionClasses` — see the 2026-08-16
+  amendment above Context and Problem Statement, and Confirmation #1).
