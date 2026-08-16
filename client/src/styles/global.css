@@ -783,11 +783,18 @@ button {
   outline-offset: 2px;
 }
 
+/* `flex-wrap: wrap` plus `row-gap` covers the case `min-width: 0` alone does not: a
+   two-slot weapon's pair of selects (WeaponSlot.jsx) can shrink to fit, but on a genuinely
+   narrow panel shrinking both down to a still-usable width isn't always possible — wrapping
+   the second control onto its own line keeps every option's text legible instead of
+   crushing two controls into a row that has no room for either. */
 .ammo-row {
   margin-top: 10px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  row-gap: 6px;
 }
 
 .over-capacity-warning {
