@@ -20,10 +20,16 @@
 //
 // Image resolution model: scraped photos are primary, the SVG icons below (THUMBS/TOOL_THUMBS/
 // TRAIT_THUMBS/CONS_THUMBS + their *Thumb() dispatch functions) are the fallback safety net for
-// any item that hasn't been scraped yet (or ever, e.g. brand-new DLC). Each dispatch function
-// checks a per-item override map first, then falls back to the item's group icon — the per-item
-// maps are empty today (no per-item SVGs are authored yet) but the two-tier lookup is structured
-// so per-item icons can be dropped in later without touching any call site.
+// any item that hasn't been scraped yet (or ever, e.g. brand-new DLC). Each dispatch function is a
+// single-tier lookup keyed on group data (ammoClass/size for weapons, the `group` field for
+// tools/traits/consumables) that resolves straight to a group-level glyph, falling back to a
+// default (rifle for weapons, Utility for the other three) when the group is unrecognized. There
+// is no per-item override map: #22 found the four per-item maps this header used to describe
+// (ITEM_THUMBS, TOOL_ITEM_THUMBS, TRAIT_ITEM_THUMBS, CONS_ITEM_THUMBS) permanently empty and the
+// two-tier lookup built around them unused indirection, and removed both — this comment simply
+// never caught up. ADR-0020 (docs/adrs/ADR-0020-ammo-iconography.md) flagged the drift; #393 is
+// the correction it called for. A real per-item override, if wanted again, is a code change for
+// its own issue, not a rewrite of this comment.
 //
 // The scraped-image side of the lookup (see slugify() and the <img onError> chain in
 // client/src/components/ItemThumb/ItemThumb.jsx) does not use a hardcoded IMAGES manifest keyed
@@ -814,11 +820,10 @@ export const TOOL_COLOR = "#8a6f42";
 //     is why 8 Scarce traits are IN this table. Reusing that ground would contradict the row above.
 //
 // What actually disqualifies them: the Event index cannot be trusted to describe the live roster.
-// `Traits/Shadow Crush` appears to have been replaced by `Traits/Shadow Leap` with neither page
-// saying so — and a silent replacement is exactly what the tombstone classifier (#164) cannot
-// detect, because it reads pages for stated removals. All Ears is the same shape caught only
-// because its page happens to state its removal outright. So the classifier's silence over an
-// Event page is not evidence the trait is real.
+// A page can go stale silently — retired or superseded without saying so — and that is exactly what
+// the tombstone classifier (#164) cannot detect, because it reads pages for stated removals. All Ears
+// is the same shape caught only because its page happens to state its removal outright. So the
+// classifier's silence over an Event page is not evidence the trait is real.
 //
 // The 11 Event-only traits state no cost anywhere, so adding them would also mean inventing budget
 // data that SPEC-0007 REQ "Budget-Affecting Attributes Are Stored, Never Inferred" forbids. Signee
@@ -828,12 +833,21 @@ export const TOOL_COLOR = "#8a6f42";
 // cost" does not exist in this data at all, and the cost-0 invariant test has no ambiguous case.
 //
 // REVISIT WHEN: a page-level liveness signal exists for Event traits that does not depend on a page
-// stating its own removal — or when Shadow Crush is resolved either way, since it is the concrete
-// case this boundary was drawn around. New rows go on the end (see the note above the additions).
+// stating its own removal. New rows go on the end (see the note above the additions).
 //
-// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), SPEC-0007 REQ "Acquisition
-// Class Is Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored,
-// Never Inferred". Refs #157, #164, #231.
+// 2026-08-16 (#394): this comment used to name `Traits/Shadow Crush` as a case of "appears to have
+// been replaced by `Traits/Shadow Leap`", and the REVISIT trigger above named resolving that case as
+// an alternate way to fire. ADR-0018 read both pages and refuted the premise — Shadow Crush (Event,
+// Offensive, one event appearance) and Shadow Leap (Scarce, Movement, four update-history rows) are
+// two different traits, not one replaced by the other, so that half of the trigger could never fire.
+// Struck deliberately, not by oversight: the hold-back's sole surviving ground is the page-level
+// liveness signal above. Whether the 17 held-back traits should ship is a separate decision this fix
+// does not make.
+//
+// Governing: ADR-0013 (Model Scarce Items as Selectable at Zero Cost), ADR-0018 (refuted the Shadow
+// Crush/Shadow Leap premise, narrowed the REVISIT trigger), SPEC-0007 REQ "Acquisition Class Is
+// Captured So Roster Membership Is Checkable", REQ "Budget-Affecting Attributes Are Stored, Never
+// Inferred". Refs #157, #164, #231, #394.
 
 // UP costs re-verified against huntshowdown.wiki.gg (current through Update 2.8.1). This paragraph
 // is about COSTS ONLY and has never claimed roster completeness — the boundary block above is what
@@ -1082,9 +1096,15 @@ export function weaponThumb(w) {
 
 // Tools/Traits/Consumables SVG fallback layer (mirrors THUMBS/weaponThumb above). These didn't
 // exist before this change — Tools, Traits, and Consumables previously rendered no imagery at
-// all. One simple line-art path silhouette per group (5 groups per category), dispatched by the
-// item's `group` field. Kept intentionally schematic/simple, consistent with the weapon THUMBS
-// visual language — this is now a fallback tier behind scraped photos, not primary art (see
+// all. One simple line-art path silhouette per group, dispatched by the item's `group` field —
+// the group count differs per category and has moved since this was first written (most recently
+// by #37's Tarot Cards split): tools 7, traits 5, consumables 6 (weapons' THUMBS above is a
+// separate 7-entry set, keyed differently — see the header note at the top of this file). This
+// file previously and wrongly claimed "5 groups per category" here; catalog.test.js now pins all
+// four counts against Object.keys(...).length so the next group split fails loudly instead of
+// leaving this comment stale again (#393, following #166's split doing exactly that once already).
+// Kept intentionally schematic/simple, consistent with the weapon THUMBS visual language — this is
+// now a fallback tier behind scraped photos, not primary art (see
 // docs/openspec/specs/equipment-iconography/design.md).
 const TOOL_THUMBS = {
   // A thrown noise-maker with sound trailing off it, and a compact break-action derringer. Both drawn
@@ -1119,6 +1139,17 @@ const CONS_THUMBS = {
   // picker's tile size. `consThumb` falls back to Utility for an unrecognised group, so a group
   // without an entry here renders as a wrench and is indistinguishable from Utility (#37 review).
   "Tarot Cards": "M32 4h24v40H32zM44 14l3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1z",
+};
+
+// Exported so catalog.test.js can pin the real per-category group counts (see the header note
+// above and #393) against Object.keys(...).length, rather than a comment restating a number that
+// can drift silently the next time a group is added or split. Not meant as a general-purpose API —
+// callers that need a fallback glyph should go through weaponThumb/toolThumb/traitThumb/consThumb.
+export const THUMB_GROUP_COUNTS = {
+  weapons: Object.keys(THUMBS).length,
+  tools: Object.keys(TOOL_THUMBS).length,
+  traits: Object.keys(TRAIT_THUMBS).length,
+  consumables: Object.keys(CONS_THUMBS).length,
 };
 
 export function toolThumb(tool) {
