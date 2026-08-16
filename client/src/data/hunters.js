@@ -28,6 +28,25 @@ import hunters from "../../../data/hunters.json";
 
 export const HUNTERS = hunters;
 
+// Governing: SPEC-0004 (hunter roster dataset), SPEC-0003 (hunter picker), issue #387
+//
+// `HUNTERS` is scrape-id order (`allEntries.sort((a, b) => a.id.localeCompare(b.id))` in
+// scripts/scrape-hunters.mjs), and id order equals name order only for the 77 hunters whose
+// id is a literal "the-" + slug of a "The …" name. `the-statesman` is the one exception —
+// its NAME starts with "The " but its id does not — so id order and name order disagree by
+// 171 positions for that single entry. The dataset and scrape script are generated and
+// cannot be re-keyed to fix this: doing so would break stored `hunterId` references and
+// contradicts the id/name divergence SPEC-0004 explicitly sanctions
+// (docs/openspec/specs/hunter-roster-dataset/spec.md, "A renamed hunter keeps its id"). The
+// fix belongs at the consumption seam instead.
+//
+// A SEPARATE array rather than sorting `HUNTERS` in place: `HUNTERS` is the dataset in the
+// order it was generated, and any caller that legitimately wants scrape/id order (or that
+// only cares about membership, like the id/name lookups below) must keep seeing that order
+// unchanged. Only the picker — where humans scan the roster expecting alphabetical order —
+// needs this view.
+export const HUNTERS_BY_NAME = [...HUNTERS].sort((a, b) => a.name.localeCompare(b.name));
+
 const NAME_BY_ID = new Map(HUNTERS.map((h) => [h.id, h.name]));
 
 /**
@@ -136,8 +155,9 @@ function sectionsOf(favoriteMatches, otherMatches) {
 /**
  * Narrow the roster to the hunters matching every supplied filter, split into sections.
  *
- * Filtering narrows WHICH hunters are candidates: relative order is the dataset's own, and
- * no hunter is ever treated differently for being referenced by an existing list. That
+ * Filtering narrows WHICH hunters are candidates: relative order is whatever the caller's
+ * `hunters` array carries in (the picker passes `HUNTERS_BY_NAME`, issue #387), and no
+ * hunter is ever treated differently for being referenced by an existing list. That
  * separation is explicit in SPEC-0003 — "The Hunter Picker Is Filterable and Bounded"
  * narrows the candidate set; "The Hunter Picker Does Not Restrict or Mark Reuse" governs
  * how the survivors are presented — so this function is deliberately not given the caller's
