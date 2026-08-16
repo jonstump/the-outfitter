@@ -39,23 +39,42 @@ export const hunterFavoritesRouter = Router();
 const HUNTER_ID_MAX = 100;
 
 /**
- * Validate a `hunterId` from the request path.
+ * Validate a `hunterId` from the request path is well-formed, WITHOUT checking the roster.
  *
  * Governing: SPEC-0003 Security Requirements — "`hunterId` SHALL be length-capped and
  * validated against the known library".
  *
- * Both checks are required and neither subsumes the other: the cap bounds the input, the
- * roster lookup bounds the *meaning*. Unlike a list's `hunterId` — which SPEC-0003 requires
- * to survive its hunter leaving the dataset — a favorite has no reason to exist for a
- * hunter the picker can never show, so an unknown id is rejected rather than stored.
+ * This is the shape half only. `assertKnownHunter` below layers the roster check on top for
+ * PUT; DELETE (see #386) uses this function alone. An id absent from the roster is exactly
+ * the case a stale favorite needs DELETE to accept — rejecting it there is what made such a
+ * favorite permanently unremovable. The length cap still applies to DELETE: it bounds the
+ * input before it reaches a Set key or a log line, independent of what the roster says.
  */
-function assertKnownHunter(hunterId) {
+function assertHunterIdShape(hunterId) {
   if (typeof hunterId !== "string" || hunterId.length === 0 || hunterId.length > HUNTER_ID_MAX) {
     throw new UnknownReferenceError(`hunterId must be a string of at most ${HUNTER_ID_MAX} characters`, {
       recordId: typeof hunterId === "string" ? hunterId.slice(0, HUNTER_ID_MAX) : null,
       collection: "hunterFavorites",
     });
   }
+}
+
+/**
+ * Validate a `hunterId` from the request path: shape AND roster membership. PUT-only (see
+ * #386) — DELETE uses `assertHunterIdShape` alone, above.
+ *
+ * Governing: SPEC-0003 Security Requirements — "`hunterId` SHALL be length-capped and
+ * validated against the known library".
+ *
+ * Both checks are required and neither subsumes the other: the cap bounds the input, the
+ * roster lookup bounds the *meaning*. Unlike a list's `hunterId` — which SPEC-0003 requires
+ * to survive its hunter leaving the dataset — a favorite has no reason to be newly CREATED
+ * for a hunter the picker can never show, so PUT rejects an unknown id rather than storing
+ * it. That reasoning is specific to creation: it does not extend to DELETE, which exists
+ * precisely to remove a favorite regardless of whether the hunter it names is still known.
+ */
+function assertKnownHunter(hunterId) {
+  assertHunterIdShape(hunterId);
   if (!isKnownHunterId(hunterId)) {
     throw new UnknownReferenceError(`no hunter with id ${hunterId}`, {
       recordId: hunterId,
@@ -90,10 +109,23 @@ function respondToUnknownHunter(res, err, op) {
 /**
  * The caller's favorites.
  *
- * Never a filter, never a gate: this returns what the caller has favorited and nothing
- * about the roster. The picker shows all 242 either way — SPEC-0003 REQ "Favorite Hunters"
- * makes favorites their own section plus an optional client-side toggle — so an empty array
- * here is an ordinary, expected answer and not an empty picker.
+ * Filters out any hunterId absent from the roster (#386). A favorite can only reach that
+ * state via a future re-scrape that drops or re-keys a hunter id after it was favorited
+ * while known (see scripts/scrape-hunters.mjs's portrait -> id map in `readExistingIds`) —
+ * this has never happened against the committed dataset, but DELETE no longer roster-checks
+ * (see `assertHunterIdShape` above), so a stale record can exist. Filtering here, at the one
+ * server-side source of truth, is what lets every client — not just this one — receive only
+ * ids it can actually render, and is why `favored.size`/`favored.has()` on the client need
+ * no reconciliation logic of their own. The record itself is left in storage; DELETE is what
+ * removes it. A stale id simply never appears here to prompt that call, which is fine: the
+ * record being invisible is the fix, not a gap — nothing depends on the client discovering
+ * and self-cleaning ids it was never shown.
+ *
+ * This does not make the endpoint a gate on the roster: it still returns only what the
+ * caller has favorited, never anything about which hunters exist. The picker shows all 242
+ * regardless of what this returns — SPEC-0003 REQ "Favorite Hunters" makes favorites their
+ * own section plus an optional client-side toggle — so an empty array here is an ordinary,
+ * expected answer and not an empty picker.
  *
  * `readLimiter` bounds the full-file parse every read performs (issue #198); the budget is
  * far looser than the write floor, and is per-IP only. See lib/ownership.js.
@@ -102,7 +134,11 @@ hunterFavoritesRouter.get("/", readLimiter, async (req, res) => {
   try {
     await db.read();
     const token = callerToken(req);
-    res.json(ownedBy(db.data.hunterFavorites, token).map(publicRecord));
+    res.json(
+      ownedBy(db.data.hunterFavorites, token)
+        .filter((f) => isKnownHunterId(f.hunterId))
+        .map(publicRecord)
+    );
   } catch (err) {
     console.error("GET /api/hunter-favorites failed:", err);
     res.status(500).json({ error: "failed to read favorites" });
@@ -160,12 +196,18 @@ hunterFavoritesRouter.put("/:hunterId", ipLimiter, tokenLimiter, async (req, res
  * here rather than deletable: the filter is applied before the removal, so a DELETE that
  * names another token's favorite removes nothing and reports the same 204 as any other
  * no-op, disclosing nothing about what that token has favorited.
+ *
+ * Deliberately does NOT roster-check (#386, `assertHunterIdShape` above): only the shape of
+ * the id is validated, not its presence in the roster. A hunter id absent from the roster is
+ * exactly the id a stale favorite needs removed, and rejecting it here — as an earlier
+ * version of this handler did, via the shared `assertKnownHunter` — made such a favorite
+ * permanently unremovable, since GET returned it but DELETE refused to take it.
  */
 hunterFavoritesRouter.delete("/:hunterId", ipLimiter, tokenLimiter, async (req, res) => {
   try {
     const { hunterId } = req.params;
     try {
-      assertKnownHunter(hunterId);
+      assertHunterIdShape(hunterId);
     } catch (err) {
       const handled = respondToUnknownHunter(res, err, "DELETE /api/hunter-favorites/:hunterId");
       if (handled) return handled;

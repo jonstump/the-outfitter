@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
+import { randomUUID } from "node:crypto";
 import { hunterFavoritesRouter } from "./hunterFavorites.js";
 import { isKnownHunterId, rosterSize } from "../lib/hunterRoster.js";
 import { ipLimiter, readLimiter, tokenLimiter } from "../lib/ownership.js";
@@ -206,9 +207,70 @@ describe("hunter favorites API", () => {
     expect(db.data.hunterFavorites.filter((f) => f.owner === TOKEN_A)).toHaveLength(0);
   });
 
-  it("applies the same validation to unfavoriting", async () => {
+  it("still applies the length cap to unfavoriting", async () => {
     const app = makeApp();
-    expect((await unfav(app, TOKEN_A, "no-such-hunter")).status).toBe(400);
+    expect((await unfav(app, TOKEN_A, "x".repeat(500))).status).toBe(400);
+  });
+
+  // --- #386: a favorite whose hunter left the roster must stay removable ------------
+
+  it("lets DELETE remove a favorite whose hunter id is absent from the roster", async () => {
+    // Simulated directly against storage: there is no route to CREATE a favorite for an
+    // unknown hunter (PUT still roster-checks via `assertKnownHunter`), so a stale favorite
+    // can only be reproduced by seeding one under the hunter's feet, exactly as a future
+    // re-scrape dropping or re-keying a hunter id would leave behind.
+    const app = makeApp();
+    const staleId = "retired-hunter-slug";
+    await db.read();
+    db.data.hunterFavorites.push({
+      id: randomUUID(),
+      owner: TOKEN_A,
+      hunterId: staleId,
+      createdAt: new Date().toISOString(),
+    });
+    await db.write();
+
+    const res = await unfav(app, TOKEN_A, staleId);
+    expect(res.status).toBe(204);
+
+    await db.read();
+    expect(db.data.hunterFavorites.some((f) => f.hunterId === staleId && f.owner === TOKEN_A)).toBe(
+      false
+    );
+  });
+
+  it("still returns 204 for DELETE of a known but unfavorited hunter", async () => {
+    // Existing specified behaviour (the idempotent-unfavorite tests above cover this too);
+    // pinned again here so the #386 fix is proven not to have widened DELETE's success case
+    // beyond "no roster check", i.e. it did not also start returning something other than
+    // 204 for the ordinary known/unfavorited no-op.
+    const app = makeApp();
+    const res = await unfav(app, TOKEN_A, REAPER);
+    expect(res.status).toBe(204);
+  });
+
+  it("GET omits a favorite whose hunter id is absent from the roster", async () => {
+    const app = makeApp();
+    const staleId = "retired-hunter-slug";
+    await db.read();
+    db.data.hunterFavorites.push({
+      id: randomUUID(),
+      owner: TOKEN_A,
+      hunterId: staleId,
+      createdAt: new Date().toISOString(),
+    });
+    await db.write();
+
+    const ids = (await list(app, TOKEN_A)).body.map((f) => f.hunterId);
+    expect(ids).not.toContain(staleId);
+
+    // Cleanup: this record was seeded directly and DELETE never sees it via the picker,
+    // so the afterEach's owner-filtered sweep is what actually removes it — assert that
+    // sweep can still find it, i.e. it was never silently dropped from storage by GET.
+    await db.read();
+    expect(db.data.hunterFavorites.some((f) => f.hunterId === staleId && f.owner === TOKEN_A)).toBe(
+      true
+    );
   });
 
   // --- Rate limiting ----------------------------------------------------------------
