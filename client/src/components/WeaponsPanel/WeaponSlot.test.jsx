@@ -35,7 +35,7 @@ describe("WeaponSlot", () => {
 
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.png`);
     expect(container.querySelector(".weapon-thumb")).toBeInTheDocument();
   });
 
@@ -50,7 +50,7 @@ describe("WeaponSlot", () => {
     });
 
     let img = container.querySelector("img");
-    ["jpeg", "png", "webp"].forEach((ext) => {
+    ["jpg", "jpeg", "webp"].forEach((ext) => {
       fireEvent.error(img);
       img = container.querySelector("img");
       expect(img).toHaveAttribute("src", `/images/weapons/${slugify(def[1])}.${ext}`);

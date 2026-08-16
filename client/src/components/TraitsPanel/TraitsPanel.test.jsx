@@ -35,7 +35,7 @@ describe("TraitsPanel imagery", () => {
     const { container } = renderPanel([def[0]]);
 
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", `/images/traits/${slugify(def[1])}.jpg`);
+    expect(img).toHaveAttribute("src", `/images/traits/${slugify(def[1])}.png`);
     expect(container.querySelector(".trait-cell-thumb")).toBeInTheDocument();
   });
 
