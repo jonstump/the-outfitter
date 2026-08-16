@@ -652,6 +652,9 @@ export const CONS = [
   ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
   ["medical-pack", "Medical Pack", 35, "Placeable", "Shots"],
   ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
+  // Type disagrees with the scraped cap-category axis (#377): the wiki files this page under
+  // `Placeable Consumables`, not `Throwable Consumables`. Not changed here — #375 decides which is
+  // right; `itemStats.test.js` names this id in a documented, staleness-checked exception until then.
   ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
   ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
   ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
@@ -715,6 +718,22 @@ export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility", "Ta
  * A row typed outside this list is a DATA ERROR (`catalog.test.js` pins every row to it). It is not
  * thereby uncapped: `calc.js` folds every undeclared type into one shared budget, because SPEC-0006
  * requires such a row to be "treated as a data error rather than silently escaping the cap".
+ *
+ * CANDOUR, on the same terms the TRAIT_GROUPS note above states its own: until #377, `CONS[i][3]`
+ * itself — which row gets WHICH of these four values — was entirely hand-authored and had no scraped
+ * counterpart anywhere, so nothing could check it (finding S2-F5). That is fixed as of #377:
+ * `scripts/scrape-stats.mjs` now persists `capCategories` per consumable — the wiki's own "Throwable
+ * Consumables" / "Placeable Consumables" / "Tarot Cards" page categories, filtered onto this
+ * vocabulary by `consCapCategoriesFrom` — and `itemStats.test.js` pins every `CONS[i][3]` against it
+ * wherever the wiki states one. `Shot` still has no wiki category (see above), so a Shot-typed row is
+ * pinned to nothing and stays exactly as checkable as it was before #377 — recorded rather than
+ * silently promised otherwise.
+ *
+ * That pin surfaced one live disagreement on first run: `dark-dynamite-satchel` is typed `Throwable`
+ * here but the wiki files its page under `Placeable Consumables`. #377's own scope is building the
+ * axis, not resolving what it finds — #375 is the follow-up that decides which one is right. Until
+ * then `itemStats.test.js` names the id in a documented, staleness-checked exception rather than
+ * either failing CI on a question this file isn't yet answering or quietly hiding the disagreement.
  */
 export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
 

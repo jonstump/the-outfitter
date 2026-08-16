@@ -29,6 +29,8 @@ import {
   RobotsDisallowedError,
   acquisitionOf,
   acquisitionClassesFrom,
+  consCapCategoriesFrom,
+  CONS_CAP_WIKI_CATEGORIES,
   ammoFamilyFromIcon,
   ammoRoundLevelCategories,
   buildAmmoRecord,
@@ -734,6 +736,41 @@ test("buildStatsRecord: the id is the key and is never duplicated into the recor
   assert.equal(record.sourceRevision, "16192");
   assert.equal(record.ingestedAt, "2026-08-11T00:00:00.000Z");
   assert.equal(record.selectedBy, "canonical-title");
+});
+
+test("buildStatsRecord: capCategories is populated for consumables, from the page's own categories", () => {
+  const record = buildStatsRecord({
+    category: "consumables",
+    item: "Ammo Box",
+    canonicalTitle: "Ammo Box",
+    url: "https://w/x",
+    revision: "1",
+    infoboxCount: 1,
+    selection: { index: 0, method: "canonical-title", title: "Ammo Box" },
+    fields: { Price: "65" },
+    categories: ["Consumables", "Placeable Consumables"],
+  });
+  assert.deepEqual(record.capCategories, ["Placeable"]);
+});
+
+test("buildStatsRecord: capCategories is absent for every other category, not an empty array", () => {
+  // Weapons, tools and traits never carry the Throwable/Placeable/Tarot Cards categories, so a
+  // computed empty set here would be meaningless data rather than evidence. The key is left off
+  // entirely — the same "absent vs empty" distinction acquisitionClasses already draws.
+  for (const category of ["weapons", "tools", "traits"]) {
+    const record = buildStatsRecord({
+      category,
+      item: "Whatever",
+      canonicalTitle: "Whatever",
+      url: "https://w/x",
+      revision: "1",
+      infoboxCount: 1,
+      selection: { index: 0, method: "canonical-title", title: "Whatever" },
+      fields: {},
+      categories: ["Placeable Consumables"],
+    });
+    assert.equal("capCategories" in record, false, `${category} should not carry capCategories`);
+  }
 });
 
 test("writeStatsFile: sorts keys and stamps the generated marker", async () => {
@@ -1726,6 +1763,42 @@ test("acquisitionClassesFrom: a Scarce weapon declares no rarity category, and g
     [],
     "and Weapons/Size 2 does not match on its last segment either"
   );
+});
+
+test("consCapCategoriesFrom: real catlinks for a Throwable consumable (Dynamite Stick)", () => {
+  assert.deepEqual(consCapCategoriesFrom(["Consumables", "Throwable Consumables", "Explosive Consumbles"]), [
+    "Throwable",
+  ]);
+});
+
+test("consCapCategoriesFrom: real catlinks for a Placeable consumable (Ammo Box)", () => {
+  assert.deepEqual(consCapCategoriesFrom(["Consumables", "Placeable Consumables"]), ["Placeable"]);
+});
+
+test("consCapCategoriesFrom: real catlinks for a Tarot Card (The Chariot)", () => {
+  assert.deepEqual(consCapCategoriesFrom(["Consumables", "Tarot Cards"]), ["Tarot Cards"]);
+});
+
+test("consCapCategoriesFrom: `Shot` has no wiki category, so a Shot item yields no evidence", () => {
+  // Vitality Shot's real catlinks: the wiki files it under the effect (Healing Consumables), never
+  // under anything naming "Shot". An empty set here is the axis correctly reporting no evidence, not
+  // a parse failure — see the CONS_CAP_WIKI_CATEGORIES doc comment.
+  assert.deepEqual(consCapCategoriesFrom(["Consumables", "Healing Consumables"]), []);
+});
+
+test("consCapCategoriesFrom: order is stable regardless of the page's link order", () => {
+  assert.deepEqual(
+    consCapCategoriesFrom(["Tarot Cards", "Placeable Consumables", "Throwable Consumables"]),
+    consCapCategoriesFrom(["Throwable Consumables", "Tarot Cards", "Placeable Consumables"])
+  );
+});
+
+test("consCapCategoriesFrom: names every wiki category it reads, so the mapping stays visible", () => {
+  assert.deepEqual(Object.keys(CONS_CAP_WIKI_CATEGORIES), [
+    "Throwable Consumables",
+    "Placeable Consumables",
+    "Tarot Cards",
+  ]);
 });
 
 test("acquisitionOf: a Scarce trait states no cost at all, and is still known to be Scarce", () => {

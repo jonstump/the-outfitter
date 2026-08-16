@@ -547,6 +547,15 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     // are observation. Neither says what a Scarce item COSTS — that mapping is a game rule, and
     // ADR-0005 keeps game rules out of this file.
     ...acquisitionOf(result.fields, { categories: result.categories ?? [] }),
+    // The cap-category axis (#377) — evidence for `CONS[i][3]` (`type`), never `type` itself: SPEC-0007
+    // still forbids deriving `type` (see NEVER_DERIVED below), because it is a rules input `calc.js`
+    // and `loadoutSlice.js` read, and this is scrape metadata a test PINS `type` against instead.
+    // Consumables only: the wiki categories `CONS_CAP_WIKI_CATEGORIES` filters for
+    // ("Throwable Consumables", "Placeable Consumables", "Tarot Cards") describe consumable pages, so
+    // computing this for weapons/tools/traits would only ever read back an empty, meaningless set.
+    ...(result.category === "consumables"
+      ? { capCategories: consCapCategoriesFrom(result.categories ?? []) }
+      : {}),
     fields: result.fields,
     sourceRevision: result.revision,
     ingestedAt: now(),
@@ -1364,6 +1373,54 @@ export function acquisitionClassesFrom(categories = []) {
   return ACQUISITION_CLASS_CATEGORIES.filter((c) => names.has(c));
 }
 
+/**
+ * The wiki category names that carry the consumable cap-category axis — `CONS[i][3]` (`type`), the
+ * key `calc.js` reads for the four-per-category budget. Until #377 this axis had NO scraped
+ * counterpart anywhere: `type` was entirely hand-authored, so nothing could check it (finding S2-F5).
+ *
+ * The fix is exactly the one `acquisitionClassesFrom` above already uses for trait rarity: the page
+ * fetch this script already makes carries whole-page categories at no extra cost (`parsePageCategories`,
+ * read once per page and reused — see `buildStatsRecord`), so the axis is a filter over data already in
+ * hand, never a new request.
+ *
+ * Mapped rather than matched verbatim, because two of the three keys the wiki states differ from our
+ * vocabulary: the wiki calls the axis "Throwable Consumables" / "Placeable Consumables" where
+ * `CONS_CAP_CATEGORIES` (client/src/data/catalog.js) says `Throwable` / `Placeable`. `Tarot Cards` is
+ * the one place the two already agree, so it maps to itself.
+ *
+ * `Shot` has NO entry here, deliberately: `client/src/data/catalog.js`'s own `CONS_CAP_CATEGORIES`
+ * comment already records that "the wiki has no `Shot Consumables`" category — Vitality Shot and its
+ * siblings are filed only under `Healing Consumables`, an effect category, not a cap category. So a
+ * `Shot`-typed row is EXPECTED to come back with an empty `capCategories` set below; that is the axis
+ * correctly reporting no evidence, not a parse failure. `itemStats.test.js`'s pin only asserts the
+ * two-of-four categories the wiki actually states.
+ *
+ * Governing: ADR-0015 (per-type cap budget), SPEC-0007 REQ "Budget-Affecting Attributes Are Stored,
+ * Never Inferred". Issue #377.
+ */
+export const CONS_CAP_WIKI_CATEGORIES = {
+  "Throwable Consumables": "Throwable",
+  "Placeable Consumables": "Placeable",
+  "Tarot Cards": "Tarot Cards",
+};
+
+/**
+ * Which of `CONS_CAP_CATEGORIES`' values a consumable page's own category membership evidences.
+ *
+ * A SET, not a scalar, on the same reasoning `acquisitionClassesFrom` uses above: the wiki's own data
+ * is what decides the shape, not a convenient assumption, and nothing here has yet shown a consumable
+ * carrying two of these three categories at once. Order is `CONS_CAP_WIKI_CATEGORIES`' own declared
+ * order — Throwable, Placeable, Tarot Cards — so two runs over the same page produce the same array.
+ */
+export function consCapCategoriesFrom(categories = []) {
+  const names = new Set(categories.map((c) => String(c).trim()));
+  const found = [];
+  for (const [wikiName, capName] of Object.entries(CONS_CAP_WIKI_CATEGORIES)) {
+    if (names.has(wikiName) && !found.includes(capName)) found.push(capName);
+  }
+  return found;
+}
+
 // A hatnote is navigation, not description: weapon and consumable pages open with an italicised
 // "See also: Frontier 73C, Infantry 73L, Vandal 73C". Taking the first paragraph blindly would have
 // written that string into `description` for most of the catalog, where it would read as data.
@@ -1813,7 +1870,9 @@ export const NEVER_DERIVED = {
     "which is precisely the trap: it looks like `group` and is not.",
   type:
     "a rules input — calc.js counts consumables by it and loadoutSlice.js enforces the 4-per-category " +
-    "cap on the result. It may only come from a mechanical cap category, never from an infobox field.",
+    "cap on the result. It may only come from a mechanical cap category, never from an infobox field. " +
+    "`capCategories` (consCapCategoriesFrom, #377) is evidence FOR checking it, persisted separately " +
+    "in itemStats.json — it is never written into `type` itself.",
   AMMO: "has no wiki source page at all; /wiki/Ammo is prose. Prices are per-weapon, not per-pool.",
 };
 
