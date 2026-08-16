@@ -805,3 +805,47 @@ test("image coverage: every catalog row has art, and no file is orphaned", async
   // presence means nothing is pointing at it.
   assert.deepEqual(orphaned, [], "an image no catalog row resolves to should be deleted or renamed");
 });
+
+// Governing: SPEC-0004, SPEC-0001, issue #389. Related: #147.
+//
+// The fifth on-disk coverage tree — hunter portraits, 242 of the 498 committed image files
+// (2.49 MB), the largest single tree and previously the only one with NO on-disk test. Every
+// hunter-scraper filesystem test up to this point uses an in-memory fake; this is the one place
+// that reads the real directory, same as the four-tree test above and for the same reason: the
+// failure mode is a missing or misnamed FILE, so a fixture would test the wrong thing.
+//
+// #147 deleted all 242 `-thumb` files and a human caught it, not a test — this closes that gap.
+//
+// Keyed on the dataset's own `portrait` field, NOT `slugify(name)`: three roster entries'
+// `portrait` differs from `slugify(name)` (e.g. "The Statesman: Desolation's Delegate" carries
+// portrait "desolations-delegate", not the full slugified title), so keying on the slug would
+// produce three false failures. Keyed on `.avif`, the format every hunter portrait is encoded
+// to (unlike the four trees above, which keep their scraped extension) — every file under this
+// directory is `.avif` today, and the strip-any-extension comparison below would silently accept
+// a stray `.png` if one were ever added, so this test would not catch a format regression, only
+// a naming one. That is the same scope the four-tree test above has.
+test("hunter portrait coverage: every roster entry has art, and no file is orphaned", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  // Read the dataset directly rather than importing client/src/data/hunters.js: that module
+  // imports data/hunters.json as an ES module, which needs Vite's bundler-level JSON handling
+  // and fails under plain Node with ERR_IMPORT_ATTRIBUTE_MISSING. The underlying file is the
+  // same either way — hunters.js does no transformation beyond re-exporting it as HUNTERS.
+  const datasetUrl = new URL("../data/hunters.json", import.meta.url);
+  const HUNTERS = JSON.parse(readFileSync(datasetUrl, "utf8"));
+  const missing = [];
+  const orphaned = [];
+  const dir = new URL(`../client/public/images/hunters/`, import.meta.url);
+  const onDisk = new Set(readdirSync(dir).map((f) => f.replace(/\.[a-z0-9]+$/i, "")));
+  for (const hunter of HUNTERS) {
+    // A hunter with no portrait has no art to fetch by design — scrape-hunters.mjs writes such
+    // an entry with portrait: null rather than skipping it (see scrape-hunters.test.mjs "writes
+    // a hunter with no portrait into the dataset anyway") — so it is exempt the same way a
+    // KNOWN_CATALOG_DUPLICATES row is exempt above.
+    if (!hunter.portrait) continue;
+    if (!onDisk.has(hunter.portrait)) missing.push(`hunters/${hunter.portrait} (${hunter.id})`);
+  }
+  const wanted = new Set(HUNTERS.filter((h) => h.portrait).map((h) => h.portrait));
+  for (const file of onDisk) if (!wanted.has(file)) orphaned.push(`hunters/${file}`);
+  assert.deepEqual(missing, [], "a roster entry with no on-disk portrait falls back to the neutral placeholder");
+  assert.deepEqual(orphaned, [], "an image no roster entry resolves to should be deleted or renamed");
+});
