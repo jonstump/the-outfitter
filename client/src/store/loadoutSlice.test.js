@@ -450,7 +450,7 @@ describe("derived loadout name", () => {
     const before = store.getState().loadout.name;
     // The name must have been derived from the weapon — not left empty.
     expect(before).toBe(NAME0);
-    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoIndex: 0 }));
+    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoSlotIndex: 0, ammoId: "ammo-compact-high-velocity" }));
     expect(store.getState().loadout.name).toBe(before);
   });
 
@@ -691,7 +691,7 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
   const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
   // A real weapon the stored attribute does NOT mark dual-wieldable.
   const HAYMAKER = WEAPONS.findIndex((w) => w[0] === "haymaker");
-  const AMMO_INDEX = 1; // a real variant the Conversion's pool has
+  const AMMO_ID = "ammo-compact-fmj"; // a real round the Conversion's own accepted list has
 
   it("addWeapon gives the new weapon a boolean d of false", () => {
     const store = makeStore();
@@ -708,7 +708,7 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     expect(dualWieldFor(WEAPONS[PISTOL][0])).toBe(true);
     const store = makeStore();
     store.dispatch(loadoutActions.addWeapon(PISTOL));
-    expect(store.getState().loadout.weapons[0]).toEqual({ i: PISTOL, a: -1, d: false });
+    expect(store.getState().loadout.weapons[0]).toEqual({ i: PISTOL, ammo: [null, null], d: false });
     // And the capacity it occupies is the single's, not the pair's — a size-1 pistol added
     // through this route costs 1, never 2.
     expect(capUsed(store.getState().loadout)).toBe(WEAPONS[PISTOL][2]);
@@ -718,7 +718,7 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     expect(dualWieldFor(WEAPONS[HAYMAKER][0])).not.toBe(true);
     const other = makeStore();
     other.dispatch(loadoutActions.addWeapon(HAYMAKER));
-    expect(other.getState().loadout.weapons[0]).toEqual({ i: HAYMAKER, a: -1, d: false });
+    expect(other.getState().loadout.weapons[0]).toEqual({ i: HAYMAKER, ammo: [null, null], d: false });
   });
 
   it("a pair + a size-3 rifle is a legal 5-point loadout, and marking the pistol as a pair leaves the rifle in place", () => {
@@ -726,15 +726,15 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     store.dispatch(loadoutActions.addWeapon(PISTOL));
     store.dispatch(loadoutActions.addWeapon(RIFLE));
     let s = store.getState().loadout;
-    expect(s.weapons[0]).toEqual({ i: PISTOL, a: -1, d: false });
-    expect(s.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(s.weapons[0]).toEqual({ i: PISTOL, ammo: [null, null], d: false });
+    expect(s.weapons[1]).toEqual({ i: RIFLE, ammo: [null, null], d: false });
     // Marking the already-held pistol as a pair (via setLoadout, the pair-carrying route)
     // must leave the rifle's entry untouched — a pair never consumes the second slot.
     const withFlag = s.weapons.map((w) => (w && w.i === PISTOL ? { ...w, d: true } : w));
     store.dispatch(loadoutActions.setLoadout({ ...s, weapons: withFlag }));
     s = store.getState().loadout;
-    expect(s.weapons[0]).toEqual({ i: PISTOL, a: -1, d: true });
-    expect(s.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(s.weapons[0]).toEqual({ i: PISTOL, ammo: [null, null], d: true });
+    expect(s.weapons[1]).toEqual({ i: RIFLE, ammo: [null, null], d: false });
     expect(weaponSize(s.weapons[0])).toBe(2);
     expect(capUsed(s)).toBe(5);
     expect(capUsed(s)).toBeLessThanOrEqual(capMax(s));
@@ -745,20 +745,20 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     store.dispatch(loadoutActions.addWeapon(RIFLE)); // 3 points
     store.dispatch(loadoutActions.addWeapon(PISTOL)); // size-1 single fits -> 4
     let s = store.getState().loadout;
-    expect(s.weapons[0]).toEqual({ i: RIFLE, a: -1, d: false });
-    expect(s.weapons[1]).toEqual({ i: PISTOL, a: -1, d: false });
+    expect(s.weapons[0]).toEqual({ i: RIFLE, ammo: [null, null], d: false });
+    expect(s.weapons[1]).toEqual({ i: PISTOL, ammo: [null, null], d: false });
     expect(capUsed(s)).toBe(4);
 
     // Exactly 1 point remains. The pair would cost 2 (size 1 + 1), pushing to 6 over the
     // 5-point cap — the arithmetic the picker/affordance will refuse on (a later story).
     // This story owns the cost: assert that the pair's occupied capacity is what overflows.
-    const pairEntry = { i: PISTOL, a: -1, d: true };
+    const pairEntry = { i: PISTOL, ammo: [null, null], d: true };
     expect(weaponSize(pairEntry)).toBe(2);
     expect(capUsed(s) + weaponSize(pairEntry)).toBe(6);
     expect(capUsed(s) + weaponSize(pairEntry)).toBeGreaterThan(capMax(s));
     // The single still fits, and the pair flag is not silently written in a way that
     // would store an over-capacity build (the capacity refusal is the affordance's gate).
-    expect(s.weapons[1]).toEqual({ i: PISTOL, a: -1, d: false });
+    expect(s.weapons[1]).toEqual({ i: PISTOL, ammo: [null, null], d: false });
   });
 
   it("setLoadout normalizes every weapon in a version-2 record to a boolean d", () => {
@@ -767,7 +767,7 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     const decoded = fromData({
       v: 2,
       w: [
-        [WEAPONS[PISTOL][0], AMMO_INDEX],
+        [WEAPONS[PISTOL][0], 1], // a v2 wire entry is still a bare live-pool index, not an id
         [WEAPONS[RIFLE][0], -1],
       ],
       e: [],
@@ -811,15 +811,17 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
   it("marking a pair leaves the ammo selection byte-identical (setAmmo then toggle d)", () => {
     const store = makeStore();
     store.dispatch(loadoutActions.addWeapon(PISTOL));
-    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoIndex: AMMO_INDEX }));
-    const before = store.getState().loadout.weapons[0].a;
+    store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoSlotIndex: 0, ammoId: AMMO_ID }));
+    const before = store.getState().loadout.weapons[0].ammo;
     // The pair flag is normalized onto a state entry that already carries its ammo.
     // `equip` comes from the emptyLoadout() spread (already eight cells, ADR-0009) —
     // the shape guard requires exactly eight, not overridden here (#382).
-    store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }, null], traits: [] }));
-    expect(store.getState().loadout.weapons[0].a).toBe(before);
+    store.dispatch(
+      loadoutActions.setLoadout({ ...emptyLoadout(), weapons: [{ i: PISTOL, ammo: before, d: true }, null], traits: [] })
+    );
+    expect(store.getState().loadout.weapons[0].ammo).toEqual(before);
     expect(store.getState().loadout.weapons[0].d).toBe(true);
-    expect(Object.keys(store.getState().loadout.weapons[0]).sort()).toEqual(["a", "d", "i"].sort());
+    expect(Object.keys(store.getState().loadout.weapons[0]).sort()).toEqual(["ammo", "d", "i"].sort());
   });
 
   it("the generator emits weapons whose d is a boolean, and never a flag the data disallows", () => {

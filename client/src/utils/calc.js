@@ -1,4 +1,5 @@
-import { AMMO, CONS, CONS_CAP_CATEGORIES, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { CONS, CONS_CAP_CATEGORIES, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { ammoRoundFor } from "../data/itemStats.js";
 
 // All functions take a loadout-shaped object: { weapons: [w0, w1], equip: [{t,i}], traits: [id], blocked }
 
@@ -210,6 +211,30 @@ export function upTotal(loadout) {
   return loadout.traits.reduce((a, id) => a + (TRAIT_UP.get(id) || 0), 0);
 }
 
+/**
+ * A weapon's ammo cost: the sum of both slots' chosen rounds' per-pair prices — one
+ * price per FILLED slot, per SPEC-0010 REQ "A Weapon Holds Up to Two Independently
+ * Chosen Rounds". A Scarce round prices `null` in the scrape (SPEC-0010 REQ "A Scarce
+ * Round Costs Nothing and Is Still Selectable"), which this reads as 0, not "no cost
+ * contribution" — the difference only matters for `variant.price`, which is never read
+ * outside this reduction.
+ *
+ * Governing: ADR-0014, SPEC-0010 REQ "A Weapon Holds Up to Two Independently Chosen
+ * Rounds", issue #344.
+ *
+ * A pair doubles the WEAPON price (see `totalCost` below) but never the ammo price —
+ * both barrels fire the same loaded round, so this is deliberately called once per
+ * weapon entry regardless of `w.d`, exactly as the pre-#344 single-variant cost was.
+ */
+export function ammoCostFor(w) {
+  if (!w) return 0;
+  const weaponId = WEAPONS[w.i][0];
+  return (w.ammo || []).reduce((sum, ammoId, slotIndex) => {
+    const round = ammoRoundFor(weaponId, slotIndex, ammoId);
+    return sum + (round ? (round.price ?? 0) : 0);
+  }, 0);
+}
+
 export function totalCost(loadout) {
   let t = 0;
   loadout.weapons.forEach((w) => {
@@ -219,15 +244,7 @@ export function totalCost(loadout) {
     // both fire the same round, so the ammo price does NOT double — the ammo line below
     // is deliberately outside this branch.
     t += WEAPONS[w.i][3] * (w.d === true ? 2 : 1);
-    // Governing: issue #201. The decoder bounds `a` against the weapon's own variant list,
-    // so a selection that resolves to nothing should be unreachable — but this used to
-    // index straight into the pool, and an unresolved variant threw here rather than
-    // costing nothing. Cost is a pure function of a loadout the user can also have built
-    // in-session; it should not be the thing that decides a build is unrenderable.
-    const variant = w.a >= 0 ? (AMMO[WEAPONS[w.i][4]] || [])[w.a] : null;
-    // variant[2] is cost — issue #340 gave every AMMO row a stable id at variant[0] (matching
-    // every other catalog category), shifting name to [1] and cost to [2].
-    if (variant) t += variant[2];
+    t += ammoCostFor(w);
   });
   loadout.equip.forEach((e) => {
     if (!e) return; // empty cell — ADR-0009 holes are not items

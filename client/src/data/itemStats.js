@@ -89,3 +89,73 @@ export function statFieldFor(id, field) {
   const value = record.fields[field];
   return value === undefined || value === "" ? null : value;
 }
+
+/**
+ * A weapon's ammo slots, derived from its own scraped `ammo` record — never from the
+ * shared `AMMO[ammoClass]` pools in catalog.js, and never from the weapon's action type.
+ *
+ * Governing: ADR-0014, SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts", REQ "A
+ * Weapon Declares Its Own Ammo Slot Count", REQ "A Dual-Family Weapon Declares Both
+ * Families" (amended by #431), issue #344.
+ *
+ * Returns `{ count, bound, groups }`:
+ *   - `count` is 0 (no ammo section — melee, Flame Rifle, Shredder), 1, or 2.
+ *   - `groups` has exactly `count` entries; `groups[k]` is the list of rounds slot `k`
+ *     may hold, each `{ id, name, family, iconSlug, scarce, price }` straight from the
+ *     scrape.
+ *   - `bound` is true only for a dual-family weapon (#431): `groups[0]` and `groups[1]`
+ *     are then two DISJOINT subsets of `accepted`, one per family, and a round from the
+ *     family bound to the other slot is not offered in this one — REQ "A Dual-Family
+ *     Weapon Declares Both Families" is explicit that the whole `accepted` list is the
+ *     record of what the weapon can take, not what either individual slot can take.
+ *   - `bound` is false for a one-slot weapon and for a split-reserve two-slot weapon
+ *     (e.g. Berthier 1892): both slots then share the SAME group, unrestricted between
+ *     them, and the two selections may repeat a round (spec's split-reserve scenario).
+ *
+ * Slot ORDER for a dual-family weapon follows the scrape's own family order in
+ * `accepted` — the wiki lists the weapon's primary family's rounds before its secondary
+ * family's (drilling: medium rounds, then shotgun), so group 0 is always the family the
+ * page itself leads with. This reads no field decided by this app (not `ammoClass`,
+ * which #340/#341 already found types the Drilling to the WRONG family); it reads only
+ * the order the scraper — which "observes and does not decide" (SPEC-0010 REQ "The
+ * Scrape Observes and Does Not Decide") — already recorded.
+ *
+ * A weapon whose reserve claims `familySplit` but whose accepted rounds don't actually
+ * span exactly two families is a data defect, not a decode-time judgment call for this
+ * function to make — it degrades to one unbound slot over the whole list rather than
+ * guessing which rounds belong to which slot.
+ */
+export function ammoSlotsFor(id) {
+  const ammo = statsFor(id)?.ammo;
+  const accepted = ammo?.accepted;
+  if (!Array.isArray(accepted) || accepted.length === 0) return { count: 0, bound: false, groups: [] };
+  const reserve = ammo.reserve ?? {};
+  if (reserve.familySplit) {
+    const families = [];
+    for (const round of accepted) if (!families.includes(round.family)) families.push(round.family);
+    if (families.length === 2) {
+      return { count: 2, bound: true, groups: families.map((f) => accepted.filter((r) => r.family === f)) };
+    }
+    // Data defect (see doc comment) — fall through to the unbound single-list shape.
+  }
+  if (Number.isInteger(reserve.perSlotOf)) return { count: 2, bound: false, groups: [accepted, accepted] };
+  return { count: 1, bound: false, groups: [accepted] };
+}
+
+/**
+ * The round a weapon's slot names, or null — looked up by stable id within THAT slot's
+ * own group (never a global registry), because REQ "Price Belongs to the Weapon-and-
+ * Round Pair" makes price a property of the (weapon, round) pair, not the round alone.
+ *
+ * Governing: ADR-0014, SPEC-0010 REQ "Price Belongs to the Weapon-and-Round Pair", issue #344.
+ *
+ * Returns null for an empty slot (`ammoId` is null), an out-of-range `slotIndex`, or an
+ * id the slot's group does not contain — e.g. a dual-family weapon's OTHER family's id
+ * offered against the wrong slot. Never throws.
+ */
+export function ammoRoundFor(weaponId, slotIndex, ammoId) {
+  if (!ammoId) return null;
+  const group = ammoSlotsFor(weaponId).groups[slotIndex];
+  if (!group) return null;
+  return group.find((r) => r.id === ammoId) ?? null;
+}

@@ -24,10 +24,12 @@ describe("totalCost", () => {
   // string-concatenation bug the second test is named for. They were last reconciled against the
   // wiki by `scrape-stats.mjs --write-catalog` (#195).
   it("counts weapon cost and optional ammo cost", () => {
-    const lo = loadoutWith({ weapons: [{ i: 0, a: -1 }] }); // Nagant M1895 = $24
+    // Nagant M1895's own accepted list (not the shared class pool) — High Velocity Ammo is
+    // $60 on this weapon (client/src/data/itemStats.json, id "nagant-m1895").
+    const lo = loadoutWith({ weapons: [{ i: 0, ammo: [null, null] }] }); // Nagant M1895 = $24
     expect(totalCost(lo)).toBe(24);
-    lo.weapons[0].a = 0; // FMJ tier-1 = $15
-    expect(totalCost(lo)).toBe(39);
+    lo.weapons[0].ammo = ["ammo-compact-high-velocity", null];
+    expect(totalCost(lo)).toBe(84);
   });
 
   it("sums tool and consumable costs numerically, not by concatenation", () => {
@@ -63,20 +65,23 @@ describe("totalCost", () => {
     expect(totalCost(lo)).toBe(85);
   });
 
-  // Governing: issue #201. This used to index the ammo pool unguarded, so a loadout whose
-  // ammo index does not name a variant threw here instead of costing nothing — and totalCost
-  // runs on every render, which is what turned a bad share link into a blank page.
-  it("charges no ammo for an index its weapon's pool does not have", () => {
+  // Governing: issue #201 (this used to index the ammo pool unguarded, so a loadout whose
+  // ammo selection did not name a variant threw here instead of costing nothing — and
+  // totalCost runs on every render, which is what turned a bad share link into a blank
+  // page), ADR-0014/SPEC-0010 issue #344 (the guard is now id-based, against the weapon's
+  // OWN accepted list, not a shared class pool).
+  it("charges no ammo for an id its weapon's accepted list does not have", () => {
     const compact = WEAPONS.findIndex((w) => w[4] === "compact");
-    expect(totalCost(loadoutWith({ weapons: [{ i: compact, a: 9999 }] }))).toBe(WEAPONS[compact][3]);
+    expect(totalCost(loadoutWith({ weapons: [{ i: compact, ammo: ["ammo-does-not-exist", null] }] }))).toBe(
+      WEAPONS[compact][3]
+    );
 
-    // Governing: issue #340. `special` weapons used to have no purchasable variants at all — an
-    // empty pool, not a short one — but #340 populated AMMO.special with nine rows (see the block
-    // comment above AMMO.special in catalog.js), so index 0 now resolves to a real, priced round
-    // for a special-class weapon. `none`-class (melee) weapons are the ones still genuinely
-    // ammo-less; the assertion moves there to keep testing "a truly empty pool clamps to no ammo".
+    // `none`-class (melee) weapons have no ammo section at all — ammoSlotsFor's `count: 0`
+    // means any id is unresolvable here too, by construction rather than by data content.
     const none = WEAPONS.findIndex((w) => w[4] === "none");
-    expect(totalCost(loadoutWith({ weapons: [{ i: none, a: 0 }] }))).toBe(WEAPONS[none][3]);
+    expect(totalCost(loadoutWith({ weapons: [{ i: none, ammo: ["ammo-does-not-exist", null] }] }))).toBe(
+      WEAPONS[none][3]
+    );
   });
 });
 
@@ -166,13 +171,13 @@ describe("SPEC-0009: the weapon budget", () => {
     // A size-3 weapon in one slot and an empty slot must occupy 3 points.
     const size3 = WEAPONS.findIndex((w) => w[2] === 3);
     expect(WEAPONS[size3][2]).toBe(3);
-    const held = loadoutWith({ weapons: [{ i: size3, a: -1 }, null] });
+    const held = loadoutWith({ weapons: [{ i: size3, ammo: [null, null] }, null] });
     expect(capUsed(held)).toBe(3);
 
     // And two held entries sum their sizes: 1 + 2 = 3.
     const size1 = WEAPONS.findIndex((w) => w[2] === 1);
     const size2 = WEAPONS.findIndex((w) => w[2] === 2);
-    expect(capUsed(loadoutWith({ weapons: [{ i: size1, a: -1 }, { i: size2, a: -1 }] }))).toBe(
+    expect(capUsed(loadoutWith({ weapons: [{ i: size1, ammo: [null, null] }, { i: size2, ammo: [null, null] }] }))).toBe(
       WEAPONS[size1][2] + WEAPONS[size2][2]
     );
   });
@@ -191,8 +196,8 @@ describe("dual-wielded pairs: budget and cost", () => {
   // (Frontier 73C) must together total 5 points.
   const PISTOL = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
   const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
-  const pair = { i: PISTOL, a: -1, d: true };
-  const single = { i: PISTOL, a: -1, d: false };
+  const pair = { i: PISTOL, ammo: [null, null], d: true };
+  const single = { i: PISTOL, ammo: [null, null], d: false };
 
   it("a pair occupies size + 1, occupying 2 of 5 with a size-1 pistol", () => {
     expect(WEAPONS[PISTOL][2]).toBe(1);
@@ -202,7 +207,7 @@ describe("dual-wielded pairs: budget and cost", () => {
 
   it("a pair of a size-1 pistol and a size-3 rifle is a legal 5-point loadout", () => {
     expect(WEAPONS[RIFLE][2]).toBe(3);
-    const lo = loadoutWith({ weapons: [pair, { i: RIFLE, a: -1, d: false }] });
+    const lo = loadoutWith({ weapons: [pair, { i: RIFLE, ammo: [null, null], d: false }] });
     expect(capUsed(lo)).toBe(5);
     expect(capUsed(lo)).toBeLessThanOrEqual(capMax(lo));
   });
@@ -210,17 +215,18 @@ describe("dual-wielded pairs: budget and cost", () => {
   it("weaponSize returns 0 for an empty entry and ignores an absent d", () => {
     expect(weaponSize(null)).toBe(0);
     // An entry that has not been normalized (no `d` at all) is a single, never a pair.
-    expect(weaponSize({ i: PISTOL, a: -1 })).toBe(1);
+    expect(weaponSize({ i: PISTOL, ammo: [null, null] })).toBe(1);
   });
 
   it("doubles the weapon price for a pair but leaves the ammo price unchanged", () => {
-    // The Conversion's own catalog price, plus one priced ammo variant from its pool.
-    const AMMO_INDEX = 0;
-    const singleLo = loadoutWith({ weapons: [{ i: PISTOL, a: AMMO_INDEX, d: false }] });
-    const pairLo = loadoutWith({ weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }] });
+    // The Conversion's own accepted list (not the shared class pool) — FMJ Ammo is $50 on
+    // this weapon (client/src/data/itemStats.json, id "caldwell-conversion-pistol").
+    const AMMO_ID = "ammo-compact-fmj";
+    const singleLo = loadoutWith({ weapons: [{ i: PISTOL, ammo: [AMMO_ID, null], d: false }] });
+    const pairLo = loadoutWith({ weapons: [{ i: PISTOL, ammo: [AMMO_ID, null], d: true }] });
     const ammoLine = (lo) => totalCost(lo) - WEAPONS[lo.weapons[0].i][3] * (lo.weapons[0].d === true ? 2 : 1);
 
-    // The pool really has a priced variant at index 0, or this test proves nothing.
+    // The weapon's own list really prices this round above zero, or this test proves nothing.
     expect(ammoLine(singleLo)).toBeGreaterThan(0);
 
     // Weapon line: doubles. Ammo line: byte-identical. Asserted separately.

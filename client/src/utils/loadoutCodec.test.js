@@ -25,17 +25,20 @@ import { TRAIT_MAX, capUsed, upTotal } from "./calc.js";
 // (immune to array reorders), and the legacy pre-versioning index-based encoding still decodes
 // against the catalog's current order. Both must round-trip to the same in-memory loadout.
 
-// Weapon 19 is the Frontier 73C, which draws from the five-variant `compact` pool, so `a: 2` names a
-// variant it really has. The sample used to pair `a: 2` with the Dolch 96 — a `special`-pool weapon
-// whose purchasable variant list is EMPTY — which is the exact unrenderable shape issue #201 is about,
-// asserted as if it round-tripped.
+// Weapon 19 is the Frontier 73C. "ammo-compact-high-velocity" is a round its OWN accepted
+// list actually has (client/src/data/itemStats.json, id "frontier-73c") — Dumdum, which an
+// earlier revision of this fixture used, is offered by the shared `compact` class pool but
+// NOT by this weapon's own list, exactly the shared-pool-vs-per-weapon-list gap SPEC-0010
+// exists to close (ADR-0014, issue #344). `toData` (issue #344) reverse-resolves this id to
+// its live index in `AMMO.compact` for the wire — 1, not the pool's arbitrary internal
+// order — asserted directly where that matters (`re-encodes under the surviving id` below).
 //
 // It named live index 16 until #243 retired the Winfield M1873C, a duplicate of this very weapon; the
 // delete shifted every later live index down one. In-memory loadouts are index-based, so a fixture
 // like this has to move with the array — which is why the wire format stores ids instead.
 function sampleLoadout() {
   const lo = emptyLoadout();
-  lo.weapons = [{ i: 0, a: -1 }, { i: 19, a: 2 }]; // Nagant M1895, Frontier 73C + ammo variant
+  lo.weapons = [{ i: 0, ammo: [null, null] }, { i: 19, ammo: ["ammo-compact-high-velocity", null] }]; // Nagant M1895, Frontier 73C + ammo
   lo.equip = [{ t: "T", i: 0 }, { t: "C", i: 3 }]; // First Aid Kit, Antidote Shot
   lo.traits = ["quartermaster"];
   lo.name = "Test build";
@@ -60,7 +63,11 @@ describe("toData / fromData (v1 id-based wire format)", () => {
     // lift of the SAME count (`b: 1`) is asserted separately below.
     expect(dec.blocked).toEqual([]);
     // Version 3 decodes a `d` on every weapon — a single here, since the sample has no pair.
-    expect(dec.weapons).toEqual([{ i: 0, a: -1, d: false }, { i: 19, a: 2, d: false }]);
+    // `a: 1` is toData's reverse-resolved live index for "ammo-compact-high-velocity" in
+    // AMMO.compact — decode (untouched by #344, per #343's contract) still produces the
+    // bare-index `a`, not the id; `dec.ammoIds[1]` is the id-based read (asserted below).
+    expect(dec.weapons).toEqual([{ i: 0, a: -1, d: false }, { i: 19, a: 1, d: false }]);
+    expect(dec.ammoIds).toEqual([null, "ammo-compact-high-velocity"]);
     // Current entries decode at their own cells; the rest of the fixed grid is holes.
     expect(dec.equip).toEqual([{ t: "T", i: 0 }, { t: "C", i: 3 }, null, null, null, null, null, null]);
     expect(dec.traits).toEqual(["quartermaster"]);
@@ -714,8 +721,14 @@ describe("the retired Winfield M1873C alias", () => {
     const decoded = fromData({
       v: FORMAT_VERSION, w: [["winfield-m1873c", 2], null], e: [], tr: [], n: "", b: 0,
     });
-    const re = toData(decoded);
-    // Version 3: three elements per entry, the flag unset for this single.
+    // toData (issue #344) reads `.ammo`, not the decoder's own `.a` + top-level `ammoIds`
+    // pair — the store normalizes between the two (loadoutSlice.js's normalizeWeaponAmmo),
+    // simulated inline here rather than importing the store slice into a pure-codec test.
+    const normalized = { i: decoded.weapons[0].i, d: decoded.weapons[0].d, ammo: [decoded.ammoIds[0], null] };
+    const re = toData({ ...decoded, weapons: [normalized, null] });
+    // Version 3: three elements per entry, the flag unset for this single. Index 2 survives
+    // the round trip because "ammo-compact-dumdum" (what legacy index 2 resolves to) sits at
+    // the SAME live index in AMMO.compact today — coincidence of this fixture, not a rule.
     expect(re.w[0]).toEqual(["frontier-73c", 2, false]);
     expect(nameOf(fromData(re), 0)).toBe("Frontier 73C");
   });
@@ -970,11 +983,12 @@ describe("version-3 encoding (issue #332)", () => {
   // (Frontier 73C) — together a legal 5-point loadout (SPEC-0009).
   const PISTOL = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
   const RIFLE = WEAPONS.findIndex((w) => w[0] === "frontier-73c");
-  const AMMO_INDEX = 1; // a real variant the Conversion's pool has
+  const AMMO_ID = "ammo-compact-fmj"; // a real round the Conversion's OWN accepted list has
+  const AMMO_WIRE_INDEX = 0; // AMMO_ID's live position in AMMO.compact — what decode reads back as `a`
 
   const pairLoadout = () => {
     const lo = emptyLoadout();
-    lo.weapons = [{ i: PISTOL, a: AMMO_INDEX, d: true }, { i: RIFLE, a: -1, d: false }];
+    lo.weapons = [{ i: PISTOL, ammo: [AMMO_ID, null], d: true }, { i: RIFLE, ammo: [null, null], d: false }];
     return lo;
   };
 
@@ -986,8 +1000,11 @@ describe("version-3 encoding (issue #332)", () => {
     const enc = toData(pairLoadout());
     expect(enc.v).toBe(3);
     const dec = fromData(enc);
-    expect(dec.weapons[0]).toEqual({ i: PISTOL, a: AMMO_INDEX, d: true });
+    // Decode (untouched by #344, per #343's contract) still produces the bare-index `a`,
+    // not the id — AMMO_WIRE_INDEX is what toData's reverse-resolve (issue #344) wrote.
+    expect(dec.weapons[0]).toEqual({ i: PISTOL, a: AMMO_WIRE_INDEX, d: true });
     expect(dec.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(dec.ammoIds[0]).toBe(AMMO_ID);
     // The pair + rifle occupies 5 points — capacity must be unchanged through the round trip.
     expect(capUsed(dec)).toBe(5);
   });
@@ -996,13 +1013,14 @@ describe("version-3 encoding (issue #332)", () => {
     const url = encodeShareUrl(pairLoadout());
     // readHashLoadout reads location.hash; encodeShareUrl set it via history.replaceState.
     const via = fromData(JSON.parse(atob(url.split("#L=")[1])));
-    expect(via.weapons[0]).toEqual({ i: PISTOL, a: AMMO_INDEX, d: true });
+    expect(via.weapons[0]).toEqual({ i: PISTOL, a: AMMO_WIRE_INDEX, d: true });
     expect(via.weapons[1]).toEqual({ i: RIFLE, a: -1, d: false });
+    expect(via.ammoIds[0]).toBe(AMMO_ID);
   });
 
   it("a single round-trips with a three-element entry and the flag unset", () => {
     const lo = emptyLoadout();
-    lo.weapons = [{ i: PISTOL, a: -1, d: false }, null];
+    lo.weapons = [{ i: PISTOL, ammo: [null, null], d: false }, null];
     const enc = toData(lo);
     expect(enc.w[0]).toEqual([WEAPONS[PISTOL][0], -1, false]);
     expect(enc.w[0]).toHaveLength(3);
@@ -1017,7 +1035,7 @@ describe("version-3 encoding (issue #332)", () => {
     // A weapon with NO d at all (a decoder-produced or pre-normalization entry) must
     // still serialize to a boolean, not null — this is the byte the server validates.
     const dless = emptyLoadout();
-    dless.weapons = [{ i: PISTOL, a: -1 }, null];
+    dless.weapons = [{ i: PISTOL, ammo: [null, null] }, null];
     const ser2 = JSON.parse(JSON.stringify(toData(dless)));
     expect(ser2.w[0][2]).toBe(false);
     expect(typeof ser2.w[0][2]).toBe("boolean");
@@ -1034,7 +1052,7 @@ describe("version-3 encoding (issue #332)", () => {
     // with no weapon flagged, and re-encoding it as v3 must not drop anything.
     const draft = JSON.stringify({
       v: 2,
-      w: [[WEAPONS[PISTOL][0], AMMO_INDEX], null],
+      w: [[WEAPONS[PISTOL][0], AMMO_WIRE_INDEX], null],
       e: [["T", "first-aid-kit"], null, null, null, null, null, null, null],
       tr: [],
       n: "Old draft",
@@ -1043,14 +1061,18 @@ describe("version-3 encoding (issue #332)", () => {
     localStorage.setItem(LS_CUR, draft);
     const loaded = readStoredLoadout();
     // The v2 decoder yields NO `d` (a v2 record could not express a pair).
-    expect(loaded.weapons[0]).toEqual({ i: PISTOL, a: AMMO_INDEX });
+    expect(loaded.weapons[0]).toEqual({ i: PISTOL, a: AMMO_WIRE_INDEX });
     expect(loaded.weapons[0]).not.toHaveProperty("d");
     expect(loaded.name).toBe("Old draft");
+    expect(loaded.ammoIds[0]).toBe(AMMO_ID);
 
-    // The next save re-encodes as v3; the pair flag must not be invented, and the
-    // weapon must survive with everything it had (its ammo index included).
-    const saved = toData(loaded);
-    expect(saved.w[0]).toEqual([WEAPONS[PISTOL][0], AMMO_INDEX, false]);
+    // The next save re-encodes as v3; the pair flag must not be invented, and the weapon
+    // must survive with everything it had. toData reads `.ammo` (issue #344), not the
+    // decoder's own `.a` + `ammoIds` — simulating the store's normalization step inline,
+    // the same way the Winfield alias re-encode test above does.
+    const normalized = { i: loaded.weapons[0].i, d: false, ammo: [loaded.ammoIds[0], null] };
+    const saved = toData({ ...loaded, weapons: [normalized, null] });
+    expect(saved.w[0]).toEqual([WEAPONS[PISTOL][0], AMMO_WIRE_INDEX, false]);
     expect(JSON.parse(JSON.stringify(saved)).w[0][2]).toBe(false);
   });
 });

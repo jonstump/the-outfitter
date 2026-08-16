@@ -1,10 +1,10 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AMMO, AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
-import { dualWieldFor } from "../../data/itemStats.js";
+import { AMMO_LABEL, WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { ammoRoundFor, ammoSlotsFor, dualWieldFor } from "../../data/itemStats.js";
 import { selectWeaponSlot } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
-import { capMax, capUsed } from "../../utils/calc.js";
+import { ammoCostFor, capMax, capUsed } from "../../utils/calc.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -56,16 +56,15 @@ export default function WeaponSlot({ slot }) {
   }
 
   const def = WEAPONS[w.i];
-  const variants = AMMO[def[4]] || [];
-  // Governing: issue #201. `w.a` arrives from a decoded share link or from localStorage, and
-  // an index past the end of this weapon's variant list used to be read unguarded — one
-  // `undefined[1]` here throws during render, and React unmounts the whole tree, so the
-  // symptom is a blank page rather than a wrong price. The decoder bounds the value now;
-  // this resolves it to an object instead of asserting one, so a future decode bug degrades
-  // to "Standard" rather than back to a white screen.
-  const variant = w.a >= 0 ? variants[w.a] : null;
-  // variant[0] is now a stable id (issue #340), so name shifted to [1] and cost to [2].
-  const ammoCost = variant ? variant[2] : 0;
+  // Governing: ADR-0014, SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts", issue
+  // #344. The weapon's OWN accepted rounds and slot count — never the shared class pool
+  // `AMMO[ammoClass]` retired from this component's compatibility/price decisions here.
+  const slots = ammoSlotsFor(def[0]);
+  // Slot 0 is the only slot this component renders a control for; a second slot's UI is
+  // #346/#347's story. `w.ammo[0]` still prices and displays correctly even before that
+  // control exists — `ammoCostFor` below sums BOTH slots regardless of which have UI.
+  const variant = ammoRoundFor(def[0], 0, w.ammo?.[0] ?? null);
+  const ammoCost = ammoCostFor(w);
 
   // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot".
   //
@@ -150,7 +149,7 @@ export default function WeaponSlot({ slot }) {
             <div className="weapon-name">{def[1]}</div>
             <div className="weapon-meta">
               Size {def[2]} · {AMMO_LABEL[def[4]]}
-              {variant ? ` · ${variant[1]}` : ""}
+              {variant ? ` · ${variant.name}` : ""}
             </div>
           </div>
         </div>
@@ -161,31 +160,38 @@ export default function WeaponSlot({ slot }) {
           <div className="weapon-cost">${def[3] + ammoCost}</div>
         </div>
       </div>
-      {variants.length > 0 && (
+      {slots.count > 0 && (
         <div className="ammo-row">
           <span className="panel-meta">AMMO</span>
           {/* `.select-sm` — the dense step of the control scale (issue #134). The inline
               `fontSize: 15.5` this replaces was a local patch over the bare element rule, and
               is exactly the kind of per-site size override the scale exists to retire; only
-              the WIDTH stays inline, because it is this slot's layout and nobody else's. */}
+              the WIDTH stays inline, because it is this slot's layout and nobody else's.
+
+              Governing: ADR-0014, SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts",
+              issue #344. Options come from `slots.groups[0]` — this weapon's OWN accepted
+              rounds for slot 0, never the shared class pool — and the value IS the round's
+              stable id, not a positional index (#343 already made the wire/store id-based;
+              this is the last reader still keying off a bare index before #344).
+
+              Slot 0 only: a two-slot weapon (dual-family or split-reserve) has a second slot
+              in state and price (ammoSlotsFor/ammoCostFor above), but its own control is
+              #346/#347's story, not this one's. */}
           <select
             className="select-sm"
-            // An unresolved index has no <option> to match, which renders the control blank
-            // and offers no way back; show what the loadout actually costs — Standard.
-            value={String(variant ? w.a : -1)}
+            // An unresolved id has no matching <option>, which renders the control on
+            // "Standard" without correcting the stored value — see ammoRoundFor's contract:
+            // an id the weapon's list no longer contains reads back as no round chosen.
+            value={w.ammo?.[0] ?? ""}
             onChange={(e) =>
-              dispatch(loadoutActions.setAmmo({ slot, ammoIndex: parseInt(e.target.value, 10) }))
+              dispatch(loadoutActions.setAmmo({ slot, ammoSlotIndex: 0, ammoId: e.target.value || null }))
             }
             style={{ flex: 1, maxWidth: 260 }}
           >
-            <option value="-1">Standard</option>
-            {variants.map((v, idx) => (
-              // v[0] is the row's stable id (issue #340) — the <option> value is still the
-              // positional index (`idx`), not the id, because the wire format and this select
-              // still key ammo selection off `w.a`, a bare index, until #343 wires id-based
-              // decoding in. v[1] is name, v[2] is cost.
-              <option key={v[0]} value={String(idx)}>
-                {v[1]} (+${v[2]})
+            <option value="">Standard</option>
+            {slots.groups[0].map((round) => (
+              <option key={round.id} value={round.id}>
+                {round.name} (+${round.price ?? 0})
               </option>
             ))}
           </select>
