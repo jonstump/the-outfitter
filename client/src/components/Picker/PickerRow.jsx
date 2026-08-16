@@ -28,7 +28,11 @@ export default function PickerRow({ row, showThumb, thumbVariant = "square" }) {
       <span className="picker-row-badge" style={{ color: row.badgeColor }}>
         {row.badge}
       </span>
-      <span className="picker-row-cost">{row.costStr}</span>
+      {/* costColor carries ADR-0018's spur colour for a Scarce/Burn row (issue #362);
+          undefined leaves the default `.picker-row-cost` gold from global.css alone. */}
+      <span className="picker-row-cost" style={row.costColor ? { color: row.costColor } : undefined}>
+        {row.costStr}
+      </span>
     </button>
   );
 }

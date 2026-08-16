@@ -1,6 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { TRAITS, traitThumb } from "../../data/catalog.js";
-import { descriptionFor } from "../../data/itemStats.js";
+import { RARITY_COLOR, descriptionFor, rarityFor } from "../../data/itemStats.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { TRAIT_MAX } from "../../utils/calc.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
@@ -31,9 +31,23 @@ function EmptyCell() {
 function TraitCell({ trait, onRemove }) {
   const [id, name, up] = trait;
   const description = descriptionFor(id);
+  // Governing: ADR-0018 (amended by #392), issue #362. This composed string is the
+  // surface the ADR names directly: `trait-cell-up` below is aria-hidden, so it is the
+  // ONLY place a screen reader learns the trait's cost. Until this fix a Scarce trait
+  // (cost 0) was announced as "0 upgrade points" — the exact false claim ADR-0018 exists
+  // to correct, since Scarce means "cannot be bought", not "free". A Burn trait keeps its
+  // real point cost (Necromancer's is 4 and correct, since Burn does not imply free) and
+  // gains a second clause disclosing consumption instead of losing its number.
+  //
   // The tooltip is decorative duplication — the button's accessible name carries the same
   // facts, so a screen reader never depends on a hover surface it cannot reach.
-  const label = `${name}, ${up} upgrade point${up === 1 ? "" : "s"}. Activate to remove.`;
+  const rarity = rarityFor(id);
+  const costPhrase = rarity.scarce
+    ? "Scarce — cannot be purchased here"
+    : `${up} upgrade point${up === 1 ? "" : "s"}`;
+  const burnPhrase = rarity.burn ? ", consumed on use" : "";
+  const label = `${name}, ${costPhrase}${burnPhrase}. Activate to remove.`;
+  const upColor = rarity.scarce ? RARITY_COLOR.scarce : rarity.burn ? RARITY_COLOR.burn : undefined;
   return (
     <button
       type="button"
@@ -42,8 +56,12 @@ function TraitCell({ trait, onRemove }) {
       onClick={() => onRemove(id)}
     >
       <ItemThumb category="traits" name={name} alt="" svgPath={traitThumb(trait)} className="trait-cell-thumb" />
-      <span className="trait-cell-up" aria-hidden="true">
-        {up}
+      {/* The optional spur-colour half of ADR-0018's treatment. A Scarce trait's icon
+          glyph swaps the always-0 number for a dash — "0" on the icon is the same
+          visual false claim the label above fixes, even though this span is
+          aria-hidden and cannot itself reach a screen reader. */}
+      <span className="trait-cell-up" aria-hidden="true" style={upColor ? { color: upColor } : undefined}>
+        {rarity.scarce ? "—" : up}
       </span>
       {/* Name, then the scraped description when there is one. The cost is still absent: it is
           already on the icon, and repeating it as "8 UP" said the same thing twice in one hover.

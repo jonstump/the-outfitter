@@ -16,7 +16,7 @@ import {
   traitThumb,
   weaponThumb,
 } from "../../data/catalog.js";
-import { descriptionFor } from "../../data/itemStats.js";
+import { RARITY_COLOR, descriptionFor, rarityFor, rarityLabel } from "../../data/itemStats.js";
 import { capMax, consAllowed, consCategoryCount, hasFreeCell, upTotal } from "../../utils/calc.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
@@ -59,6 +59,15 @@ function buildRows(tab, ui, loadout, dispatch) {
         const free = loadout.weapons[0] && loadout.weapons[1] ? -1 : loadout.weapons[0] ? 1 : 0;
         const other = free === -1 ? 999 : loadout.weapons[1 - free] ? WEAPONS[loadout.weapons[1 - free].i][2] : 0;
         const fits = free !== -1 && x.w[2] + other <= max;
+        // Governing: ADR-0018 (amended by #392), issue #362. A Scarce weapon's cost is
+        // a hand-authored 0 meaning "cannot be bought here", not "free" — four weapons
+        // (Flame Rifle, Homestead 78, Shredder, Wildland) carry it, and none of them
+        // have `acquisitionClasses` to read (that field is trait-only by spec), so
+        // `rarityFor` falls back to the scrape's own `purchasable: false` evidence for
+        // them. This row has no aria-label of its own (see PickerRow.jsx), so its
+        // accessible name is composed straight from this visible text — fixing
+        // `costStr` here fixes both the screen and the screen reader in one place.
+        const rarity = rarityFor(x.w[0]);
         return {
           key: x.i,
           name: x.w[1],
@@ -67,7 +76,8 @@ function buildRows(tab, ui, loadout, dispatch) {
           badgeColor: "#c4a05e",
           category: "weapons",
           thumb: weaponThumb(x.w),
-          costStr: "$" + x.w[3],
+          costStr: rarity.scarce ? rarityLabel(x.w[0]) : "$" + x.w[3],
+          costColor: rarity.scarce ? RARITY_COLOR.scarce : undefined,
           enabled: fits,
           onAdd: () => fits && dispatch(loadoutActions.addWeapon(x.i)),
         };
@@ -127,6 +137,15 @@ function buildRows(tab, ui, loadout, dispatch) {
     .filter((x) => match(x.t[1]) && gOK(x.t[3]))
     .map((x) => {
       const ok = !loadout.traits.includes(x.t[0]) && !(ui.upBudgetOn && upSpent + x.t[2] > ui.upBudget);
+      // Governing: ADR-0018 (amended by #392), issue #362. Eight traits carry a
+      // hand-authored 0 cost meaning Scarce (cannot be bought), and a bare "0 pts"
+      // badge asserted the opposite — the badge is this row's only cost signal, since
+      // traits have no dollar `costStr`. A Burn trait keeps its real point cost: four
+      // of the five Burn traits are ALSO Scarce and take the branch above, but
+      // Necromancer is Burn-only with a real 4-point cost, so its badge stays "4 pts"
+      // and only gains the Burn disclosure, never loses its number.
+      const rarity = rarityFor(x.t[0]);
+      const pts = x.t[2] + (x.t[2] === 1 ? " pt" : " pts");
       return {
         key: x.i,
         name: x.t[1],
@@ -143,9 +162,10 @@ function buildRows(tab, ui, loadout, dispatch) {
         // badge is the only cost signal on a trait row (traits have no dollar cost, so
         // `costStr` is empty), so unlike the header stat and the trait-cell hover the number
         // can't simply lose its unit here. Singular at 1 so the cheapest traits don't read
-        // "1 pts".
-        badge: x.t[2] + (x.t[2] === 1 ? " pt" : " pts"),
-        badgeColor: "#c4a05e",
+        // "1 pts". A Scarce trait's badge replaces the (always-0) number with its rarity text
+        // instead — see the comment above.
+        badge: rarity.scarce ? rarityLabel(x.t[0]) : pts + (rarity.burn ? " · Burn" : ""),
+        badgeColor: rarity.scarce ? RARITY_COLOR.scarce : rarity.burn ? RARITY_COLOR.burn : "#c4a05e",
         category: "traits",
         thumb: traitThumb(x.t),
         costStr: "",
