@@ -1,5 +1,5 @@
 import { TRAITS } from "../data/catalog.js";
-import { upTotal } from "../utils/calc.js";
+import { totalCost, upTotal } from "../utils/calc.js";
 import { encodeShareUrl, fromData } from "../utils/loadoutCodec.js";
 import { randomizeLoadout } from "../utils/randomize.js";
 import { loadoutActions } from "./loadoutSlice.js";
@@ -18,7 +18,23 @@ export function randomizeThunk() {
       upBudget: ui.upBudget,
     });
     dispatch(loadoutActions.setLoadout(result));
-    dispatch(uiActions.setMessage(""));
+    // Governing: SPEC-0008, issue #380. Related: #211, #208.
+    // When budgetOn, randomizeLoadout retries a bounded number of uniform draws and
+    // falls back to the cheapest one it saw if none landed at or under budget — it
+    // never reports that fallback happened. Without this, a miss looks identical to
+    // any other result: the total merely recolors red, with nothing to tell the player
+    // a retry would very likely land in budget. Disclose the miss here instead of
+    // unconditionally clearing the banner; a subsequent in-budget (or budget-off)
+    // press clears it again.
+    if (ui.budgetOn && totalCost(result) > ui.budget) {
+      dispatch(
+        uiActions.setMessage(
+          "No in-budget build found after several tries — this is the cheapest of the bunch. Press Randomize again for another shot."
+        )
+      );
+    } else {
+      dispatch(uiActions.setMessage(""));
+    }
   };
 }
 

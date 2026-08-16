@@ -1,12 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 import { WEAPONS } from "../data/catalog.js";
 import { encodeShareUrl, toData } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
-import uiReducer from "./uiSlice.js";
+import uiReducer, { uiActions } from "./uiSlice.js";
 import savedLoadoutsReducer, { saveCurrent } from "./savedLoadoutsSlice.js";
 import { loadSavedThunk, randomizeThunk, shareThunk } from "./thunks.js";
+
+// Swappable-for-one-test stub for randomizeLoadout, same pattern as selectors.test.js's
+// stubbedRule. Null means "use the real generator"; every test outside the #380 describe
+// block below runs against the genuine implementation.
+const { stubbedResult } = vi.hoisted(() => ({ stubbedResult: { fn: null } }));
+vi.mock("../utils/randomize.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, randomizeLoadout: (args) => (stubbedResult.fn ?? actual.randomizeLoadout)(args) };
+});
+
+afterEach(() => {
+  stubbedResult.fn = null;
+});
 
 // Governing: issue #27 (randomize's payload must satisfy setLoadout's shape
 // validation — a shape mismatch used to throw inside the reducer and crashed the
@@ -348,5 +361,87 @@ describe("shareThunk error handling (issue #358)", () => {
       vi.unstubAllGlobals();
       globalThis.btoa = realBtoa;
     }
+  });
+});
+
+// Governing: SPEC-0008, issue #380. Related: #211, #208.
+//
+// When budgetOn, randomizeLoadout retries a bounded number of uniform draws and, if none
+// land at or under budget, falls back to the cheapest attempt it drew — silently. Before
+// this fix, randomizeThunk unconditionally cleared the message banner, so a miss looked
+// identical to any other result: the total merely recolored red, with nothing telling the
+// player a retry would very likely land in budget. These tests stub randomizeLoadout (via
+// the module mock above) so the "did it land in budget" branch is deterministic rather than
+// dependent on the real generator's random draws.
+describe("randomizeThunk budget miss disclosure (issue #380)", () => {
+  function makeBudgetStore(budgetOn, budget) {
+    return configureStore({
+      reducer: {
+        loadout: loadoutReducer,
+        ui: uiReducer,
+      },
+      preloadedState: {
+        loadout: { ...emptyLoadout(), savedId: null, nameIsDerived: true },
+        ui: {
+          tab: "Weapons",
+          search: "",
+          group: "All",
+          sizeFilter: "All",
+          ammoF: "All",
+          budgetOn,
+          budget,
+          upBudgetOn: false,
+          upBudget: 5,
+          message: "",
+        },
+      },
+    });
+  }
+
+  // Nagant M1895 is WEAPONS[0], price 24 (see client/src/data/catalog.js) — cheap enough
+  // that a low budget guarantees a miss and a generous budget guarantees a hit.
+  const singleWeaponBuild = () => ({
+    weapons: [{ i: 0, a: -1, d: false }, null],
+    equip: [null, null, null, null, null, null, null, null],
+    traits: [],
+  });
+
+  it("sets a message when budgetOn and the returned build's totalCost exceeds the budget", () => {
+    stubbedResult.fn = () => singleWeaponBuild(); // totalCost 24
+    const store = makeBudgetStore(true, 10); // budget below the build's cost — guaranteed miss
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).not.toBe("");
+    expect(store.getState().ui.message.toLowerCase()).toContain("budget");
+  });
+
+  it("sets no message when budgetOn and the returned build satisfies the budget", () => {
+    stubbedResult.fn = () => singleWeaponBuild(); // totalCost 24
+    const store = makeBudgetStore(true, 200); // budget comfortably covers the build's cost
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).toBe("");
+  });
+
+  it("clears a prior miss message on the next successful (in-budget) press", () => {
+    stubbedResult.fn = () => singleWeaponBuild(); // totalCost 24
+    const store = makeBudgetStore(true, 10); // first press: guaranteed miss
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).not.toBe("");
+
+    // Second press lands in budget — the miss message must clear, not linger.
+    store.dispatch(uiActions.setBudget(200));
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).toBe("");
+  });
+
+  it("clears a prior miss message on the next press when budget mode is turned off", () => {
+    stubbedResult.fn = () => singleWeaponBuild(); // totalCost 24
+    const store = makeBudgetStore(true, 10); // first press: guaranteed miss
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).not.toBe("");
+
+    // Second press has budget mode off entirely — the miss message must clear.
+    store.dispatch(uiActions.toggleBudgetOn());
+    store.dispatch(randomizeThunk());
+    expect(store.getState().ui.message).toBe("");
   });
 });
