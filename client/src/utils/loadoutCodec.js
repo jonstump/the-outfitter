@@ -187,6 +187,35 @@ export function emptyLoadout() {
   };
 }
 
+// Governing: ADR-0014, SPEC-0010 REQ "Wire Format Version 4 References Rounds by Stable
+// Id", issue #344. Loadout STATE now carries ammo as stable ids (`weapons[k].ammo`,
+// #344's own "switch the readers" change) — but FORMAT_VERSION stays 3 here, because
+// raising it and encoding ids directly on the wire is #345's job, not this one's. So
+// slot 0's chosen id has to translate BACK to a live-pool index for this version's
+// `[weaponId, ammoIndex, d]` shape, matching what `boundedAmmo` will read it against the
+// next time this exact record is decoded.
+//
+// Resolved against `AMMO[weapon's OWN ammoClass]` specifically — never a global search
+// across every pool — because that is the ONE pool `boundedAmmo` reads the index
+// against on decode. Writing an index relative to a different pool than decode will
+// read it against is the Frontier 73C hazard in reverse: the NUMBER would be right and
+// the ROUND it names would be wrong.
+//
+// Neither this wire version nor the already-deployed version-4 validator (#342, #458)
+// has a second ammo element at all, so slot 1 is never written here — silently dropped
+// on save, a known and documented gap (flagged in #458's PR, tracked for #345/#346). A
+// slot-0 round this pool genuinely cannot express — e.g. a dual-family weapon's round
+// from the family `ammoClass` does NOT name; the Drilling's catalog `ammoClass` is
+// "shotgun", so its medium-family rounds have no index in `AMMO.shotgun` at all — writes
+// -1 ("no round chosen" on the next load), never a DIFFERENT round. `findIndex`'s own
+// -1-on-miss is exactly that contract; no extra branch needed.
+function wireAmmoIndex(w) {
+  const chosenId = w.ammo?.[0];
+  if (!chosenId) return -1;
+  const pool = AMMO[WEAPONS[w.i][4]] || [];
+  return pool.findIndex((row) => row[0] === chosenId);
+}
+
 // loadout -> compact wire shape, e.g. for localStorage / share links / saved records.
 // Items are referenced by stable catalog id (see the catalog.js header) rather than
 // array position, and the envelope carries a format version so future format changes
@@ -209,7 +238,7 @@ export function toData(loadout) {
     // (isIslandV3) rejects that. A d-less weapon can still legitimately reach `toData`
     // from a decoder-produced loadout (e.g. the Katana promotion, which builds `{i, a}`
     // by design — #330), so the undefined case is normalized here rather than shipped.
-    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], w.a, w.d === true] : null)),
+    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], wireAmmoIndex(w), w.d === true] : null)),
     e: equip,
     tr: loadout.traits,
     n: loadout.name,

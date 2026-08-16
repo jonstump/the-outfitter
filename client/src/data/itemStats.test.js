@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_STATS, STATS_GENERATED, descriptionFor, dualWieldFor, statFieldFor, statsFor } from "./itemStats.js";
+import {
+  ITEM_STATS,
+  STATS_GENERATED,
+  ammoRoundFor,
+  ammoSlotsFor,
+  descriptionFor,
+  dualWieldFor,
+  statFieldFor,
+  statsFor,
+} from "./itemStats.js";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "./catalog.js";
 
 // Governing: ADR-0005 (Scrape Item Stats into a Generated, Committed Data File)
@@ -421,5 +430,87 @@ describe("dualWieldFor", () => {
     // so the "per-pistol or per-pair" tiebreak §3.5 worried about never had to be made.
     expect(WEAPONS.find((w) => w[0] === "sparks-pistol")[2]).toBe(1);
     expect(dualWieldFor("sparks-pistol")).toBe(true);
+  });
+});
+
+// Governing: ADR-0014, SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts", REQ "A
+// Weapon Declares Its Own Ammo Slot Count", REQ "A Dual-Family Weapon Declares Both
+// Families", REQ "Price Belongs to the Weapon-and-Round Pair", issue #344.
+describe("ammoSlotsFor", () => {
+  it("a one-slot weapon's whole accepted list is its single group", () => {
+    // Nagant M1895 (compact): no perSlotOf, no familySplit — see itemStats.json.
+    const slots = ammoSlotsFor("nagant-m1895");
+    expect(slots.count).toBe(1);
+    expect(slots.bound).toBe(false);
+    expect(slots.groups).toHaveLength(1);
+    expect(slots.groups[0].map((r) => r.id)).toEqual([
+      "ammo-compact-dumdum",
+      "ammo-compact-high-velocity",
+      "ammo-compact-poison",
+      "ammo-compact-subsonic",
+    ]);
+  });
+
+  it("a split-reserve weapon's two slots share one unbound group", () => {
+    // Berthier 1892 (slong): reserve.perSlotOf: 6, familySplit: false.
+    const slots = ammoSlotsFor("berthier-1892");
+    expect(slots.count).toBe(2);
+    expect(slots.bound).toBe(false);
+    expect(slots.groups[0]).toBe(slots.groups[1]); // literally the same list — either slot, any round
+    expect(slots.groups[0].map((r) => r.id)).toEqual(["ammo-slong-incendiary", "ammo-slong-spitzer"]);
+  });
+
+  it("a dual-family weapon's two slots are disjoint, one group per family", () => {
+    // Drilling: reserve.familySplit: true, accepted spans medium then shotgun (#431).
+    const slots = ammoSlotsFor("drilling");
+    expect(slots.count).toBe(2);
+    expect(slots.bound).toBe(true);
+    expect(slots.groups[0].every((r) => r.family === "medium")).toBe(true);
+    expect(slots.groups[1].every((r) => r.family === "shotgun")).toBe(true);
+    // Every round in each group also appears in the weapon's own accepted list — the
+    // groups partition it, they don't invent or drop rounds.
+    const accepted = statsFor("drilling").ammo.accepted.map((r) => r.id);
+    expect([...slots.groups[0], ...slots.groups[1]].map((r) => r.id).sort()).toEqual([...accepted].sort());
+  });
+
+  it("a weapon with no Ammo Types section has zero slots", () => {
+    // cavalry-saber (melee): itemStats.json records `ammo: null`.
+    expect(statsFor("cavalry-saber").ammo).toBeNull();
+    expect(ammoSlotsFor("cavalry-saber")).toEqual({ count: 0, bound: false, groups: [] });
+  });
+
+  it("returns zero slots rather than throwing for an unknown id", () => {
+    expect(ammoSlotsFor("no-such-weapon")).toEqual({ count: 0, bound: false, groups: [] });
+    expect(ammoSlotsFor(undefined)).toEqual({ count: 0, bound: false, groups: [] });
+  });
+});
+
+describe("ammoRoundFor", () => {
+  it("resolves a round by id within the correct slot", () => {
+    const round = ammoRoundFor("nagant-m1895", 0, "ammo-compact-high-velocity");
+    expect(round).toMatchObject({ id: "ammo-compact-high-velocity", name: "High Velocity Ammo", price: 60 });
+  });
+
+  it("a dual-family weapon's round from the OTHER slot's family does not resolve here", () => {
+    // Drilling slot 0 is medium; a shotgun round offered against slot 0 must not resolve —
+    // this is the enforcement REQ "A Dual-Family Weapon Declares Both Families" describes:
+    // "A round from the family bound to the OTHER slot MUST NOT be offered in this one."
+    expect(ammoRoundFor("drilling", 0, "ammo-shotgun-slug")).toBeNull();
+    expect(ammoRoundFor("drilling", 1, "ammo-shotgun-slug")).not.toBeNull();
+  });
+
+  it("returns null for an empty slot, an out-of-range slot, and an id the weapon does not offer", () => {
+    expect(ammoRoundFor("nagant-m1895", 0, null)).toBeNull();
+    expect(ammoRoundFor("nagant-m1895", 1, "ammo-compact-high-velocity")).toBeNull(); // one-slot weapon
+    expect(ammoRoundFor("nagant-m1895", 0, "ammo-compact-fmj")).toBeNull(); // not in this weapon's list
+    expect(ammoRoundFor("no-such-weapon", 0, "ammo-compact-fmj")).toBeNull();
+  });
+
+  it("a Scarce round resolves with a null price, not a fabricated zero", () => {
+    // SPEC-0010 REQ "A Scarce Round Costs Nothing and Is Still Selectable" — the scrape
+    // records Scarce as `price: null`; turning that into 0 is the READER's job (ammoCostFor
+    // in calc.js), not this accessor's, which passes the record through unmodified.
+    const round = ammoRoundFor("nagant-m1895", 0, "ammo-compact-dumdum");
+    expect(round).toMatchObject({ id: "ammo-compact-dumdum", scarce: true, price: null });
   });
 });

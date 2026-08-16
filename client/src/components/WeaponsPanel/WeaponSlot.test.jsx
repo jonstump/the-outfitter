@@ -92,15 +92,20 @@ describe("WeaponSlot — an unresolvable ammo variant", () => {
   // are the ones that still genuinely have no ammo pool.
   const none = WEAPONS.findIndex((w) => w[4] === "none"); // no purchasable variants
 
-  it("renders a weapon whose ammo index is past the end of its variant list", () => {
+  it("renders a weapon whose ammo id its accepted list does not have", () => {
+    // Governing: ADR-0014, SPEC-0010, issue #344. The hazard this guards is now id-based
+    // (an id the weapon's own accepted list doesn't contain), not index-based — but the
+    // same "must not throw, must degrade to Standard" contract issue #201 established.
     const { container } = renderSlot({
-      loadout: loadoutState({ weapons: [{ i: compact, a: 9999 }, null] }),
+      loadout: loadoutState({ weapons: [{ i: compact, ammo: ["ammo-does-not-exist", null] }, null] }),
     });
-    // Before the fix this threw a TypeError out of render and unmounted the tree.
+    // Before the #201 fix this threw a TypeError out of render and unmounted the tree.
     expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[compact][1]);
     // Priced as no variant selected, and the select offers a way back rather than sitting blank.
     expect(container.querySelector(".weapon-cost")).toHaveTextContent(`$${WEAPONS[compact][3]}`);
-    expect(container.querySelector("select").value).toBe("-1");
+    // "" is the Standard/no-selection sentinel (an id string is never empty) — no <option>
+    // matches the unresolvable id, so the control shows Standard without correcting state.
+    expect(container.querySelector("select").value).toBe("");
   });
 
   it("renders a weapon that has no purchasable variants at all", () => {

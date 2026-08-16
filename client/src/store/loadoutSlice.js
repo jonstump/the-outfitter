@@ -34,8 +34,23 @@ function isValidLoadoutShape(payload) {
   if (payload.blocked !== undefined && (!Array.isArray(payload.blocked) || payload.blocked.some((c) => !Number.isInteger(c) || c < 0 || c >= 8))) return false;
   if (payload.name !== undefined && typeof payload.name !== "string") return false;
   if (!Array.isArray(payload.traits)) return false;
+  // Governing: ADR-0014, SPEC-0010, issue #344. A weapon slot's ammo arrives in one of
+  // two shapes depending on the payload's origin, and both are accepted here — whichever
+  // is present is validated; `normalizeWeaponAmmo` (below) converts either into the
+  // canonical `ammo` shape state actually holds. `a` (an integer, `loadoutCodec.js`'s
+  // decoders' bare live-pool index) is decoder output; `ammo` (an exactly-two-element
+  // array of stable ids or null) is native — randomize.js and every in-session reducer
+  // write it directly. A payload is never required to carry both.
+  const isAmmoArray = (v) =>
+    Array.isArray(v) && v.length === 2 && v.every((id) => id === null || (typeof id === "string" && id.length > 0 && id.length <= 100));
   return payload.weapons.every(
-    (w) => w === null || (typeof w === "object" && typeof w.i === "number" && WEAPONS[w.i] && Number.isInteger(w.a))
+    (w) =>
+      w === null ||
+      (typeof w === "object" &&
+        typeof w.i === "number" &&
+        WEAPONS[w.i] &&
+        (w.a === undefined || Number.isInteger(w.a)) &&
+        (w.ammo === undefined || isAmmoArray(w.ammo)))
   );
 }
 
@@ -51,6 +66,33 @@ function normalizeWeaponPairFlag(w) {
   if (w === null) return null;
   if (w.d === true && dualWieldFor(WEAPONS[w.i][0]) !== true) return { ...w, d: false };
   return { ...w, d: w.d === true };
+}
+
+// Governing: ADR-0014, SPEC-0010 REQ "A Weapon Holds Up to Two Independently Chosen
+// Rounds", REQ "Every Legacy Ammo Selection Migrates to the Round It Named", issue #344.
+//
+// Converts a weapon slot's ammo into the canonical STATE shape — `ammo: [id0, id1]` —
+// regardless of which shape it arrived in:
+//   - Already `{ ammo: [...] }` (randomize.js, an in-session reducer, or a hand-built
+//     fixture): kept, sanitized to exactly two entries. `a` is dropped if present
+//     alongside it — `ammo` is authoritative once it exists.
+//   - Legacy decoder output — `{ a, d }` with no `ammo`, and the loadout-level payload
+//     carries a sibling top-level `ammoIds` array (see loadoutCodec.js's `fromData`,
+//     #343): slot k's resolved id is `payload.ammoIds?.[k] ?? null`. `a` itself is
+//     dropped from state — nothing downstream reads it anymore; it was only ever the
+//     bridge #343 built so its own decoder tests could pass unmodified.
+//   - Neither `ammo` nor a resolvable `a`: both slots empty. This is also the legacy
+//     wire's permanent ceiling — no version this client can decode carries a second
+//     slot's id (`loadoutCodec.js`'s `toData`, and the already-deployed server
+//     validator from #342, both cap a weapon entry at one ammo reference), so a
+//     decoded loadout's slot 1 is always null regardless of what the source record
+//     might have meant. Widening that is #345/#346's job, not this normalization's.
+function normalizeWeaponAmmo(w, payload, slotIndex) {
+  if (w === null) return null;
+  const ammo = Array.isArray(w.ammo)
+    ? [w.ammo[0] ?? null, w.ammo[1] ?? null]
+    : [payload.ammoIds?.[slotIndex] ?? null, null];
+  return { i: w.i, d: w.d, ammo };
 }
 
 // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons Until
@@ -104,7 +146,7 @@ const loadoutSlice = createSlice({
       //
       // The pair toggle is a SEPARATE reducer (`togglePair`), with its own refusal — the
       // stored-attribute check and the capacity check both live there, not here.
-      state.weapons[slot] = { i: weaponIndex, a: -1, d: false };
+      state.weapons[slot] = { i: weaponIndex, ammo: [null, null], d: false };
       // Re-derive the name only while the user has not taken ownership (SPEC-0003 REQ
       // "A Loadout's Name Is Derived From Its Weapons Until the User Owns It").
       if (state.nameIsDerived) state.name = derivedName(state.weapons);
@@ -113,11 +155,16 @@ const loadoutSlice = createSlice({
       state.weapons[action.payload] = null;
       if (state.nameIsDerived) state.name = derivedName(state.weapons);
     },
-    // Picker placement fills the LOWEST-NUMBERED free (unblocked, empty) cell:
-    // cells 0..7 in order, and `blocked` names the exact cells to skip (ADR-0009).
+    // Governing: ADR-0014, SPEC-0010 REQ "A Weapon Holds Up to Two Independently Chosen
+    // Rounds", issue #344. `ammoSlotIndex` is WHICH of the weapon's own (up to two) ammo
+    // slots this sets — 0 or 1 — never a position in a shared class pool. `ammoId` is a
+    // stable catalog id or null ("Standard" / no round); this reducer does not validate
+    // it against the weapon's accepted list — WeaponSlot.jsx only ever offers ids drawn
+    // from that weapon's own `ammoSlotsFor` groups, so an invalid id here would mean a
+    // caller bypassed the picker, not a case this reducer needs to guard.
     setAmmo(state, action) {
-      const { slot, ammoIndex } = action.payload;
-      if (state.weapons[slot]) state.weapons[slot].a = ammoIndex;
+      const { slot, ammoSlotIndex, ammoId } = action.payload;
+      if (state.weapons[slot]) state.weapons[slot].ammo[ammoSlotIndex] = ammoId;
     },
     // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot",
     // REQ "The Pair Flag Is Refused Wherever the Data Does Not Permit It".
@@ -259,7 +306,7 @@ const loadoutSlice = createSlice({
       if (!isValidLoadoutShape(payload)) {
         throw new Error("setLoadout: payload does not match the expected loadout shape");
       }
-      state.weapons = payload.weapons.map(normalizeWeaponPairFlag);
+      state.weapons = payload.weapons.map((w, slotIndex) => normalizeWeaponPairFlag(normalizeWeaponAmmo(w, payload, slotIndex)));
       state.equip = payload.equip;
       state.traits = payload.traits;
       state.blocked = payload.blocked ?? state.blocked;

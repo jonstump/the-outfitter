@@ -1,4 +1,5 @@
-import { AMMO, CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { ammoSlotsFor } from "../data/itemStats.js";
 import { TRAIT_MAX, consAllowed, totalCost, weaponSize } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
@@ -61,12 +62,23 @@ function attempt({ blockedArray, upBudgetOn, upBudget }) {
   const rem = cap - weaponSize({ i: i1, d: false });
   const w2c = WEAPONS.map((w, i) => i).filter((i) => weaponSize({ i, d: false }) <= rem);
   const i2 = w2c.length ? w2c[Math.floor(Math.random() * w2c.length)] : null;
-  // Governing: issue #384 (mirrors the AMMO-lookup guard in calc.js:152)
-  const mkAmmo = (i) =>
-    Math.random() < 0.3 && (AMMO[WEAPONS[i][4]] || []).length
-      ? Math.floor(Math.random() * (AMMO[WEAPONS[i][4]] || []).length)
-      : -1;
-  const weapons = [{ i: i1, a: mkAmmo(i1), d: false }, i2 === null ? null : { i: i2, a: mkAmmo(i2), d: false }];
+  // Governing: ADR-0014, SPEC-0010 REQ "A Weapon Holds Up to Two Independently Chosen
+  // Rounds", issue #344 (mirrors #384's original AMMO-lookup guard, now per-weapon-slot).
+  //
+  // Rolls each of the weapon's OWN slots independently — up to two, per `ammoSlotsFor`,
+  // which already resolves split-reserve (both slots share one group, may repeat) vs.
+  // dual-family (#431's disjoint groups) vs. one-slot. A slot past the weapon's own
+  // count, or one whose group is empty, stays unfilled; each filled slot is an
+  // independent 30% draw, same odds the single-slot generator always used.
+  const mkAmmo = (i) => {
+    const slots = ammoSlotsFor(WEAPONS[i][0]);
+    return [0, 1].map((slotIndex) => {
+      const group = slotIndex < slots.count ? slots.groups[slotIndex] : null;
+      if (!group || !group.length || Math.random() >= 0.3) return null;
+      return group[Math.floor(Math.random() * group.length)].id;
+    });
+  };
+  const weapons = [{ i: i1, ammo: mkAmmo(i1), d: false }, i2 === null ? null : { i: i2, ammo: mkAmmo(i2), d: false }];
 
   // Starter tool resolved by stable catalog id so a future reorder of TOOLS
   // can't silently remap the random build's guaranteed First Aid Kit.
