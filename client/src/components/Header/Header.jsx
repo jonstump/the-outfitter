@@ -1,5 +1,5 @@
 import { useSelector } from "react-redux";
-import { selectTotalCost, selectUpTotal } from "../../store/selectors.js";
+import { selectEstimatedMinimumLevel, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 // Both header stats signal "over the limit you set" the same way, so the colour lives in
 // one place rather than being spelled twice (issue #66).
@@ -10,6 +10,8 @@ const UP_OK = "#c4a05e";
 export default function Header() {
   const total = useSelector(selectTotalCost);
   const up = useSelector(selectUpTotal);
+  // Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure".
+  const minLevel = useSelector(selectEstimatedMinimumLevel);
   const budgetOn = useSelector((s) => s.ui.budgetOn);
   const budget = useSelector((s) => s.ui.budget);
   const upBudgetOn = useSelector((s) => s.ui.upBudgetOn);
@@ -41,6 +43,16 @@ export default function Header() {
               the trait-cap input and the per-trait badges, where it labels one trait's cost. */}
           <div className="header-stat-value" style={{ color: overUp ? OVER_LIMIT : UP_OK }}>
             {up}
+          </div>
+        </div>
+        <div className="header-stat">
+          <div className="header-stat-label">Est. min. level</div>
+          {/* Governing: ADR-0021 amendment. Never colored as over/under a limit — this isn't
+              a budget the player set, it's a floor computed from the trait points above, and
+              it always renders even at 0 traits (level 1), so it never reads as conditional
+              the way the budget stats do. */}
+          <div className="header-stat-value" style={{ color: UP_OK }}>
+            {minLevel}
           </div>
         </div>
       </div>

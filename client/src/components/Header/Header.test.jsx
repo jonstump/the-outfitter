@@ -67,3 +67,24 @@ describe("Header total cost", () => {
     expect(under.value("Total cost")).not.toHaveStyle({ color: OVER });
   });
 });
+
+// Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure".
+describe("Header estimated minimum level", () => {
+  it("renders level 1 for a fresh, trait-free loadout", () => {
+    const { value } = renderHeader(undefined, {});
+    expect(value("Est. min. level")).toHaveTextContent(/^1$/);
+  });
+
+  it("renders the level the trait-point total requires — 16 points needs level 7", () => {
+    // upgradePointsAtLevel(level) = 10 + (level - 1); the inverse of 16 is level 7
+    // (UP(7) = 16), matching calc.test.js's own pinned inverse.
+    const { value } = renderHeader(undefined, twoBigTraits);
+    expect(value("Est. min. level")).toHaveTextContent(/^7$/);
+  });
+
+  it("is never colored as over/under a limit — it isn't a budget the player set", () => {
+    // Neither budgetOn nor upBudgetOn should affect this stat's color, unlike the other two.
+    const { value } = renderHeader({ upBudgetOn: true, upBudget: 1 }, twoBigTraits);
+    expect(value("Est. min. level")).toHaveStyle({ color: GOLD });
+  });
+});

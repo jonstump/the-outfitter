@@ -218,6 +218,55 @@ export function upTotal(loadout) {
 }
 
 /**
+ * A Legendary hunter's total Upgrade Points at a given level, under the worst-case
+ * assumption of zero bonus Upgrade Points from any other source (in-match pickups,
+ * Retaliation bonuses, Dark Tribute).
+ *
+ * Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure".
+ *
+ * The rate — one Upgrade Point per level, starting from 10 at level 1 — is
+ * hand-authored from the product owner's own knowledge of the game, not scraped: the
+ * wiki states the mechanic ("Each level grants Upgrade Points") but never quantifies
+ * it, and no per-level table exists to check it against. `uiSlice.js`'s pre-existing
+ * `upBudget: 10` default independently corroborates the level-1 figure — it was chosen
+ * for the same reason, before this function existed.
+ *
+ * Free hunters start differently (three random traits from a pool, no starting Upgrade
+ * Points) and are NOT covered by this formula — out of scope until the randomizer can
+ * represent a starting trait pool at all.
+ */
+export function upgradePointsAtLevel(level) {
+  return 10 + (level - 1);
+}
+
+/**
+ * The "Estimated Minimum Level" disclosed for a loadout: the lowest hunter level whose
+ * worst-case Upgrade Points (see `upgradePointsAtLevel`) cover `upTotalCost`, clamped to
+ * the level cap of 50.
+ *
+ * Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure".
+ *
+ * The clamp is deliberate, not an oversight: the 15 most expensive traits in the catalog
+ * sum to 83 points, which exceeds `upgradePointsAtLevel(50) === 59` — a real, reachable
+ * build can cost more than this formula's level-50 figure. Past level 50 a hunter keeps
+ * earning Bloodline XP with a stated 50/50 match-XP split, and further Upgrade Points
+ * may continue accruing by some mechanic the product owner is not certain of and the
+ * wiki does not state — exactly the kind of unquantified rule this function refuses to
+ * guess at. So a cost above 59 reads identically to a cost of exactly 59: "Estimated
+ * Minimum Level: 50", never a distinct "exceeds" value and never a claim that level 50
+ * is actually sufficient — only that it is the floor this data supports.
+ *
+ * "Minimum" and "estimated" are both load-bearing in the label this renders under: a
+ * player who has picked up any bonus Upgrade Points (Retaliation, in-match pickups,
+ * Dark Tribute — none of which this app can know about) could need a LOWER level than
+ * this number, never a higher one. The number can only ever be wrong in the safe
+ * direction.
+ */
+export function estimatedMinimumLevel(upTotalCost) {
+  return Math.min(50, Math.max(1, upTotalCost - 9));
+}
+
+/**
  * A weapon's ammo cost: the sum of both slots' chosen rounds' per-pair prices — one
  * price per FILLED slot, per SPEC-0010 REQ "A Weapon Holds Up to Two Independently
  * Chosen Rounds". A Scarce round prices `null` in the scrape (SPEC-0010 REQ "A Scarce

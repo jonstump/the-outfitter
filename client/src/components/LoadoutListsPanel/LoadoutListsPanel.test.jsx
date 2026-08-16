@@ -1163,6 +1163,33 @@ const LOADED = v1({
 const EIGHTEEN_TRAIT_IDS = TRAITS.slice(0, 18).map((t) => t[0]);
 const OVERSTUFFED = v1({ w: [["sparks-lrr", -1]], tr: EIGHTEEN_TRAIT_IDS });
 
+// Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure". Quartermaster
+// (8) + Fanning (8) = 16 trait points; estimatedMinimumLevel(16) = 7 (calc.test.js pins the same
+// inverse), matching Header.test.jsx's identical fixture so the two surfaces are asserted the
+// same way against the same numbers.
+const TWO_BIG_TRAITS = v1({ tr: ["quartermaster", "fanning"] });
+
+describe("loadout card stats: Trait Points and Estimated Minimum Level", () => {
+  it("shows both stats for a loadout that is not currently open in the builder", () => {
+    renderPanel(base([], [filed("1", "Duelist", TWO_BIG_TRAITS)], { unassignedOpen: true }));
+    const stats = screen.getByTestId("loadout-stats-1");
+    expect(stats).toHaveTextContent("16 Trait Points");
+    expect(stats).toHaveTextContent("Est. Min. Level 7");
+  });
+
+  it("says 'Trait Points', never 'UP' — matches the header's own established wording", () => {
+    renderPanel(base([], [filed("1", "Duelist", TWO_BIG_TRAITS)], { unassignedOpen: true }));
+    expect(screen.getByTestId("loadout-stats-1")).not.toHaveTextContent(/\bUP\b/);
+  });
+
+  it("shows level 1 for a trait-free loadout, the same floor calc.test.js pins", () => {
+    renderPanel(base([], [filed("1", "Bare Build", data)], { unassignedOpen: true }));
+    const stats = screen.getByTestId("loadout-stats-1");
+    expect(stats).toHaveTextContent("0 Trait Points");
+    expect(stats).toHaveTextContent("Est. Min. Level 1");
+  });
+});
+
 describe("the categorised loadout preview", () => {
   beforeEach(() => {
     global.fetch = vi.fn(async () => {

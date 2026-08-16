@@ -33,7 +33,7 @@ import {
   traitThumb,
   weaponThumb,
 } from "../../data/catalog.js";
-import { totalCost } from "../../utils/calc.js";
+import { estimatedMinimumLevel, totalCost, upTotal } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
 import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
 import { HUNTERS, hunterFor, hunterNameFor } from "../../data/hunters.js";
@@ -1310,6 +1310,9 @@ function LoadoutCard({ item, lists }) {
   // which is the whole reason the preview costs nothing (design.md).
   const loadout = useMemo(() => fromData(item.data), [item.data]);
   const cost = totalCost(loadout);
+  // Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure".
+  const traitPoints = upTotal(loadout);
+  const minLevel = estimatedMinimumLevel(traitPoints);
 
   return (
     // Named, not bare. SPEC-0003 makes the loadout's name the accessible identity of its
@@ -1322,6 +1325,15 @@ function LoadoutCard({ item, lists }) {
           {item.name}
         </button>
         <span className="ll-lcard-cost">${cost}</span>
+      </div>
+
+      {/* Trait points and Estimated Minimum Level — the same two values the builder header
+          shows for the loadout currently open, now also readable for a loadout that ISN'T
+          open, without loading it first. "Trait points", not "UP" — matches the header's own
+          established wording (Header.jsx). */}
+      <div className="ll-lcard-stats" data-testid={`loadout-stats-${item.id}`}>
+        <span>{traitPoints} Trait Points</span>
+        <span>Est. Min. Level {minLevel}</span>
       </div>
 
       {/* Between the head and the preview, which is the position the card reserved for it.
