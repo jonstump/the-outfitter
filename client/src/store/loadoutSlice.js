@@ -288,8 +288,21 @@ const loadoutSlice = createSlice({
       state.savedId = action.payload;
     },
     // Governing: ADR-0022, SPEC-0003 REQ "A Loadout's Name Is Derived From Its Weapons
-    // Until the User Owns It". Clearing the build resets to a fresh state: the name
-    // re-derives (back to ""), and `nameIsDerived` returns to true.
+    // Until the User Owns It", SPEC-0003 REQ "Loadout Identity Is Scoped to Its List".
+    // Clearing the build resets to a fresh state: the name re-derives (back to ""),
+    // `nameIsDerived` returns to true, and `savedId` is cleared.
+    //
+    // The `savedId` clear is load-bearing, not tidiness: `saveCurrent` (savedLoadoutsSlice.js)
+    // sends `loadout.savedId` as an addressing argument, and the server resolves an
+    // id-addressed save against that record ONLY, ignoring the currently-selected list
+    // entirely (server/src/routes/loadouts.js's POST handler, "id present" branch). Before
+    // this field was cleared here, Clear was the one control users would reach for to start
+    // an unrelated build, and it silently left the PREVIOUS loadout's `savedId` attached —
+    // so a save after Clear, even into a deliberately different list (including Unassigned),
+    // overwrote the old record in place instead of filing the new build where the user
+    // pointed it. `setLoadout` already gets this right for every other path that starts a
+    // fresh build (randomize, share-URL, hydration) via `payload.savedId ?? null`; this was
+    // the one remaining path that did not.
     clearBuild(state) {
       state.weapons = [null, null];
       state.equip = Array(8).fill(null);
@@ -297,6 +310,7 @@ const loadoutSlice = createSlice({
       state.blocked = [];
       state.name = "";
       state.nameIsDerived = true;
+      state.savedId = null;
     },
     // Bulk merge — used by hydrate-on-load, loading a saved build, and randomize.
     // Rejects payloads that don't match the loadout shape so a bad call fails

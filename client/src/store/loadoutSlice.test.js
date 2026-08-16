@@ -507,6 +507,23 @@ describe("derived loadout name", () => {
     expect(store.getState().loadout.name).toBe(NAME1);
   });
 
+  // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List". Reported
+  // as a live bug: load a saved loadout, hit Clear, build something new, save it to a
+  // different (or Unassigned) list — the save overwrote the ORIGINAL loaded record instead
+  // of filing the new build where the user pointed it. Root cause: `saveCurrent`
+  // (savedLoadoutsSlice.js) sends `loadout.savedId` as an id-addressing argument, and the
+  // server resolves an id-addressed save against that record ONLY, ignoring the selected
+  // list entirely. `clearBuild` is the one control that starts an unrelated build, so it
+  // MUST sever that provenance the same way `setLoadout` already does for every other
+  // fresh-build path (randomize, share URL, hydration — all via `payload.savedId ?? null`).
+  it("clears savedId on clearBuild, so a save after Clear cannot address the loaded record", () => {
+    const store = makeStore();
+    store.dispatch(loadoutActions.setSavedId("loaded-from-a-list-record-id"));
+    expect(store.getState().loadout.savedId).toBe("loaded-from-a-list-record-id");
+    store.dispatch(loadoutActions.clearBuild());
+    expect(store.getState().loadout.savedId).toBeNull();
+  });
+
   // The store subscriber persists the loadout to localStorage on every change
   // (store/index.js), and App.jsx hydrates it through setLoadout on boot with no
   // savedId. A typed name is on the wire (`n`), so deriving over a hydrated payload
