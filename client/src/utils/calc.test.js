@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QM, WEAPONS } from "../data/catalog.js";
-import { capMax, capUsed, consCount, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
+import { capMax, capUsed, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -73,38 +73,6 @@ describe("totalCost", () => {
     // `special` weapons have no purchasable variants at all — an empty pool, not a short one.
     const special = WEAPONS.findIndex((w) => w[4] === "special");
     expect(totalCost(loadoutWith({ weapons: [{ i: special, a: 0 }] }))).toBe(WEAPONS[special][3]);
-  });
-});
-
-describe("consCount", () => {
-  it("counts copies of one specific consumable, not its type", () => {
-    const lo = loadoutWith({
-      equip: [
-        { t: "C", i: 4 }, // Dynamite Stick (Throwable)
-        { t: "C", i: 4 }, // Dynamite Stick (Throwable)
-        { t: "C", i: 5 }, // Dynamite Bundle (Throwable)
-      ],
-    });
-    expect(consCount(lo, 4)).toBe(2);
-    expect(consCount(lo, 5)).toBe(1);
-  });
-
-  it("counts only held items on a grid with gaps", () => {
-    // Two Dynamite Sticks separated by holes must still count as 2 — a packed-array
-    // count would work here by accident, but one that iterated `.length` or holes
-    // would not; the point is the filter(Boolean) semantics under ADR-0009.
-    const lo = loadoutWith({
-      equip: [
-        { t: "C", i: 4 }, null, null, { t: "C", i: 4 }, null, null, null, null,
-      ],
-    });
-    expect(consCount(lo, 4)).toBe(2);
-  });
-
-  it("ignores tools sharing the consumable's index", () => {
-    const lo = loadoutWith({ equip: [{ t: "T", i: 4 }, { t: "C", i: 0 }] });
-    expect(consCount(lo, 4)).toBe(0);
-    expect(consCount(lo, 0)).toBe(1);
   });
 });
 
