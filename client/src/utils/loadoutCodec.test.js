@@ -1413,6 +1413,23 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
     expect(dec.name).toBe("Plain ASCII build");
   });
 
+  it("a legacy share code naming a Latin-1 accented character (not plain ASCII) still decodes correctly", () => {
+    // The regression this guards: a pre-fix share code built by the OLD raw-btoa encoder
+    // can carry a Latin-1 character in U+0080..U+00FF (e.g. "é" is U+00E9) — `btoa` allows
+    // these, it only throws above U+00FF. Read as raw bytes, "é" is the single byte 0xE9,
+    // which is NOT valid standalone UTF-8 (0xE9 starts a 3-byte sequence with no
+    // continuation bytes following). `decodeBase64Utf8` must throw on this so
+    // readHashLoadout's catch falls through to the legacy `atob` path — if it instead
+    // silently substitutes U+FFFD (TextDecoder's default, non-fatal behavior), the name
+    // decodes as mangled text instead of falling back.
+    const lo = loadoutNamed("Café");
+    const legacyCode = btoa(JSON.stringify(toData(lo)));
+    history.replaceState(null, "", "#L=" + legacyCode);
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Café");
+  });
+
   it("a plain-ASCII name round-trips through the new encoder too", () => {
     const lo = loadoutNamed("Café");
     encodeShareUrl(lo);

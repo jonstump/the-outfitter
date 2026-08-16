@@ -816,7 +816,12 @@ function decodeBase64Utf8(b64) {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  // `fatal: true` is load-bearing: without it, TextDecoder silently substitutes U+FFFD
+  // for invalid byte sequences instead of throwing, so a legacy Latin-1 share code
+  // containing an accented character (e.g. "Café", raw-btoa'd pre-#358) would "succeed"
+  // here as mangled text instead of throwing and letting readHashLoadout's catch fall
+  // through to the legacy atob path that decodes it correctly.
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
 export function encodeShareUrl(loadout) {
