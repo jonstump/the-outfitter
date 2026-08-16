@@ -117,7 +117,7 @@ Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creatin
 
 1. Dual-wield pairs — **clear** (SPEC-0009 `implemented`, epic #327 closed 2026-08-15).
 2. Tarot card support — **clear** (#37 admitted the fourteen rows via PR #426, #350's SPEC-0006 amendment landed with it, 2026-08-15).
-3. The data-audit remediation worked down — the #351–#394 sweep, 5 of 42 closed, 37 open and none of them a blocker. **Its granularity is unsettled** and the strict and severity readings differ by roughly 4×; the spec says settle it before burning it down further.
+3. The data-audit remediation worked down — the #351–#394 sweep, 10 of 42 closed (#355, #357, #358, #359 and #360 closed 2026-08-16 via PRs #437/#433/#434/#435/#436, joining #351–#354 and #376), 32 open and none of them a blocker. **Its granularity is unsettled** and the strict and severity readings differ by roughly 4×; the spec says settle it before burning it down further.
 4. Equipment drag and drop settled — shipped, not settled. Both blockers (#352/#353) and #419 closed 2026-08-15 (PR #430); #241, #363 and #382 remain.
 5. The rebrand to "Backwater Outfitters" (#424) — **goes first.** Copy only: the spec names four identifier families (`hunt-outfitter-*` storage keys, `OUTFITTER_DB_FILE`, the `render.yaml` service and disk names, the npm workspace names) that MUST NOT be renamed, because each fails silently and one of them strands users' saved loadouts. Read that bullet before touching this.
 6. The application icon (#428) — the app has no mark at all, not even a favicon. Sequenced after the rebrand.
