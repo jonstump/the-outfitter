@@ -646,10 +646,13 @@ export const CONS = [
   ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
   ["medical-pack", "Medical Pack", 35, "Placeable", "Shots"],
   ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
-  // Type disagrees with the scraped cap-category axis (#377): the wiki files this page under
-  // `Placeable Consumables`, not `Throwable Consumables`. Not changed here — #375 decides which is
-  // right; `itemStats.test.js` names this id in a documented, staleness-checked exception until then.
-  ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
+  // Retyped `Throwable` -> `Placeable` (#375), resolving the disagreement #377's scraped
+  // cap-category axis surfaced: the wiki files this page under `Placeable Consumables`, not
+  // `Throwable Consumables`. Its melee/damage/fuse profile still reads like the other dynamite
+  // Throwables, but the fix direction settled the question on page-category membership, not prose —
+  // see the CANDOUR paragraph on `CONS_CAP_CATEGORIES` below. `itemStats.test.js`'s
+  // `KNOWN_DISAGREEMENTS` exception for this id is retired now that catalog and scrape agree.
+  ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Placeable", "Explosives"],
   ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
   ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
   ["ammo-box", "Ammo Box", 65, "Placeable", "Utility"],
@@ -723,11 +726,13 @@ export const CONS_GROUPS = ["Shots", "Explosives", "Fire", "Gas", "Utility", "Ta
  * pinned to nothing and stays exactly as checkable as it was before #377 — recorded rather than
  * silently promised otherwise.
  *
- * That pin surfaced one live disagreement on first run: `dark-dynamite-satchel` is typed `Throwable`
- * here but the wiki files its page under `Placeable Consumables`. #377's own scope is building the
- * axis, not resolving what it finds — #375 is the follow-up that decides which one is right. Until
- * then `itemStats.test.js` names the id in a documented, staleness-checked exception rather than
- * either failing CI on a question this file isn't yet answering or quietly hiding the disagreement.
+ * That pin surfaced one live disagreement on first run: `dark-dynamite-satchel` was typed `Throwable`
+ * here while the wiki files its page under `Placeable Consumables`. #377's own scope was building the
+ * axis, not resolving what it found — #375 is the follow-up that decided which one is right, in favor
+ * of `Placeable`: the fix direction weighs page-category membership over prose, because the prose
+ * ("a deployable bundle ... can be attached to walls and floors") is worded identically to
+ * `medical-pack`'s, which #155 already moved to `Placeable`. The row above now reads `Placeable`, and
+ * `itemStats.test.js`'s `KNOWN_DISAGREEMENTS` exception for this id was retired in the same change.
  */
 export const CONS_CAP_CATEGORIES = ["Shot", "Throwable", "Placeable", "Tarot Cards"];
 

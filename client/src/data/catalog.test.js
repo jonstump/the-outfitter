@@ -351,7 +351,7 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
       "Tool Box": ["tool-box", "Tool Box", 70, "Placeable", "Utility"],
       "Hellfire Bomb": ["hellfire-bomb", "Hellfire Bomb", 70, "Throwable", "Explosives"],
       "Waxed Dynamite Stick": ["waxed-dynamite-stick", "Waxed Dynamite Stick", 24, "Throwable", "Explosives"],
-      "Dark Dynamite Satchel": ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Throwable", "Explosives"],
+      "Dark Dynamite Satchel": ["dark-dynamite-satchel", "Dark Dynamite Satchel", 100, "Placeable", "Explosives"],
       "Poison Bomb": ["poison-bomb", "Poison Bomb", 25, "Throwable", "Gas"],
       "Medical Pack": ["medical-pack", "Medical Pack", 35, "Placeable", "Shots"],
       "Recovery Shot": ["recovery-shot", "Recovery Shot", 140, "Shot", "Shots"],
@@ -512,6 +512,14 @@ describe("consumable type", () => {
     expect(typeOf("Medical Pack")).toBe("Placeable");
   });
 
+  it("files Dark Dynamite Satchel as Placeable, per the wiki's own page category (#375)", () => {
+    // Retyped from `Throwable` (#375), settling the disagreement #377's scraped `capCategories`
+    // axis surfaced: the wiki files this page under `Placeable Consumables`, not `Throwable
+    // Consumables`, even though its damage/effect-radius/fuse-timer profile reads like the other
+    // dynamite Throwables. The fix direction weighs page-category membership over prose.
+    expect(typeOf("Dark Dynamite Satchel")).toBe("Placeable");
+  });
+
   it("keeps Medical Pack's UI group, which was never wrong", () => {
     // `group` is the picker bucket and is a separate field from `type`. Only `type` was misfiled.
     expect(entry(CONS, "Medical Pack")[4]).toBe("Shots");
@@ -605,6 +613,37 @@ describe("consumable type", () => {
     store.dispatch(loadoutActions.addEquip({ t: "C", i: toolBox.i }));
     expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(4);
     expect(store.getState().loadout.equip.filter(Boolean).some((e) => e.i === toolBox.i)).toBe(false);
+  });
+
+  it("counts Dark Dynamite Satchel against the Placeable budget, not Throwable (#375)", async () => {
+    // The player-facing consequence #375 named directly: before this fix, four satchels plus a
+    // real Throwable (e.g. Dynamite Stick) was refused a slot too early, and four satchels plus a
+    // real Placeable (e.g. Ammo Box) was permitted past the four-per-type cap. Both are wrong once
+    // the satchel is typed `Placeable`; this asserts the corrected behavior directly against the
+    // reducer, the same way the fifth-Placeable test above does for Ammo Box / Tool Box.
+    const { configureStore } = await import("@reduxjs/toolkit");
+    const { default: loadoutReducer, loadoutActions } = await import("../store/loadoutSlice.js");
+    const store = configureStore({ reducer: { loadout: loadoutReducer } });
+    const satchelIndex = CONS.findIndex((c) => c[0] === "dark-dynamite-satchel");
+    const ammoBoxIndex = CONS.findIndex((c) => c[0] === "ammo-box");
+    const dynamiteStickIndex = CONS.findIndex((c) => c[0] === "dynamite-stick");
+    expect(satchelIndex).toBeGreaterThanOrEqual(0);
+    expect(ammoBoxIndex).toBeGreaterThanOrEqual(0);
+    expect(dynamiteStickIndex).toBeGreaterThanOrEqual(0);
+
+    // Four satchels plus one more real Throwable: refused only if the satchel does NOT share the
+    // Throwable budget. Before the fix this would have been rejected at the fifth slot.
+    for (let k = 0; k < 4; k++) store.dispatch(loadoutActions.addEquip({ t: "C", i: satchelIndex }));
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(4);
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: dynamiteStickIndex }));
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(5);
+    expect(store.getState().loadout.equip.filter(Boolean).some((e) => e.i === dynamiteStickIndex)).toBe(true);
+
+    // A fifth Placeable — Ammo Box, a different item, same type — IS refused: the satchel shares
+    // the Placeable budget, so four satchels already fill it.
+    store.dispatch(loadoutActions.addEquip({ t: "C", i: ammoBoxIndex }));
+    expect(store.getState().loadout.equip.filter(Boolean)).toHaveLength(5);
+    expect(store.getState().loadout.equip.filter(Boolean).some((e) => e.i === ammoBoxIndex)).toBe(false);
   });
 });
 
