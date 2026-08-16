@@ -148,13 +148,17 @@ describe("the generated dataset", () => {
 // "compared > 0" terms the cost/size/UP pins above use, so the pin can only fail on a row the wiki
 // actually speaks to.
 describe("pins consumable type against the scraped cap-category axis", () => {
-  // #375 asks whether dark-dynamite-satchel's declared `Throwable` is the right cap category. This
-  // pin's own scraped evidence says the wiki files the page under `Placeable Consumables` instead —
-  // a real disagreement, and exactly the kind of thing #377 exists to make checkable. Deciding which
-  // one is correct is #375's job, not this test's: naming the id here is what keeps the disagreement
-  // visible (and reported, via the staleness check below) instead of either failing CI on a question
-  // this issue is not answering, or silently coercing the row to agree with itself.
-  const KNOWN_DISAGREEMENTS = new Set(["dark-dynamite-satchel"]);
+  // #375 asked whether dark-dynamite-satchel's declared `Throwable` was the right cap category.
+  // This pin's own scraped evidence said the wiki files the page under `Placeable Consumables`
+  // instead — a real disagreement, and exactly the kind of thing #377 exists to make checkable.
+  // #375 resolved it in favor of `Placeable` (catalog.js's CONS row was retyped in the same
+  // change), so there is no longer a live exception to carry here: this describe block used to
+  // hold a `KNOWN_DISAGREEMENTS` allowlist naming dark-dynamite-satchel and a third test that
+  // failed loudly the day the disagreement closed, which is precisely what just happened. Both
+  // were removed rather than left pointing at a disagreement that no longer exists — if a future
+  // re-scrape (or a new catalog row) opens a fresh disagreement, the "agrees with the wiki's own
+  // cap-category evidence" test below will fail and name it, the same way it would have failed on
+  // dark-dynamite-satchel had #377 not pre-declared the exception.
 
   it("has rows with scraped evidence to check, so the pin cannot pass vacuously", () => {
     const evidenced = CONS.filter((row) => (statsFor(row[0])?.capCategories ?? []).length > 0);
@@ -168,26 +172,12 @@ describe("pins consumable type against the scraped cap-category axis", () => {
       const scraped = statsFor(id)?.capCategories ?? [];
       if (scraped.length === 0) continue;
       compared += 1;
-      if (!scraped.includes(type) && !KNOWN_DISAGREEMENTS.has(id)) {
+      if (!scraped.includes(type)) {
         mismatches.push(`${id}: catalog says "${type}", wiki's own categories say ${JSON.stringify(scraped)}`);
       }
     }
     expect(compared, "no consumable type was actually compared").toBeGreaterThan(0);
     expect(mismatches).toEqual([]);
-  });
-
-  it("keeps the known-disagreement list from going stale", () => {
-    // If a future re-scrape (or #375's own fix) makes dark-dynamite-satchel agree, this fails — the
-    // signal to remove it from KNOWN_DISAGREEMENTS rather than leave a stale exception standing.
-    for (const id of KNOWN_DISAGREEMENTS) {
-      const row = CONS.find((r) => r[0] === id);
-      expect(row, `${id} is in KNOWN_DISAGREEMENTS but no longer exists in CONS`).toBeTruthy();
-      const scraped = statsFor(id)?.capCategories ?? [];
-      expect(
-        scraped.includes(row[3]),
-        `${id} no longer disagrees with the scraped axis — remove it from KNOWN_DISAGREEMENTS (#375)`
-      ).toBe(false);
-    }
   });
 });
 
