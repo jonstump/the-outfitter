@@ -4,10 +4,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import WeaponSlot from "./WeaponSlot.jsx";
 import Picker from "../Picker/Picker.jsx";
 import { WEAPONS, weaponThumb } from "../../data/catalog.js";
+import { ammoRoundFor, ammoSlotsFor } from "../../data/itemStats.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { createTestStore, loadoutState } from "../../test/testStore.js";
 import { slugify } from "../ItemThumb/ItemThumb.jsx";
-import { capMax, capUsed } from "../../utils/calc.js";
+import { ammoCostFor, capMax, capUsed, totalCost } from "../../utils/calc.js";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
@@ -556,5 +557,249 @@ describe("WeaponSlot - the dual-wield pair affordance", () => {
       .getAllByRole("button")
       .find((b) => /duel|dual|wield|pair|unpair/i.test(b.getAttribute("aria-label") || b.textContent || ""));
     expect(offender).toBeUndefined();
+  });
+});
+
+// Governing: issue #346, issue #347, ADR-0014, SPEC-0010 REQ "Each Ammo Slot Is
+// Individually Labelled and Operable" (WCAG 2.1 AA baseline, SPEC-0001).
+//
+// Companion test story for #346: that PR carries its own unit tests, but this is the
+// render/interaction/accessibility coverage a feature PR typically under-serves, plus
+// the seams where two ammo slots meet the rest of the loadout (pairing, total cost).
+//
+// A native <select> is Testing Library's "combobox" role. Queries use ROLE and
+// ACCESSIBLE NAME throughout — never querySelector on class names — per the same
+// discipline the pair-affordance tests above establish: a test that passes when the
+// control becomes a <div> has not tested the requirement.
+describe("WeaponSlot — the second ammo control", () => {
+  // Real catalog weapons chosen for their SLOT SHAPE, not arbitrarily:
+  //   - Drilling: dual-family (medium + shotgun) — bound, two DISJOINT groups.
+  //   - 1890 Cavalry: split-reserve (long only) — unbound, both slots share one group
+  //     and may repeat a round.
+  //   - Conversion: one slot (Compact) — the exact class the pre-#344 shared AMMO pool
+  //     priced wrong, called out explicitly by this issue for the "offered rounds"
+  //     render test.
+  //   - LeMat Mark II: the one weapon in the catalog that is BOTH dual-family (two
+  //     ammo slots) AND dual-wieldable — the only real fixture for the pairing seam.
+  const DRILLING = WEAPONS.findIndex((w) => w[0] === "drilling");
+  const CAVALRY = WEAPONS.findIndex((w) => w[0] === "1890-cavalry");
+  const CONVERSION = WEAPONS.findIndex((w) => w[0] === "caldwell-conversion-pistol");
+  const LEMAT = WEAPONS.findIndex((w) => w[0] === "lemat-mark-ii");
+
+  // -- Render: slot count --------------------------------------------------------------
+
+  it("renders exactly two ammo controls for a two-slot dual-family weapon (Drilling)", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }) });
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
+  });
+
+  it("renders exactly two ammo controls for a two-slot split-reserve weapon (1890 Cavalry)", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: CAVALRY, ammo: [null, null], d: false }, null] }) });
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
+  });
+
+  it("renders exactly one ammo control for a one-slot weapon — not a second, disabled one", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: CONVERSION, ammo: [null, null], d: false }, null] }) });
+    const boxes = screen.getAllByRole("combobox");
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).not.toBeDisabled();
+    // Queried by role AND accessible name too, not just count — a one-slot weapon's
+    // control needs a name as much as a two-slot weapon's do (the pre-#346 control had
+    // no aria-label at all, so this also pins that #346 didn't skip the single-slot case).
+    expect(screen.getByRole("combobox", { name: `${WEAPONS[CONVERSION][1]} ammo` })).toBe(boxes[0]);
+  });
+
+  // -- Render: offered rounds -----------------------------------------------------------
+
+  it("Drilling's two controls each offer only their own family's rounds, never the other slot's or a class pool", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }) });
+    const slots = ammoSlotsFor(WEAPONS[DRILLING][0]);
+    expect(slots.bound).toBe(true); // sanity: Drilling IS the dual-family case under test
+    const [select1, select2] = screen.getAllByRole("combobox");
+    const optionIds = (select) => [...select.querySelectorAll("option")].map((o) => o.value).filter(Boolean);
+    expect(optionIds(select1)).toEqual(slots.groups[0].map((r) => r.id));
+    expect(optionIds(select2)).toEqual(slots.groups[1].map((r) => r.id));
+    // The two groups are disjoint families — confirms neither slot leaks the other's rounds.
+    expect(optionIds(select1).some((id) => optionIds(select2).includes(id))).toBe(false);
+  });
+
+  it("Conversion's single control offers its own Compact rounds, not the shared class pool", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: CONVERSION, ammo: [null, null], d: false }, null] }) });
+    const slots = ammoSlotsFor(WEAPONS[CONVERSION][0]);
+    const select = screen.getByRole("combobox", { name: `${WEAPONS[CONVERSION][1]} ammo` });
+    const optionIds = [...select.querySelectorAll("option")].map((o) => o.value).filter(Boolean);
+    expect(optionIds).toEqual(slots.groups[0].map((r) => r.id));
+  });
+
+  // -- Interaction ------------------------------------------------------------------
+
+  it("setting slot 2 leaves slot 1 unchanged, and vice versa — both selections persist", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }),
+    });
+    render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const [slot1, slot2] = screen.getAllByRole("combobox");
+
+    fireEvent.change(slot1, { target: { value: "ammo-medium-fmj" } });
+    expect(store.getState().loadout.weapons[0].ammo).toEqual(["ammo-medium-fmj", null]);
+
+    fireEvent.change(slot2, { target: { value: "ammo-shotgun-slug" } });
+    expect(store.getState().loadout.weapons[0].ammo).toEqual(["ammo-medium-fmj", "ammo-shotgun-slug"]);
+
+    // And the reverse direction: changing slot 1 again must not disturb slot 2.
+    fireEvent.change(slot1, { target: { value: "ammo-medium-high-velocity" } });
+    expect(store.getState().loadout.weapons[0].ammo).toEqual(["ammo-medium-high-velocity", "ammo-shotgun-slug"]);
+  });
+
+  it("permits choosing the same round in both slots of a split-reserve weapon", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: CAVALRY, ammo: [null, null], d: false }, null] }),
+    });
+    render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const [slot1, slot2] = screen.getAllByRole("combobox");
+    fireEvent.change(slot1, { target: { value: "ammo-long-fmj" } });
+    fireEvent.change(slot2, { target: { value: "ammo-long-fmj" } });
+    expect(store.getState().loadout.weapons[0].ammo).toEqual(["ammo-long-fmj", "ammo-long-fmj"]);
+  });
+
+  // -- Accessibility --------------------------------------------------------------------
+
+  it("Drilling's two controls have accessible names that identify their slot and differ from each other", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }) });
+    const slot1 = screen.getByRole("combobox", { name: `${WEAPONS[DRILLING][1]} — Medium ammo` });
+    const slot2 = screen.getByRole("combobox", { name: `${WEAPONS[DRILLING][1]} — Shotgun` });
+    expect(slot1).not.toBe(slot2);
+  });
+
+  it("1890 Cavalry's two controls also carry distinct, slot-identifying accessible names", () => {
+    // Split-reserve: both slots share one round group, so there is no family to name
+    // the slot by — the fallback is an ordinal, still distinct per slot.
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: CAVALRY, ammo: [null, null], d: false }, null] }) });
+    const slot1 = screen.getByRole("combobox", { name: `${WEAPONS[CAVALRY][1]} — ammo slot 1` });
+    const slot2 = screen.getByRole("combobox", { name: `${WEAPONS[CAVALRY][1]} — ammo slot 2` });
+    expect(slot1).not.toBe(slot2);
+  });
+
+  it("both controls are reachable in the tab order", () => {
+    renderSlot({ loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }) });
+    const boxes = screen.getAllByRole("combobox");
+    expect(boxes).toHaveLength(2); // both, not just whichever one already existed
+    for (const box of boxes) expect(box.tabIndex).toBe(0);
+  });
+
+  it("keyboard and pointer activation produce identical state, on the SECOND slot specifically", () => {
+    // A native <select> is keyboard-operable by construction, and both a keyboard
+    // selection (focus + arrow keys + Enter) and a pointer selection (click + click)
+    // terminate in the SAME DOM "change" event carrying the chosen value — there is no
+    // separate code path in the component to diverge, unlike the custom pair-toggle
+    // <button> tested above (whose keyDown and click handlers are genuinely distinct).
+    // Exercised on slot 2 deliberately — slot 1 already existed before #346, so only
+    // slot 2 proves the NEW control is reachable and operable the same way.
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }),
+    });
+    render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const [, slot2] = screen.getAllByRole("combobox");
+    slot2.focus();
+    expect(document.activeElement).toBe(slot2);
+    fireEvent.change(slot2, { target: { value: "ammo-shotgun-slug" } });
+    expect(store.getState().loadout.weapons[0].ammo[1]).toBe("ammo-shotgun-slug");
+  });
+
+  // -- Live region ---------------------------------------------------------------------
+
+  it("changing an ammo selection announces the cost change through a live region", () => {
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: DRILLING, ammo: [null, null], d: false }, null] }),
+    });
+    render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("");
+    const [slot1] = screen.getAllByRole("combobox");
+    const price = ammoRoundFor(WEAPONS[DRILLING][0], 0, "ammo-medium-fmj").price;
+    fireEvent.change(slot1, { target: { value: "ammo-medium-fmj" } });
+    expect(region).toHaveTextContent(`${WEAPONS[DRILLING][1]} ammo cost is now $${price}.`);
+  });
+
+  // -- Seam: cost -----------------------------------------------------------------------
+
+  it("seam: two filled slots contribute two prices; one filled slot contributes one — per-weapon prices, not hardcoded", () => {
+    const oneFilled = { i: DRILLING, ammo: ["ammo-medium-fmj", null], d: false };
+    let store = createTestStore({ loadout: loadoutState({ weapons: [oneFilled, null] }) });
+    let utils = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    expect(utils.container.querySelector(".weapon-cost")).toHaveTextContent(
+      `$${WEAPONS[DRILLING][3] + ammoCostFor(oneFilled)}`
+    );
+    utils.unmount();
+
+    const bothFilled = { i: DRILLING, ammo: ["ammo-medium-fmj", "ammo-shotgun-slug"], d: false };
+    store = createTestStore({ loadout: loadoutState({ weapons: [bothFilled, null] }) });
+    utils = render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    expect(utils.container.querySelector(".weapon-cost")).toHaveTextContent(
+      `$${WEAPONS[DRILLING][3] + ammoCostFor(bothFilled)}`
+    );
+    // The two-slot figure is strictly greater — confirms the second slot's price was
+    // actually added, not merely that the assertion re-derives the same function.
+    expect(ammoCostFor(bothFilled)).toBeGreaterThan(ammoCostFor(oneFilled));
+    // And the second slot's PRICE is visible only because its CONTROL exists to select
+    // it — pin that both selections are reflected as two live controls, not just a
+    // number computed independently of what's rendered.
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
+  });
+
+  // -- Seam: dual-wielded pair ----------------------------------------------------------
+
+  it("seam: a paired dual-wieldable two-slot weapon still shows two ammo controls; ammo cost is not doubled by pairing", () => {
+    // Governing: SPEC-0009 REQ "A Pair Carries One Weapon's Ammo and Doubles Only the
+    // Weapon Price". LeMat Mark II is dual-family (two ammo slots) AND dual-wieldable,
+    // the only catalog weapon that is both, so it is the only real fixture for this seam.
+    const fmjId = "ammo-compact-fmj";
+    const dragonId = "ammo-shotgun-dragon-breath";
+    const store = createTestStore({
+      loadout: loadoutState({ weapons: [{ i: LEMAT, ammo: [fmjId, dragonId], d: false }, null] }),
+    });
+    render(
+      <Provider store={store}>
+        <WeaponSlot slot={0} />
+      </Provider>
+    );
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
+    const before = totalCost(store.getState().loadout);
+
+    fireEvent.click(screen.getByRole("button", { name: `Dual-wield ${WEAPONS[LEMAT][1]}` }));
+    expect(store.getState().loadout.weapons[0].d).toBe(true);
+
+    // Still two controls, selections untouched by pairing.
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
+    expect(store.getState().loadout.weapons[0].ammo).toEqual([fmjId, dragonId]);
+
+    // If ammo cost had also doubled, the delta would be weaponPrice + ammoCost; the
+    // requirement is that it is EXACTLY one weapon price.
+    const after = totalCost(store.getState().loadout);
+    expect(after - before).toBe(WEAPONS[LEMAT][3]);
   });
 });
