@@ -1131,7 +1131,7 @@ button {
    proportionate at any tile size — including the 112px ceiling, where a fixed 80px would
    start looking lost again.
 
-   The real fix is a better source: all 32 trait assets are 64x64 because that is what the
+   The real fix is a better source: all 58 trait assets are 64x64 because that is what the
    wiki's infobox <img> serves, and scrape-images.mjs takes that src verbatim. wiki.gg
    usually also exposes the unscaled original, so a scrape that reached for it would let this
    go back to 1x. Tracked on #228. */
@@ -1175,7 +1175,7 @@ button {
    than having been left standing on the chance one arrived.
 
    `white-space: pre-line` is load-bearing, not formatting taste. A description is the wiki's lead
-   paragraphs newline-joined, and 9 of the 32 traits carry a second one: beastface, conduit,
+   paragraphs newline-joined, and 9 of the 58 traits carry a second one: beastface, conduit,
    frontiersman, kiteskin, magpie, necromancer, pain-sense, serpent and vigilant. Each second
    paragraph is a conditional rule — `SOLO:`, `CATALYST:` or `SOLO CATALYST:` — that applies instead
    of the base effect rather than restating it. Collapsing the newline would run two distinct

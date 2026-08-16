@@ -1447,10 +1447,10 @@ const HATNOTE_PREFIXES = [/^see also\b/i, /^for (?:the|other)\b/i, /^not to be c
  * page that has a TOC and reported no description at all.
  *
  * Multiple paragraphs are joined with a newline rather than collapsed, because the second one is
- * load-bearing where it exists. 9 of the 32 traits carry one — beastface, conduit, frontiersman,
+ * load-bearing where it exists. 9 of the 58 traits carry one — beastface, conduit, frontiersman,
  * kiteskin, magpie, necromancer, pain-sense, serpent, vigilant — and each is a conditional rule
  * (`SOLO:`, `CATALYST:` or `SOLO CATALYST:`) that replaces the base effect rather than restating
- * it. Collapsing to the first paragraph would drop a mechanic from more than a quarter of them.
+ * it. Collapsing to the first paragraph would drop a mechanic from nine of them.
  *
  * The result is plain text with tags stripped. SPEC-0003 already requires the hunter descriptions be
  * treated as untrusted and never inserted as markup; the same applies here, and stripping at the
@@ -1831,7 +1831,7 @@ export function formatCoverage(report) {
  *   TRAITS  [id, name, up, group]
  *
  * Traits say `Cost` where every other category says `Price` — the wiki labels Upgrade Points
- * differently, and mapping it to `Price` would silently write nothing for all 32 traits.
+ * differently, and mapping it to `Price` would silently write nothing for all 58 traits.
  */
 export const CATALOG_FIELD_MAP = {
   weapons: [

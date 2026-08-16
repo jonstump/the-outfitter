@@ -253,15 +253,32 @@ describe("descriptionFor", () => {
   });
 
   it("keeps multi-paragraph descriptions newline-joined rather than collapsed", () => {
-    // 9 of the 32 traits carry a second paragraph — beastface, conduit, frontiersman, kiteskin,
+    // 9 of the 58 traits carry a second paragraph — beastface, conduit, frontiersman, kiteskin,
     // magpie, necromancer, pain-sense, serpent, vigilant. Each is a conditional rule (`SOLO:`,
     // `CATALYST:`, `SOLO CATALYST:`) that replaces the base effect rather than restating it, so
-    // collapsing to the first paragraph would drop a mechanic from more than a quarter of them.
+    // collapsing to the first paragraph would drop a mechanic from nine of them.
     const multi = Object.keys(ITEM_STATS).filter((k) => ITEM_STATS[k].description?.includes("\n"));
     for (const id of multi) {
       expect(descriptionFor(id)).toContain("\n");
       expect(descriptionFor(id)).not.toMatch(/\n\s*\n/);
     }
+  });
+
+  it("pins the trait catalog size that comment prose elsewhere cites by number (#369)", () => {
+    // Several comments across this codebase — this file, LoadoutListsPanel.jsx, global.css,
+    // scripts/scrape-stats.mjs and its test — state the trait catalog's size in prose ("58
+    // traits", "9 of the 58 traits carry a second paragraph") rather than deriving it inline,
+    // because deriving it would bury each comment's actual point in a length computation.
+    // That makes every one of those prose numbers a hardcoded copy of TRAITS.length, which is
+    // exactly how issue #369 went stale: the catalog grew from 32 to 58 traits and five live
+    // comments still said 32. Asserting both numbers here means the next roster growth fails
+    // a test instead of leaving another batch of comments quietly wrong.
+    expect(TRAITS.length).toBe(58);
+    const traitIds = new Set(TRAITS.map((t) => t[0]));
+    const multiParagraphTraits = Object.keys(ITEM_STATS).filter(
+      (k) => traitIds.has(k) && ITEM_STATS[k].description?.includes("\n")
+    );
+    expect(multiParagraphTraits.length).toBe(9);
   });
 
   it("never leaves a space before punctuation from an inline link", () => {

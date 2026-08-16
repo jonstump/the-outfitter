@@ -1190,7 +1190,7 @@ test("planCatalogWrites: an out-of-range value is refused, and the rest of the i
 
 test("planCatalogWrites: traits map from Cost, not Price", () => {
   // The wiki labels Upgrade Points "Cost". Mapping traits to "Price" would silently plan nothing
-  // for all 32 of them, which reads as "the trait table is already correct".
+  // for all 58 of them, which reads as "the trait table is already correct".
   const rows = { traits: [["t1", "T One", 4, "Combat"]] };
   const { changes } = planCatalogWrites({ t1: { fields: { Cost: "6" }, wikiUrl: "u" } }, rows);
   assert.deepEqual(changes.map((c) => [c.label, c.from, c.to]), [["up", 4, 6]]);
@@ -1589,10 +1589,10 @@ test("parseDescription: the table of contents is not a section boundary", () => 
 });
 
 test("parseDescription: several lead paragraphs are kept, newline-joined", () => {
-  // Necromancer's shape, and not only Necromancer's: 9 of the 32 traits carry a second paragraph,
+  // Necromancer's shape, and not only Necromancer's: 9 of the 58 traits carry a second paragraph,
   // each a conditional rule (`SOLO:`, `CATALYST:`, `SOLO CATALYST:`) that replaces the base effect
-  // rather than restating it. Collapsing to the first paragraph would drop a mechanic from over a
-  // quarter of them.
+  // rather than restating it. Collapsing to the first paragraph would drop a mechanic from nine
+  // of them.
   const html = TRAIT_PAGE_SHAPE(
     "<p>Using Dark Sight, revive a downed teammate from a distance. (25m)</p>" +
       "<p>SOLO: You can revive your downed Hunter.</p>"

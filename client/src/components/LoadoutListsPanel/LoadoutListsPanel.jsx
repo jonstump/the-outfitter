@@ -105,9 +105,14 @@ function hunterLine(hunterId) {
  * Fifteen is *Hunt: Showdown*'s per-hunter trait maximum. It is deliberately NOT derived
  * from the trait-point cap, which is user-settable — deriving it would make the grid reflow
  * when a setting changed, which is exactly what fixing the shape is meant to prevent. It is
- * a fact about the game, not an invariant this application enforces: `upBudgetOn` is off by
- * default, the catalog holds 32 traits and the server accepts 40, so a loadout holding more
- * than fifteen is an ordinary savable record. See `traitOverflow` below.
+ * a fact about the game, and — as of ADR-0012 (SPEC-0003 "A Loadout Holds At Most Fifteen
+ * Traits") — an invariant this application enforces too: `addTrait` refuses a sixteenth
+ * unconditionally regardless of `upBudgetOn`, every decoder in `loadoutCodec.js` bounds a
+ * decoded trait list to fifteen, `randomize` never draws past the cap, and the server rejects
+ * a write over `MAX_TRAITS = 15` (server/src/routes/loadouts.js, `MAX_TRAITS`). None of that is a
+ * function of the trait catalog's size, which holds 58 traits today. See `traitOverflow`
+ * below for why the grid still defends against an over-cap loadout despite the cap being
+ * enforced everywhere it is written.
  */
 export const WEAPON_CELLS = 2;
 export const EQUIP_CELLS = 8;
@@ -193,9 +198,16 @@ export function previewGroups(loadout) {
   const equipment = Array.from({ length: EQUIP_CELLS }, (_, slot) => equipCell(loadout.equip[slot], slot));
   const traits = Array.from({ length: TRAIT_CELLS }, (_, slot) => traitCell(loadout.traits[slot], slot));
 
-  // What the loadout HOLDS, which is not the same as what the grid can draw. More than
-  // fifteen traits is reachable today, so the sixteenth is counted and announced even though
-  // there is no cell for it — the grid must not grow, scroll or clip to accommodate it.
+  // What the loadout HOLDS, which is not the same as what the grid can draw. Every path that
+  // WRITES a trait list now enforces the fifteen-trait cap (ADR-0012: `addTrait`, every
+  // decoder, `randomize`, and the server's `MAX_TRAITS`), so `traitOverflow` cannot fire
+  // against anything this client itself produces today. It stays as defence, per SPEC-0003's
+  // "Filed Loadouts Preview Their Contents": a record saved before the cap existed, a decoder
+  // that regresses, or a payload arriving by some path not yet imagined can still reach this
+  // preview, and a component that trusts an invariant it does not itself enforce is how a bad
+  // ammo index blanked the page in issue #201. If more than fifteen ever does arrive here, the
+  // sixteenth is counted and announced even though there is no cell for it — the grid must not
+  // grow, scroll or clip to accommodate it.
   const traitsHeld = loadout.traits.filter((id) => TRAIT_BY_ID.has(id)).length;
   const traitOverflow = Math.max(0, traitsHeld - traits.filter(Boolean).length);
 
