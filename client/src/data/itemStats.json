@@ -343,7 +343,10 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15275",
-      "ingestedAt": "2026-08-16T06:57:59.210Z"
+      "ingestedAt": "2026-08-16T06:57:59.210Z",
+      "capCategories": [
+        "Placeable"
+      ]
     },
     "antidote-shot": {
       "name": "Antidote Shot",
@@ -367,7 +370,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15190",
-      "ingestedAt": "2026-08-16T06:57:26.155Z"
+      "ingestedAt": "2026-08-16T06:57:26.155Z",
+      "capCategories": []
     },
     "antidote-shot-weak": {
       "name": "Antidote Shot (Weak)",
@@ -391,7 +395,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15191",
-      "ingestedAt": "2026-08-16T06:57:48.681Z"
+      "ingestedAt": "2026-08-16T06:57:48.681Z",
+      "capCategories": []
     },
     "assailant": {
       "name": "Assailant",
@@ -853,7 +858,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16069",
-      "ingestedAt": "2026-08-16T06:57:30.658Z"
+      "ingestedAt": "2026-08-16T06:57:30.658Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "blade-seer": {
       "name": "Blade Seer",
@@ -2240,7 +2248,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10096",
-      "ingestedAt": "2026-08-16T06:57:39.662Z"
+      "ingestedAt": "2026-08-16T06:57:39.662Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "choke-beetle": {
       "name": "Choke Beetle",
@@ -2268,7 +2279,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14806",
-      "ingestedAt": "2026-08-16T06:58:02.214Z"
+      "ingestedAt": "2026-08-16T06:58:02.214Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "choke-bombs": {
       "name": "Choke Bombs",
@@ -2408,7 +2422,10 @@
         "HeavyMeleeDamage": "112"
       },
       "sourceRevision": "15277",
-      "ingestedAt": "2026-08-16T06:57:42.677Z"
+      "ingestedAt": "2026-08-16T06:57:42.677Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "concertina-trip-mine": {
       "name": "Concertina Trip Mines",
@@ -2753,7 +2770,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16070",
-      "ingestedAt": "2026-08-16T06:57:54.698Z"
+      "ingestedAt": "2026-08-16T06:57:54.698Z",
+      "capCategories": [
+        "Placeable"
+      ]
     },
     "dauntless": {
       "name": "Dauntless",
@@ -3504,7 +3524,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16068",
-      "ingestedAt": "2026-08-16T06:57:29.164Z"
+      "ingestedAt": "2026-08-16T06:57:29.164Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "dynamite-stick": {
       "name": "Dynamite Stick",
@@ -3531,7 +3554,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14715",
-      "ingestedAt": "2026-08-16T06:57:27.658Z"
+      "ingestedAt": "2026-08-16T06:57:27.658Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "fanning": {
       "name": "Fanning",
@@ -3606,7 +3632,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14807",
-      "ingestedAt": "2026-08-16T06:58:05.187Z"
+      "ingestedAt": "2026-08-16T06:58:05.187Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "fire-bomb": {
       "name": "Fire Bomb",
@@ -3633,7 +3662,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15394",
-      "ingestedAt": "2026-08-16T06:57:35.157Z"
+      "ingestedAt": "2026-08-16T06:57:35.157Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "first-aid-kit": {
       "name": "First Aid Kit",
@@ -3753,7 +3785,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "10105",
-      "ingestedAt": "2026-08-16T06:57:41.174Z"
+      "ingestedAt": "2026-08-16T06:57:41.174Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "frag-bomb": {
       "name": "Frag Bomb",
@@ -3780,7 +3815,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14717",
-      "ingestedAt": "2026-08-16T06:57:32.155Z"
+      "ingestedAt": "2026-08-16T06:57:32.155Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "frontier-73c": {
       "name": "Frontier 73C",
@@ -4372,7 +4410,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15398",
-      "ingestedAt": "2026-08-16T06:57:56.203Z"
+      "ingestedAt": "2026-08-16T06:57:56.203Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "hive-bomb": {
       "name": "Hive Bomb",
@@ -4398,7 +4439,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16074",
-      "ingestedAt": "2026-08-16T06:57:38.168Z"
+      "ingestedAt": "2026-08-16T06:57:38.168Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "homestead-78": {
       "name": "Homestead 78",
@@ -5821,7 +5865,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15396",
-      "ingestedAt": "2026-08-16T06:57:36.669Z"
+      "ingestedAt": "2026-08-16T06:57:36.669Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "machete": {
       "name": "Machete",
@@ -6778,7 +6825,10 @@
         "HeavyMeleeDamage": "31"
       },
       "sourceRevision": "15196",
-      "ingestedAt": "2026-08-16T06:57:51.693Z"
+      "ingestedAt": "2026-08-16T06:57:51.693Z",
+      "capCategories": [
+        "Placeable"
+      ]
     },
     "mithridatist": {
       "name": "Mithridatist",
@@ -8494,7 +8544,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16236",
-      "ingestedAt": "2026-08-16T06:57:57.687Z"
+      "ingestedAt": "2026-08-16T06:57:57.687Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "poison-trip-mine": {
       "name": "Poison Trip Mines",
@@ -8930,7 +8983,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "16075",
-      "ingestedAt": "2026-08-16T06:57:50.183Z"
+      "ingestedAt": "2026-08-16T06:57:50.183Z",
+      "capCategories": []
     },
     "regeneration-shot": {
       "name": "Regeneration Shot",
@@ -8954,7 +9008,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15288",
-      "ingestedAt": "2026-08-16T06:57:23.169Z"
+      "ingestedAt": "2026-08-16T06:57:23.169Z",
+      "capCategories": []
     },
     "regeneration-shot-weak": {
       "name": "Regeneration Shot (Weak)",
@@ -8978,7 +9033,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15286",
-      "ingestedAt": "2026-08-16T06:57:45.671Z"
+      "ingestedAt": "2026-08-16T06:57:45.671Z",
+      "capCategories": []
     },
     "relentless": {
       "name": "Relentless",
@@ -11477,7 +11533,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15340",
-      "ingestedAt": "2026-08-16T06:58:03.695Z"
+      "ingestedAt": "2026-08-16T06:58:03.695Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "stamina-shot": {
       "name": "Stamina Shot",
@@ -11501,7 +11560,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15201",
-      "ingestedAt": "2026-08-16T06:57:24.658Z"
+      "ingestedAt": "2026-08-16T06:57:24.658Z",
+      "capCategories": []
     },
     "stamina-shot-weak": {
       "name": "Stamina Shot (Weak)",
@@ -11525,7 +11585,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15202",
-      "ingestedAt": "2026-08-16T06:57:47.185Z"
+      "ingestedAt": "2026-08-16T06:57:47.185Z",
+      "capCategories": []
     },
     "steady-aim": {
       "name": "Steady Aim",
@@ -11576,7 +11637,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15432",
-      "ingestedAt": "2026-08-16T06:57:33.668Z"
+      "ingestedAt": "2026-08-16T06:57:33.668Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "surefoot": {
       "name": "Surefoot",
@@ -11776,7 +11840,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13655",
-      "ingestedAt": "2026-08-16T06:58:06.689Z"
+      "ingestedAt": "2026-08-16T06:58:06.689Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-devil": {
       "name": "The Devil",
@@ -11798,7 +11865,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14797",
-      "ingestedAt": "2026-08-16T06:58:08.203Z"
+      "ingestedAt": "2026-08-16T06:58:08.203Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-empress": {
       "name": "The Empress",
@@ -11820,7 +11890,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13654",
-      "ingestedAt": "2026-08-16T06:58:09.696Z"
+      "ingestedAt": "2026-08-16T06:58:09.696Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-fool": {
       "name": "The Fool",
@@ -11842,7 +11915,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13657",
-      "ingestedAt": "2026-08-16T06:58:11.195Z"
+      "ingestedAt": "2026-08-16T06:58:11.195Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-garden": {
       "name": "The Garden",
@@ -11864,7 +11940,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13658",
-      "ingestedAt": "2026-08-16T06:58:12.701Z"
+      "ingestedAt": "2026-08-16T06:58:12.701Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-hanged-man": {
       "name": "The Hanged Man",
@@ -11887,7 +11966,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13659",
-      "ingestedAt": "2026-08-16T06:58:14.199Z"
+      "ingestedAt": "2026-08-16T06:58:14.199Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-high-priestess": {
       "name": "The High Priestess",
@@ -11910,7 +11992,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13798",
-      "ingestedAt": "2026-08-16T06:58:15.711Z"
+      "ingestedAt": "2026-08-16T06:58:15.711Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-judgement": {
       "name": "The Judgement",
@@ -11932,7 +12017,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13661",
-      "ingestedAt": "2026-08-16T06:58:17.207Z"
+      "ingestedAt": "2026-08-16T06:58:17.207Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-magician": {
       "name": "The Magician",
@@ -11954,7 +12042,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13662",
-      "ingestedAt": "2026-08-16T06:58:18.715Z"
+      "ingestedAt": "2026-08-16T06:58:18.715Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-moon": {
       "name": "The Moon",
@@ -11976,7 +12067,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13663",
-      "ingestedAt": "2026-08-16T06:58:20.210Z"
+      "ingestedAt": "2026-08-16T06:58:20.210Z",
+      "capCategories": []
     },
     "the-pathfinder": {
       "name": "The Pathfinder",
@@ -11999,7 +12091,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13664",
-      "ingestedAt": "2026-08-16T06:58:21.717Z"
+      "ingestedAt": "2026-08-16T06:58:21.717Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-sun": {
       "name": "The Sun",
@@ -12022,7 +12117,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14796",
-      "ingestedAt": "2026-08-16T06:58:23.223Z"
+      "ingestedAt": "2026-08-16T06:58:23.223Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-tower": {
       "name": "The Tower",
@@ -12044,7 +12142,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13667",
-      "ingestedAt": "2026-08-16T06:58:24.728Z"
+      "ingestedAt": "2026-08-16T06:58:24.728Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "the-world": {
       "name": "The World",
@@ -12066,7 +12167,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "13668",
-      "ingestedAt": "2026-08-16T06:58:26.218Z"
+      "ingestedAt": "2026-08-16T06:58:26.218Z",
+      "capCategories": [
+        "Tarot Cards"
+      ]
     },
     "throwing-axes": {
       "name": "Throwing Axes",
@@ -12185,7 +12289,10 @@
         "HeavyMeleeDamage": "90"
       },
       "sourceRevision": "15116",
-      "ingestedAt": "2026-08-16T06:58:00.691Z"
+      "ingestedAt": "2026-08-16T06:58:00.691Z",
+      "capCategories": [
+        "Placeable"
+      ]
     },
     "uppercut-deadeye": {
       "name": "Uppercut Deadeye",
@@ -13112,7 +13219,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15290",
-      "ingestedAt": "2026-08-16T06:57:21.660Z"
+      "ingestedAt": "2026-08-16T06:57:21.660Z",
+      "capCategories": []
     },
     "vitality-shot-weak": {
       "name": "Vitality Shot (Weak)",
@@ -13135,7 +13243,8 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "15418",
-      "ingestedAt": "2026-08-16T06:57:44.170Z"
+      "ingestedAt": "2026-08-16T06:57:44.170Z",
+      "capCategories": []
     },
     "vulture": {
       "name": "Vulture",
@@ -13186,7 +13295,10 @@
         "HeavyMeleeDamage": "27"
       },
       "sourceRevision": "14732",
-      "ingestedAt": "2026-08-16T06:57:53.201Z"
+      "ingestedAt": "2026-08-16T06:57:53.201Z",
+      "capCategories": [
+        "Throwable"
+      ]
     },
     "whispersmith": {
       "name": "Whispersmith",
