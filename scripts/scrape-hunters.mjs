@@ -449,15 +449,23 @@ export function parseSources(html) {
 //
 // Order matters: the first matching rule wins, so the specific patterns precede the general ones
 // ("Soul Survivor" before the bare event match, "Dark Tribute" before "Tribute").
+//
+// `mythic` is hoisted above every channel rule (soul-survivor, blood-bonds, event, ...) even though
+// none of them share a source string with it today. It answers a different question — "can this
+// ever be obtained again" — from the channel rules' "which channel sold it", and it is the only
+// rule `deriveObtainable` reads. Its position in a first-match list among the channel rules was
+// therefore arbitrary; putting it first makes that structurally impossible to get wrong later,
+// regardless of what channel rules get added around it. (#390, SPEC-0004; see also #127/#388 on the
+// currently-dormant question of whether any hunter's source will ever match it.)
 // ---------------------------------------------------------------------------
 
 export const ACQUISITION_RULES = [
+  [/\bmythic\b/i, "mythic"],
   [/\bsoul\s*survivor\b/i, "soul-survivor"],
   [/\bdark\s*tribute\b/i, "dark-tribute"],
   [/\bblood\s*bonds?\b/i, "blood-bonds"],
   [/\bhunt\s*dollars?\b/i, "hunt-dollars"],
   [/\btwitch\b/i, "twitch-drop"],
-  [/\bmythic\b/i, "mythic"],
   [/\bprestige\b/i, "prestige"],
   [/\bbloodline\b/i, "bloodline"],
   // "Halloween Questline", "Vengeance of the Skinned Questline" — the wiki's own wording for what
@@ -469,13 +477,28 @@ export const ACQUISITION_RULES = [
   [/\bfree\b/i, "free"],
 ];
 
-/** Map a verbatim `Source` string onto SPEC-0004's closed acquisition vocabulary, or null. */
+/**
+ * Every acquisition value whose rule matches `source`, in `ACQUISITION_RULES` order. Empty if none
+ * match. A source naming two channels (e.g. "900 Blood Bonds / Garden of the Witch Event") matches
+ * more than one rule; this is how the caller (`runScrape`) detects and reports that case instead of
+ * silently reducing it to whichever rule happens to run first — see `unmappedSources` for the
+ * existing, analogous "can't classify this" report this mirrors. (#390, SPEC-0004)
+ */
+export function matchedAcquisitions(source) {
+  if (!source) return [];
+  return ACQUISITION_RULES.filter(([pattern]) => pattern.test(source)).map(([, value]) => value);
+}
+
+/**
+ * Map a verbatim `Source` string onto SPEC-0004's closed acquisition vocabulary, or null.
+ *
+ * When more than one rule matches, the first (by `ACQUISITION_RULES` order) wins — this resolution
+ * policy is unchanged by `matchedAcquisitions` existing; see that function to detect the multi-match
+ * case itself.
+ */
 export function normaliseAcquisition(source) {
-  if (!source) return null;
-  for (const [pattern, value] of ACQUISITION_RULES) {
-    if (pattern.test(source)) return value;
-  }
-  return null;
+  const matches = matchedAcquisitions(source);
+  return matches.length ? matches[0] : null;
 }
 
 /**
@@ -537,6 +560,17 @@ export function formatSummary(summary, extra = {}) {
   if (extra.unmappedSources?.length) {
     lines.push(`  UNMAPPED Source values (acquisition=null), ${extra.unmappedSources.length} distinct:`);
     for (const s of extra.unmappedSources) lines.push(`    - ${s}`);
+  }
+  // A source naming two channels (e.g. "900 Blood Bonds / Garden of the Witch Event") is reduced to
+  // one `acquisition` value by first-match — see `matchedAcquisitions`. That reduction is silent
+  // unless reported here; this is the report. (#390, SPEC-0004)
+  if (extra.multiMatchAcquisitions?.length) {
+    lines.push(
+      `  MULTI-MATCH Source values (more than one acquisition rule matched), ${extra.multiMatchAcquisitions.length} hunter(s):`
+    );
+    for (const m of extra.multiMatchAcquisitions) {
+      lines.push(`    - ${m.hunter}: "${m.source}" matched [${m.matches.join(", ")}], using "${m.matches[0]}"`);
+    }
   }
   for (const f of summary.failed) lines.push(`  FAILED  ${f.hunter}: ${f.reason}`);
   for (const s of summary.skipped) lines.push(`  SKIPPED ${s.hunter}: ${s.reason}`);
@@ -1206,6 +1240,7 @@ export async function runScrape(options = {}, deps = {}) {
 
   const allEntries = [];
   const unmappedSources = new Set();
+  const multiMatchAcquisitions = [];
   const seenCanonical = new Set();
   let totalBytes = 0;
   let portraitsSkipped = 0;
@@ -1251,6 +1286,12 @@ export async function runScrape(options = {}, deps = {}) {
       for (const entry of result.entries) {
         allEntries.push(entry);
         if (entry.source && entry.acquisition === null) unmappedSources.add(entry.source);
+        if (entry.source) {
+          const matches = matchedAcquisitions(entry.source);
+          if (matches.length > 1) {
+            multiMatchAcquisitions.push({ hunter: entry.id, source: entry.source, matches });
+          }
+        }
       }
 
       // Variants that failed their portrait stage are individually failed hunters, not a failed
@@ -1390,6 +1431,7 @@ export async function runScrape(options = {}, deps = {}) {
     staleRemoved,
     staleSweepSkipped,
     unmappedSources: unmappedSources.size,
+    multiMatchAcquisitions: multiMatchAcquisitions.length,
   });
 
   return {
@@ -1400,6 +1442,7 @@ export async function runScrape(options = {}, deps = {}) {
     staleRemoved,
     staleSweepSkipped,
     unmappedSources: [...unmappedSources].sort(),
+    multiMatchAcquisitions: [...multiMatchAcquisitions].sort((a, b) => a.hunter.localeCompare(b.hunter)),
   };
 }
 
@@ -1442,6 +1485,7 @@ async function main() {
       staleRemoved: result.staleRemoved,
       staleSweepSkipped: result.staleSweepSkipped,
       unmappedSources: result.unmappedSources,
+      multiMatchAcquisitions: result.multiMatchAcquisitions,
     })
   );
 
