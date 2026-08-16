@@ -37,7 +37,7 @@ This paragraph previously stated the opposite — four copies of one *specific* 
 - **Equipment Occupies a Fixed Eight-Cell Grid** — `state.equip` is a fixed eight-element array with `null` holes; `heldItems`, `totalCost`, `selectEquipCount`, `toData`/`fromData` and the randomizer all derive from occupied cells rather than array length.
 - **The Grid Renders as Two Ranks of Four** — a fixed 4-track grid with column-major fill, transposed to 2×4 by a panel-width `@container` query. The threshold is declared once, in that query, and the keyboard reads the arrangement from a token the query sets rather than measuring geometry.
 - **Cells Are Individually Blockable** — `blocked` is an array of cell indices; `toggleBlockedSlot` refuses an occupied cell, `slotMax()` is `8 - blocked.length`, and placement skips blocked indices.
-- **Items Are Rearranged by Direct Manipulation** — one `moveEquip` operation behind both pointer drag and the keyboard, with an off-grid drop as the remove path.
+- **Items Are Rearranged by Direct Manipulation** — one `moveEquip` operation behind both pointer drag and the keyboard, with an off-grid drop as one remove path and a dedicated per-cell control *(named 2026-08-16, per #241)* as the other; a zero-movement click is neither.
 - **Repeated Consumables Read as One Stack** — `utils/stacking.js` derives runs at render time; the badge is computed from the run, never stored.
 - **Capacity Rules Are Stated Once and Preserved** — one `hasFreeCell` predicate, and the four-per-category cap read from `CONS_CAP_CATEGORIES` in `catalog.js`.
 - **Wire Format Version 2 Encodes Cell Position** — `FORMAT_VERSION` is 2 and `toData` emits eight positional entries.
@@ -126,6 +126,18 @@ A cell's blocked state SHALL be determined by membership in that list. The syste
 
 Only an empty cell MAY be blocked. Blocking SHALL be rejected for a cell that holds an item, including a cell held by a stack. A blocked cell MUST NOT accept an item by any route — picker placement, drag, keyboard placement, bulk load, or randomization.
 
+*(Corrected 2026-08-16, per #241 — this requirement stated what blocking means and never stated the gesture that triggers it.)* Blocking SHALL be activated by the empty cell's own control — a click, or Enter/Space while it holds keyboard focus — and MUST NOT be triggered by any other cell's gesture, including a drag that ends over it. An empty cell is a valid drop target under "Items Are Rearranged by Direct Manipulation": the system SHALL distinguish a drop released over an empty cell from a click on that same cell, and a drop MUST NOT toggle the cell's blocked state.
+
+#### Scenario: An empty cell is blocked by its own control
+
+- **WHEN** the user clicks an unblocked, unoccupied cell, or reaches it by keyboard and presses Enter or Space
+- **THEN** the cell SHALL become blocked
+
+#### Scenario: A drop onto an empty cell does not block it
+
+- **WHEN** the user drags an item from another cell and releases it over an empty, unblocked cell
+- **THEN** the item SHALL move to that cell, and the cell's blocked state MUST NOT change as a side effect of the drop
+
 #### Scenario: A middle cell is blocked while later cells stay usable
 
 - **WHEN** the user blocks cell 4 in an otherwise empty grid
@@ -145,9 +157,9 @@ Only an empty cell MAY be blocked. Blocking SHALL be rejected for a cell that ho
 
 The system SHALL provide a single move operation over the grid, expressed as "move the contents of cell A to cell B". Pointer drag and the keyboard equivalent required by "Keyboard Equivalence for Every Pointer Gesture" SHALL both be callers of that one operation, and MUST NOT implement divergent placement rules.
 
-Dropping an item onto an **empty, unblocked** cell SHALL move it there. Dropping an item onto an **occupied** cell SHALL swap the two cells' contents. Dropping an item onto its own cell, onto a blocked cell, or outside any cell other than the remove target SHALL be a no-op that returns the item to its origin.
+Dropping an item onto an **empty, unblocked** cell SHALL move it there. Dropping an item onto an **occupied** cell SHALL swap the two cells' contents. Dropping an item onto its own cell or onto a blocked cell SHALL be a no-op that returns the item to its origin.
 
-Dragging an item off the grid to the designated remove target SHALL unequip it, with the same effect as the existing click-to-remove.
+*(Corrected 2026-08-16, per #241 — "the designated remove target" named an affordance ADR-0009 does not mention and this spec never placed in any component; "the existing click-to-remove" described a gesture that collides with drop-on-origin, once click and drag share one event sequence.)* Releasing a drag anywhere outside the grid — not a specific in-grid target — SHALL unequip the dragged item. Removal is otherwise reachable **only** through a dedicated, always-present per-cell control, distinct from the drag source and distinct from the tile body: activating that control SHALL unequip the item it names. A press-and-release on the tile body or drag handle with no movement between — a click, in the sense of zero pointer travel — SHALL be treated identically to a drag released back onto its own cell: a no-op, per the scenario above. It MUST NOT unequip the item. This is what keeps the two rules from colliding: "click removes" is withdrawn, and only the dedicated control does.
 
 Adding an item from the picker SHALL place it in the **lowest-numbered free, unblocked cell**, except where "Repeated Consumables Read as One Stack" directs otherwise. The picker SHALL NOT be a drag source; placement from the picker into a chosen cell is out of scope for this capability.
 
@@ -170,7 +182,17 @@ A move MUST NOT change which items are equipped, MUST NOT change the total cost,
 
 #### Scenario: Dragging off the grid unequips
 
-- **WHEN** the user drags the item in cell 6 onto the remove target and releases
+- **WHEN** the user drags the item in cell 6 outside the grid and releases
+- **THEN** cell 6 SHALL be empty, every other cell SHALL be unchanged, and the total cost SHALL drop by exactly that item's cost
+
+#### Scenario: A click on the tile body does not remove the item
+
+- **WHEN** the user presses and releases the pointer on cell 6's tile body with no movement between
+- **THEN** cell 6's item SHALL be unchanged, identically to a drag released back onto its own cell
+
+#### Scenario: Only the dedicated control removes an item
+
+- **WHEN** the user activates cell 6's remove control
 - **THEN** cell 6 SHALL be empty, every other cell SHALL be unchanged, and the total cost SHALL drop by exactly that item's cost
 
 #### Scenario: The picker fills the lowest free cell
@@ -493,7 +515,7 @@ The sensor SHALL take the current arrangement from the same declared threshold t
 - **WHEN** a keyboard user grabs the item in cell 2 and presses Down once
 - **THEN** the placement target SHALL be cell 6 in the wide arrangement and cell 3 in the narrow one, in each case the cell directly below cell 2 as drawn
 
-Unequipping SHALL likewise have a keyboard route that does not require dragging off the grid; the existing activation-to-remove behaviour satisfies this and SHALL be retained.
+*(Corrected 2026-08-16, per #241 — Enter/Space on a filled cell was described as the keyboard route for removal, which collides with the same keys starting and committing a grab. The two are not the same control.)* Unequipping SHALL likewise have a keyboard route that does not require dragging off the grid: the per-cell remove control required by "Items Are Rearranged by Direct Manipulation" SHALL itself be reachable in the tab order and activatable by Enter or Space while it holds focus, independent of the grab-and-place state machine above. Reaching the remove control MUST NOT require a grab to be in progress, and activating it MUST NOT be interpreted as starting or committing one.
 
 Cells SHALL be reachable in a tab order that follows the visual layout, and a grabbed stack SHALL be announced with its quantity so a screen-reader user knows how many cells the pending move will consume.
 
@@ -518,6 +540,11 @@ Focus SHALL follow the item rather than the cell. After a completed move, focus 
 
 - **WHEN** a keyboard user grabs a cell, moves the target to another cell, and presses Escape
 - **THEN** the item SHALL remain in its origin cell and the loadout SHALL be unchanged
+
+#### Scenario: The remove control is reachable and operable without a grab
+
+- **WHEN** a keyboard user tabs to a filled cell's remove control, with no grab in progress, and presses Enter or Space
+- **THEN** that cell's item SHALL be unequipped, and no grab SHALL have been started or committed by the keypress
 
 #### Scenario: A rejected keyboard drop is announced
 
@@ -556,7 +583,9 @@ The quantity badge, the slot counter in the panel header, and the grab/drop anno
 
 ### Keyboard Navigation
 
-Every cell SHALL be focusable and operable by keyboard. Tab order SHALL follow the visual grid order, which the fixed arrangement makes unambiguous in both orientations: cells 1 through 8 in DOM order, which is the visual reading order when wide and when narrow alike. Enter and Space SHALL activate a cell's primary action, arrow keys SHALL move among cells with the arrangement-relative semantics required by "Keyboard Equivalence for Every Pointer Gesture", and Escape SHALL cancel an in-progress grab. Keyboard focus MUST NOT be trapped in the grid outside an active grab.
+Every cell SHALL be focusable and operable by keyboard. Tab order SHALL follow the visual grid order, which the fixed arrangement makes unambiguous in both orientations: cells 1 through 8 in DOM order, which is the visual reading order when wide and when narrow alike.
+
+*(Corrected 2026-08-16, per #241 — "Enter and Space SHALL activate a cell's primary action" named a single, unnamed action per cell state; the implementation has no such single action.)* On a filled cell's tile, Space SHALL start a grab; on an empty cell, Enter or Space SHALL toggle its blocked state; and on the cell's remove control, where present, Enter or Space SHALL activate it, per "Items Are Rearranged by Direct Manipulation" and "Keyboard Equivalence for Every Pointer Gesture" above. These are three controls, not one action read three ways, and each SHALL be independently reachable in the tab order. Arrow keys SHALL move an in-progress grab among cells with the arrangement-relative semantics required by "Keyboard Equivalence for Every Pointer Gesture", Enter SHALL commit an in-progress grab, and Escape SHALL cancel one. Keyboard focus MUST NOT be trapped in the grid outside an active grab.
 
 ### Focus Management
 
