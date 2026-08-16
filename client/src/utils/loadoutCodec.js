@@ -19,6 +19,14 @@ export const LS_CUR = "hunt-outfitter-current";
 // flag — [weaponId, ammoIndex, d]. Version 2 records keep decoding; a pair is
 // expressible only from version 3 on.
 //
+// Version 4 (ADR-0014, SPEC-0010, issues #342/#343/#345): the ammo element becomes a
+// two-slot array of stable ids rather than a bare index — [weaponId, [ammoId0, ammoId1],
+// d]. Each slot is an id (the `ammo-{class}-{name}` slug) or null for an explicitly empty
+// slot. Versions 1-3 keep decoding through the frozen index-to-id table (issue #339,
+// client/src/data/ammoIds.js) — legacy resolution was live for two releases (#343) before
+// this version started writing ids directly (#345), specifically so the server's version-4
+// validator could deploy ahead of any client emitting it.
+//
 // Known, closed-off defect (issue #351): `frontier-73c` moved from `medium` to `compact`
 // in commit `e9b2c1d` without a FORMAT_VERSION bump. A saved ammo selection is a bare
 // integer index into `AMMO[ammoClass]`, so a record written before the move that carries
@@ -32,7 +40,7 @@ export const LS_CUR = "hunt-outfitter-current";
 // `["frontier-73c", 1]`, indistinguishable from a native v2 record that legitimately
 // means High Velocity. Do not attempt a blanket remap of all `["frontier-73c", 1]`
 // selections — post-`e9b2c1d` records legitimately mean High Velocity.
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 4;
 
 // Stable catalog id lookup: id -> tuple (tuple[0] is the id, name is tuple[1]).
 const WEAPON_BY_ID = new Map(WEAPONS.map((t) => [t[0], t]));
@@ -188,32 +196,18 @@ export function emptyLoadout() {
 }
 
 // Governing: ADR-0014, SPEC-0010 REQ "Wire Format Version 4 References Rounds by Stable
-// Id", issue #344. Loadout STATE now carries ammo as stable ids (`weapons[k].ammo`,
-// #344's own "switch the readers" change) — but FORMAT_VERSION stays 3 here, because
-// raising it and encoding ids directly on the wire is #345's job, not this one's. So
-// slot 0's chosen id has to translate BACK to a live-pool index for this version's
-// `[weaponId, ammoIndex, d]` shape, matching what `boundedAmmo` will read it against the
-// next time this exact record is decoded.
+// Id", REQ "A Weapon Holds Up to Two Independently Chosen Rounds", issue #345.
 //
-// Resolved against `AMMO[weapon's OWN ammoClass]` specifically — never a global search
-// across every pool — because that is the ONE pool `boundedAmmo` reads the index
-// against on decode. Writing an index relative to a different pool than decode will
-// read it against is the Frontier 73C hazard in reverse: the NUMBER would be right and
-// the ROUND it names would be wrong.
-//
-// Neither this wire version nor the already-deployed version-4 validator (#342, #458)
-// has a second ammo element at all, so slot 1 is never written here — silently dropped
-// on save, a known and documented gap (flagged in #458's PR, tracked for #345/#346). A
-// slot-0 round this pool genuinely cannot express — e.g. a dual-family weapon's round
-// from the family `ammoClass` does NOT name; the Drilling's catalog `ammoClass` is
-// "shotgun", so its medium-family rounds have no index in `AMMO.shotgun` at all — writes
-// -1 ("no round chosen" on the next load), never a DIFFERENT round. `findIndex`'s own
-// -1-on-miss is exactly that contract; no extra branch needed.
-function wireAmmoIndex(w) {
-  const chosenId = w.ammo?.[0];
-  if (!chosenId) return -1;
-  const pool = AMMO[WEAPONS[w.i][4]] || [];
-  return pool.findIndex((row) => row[0] === chosenId);
+// Loadout STATE already carries ammo as stable ids (`weapons[k].ammo`, #344's "switch the
+// readers" change) — a two-element array, one entry per slot, each an id or null. Now that
+// FORMAT_VERSION is 4, the wire carries exactly that shape verbatim: no index translation,
+// no live-pool lookup, no Frontier-73C-style hazard, because the wire finally names the
+// round directly instead of a position. Sanitized to exactly two entries defensively — a
+// decoder-produced loadout can still reach `toData` with no `.ammo` at all (the Katana
+// promotion in `promoteToWeaponSlots` builds `{i, a}` by design, #330), and that degrades
+// to two explicit empty slots rather than throwing.
+function wireAmmo(w) {
+  return [w.ammo?.[0] ?? null, w.ammo?.[1] ?? null];
 }
 
 // loadout -> compact wire shape, e.g. for localStorage / share links / saved records.
@@ -238,7 +232,7 @@ export function toData(loadout) {
     // (isIslandV3) rejects that. A d-less weapon can still legitimately reach `toData`
     // from a decoder-produced loadout (e.g. the Katana promotion, which builds `{i, a}`
     // by design — #330), so the undefined case is normalized here rather than shipped.
-    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], wireAmmoIndex(w), w.d === true] : null)),
+    w: loadout.weapons.map((w) => (w ? [WEAPONS[w.i][0], wireAmmo(w), w.d === true] : null)),
     e: equip,
     tr: loadout.traits,
     n: loadout.name,
@@ -709,7 +703,16 @@ function fromV4(d) {
     const id = aliasWeaponId(w[0]);
     if (!WEAPON_BY_ID.has(id)) return null;
     const i = indexOfItem(WEAPONS, id);
-    return { i, a: -1, d: w[2] === true };
+    // Version 4's ammo element is the two-slot id array directly (issue #345 widened it
+    // from #342/#343's single-id placeholder before anything had ever written v4) — no
+    // index, no frozen-table resolution, no live-pool lookup. A malformed entry (not an
+    // array) degrades to two explicit empty slots rather than throwing; `ammo` is set
+    // directly on the decoded weapon rather than through the `.a` + top-level `ammoIds`
+    // bridge withDecodeNotices() below builds for v1/v2/v3/legacy — that bridge exists
+    // specifically because those versions have no id to give a decoder in the first
+    // place, which is no longer true here.
+    const slots = Array.isArray(w[1]) ? w[1] : [null, null];
+    return { i, ammo: [slots[0] ?? null, slots[1] ?? null], d: w[2] === true };
   };
   const empty = Array(8).fill(null);
   const raw = d.e || [];
@@ -802,14 +805,18 @@ export function fromData(d) {
 // can no longer hold it — distinct from a raw -1 (no selection was ever made).
 //
 // Governing: ADR-0014, SPEC-0010 REQ "Every Legacy Ammo Selection Migrates to the Round
-// It Named", issue #339/#343. Also resolves `ammoIds` — the round each weapon slot's ammo
-// selection actually NAMES, by stable catalog id.
+// It Named", issue #339/#343/#345. Also resolves `ammoIds` — the round each PRE-V4 weapon
+// slot's ammo selection actually NAMES, by stable catalog id, for the legacy-decoder
+// bridge `normalizeWeaponAmmo` (loadoutSlice.js) reads.
 //
-// For a version-4 entry, the wire already carries the id directly (`rawAmmo` is a string);
-// it is passed through unchanged (an empty string is "no round chosen", same as -1
-// elsewhere).
+// For a version-4 entry, `rawAmmo` is the two-slot id array (issue #345), and `fromV4`
+// already set `decoded.ammo` directly from it — there is nothing to bridge, and "dropped"
+// is not decode-time detectable for id-based ammo the way it was for a bare index (an id
+// that no longer resolves degrades at the point of USE, via `ammoRoundFor` in
+// itemStats.js, not at decode time). Both the notice check and `ammoIds` are skipped for
+// these entries.
 //
-// For every older version, `rawAmmo` is a bare index and there is no id on the wire at
+// For every version before 4, `rawAmmo` is a bare index and there is no id on the wire at
 // all — it has to be resolved. This intentionally resolves `decoded.a` (the ALREADY
 // clamped, and for fromLegacy's frontier-73c case ALREADY remapped, index — see
 // remapFrontierAmmo above) against the FROZEN `LEGACY_AMMO_IDS` snapshot
@@ -830,10 +837,9 @@ export function fromData(d) {
 //     round chosen" is the honest answer, not a fabricated one — while `a` (unchanged by
 //     this story) keeps working exactly as the pinned regression test requires.
 //
-// This is a NEW, additive field, not a change to `weapons[k].a`: every existing decoder
-// test asserts `.a` via `toEqual`, and #343's acceptance criteria requires those to pass
-// unmodified. Only the READERS that switch from `.a` to `.ammoIds` (migration step 5,
-// design.md — a later story) can retire the live-index reading `.a` still gets today.
+// `ammoIds` is a NEW, additive field for pre-v4 entries, not a change to
+// `weapons[k].a` — every existing v1/v2/v3/legacy decoder test asserts `.a` via `toEqual`,
+// and #343's acceptance criteria requires those to pass unmodified.
 function withDecodeNotices(result, d) {
   const notices = [];
   const ammoIds = [null, null];
@@ -843,11 +849,11 @@ function withDecodeNotices(result, d) {
       if (!entry || !Array.isArray(entry)) continue;
       const rawAmmo = entry[1];
       const decoded = result.weapons[k];
-      if (rawAmmo >= 0 && decoded && decoded.a === -1) {
+      if (!decoded || Array.isArray(rawAmmo)) continue;
+      if (rawAmmo >= 0 && decoded.a === -1) {
         notices.push({ kind: "ammo-dropped", slot: k });
       }
-      if (!decoded) continue;
-      ammoIds[k] = typeof rawAmmo === "string" ? rawAmmo || null : legacyAmmoId(WEAPONS[decoded.i][4], decoded.a);
+      ammoIds[k] = legacyAmmoId(WEAPONS[decoded.i][4], decoded.a);
     }
   }
   result.decodeNotices = notices;

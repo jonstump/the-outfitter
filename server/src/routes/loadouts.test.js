@@ -809,21 +809,26 @@ describe("loadouts API", () => {
     expect(Object.keys(stored.data).sort()).toEqual(["b", "e", "n", "tr", "v", "w"].sort());
   });
 
-  // --- The version-4 wire format (SPEC-0010, issue #342) -----------------------------
+  // --- The version-4 wire format (SPEC-0010, issue #342, widened by issue #345) ------
   //
   // Governing: SPEC-0009 (established the exact-count + isIslandV3 pattern this extends),
-  // SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape".
+  // SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape", REQ "A Weapon Holds
+  // Up to Two Independently Chosen Rounds".
   //
   // Version 4 keeps v3's exact three-element weapon entry and its boolean pair flag
-  // unchanged; the only change is a TYPE change on the ammo element (index 1): a bounded
-  // identifier string (the `ammo-{class}-{name}` slug #339/#340 established) rather than a
-  // catalog index. The count stays an EQUALITY, same as v3 (issue #198) — these pin the
-  // acceptance and the two mistakes most likely to slip past review: relaxing the count to
-  // a minimum, and loosening rather than replacing the ammo type check.
+  // unchanged. The ammo element (index 1) is now a TWO-element array — one entry per ammo
+  // slot, each a bounded identifier string (the `ammo-{class}-{name}` slug #339/#340
+  // established) or `null` for an explicitly empty slot. #342 originally shipped this as a
+  // single string; #345 widened it before anything had ever written v4, so there is no live
+  // record in the old single-id shape to stay compatible with. Both counts — three elements
+  // in the weapon entry, two in the ammo slot array — are EQUALITIES (issue #198): these pin
+  // the acceptance and the mistakes most likely to slip past review — relaxing either count
+  // to a minimum, and loosening rather than replacing the ammo element's type check.
   const v4Data = (overrides = {}) => ({
     v: 4,
-    // [ref, ammoId, d] — the v4 weapon entry: ammo is now a stable id string.
-    w: [["nagant-m1895", "ammo-medium-fmj", false], null],
+    // [ref, [ammoId0, ammoId1], d] — the v4 weapon entry: ammo is now a two-slot array of
+    // stable ids (or null for an empty slot).
+    w: [["nagant-m1895", ["ammo-medium-fmj", null], false], null],
     e: [["T", 0], null, null, null, null, null, null, null],
     tr: ["quartermaster"],
     n: "x",
@@ -831,12 +836,29 @@ describe("loadouts API", () => {
     ...overrides,
   });
 
-  it("accepts a v4 payload with a string ammo identifier in the weapon entry", async () => {
+  it("accepts a v4 payload with a two-slot ammo array in the weapon entry", async () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
       .set("x-loadout-token", "v4-accept")
-      .send({ name: `__test__v4accept${Date.now()}`, data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }) });
+      .send({
+        name: `__test__v4accept${Date.now()}`,
+        data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null], true], null] }),
+      });
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts a v4 payload with both ammo slots filled", async () => {
+    const app = makeApp();
+    // The dual-family / split-reserve case (SPEC-0010 REQ "A Weapon Holds Up to Two
+    // Independently Chosen Rounds") — both slots carry a real id at once.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-both-slots")
+      .send({
+        name: `__test__v4bothslots${Date.now()}`,
+        data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", "ammo-medium-dumdum"], false], null] }),
+      });
     expect(res.status).toBe(201);
   });
 
@@ -851,7 +873,7 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "v4-four")
       .send({
         name: "__test__v4four",
-        data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true, "trailing"], null] }),
+        data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null], true, "trailing"], null] }),
       });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.w/);
@@ -863,12 +885,12 @@ describe("loadouts API", () => {
     expect(db.data.loadouts.some((l) => l.name === "__test__v4four")).toBe(false);
   });
 
-  it("rejects a v4 payload with an integer in the ammo position", async () => {
+  it("rejects a v4 payload with an integer in an ammo slot", async () => {
     const app = makeApp();
-    // This is the test that fails if the ammo type check was loosened (e.g. to accept both
-    // a string and a number) instead of being replaced outright — version 4 defines the
-    // ammo element as an identifier string, and an integer there is a version-3 shape
-    // wearing a version-4 label.
+    // This is the test that fails if the ammo slot type check was loosened (e.g. to accept
+    // both a string and a number) instead of being replaced outright — version 4 defines
+    // each ammo slot as an identifier string or null, and an integer there is a version-3
+    // shape wearing a version-4 label.
     await db.read();
     const before = db.data.loadouts.length;
     const res = await request(app)
@@ -876,7 +898,7 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "v4-int-ammo")
       .send({
         name: "__test__v4intammo",
-        data: v4Data({ w: [["nagant-m1895", -1, true], null] }),
+        data: v4Data({ w: [["nagant-m1895", [-1, null], true], null] }),
       });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.w/);
@@ -894,12 +916,44 @@ describe("loadouts API", () => {
       const res = await request(app)
         .post("/api/loadouts")
         .set("x-loadout-token", "v4-ammo-bound")
-        .send({ name, data: v4Data({ w: [["nagant-m1895", badAmmo, true], null] }) });
+        .send({ name, data: v4Data({ w: [["nagant-m1895", [badAmmo, null], true], null] }) });
       expect(res.status, `ammo id of length ${badAmmo.length} must be rejected`).toBe(400);
       expect(res.body.error).toMatch(/data\.w/);
       await db.read();
       expect(db.data.loadouts.some((l) => l.name === name)).toBe(false);
     }
+  });
+
+  it("rejects a v4 payload whose ammo slot array has one or three entries instead of exactly two", async () => {
+    const app = makeApp();
+    // Same exact-count discipline as the weapon entry itself (#198) — a floor with no
+    // ceiling on the ammo array reopens the unbounded-growth hole this whole pattern exists
+    // to close, just one level deeper.
+    for (const badAmmo of [["ammo-medium-fmj"], ["ammo-medium-fmj", null, null]]) {
+      const name = `__test__v4ammocount${badAmmo.length}`;
+      const res = await request(app)
+        .post("/api/loadouts")
+        .set("x-loadout-token", "v4-ammo-count")
+        .send({ name, data: v4Data({ w: [["nagant-m1895", badAmmo, true], null] }) });
+      expect(res.status, `an ammo array of length ${badAmmo.length} must be rejected`).toBe(400);
+      expect(res.body.error).toMatch(/data\.w/);
+    }
+  });
+
+  it("rejects a v4 payload whose ammo element is a bare string instead of a two-slot array", async () => {
+    const app = makeApp();
+    // The shape #342 originally shipped, before #345 widened it — pinned as rejected so a
+    // regression back to the single-id shape fails loudly rather than silently narrowing
+    // what a two-slot weapon can save.
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", "v4-bare-string-ammo")
+      .send({
+        name: "__test__v4barestringammo",
+        data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/data\.w/);
   });
 
   it("rejects a two-element weapon entry declared as version 4", async () => {
@@ -911,7 +965,7 @@ describe("loadouts API", () => {
       .set("x-loadout-token", "v4-short")
       .send({
         name: "__test__v4short",
-        data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj"], null] }),
+        data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null]], null] }),
       });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.w/);

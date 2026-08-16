@@ -45,17 +45,28 @@ const isIsland = (v, bound) => Array.isArray(v) && v.length === 2 && isRef(v[0],
 const isIslandV3 = (v, bound) =>
   Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && Number.isInteger(v[1]) && typeof v[2] === "boolean";
 // Governing: SPEC-0009 (established the exact-count + isIslandV3 pattern this extends),
-// SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape", issue #342.
+// SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape", REQ "A Weapon Holds
+// Up to Two Independently Chosen Rounds", issue #342, issue #345.
 //
 // Version 4 keeps v3's exact three-element count and its boolean pair flag unchanged; the
-// only thing that changes is the ammo element's TYPE. Versions 1-3 carry ammo as a catalog
-// index (`Number.isInteger`); version 4 carries it as a stable id string in the
-// `ammo-{class}-{name}` slug convention #339/#340 already established on the catalog. `isId`
-// is the same bounded-identifier check `isRef` already uses for every other string
-// reference, reused rather than reinvented so the length/character-set bound stays in one
-// place. The weapon ref (element 0) and the pair flag (element 2) are untouched from v3.
+// ammo element's TYPE changes twice over this shape's history. Versions 1-3 carry ammo as
+// a catalog index (`Number.isInteger`). #342 first shipped version 4 with a SINGLE stable
+// id string, before anything wrote v4 — that shape never reached a real save. #345 widens
+// it to what SPEC-0010 actually requires: up to TWO independently chosen rounds, one per
+// weapon ammo slot (dual-family and split-reserve weapons both need two — see
+// docs/openspec/specs/per-weapon-ammo/spec.md REQ "A Weapon Holds Up to Two Independently
+// Chosen Rounds"). Widening a version's shape in place, rather than minting v5, is safe
+// specifically because v4 was still inert: no deployed client had ever emitted the
+// single-id shape, so there is no live record to stay compatible with.
+//
+// Each ammo slot is a bounded id string (`isId`, the same check `isRef` already uses for
+// every other string reference) or `null` for an explicitly empty slot — SPEC-0010's own
+// words: "An empty ammo slot SHALL be represented explicitly rather than by omission." The
+// slot array's length is checked with the same exact-count discipline as the weapon entry
+// itself (#198) — not "at least two", so a three-slot payload is rejected, not truncated.
+const isAmmoSlotArray = (v) => Array.isArray(v) && v.length === 2 && v.every((slot) => slot === null || isId(slot));
 const isIslandV4 = (v, bound) =>
-  Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && isId(v[1]) && typeof v[2] === "boolean";
+  Array.isArray(v) && v.length === 3 && isRef(v[0], bound) && isAmmoSlotArray(v[1]) && typeof v[2] === "boolean";
 
 // Governing: issue #198.
 //
