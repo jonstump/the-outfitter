@@ -60,19 +60,29 @@ is by some distance the largest gate on this list.
       colour (the tests require a distinct one per category with rows), and a scrape re-run, without
       which the cost-0/Scarce assertion would have had no data to assert against — `itemStats.json`
       went 256 to 270 rows.
-- [ ] **The data audit is worked down — begun, not finished.** The audit itself has happened; the
-      remediation is under way. It is what produced the #351–#394 sweep, which is why the tracker is
-      carrying so many data and catalog tickets. As of 2026-08-15, five of the 42 are closed — #351,
-      #352 and #353 (all three blockers) and #354, on their merits, plus #376 as a duplicate — leaving
-      37, none of them a blocker. The gate is those findings closed, not the audit re-run.
+- [ ] **The data audit is worked down — 41 of 42 closed, one PR from done.** The audit itself has
+      happened; the remediation is nearly complete. It is what produced the #351–#394 sweep, which is
+      why the tracker carried so many data and catalog tickets. As of 2026-08-16, 41 of the 42 are
+      closed; only **#388** (nice-to-have, test fixture honesty) remains, with PR #488 open and
+      awaiting merge. The gate is those findings closed, not the audit re-run.
 
-      **This gate's granularity is not stated, and the two readings differ by months.** Read strictly,
-      "the sweep closed" means all 42, of which 28 are documentation, provenance and test-coverage debt
-      no desktop user could ever observe. Read by severity — blockers plus should-fix plus #366 — it is
-      13, of which 9 remain. The severity reading is the one that matches this section's own stated bar
-      ("carries data still known to be wrong"); the strict reading is roughly four times the work.
-      **Settle this before the burn-down goes further**, because the two answers put the desktop build
-      weeks apart or months apart, and picking one silently is how it gets picked wrongly.
+      **This gate's granularity was never formally settled, and by 2026-08-16 the question became
+      moot rather than resolved.** Read strictly, "the sweep closed" means all 42, of which 28 are
+      documentation, provenance and test-coverage debt no desktop user could ever observe. Read by
+      severity — blockers plus should-fix plus #366 — it was 13, all 13 of which closed on 2026-08-16
+      (#351/#352/#353 blockers, #354–#362 should-fix, #366). **The two readings converged by
+      exhaustive completion, not by a deliberate choice between them** — the burn-down finished the
+      strict reading before anyone had to pick, so the "weeks apart or months apart" risk this
+      section warned about never materialized. Recorded here rather than silently claiming the
+      question was decided: it wasn't decided, it was overtaken. The severity reading is the one that
+      matches this section's own stated bar
+      ("carries data still known to be wrong"); the strict reading was roughly four times the work.
+      **The instruction to settle this before the burn-down went further was not followed, and it
+      turned out not to matter** — the burn-down reached both answers within the same 48 hours, so
+      no build was ever scheduled against one reading and then found wanting under the other. This
+      does not retroactively validate skipping the decision; it recorded a real risk this run of the
+      burn-down happened not to hit. Whoever next opens this gate on a slower-moving item should still
+      settle its granularity before picking either.
 - [ ] **Equipment slot drag and drop is sound — shipped, not settled. The two blockers have cleared;
       the gate has not.** SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
       bullet called blockers are closed: **#352** (`moveEquip` duplicated an item from an empty source
