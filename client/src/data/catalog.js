@@ -67,12 +67,19 @@ export const AMMO = {
   // ammo type the game does not sell per-variant. Chu Ko Nu is the one worth flagging — its
   // infobox says "Special" while its prose says "fires Compact Bolts", and the infobox is what
   // this pool follows, because offering it the `xbow` pool's three bolts would price rounds the
-  // wiki does not list for it. [UNVERIFIED, single-source, contested]: Bomb Launcher's and Chu Ko
-  // Nu's rounds may in fact be purchasable, per a claim this audit could not confirm against the
-  // wiki (unreachable throughout). Not encoded as fact either way — resolve before trusting this
-  // pool's purchasability claim for those two weapons specifically.
+  // wiki does not list for it.
   //
-  // Governing: issue #373. Related: #361, #233, #254.
+  // Bomb Launcher and Chu Ko Nu are the two exceptions to "nothing purchasable to list" above, and
+  // this is settled, not open: ADR-0014 (accepted, backed by a wiki read of all 140 weapons on
+  // 2026-08-12, unlike the single unreachable-wiki audit this comment otherwise draws on) states
+  // Bomb Launcher has four Hunt-Dollar-priced charges and Chu Ko Nu's Incendiary Bolt is priced at
+  // 25 — both weapons DO have a purchasable round. `special`'s binary empty-pool model can't
+  // represent that (it has no per-weapon pricing, only per-class), so their entries here are a
+  // known simplification, not a wrong fact — the per-weapon redesign ADR-0014 specifies (SPEC-0010,
+  // CLAUDE.md gate 7) is what actually fixes it.
+  //
+  // Governing: issue #373, ADR-0014 (Per-Weapon Ammo Compatibility and Slots). Related: #361, #233,
+  // #254.
   special: [],
   none: [],
 };
