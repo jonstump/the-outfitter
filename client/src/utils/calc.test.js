@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QM, WEAPONS } from "../data/catalog.js";
+import { ammoRoundFor } from "../data/itemStats.js";
 import { capMax, capUsed, equipOverCapacity, hasFreeCell, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
@@ -82,6 +83,45 @@ describe("totalCost", () => {
     expect(totalCost(loadoutWith({ weapons: [{ i: none, ammo: ["ammo-does-not-exist", null] }] }))).toBe(
       WEAPONS[none][3]
     );
+  });
+});
+
+// Governing: ADR-0014, SPEC-0010 REQ "Price Belongs to the Weapon-and-Round Pair", issue
+// #344/#462. #344's own acceptance criteria named this behavior explicitly and nothing
+// asserted it by name until now: two weapons of the SAME ammoClass that both accept the
+// SAME round id must each charge their OWN per-weapon price for it — proof the shared
+// AMMO[ammoClass] pool (what #344 replaced) is not silently still driving price.
+describe("two same-class weapons sharing one round id (issue #462, criterion 2)", () => {
+  // Auto-4 Shorty and Drilling are both shotgun-class weapons (WEAPONS[i][4]) that both
+  // accept the Slug round ("ammo-shotgun-slug"), at different scraped prices
+  // (client/src/data/itemStats.json): $130 on the Shorty, $65 on the Drilling. The
+  // Drilling's accepted list spans two families (familySplit) so Slug — a shotgun round —
+  // lives in its SECOND group (medium leads, per ammoSlotsFor's family-order doc comment);
+  // the Shorty is a single unbound group, so Slug is in its first (and only) group.
+  const SHORTY = WEAPONS.findIndex((w) => w[0] === "auto-4-shorty");
+  const DRILLING = WEAPONS.findIndex((w) => w[0] === "drilling");
+  const ROUND_ID = "ammo-shotgun-slug";
+
+  it("both weapons are the same ammoClass and both genuinely accept the round", () => {
+    expect(WEAPONS[SHORTY][4]).toBe("shotgun");
+    expect(WEAPONS[DRILLING][4]).toBe("shotgun");
+    expect(ammoRoundFor(WEAPONS[SHORTY][0], 0, ROUND_ID)).not.toBeNull();
+    expect(ammoRoundFor(WEAPONS[DRILLING][0], 1, ROUND_ID)).not.toBeNull();
+  });
+
+  it("each weapon's own lookup prices the identical round differently", () => {
+    const shortyPrice = ammoRoundFor(WEAPONS[SHORTY][0], 0, ROUND_ID).price;
+    const drillingPrice = ammoRoundFor(WEAPONS[DRILLING][0], 1, ROUND_ID).price;
+    // The prices really differ, or this test proves nothing.
+    expect(shortyPrice).not.toBe(drillingPrice);
+
+    const shortyLoadout = loadoutWith({ weapons: [{ i: SHORTY, ammo: [ROUND_ID, null], d: false }] });
+    const drillingLoadout = loadoutWith({ weapons: [{ i: DRILLING, ammo: [null, ROUND_ID], d: false }] });
+    const ammoLine = (lo) => totalCost(lo) - WEAPONS[lo.weapons[0].i][3];
+
+    expect(ammoLine(shortyLoadout)).toBe(shortyPrice);
+    expect(ammoLine(drillingLoadout)).toBe(drillingPrice);
+    expect(ammoLine(shortyLoadout)).not.toBe(ammoLine(drillingLoadout));
   });
 });
 
