@@ -62,6 +62,26 @@ describe("the generated dataset", () => {
     expect(offenders).toEqual([]);
   });
 
+  // Governing: ADR-0016 (incremental refresh — sourceRevision is edit-recency provenance, not a
+  // staleness signal on its own), issue #378
+  //
+  // decoys, chaos-bomb, and flash-bomb carry the three lowest sourceRevision values in this file —
+  // their wiki pages were last edited far earlier than the rest of the catalog. That is edit
+  // recency, not age or correctness: a page nobody has needed to edit is not thereby wrong, and no
+  // player-facing value was ever suspected here (issue #378, from audit finding S2-F8 — CONFIRMED
+  // only as a revision gap, SUSPECTED that any value is wrong, never CONFIRMED wrong).
+  //
+  // Re-scraped live on 2026-08-16 once huntshowdown.wiki.gg was reachable again (it answered 403
+  // for the entire original audit): sourceRevision, fields (including Price), and description for
+  // all three came back byte-identical to what's already committed here. Pinned below so a future
+  // regeneration that silently changes one of these is visible as a real, reviewable diff rather
+  // than reopening this as "still unverified."
+  it("confirms the three least-recently-edited pages checked out unchanged on live re-scrape (#378)", () => {
+    expect(ITEM_STATS["decoys"].sourceRevision).toBe("10076");
+    expect(ITEM_STATS["chaos-bomb"].sourceRevision).toBe("10096");
+    expect(ITEM_STATS["flash-bomb"].sourceRevision).toBe("10105");
+  });
+
   // Governing: SPEC-0007 REQ "Catalog Write-Through Is Bounded, Reviewable, and Opt-In"
   //
   // The reverse direction of the id check above, on VALUES rather than keys. #195 reconciled the

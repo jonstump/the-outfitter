@@ -34,6 +34,7 @@ import {
   buildAmmoRecord,
   findAmmoCategoryDisagreements,
   findAmmoSiblingPriceDisagreements,
+  findDuplicateVariantDescriptions,
   parseAmmoReserve,
   parseAmmoRounds,
   parseAmmoTypesSection,
@@ -2560,4 +2561,97 @@ test("findAmmoSiblingPriceDisagreements: agreement across siblings is not flagge
     ammoEntry("rival-78-mace", "Rival 78 Mace", "Weapons/Rival_78/Mace", { ...shape, rounds: [{ id: "ammo-shotgun-slug", price: 130, scarce: false }] }),
   ];
   assert.deepEqual(findAmmoSiblingPriceDisagreements(entries), []);
+});
+
+// ---------------------------------------------------------------------------
+// findDuplicateVariantDescriptions (#370, finding S5-F8) — a variant subpage whose description is
+// byte-identical to its base weapon's is flagged for review, never thrown: `marathon` and
+// `marathon-swift` are the live case (both carried "Caldwell made, pump-action rifle. Good cycle
+// rate and high capacity, but has a wasteful reload." while their committed stats disagree —
+// ReloadSpeed 19.2 vs 10, cost 68 vs 95). Verified directly against the live wiki pages during
+// #370's fix: both huntshowdown.wiki.gg/wiki/Weapons/Marathon and .../Weapons/Marathon/Swift
+// genuinely carry that same sentence today, so this is real wiki content, not a scrape artifact —
+// itemStats.json was left as-is (see #370's PR) and this assertion is the durable half of the fix.
+// ---------------------------------------------------------------------------
+
+function descEntry(id, item, wikiPath, description) {
+  return { id, item, url: `https://w/${id}`, wikiPath, description };
+}
+
+test("findDuplicateVariantDescriptions: flags a variant whose description matches its base's exactly", () => {
+  const entries = [
+    descEntry("marathon", "Marathon", "Weapons/Marathon", "Caldwell made, pump-action rifle. Good cycle rate and high capacity, but has a wasteful reload."),
+    descEntry("marathon-swift", "Marathon Swift", "Weapons/Marathon/Swift", "Caldwell made, pump-action rifle. Good cycle rate and high capacity, but has a wasteful reload."),
+  ];
+  const flagged = findDuplicateVariantDescriptions(entries);
+  assert.equal(flagged.length, 1);
+  assert.deepEqual(flagged[0], {
+    group: "Weapons/Marathon",
+    baseId: "marathon",
+    variantId: "marathon-swift",
+    description: "Caldwell made, pump-action rifle. Good cycle rate and high capacity, but has a wasteful reload.",
+    url: "https://w/marathon-swift",
+  });
+});
+
+test("findDuplicateVariantDescriptions: a variant with its own distinct description is not flagged", () => {
+  const entries = [
+    descEntry("ranger-73", "Ranger 73", "Weapons/Ranger_73", "A lever-action rifle."),
+    descEntry("ranger-73-swift", "Ranger 73 Swift", "Weapons/Ranger_73/Swift", "A faster-cycling variant of the Ranger 73."),
+  ];
+  assert.deepEqual(findDuplicateVariantDescriptions(entries), []);
+});
+
+test("findDuplicateVariantDescriptions: a family with only a base page (no variants) is not flagged", () => {
+  const entries = [descEntry("baseball-bat", "Baseball Bat", "Weapons/Baseball_Bat", "A wooden bat.")];
+  assert.deepEqual(findDuplicateVariantDescriptions(entries), []);
+});
+
+test("findDuplicateVariantDescriptions: siblings are never compared to each other, only to the base", () => {
+  // Two variants that happen to match each other but NOT the base are not this bug — only a
+  // variant-vs-base match is flagged.
+  const entries = [
+    descEntry("x", "X", "Weapons/X", "Base prose."),
+    descEntry("x-a", "X A", "Weapons/X/A", "Shared variant prose."),
+    descEntry("x-b", "X B", "Weapons/X/B", "Shared variant prose."),
+  ];
+  assert.deepEqual(findDuplicateVariantDescriptions(entries), []);
+});
+
+test("findDuplicateVariantDescriptions: a family missing its base entry is skipped, not guessed at", () => {
+  // Simulates a partial run (--only / --limit) that visited a variant but not its base.
+  const entries = [
+    descEntry("marathon-swift", "Marathon Swift", "Weapons/Marathon/Swift", "Caldwell made, pump-action rifle. Good cycle rate and high capacity, but has a wasteful reload."),
+  ];
+  assert.deepEqual(findDuplicateVariantDescriptions(entries), []);
+});
+
+test("findDuplicateVariantDescriptions: a null base description never matches (never flags on two nulls)", () => {
+  const entries = [
+    descEntry("y", "Y", "Weapons/Y", null),
+    descEntry("y-a", "Y A", "Weapons/Y/A", null),
+  ];
+  assert.deepEqual(findDuplicateVariantDescriptions(entries), []);
+});
+
+test("findDuplicateVariantDescriptions: the full committed dataset reports exactly the Marathon family", async () => {
+  // The durable regression guard for #370: run the finder over every currently committed weapon
+  // record and confirm it flags exactly one family (Marathon) and none of the other 34 multi-row
+  // weapon families. If a future re-scrape fixes the Marathon Swift description on the wiki's end,
+  // this test's assertion on the flagged family should be updated to expect zero.
+  const data = JSON.parse(
+    await readFile(path.join(__dirname, "..", "client", "src", "data", "itemStats.json"), "utf8")
+  );
+  const entries = Object.entries(data.items)
+    .filter(([, item]) => item.wikiUrl && item.wikiUrl.includes("/wiki/Weapons/"))
+    .map(([id, item]) => ({
+      id,
+      item: item.name,
+      url: item.wikiUrl,
+      wikiPath: new URL(item.wikiUrl).pathname.replace(/^\/wiki\//, ""),
+      description: item.description,
+    }));
+  const flagged = findDuplicateVariantDescriptions(entries);
+  const families = new Set(flagged.map((f) => f.group));
+  assert.deepEqual([...families], ["Weapons/Marathon"]);
 });

@@ -16,6 +16,9 @@
 
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import {
   ACQUISITION_RULES,
@@ -33,6 +36,7 @@ import {
   findAlphaBoundingBox,
   formatSummary,
   loadImageProcessor,
+  matchedAcquisitions,
   normaliseAcquisition,
   pageTitleToDisplay,
   parseArgs,
@@ -559,6 +563,58 @@ describe("acquisition normalisation", () => {
     assert.equal(deriveObtainable("mythic"), false);
     assert.equal(deriveObtainable("dlc"), true);
     assert.equal(deriveObtainable(null), null);
+  });
+
+  it("mythic is hoisted above every channel rule, so its position is no longer arbitrary (#390)", () => {
+    const mythicIndex = ACQUISITION_RULES.findIndex(([, value]) => value === "mythic");
+    assert.equal(mythicIndex, 0, "mythic must run before any channel-naming rule");
+  });
+
+  it("hoisting mythic has no effect on today's data: no stored source matches /\\bmythic\\b/i (#390)", () => {
+    // SUSPECTED half of #390's fix direction: confirm rather than assume. If this ever starts
+    // failing, some hunter's source now names "mythic" and the reorder above finally matters.
+    const dataPath = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../data/hunters.json");
+    const hunters = JSON.parse(readFileSync(dataPath, "utf8"));
+    const mythicMatches = hunters.filter((h) => h.source && /\bmythic\b/i.test(h.source));
+    assert.deepEqual(
+      mythicMatches.map((h) => h.id),
+      [],
+      "reordering mythic changed a derived acquisition/obtainable value — that was supposed to be impossible today"
+    );
+  });
+
+  it("reports every rule a compound Source matches, not just the winner (#390)", () => {
+    // "900/800 Blood Bonds / Garden of the Witch Event" — a compound source naming two channels.
+    // normaliseAcquisition still resolves to the first match (unchanged resolution policy); the
+    // diagnostic below is what makes the second match visible instead of silently dropped.
+    const source = "900/800 Blood Bonds / Garden of the Witch Event";
+    assert.deepEqual(matchedAcquisitions(source), ["blood-bonds", "event"]);
+    assert.equal(normaliseAcquisition(source), "blood-bonds", "first-match resolution is unchanged");
+  });
+
+  it("matchedAcquisitions returns a single-element array for an ordinary source, empty for none", () => {
+    assert.deepEqual(matchedAcquisitions("The Revenant DLC"), ["dlc"]);
+    assert.deepEqual(matchedAcquisitions("Something Entirely New"), []);
+    assert.deepEqual(matchedAcquisitions(null), []);
+  });
+
+  it("the live dataset's multi-match set is exactly the four Garden of the Witch hunters (#390)", () => {
+    // Confirms the audit's count against the CURRENT committed data/hunters.json rather than
+    // assuming it's unchanged. If this count ever changes, the fix direction in #390 may need
+    // revisiting rather than this assertion just being bumped.
+    const dataPath = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../data/hunters.json");
+    const hunters = JSON.parse(readFileSync(dataPath, "utf8"));
+    const multiMatch = hunters
+      .filter((h) => h.source && matchedAcquisitions(h.source).length > 1)
+      .map((h) => h.id)
+      .sort();
+    assert.deepEqual(multiMatch, ["bruja-crone", "bruja-maiden", "welder-flame", "welder-torch"]);
+
+    // The resolution policy (first match wins) is unchanged: each of the four still resolves to
+    // "blood-bonds", not "event" — #390 adds the diagnostic, it does not change which value wins.
+    for (const hunter of hunters.filter((h) => multiMatch.includes(h.id))) {
+      assert.equal(hunter.acquisition, "blood-bonds", `${hunter.id} acquisition must be unchanged`);
+    }
   });
 });
 
@@ -1255,6 +1311,30 @@ describe("runScrape", () => {
     assert.equal(entry.acquisition, null, "hunter not dropped");
   });
 
+  it("reports a Source matching more than one acquisition rule instead of silently reducing it (#390)", async () => {
+    const compound = SINGLE_VARIANT_HTML.replace(
+      '<a href="/wiki/Bloodline" title="Bloodline">Bloodline</a> Rank 67',
+      "900/800 Blood Bonds / Garden of the Witch Event"
+    );
+    const routes = DEFAULT_ROUTES.map(([p, v]) =>
+      String(p).includes("Caitlyn") ? [p, () => response(compound)] : [p, v]
+    );
+    const { multiMatchAcquisitions, entries } = await runScrape(
+      { ...RUN_OPTS, namesOnly: true },
+      baseDeps({ fetchFn: makeFetch(routes) })
+    );
+
+    assert.equal(multiMatchAcquisitions.length, 1);
+    const entry = entries.find((e) => e.portrait === "caitlyn-hammond");
+    assert.deepEqual(multiMatchAcquisitions[0], {
+      hunter: entry.id,
+      source: "900/800 Blood Bonds / Garden of the Witch Event",
+      matches: ["blood-bonds", "event"],
+    });
+    // The resolution policy is unchanged — the diagnostic is additive, not a behaviour change.
+    assert.equal(entry.acquisition, "blood-bonds");
+  });
+
   it("creates no image files in names-only mode, and needs no image library", async () => {
     const deps = baseDeps({
       sharpLoader: async () => {
@@ -1518,6 +1598,18 @@ describe("CLI surface", () => {
     const text = formatSummary(createSummary(), { portraitsSkipped: 242 });
     assert.match(text, /portraits left untouched \(already on disk\): 242/);
     assert.match(text, /--force/);
+  });
+
+  it("reports a compound Source's multi-match instead of hiding the reduction (#390)", () => {
+    const text = formatSummary(createSummary(), {
+      multiMatchAcquisitions: [
+        { hunter: "bruja-crone", source: "900 Blood Bonds / Garden of the Witch Event", matches: ["blood-bonds", "event"] },
+      ],
+    });
+    assert.match(text, /MULTI-MATCH Source values.*1 hunter\(s\)/);
+    assert.match(text, /bruja-crone/);
+    assert.match(text, /blood-bonds, event/);
+    assert.match(text, /using "blood-bonds"/);
   });
 });
 
