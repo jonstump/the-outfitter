@@ -8,7 +8,7 @@ decision-makers: [jmstump]
 
 ## Context and Problem Statement
 
-The Outfitter's client (`client/`) is a React 18 + Redux Toolkit single-page app, developed and shipped inside an npm-workspaces monorepo alongside an Express + lowdb API server (`server/`). The client currently uses Vite for both its dev server and production build (`npm run dev` serves it at `http://localhost:5173`, proxying `/api` to the Express server at `4100`; `npm run build` produces static assets the production server serves when `NODE_ENV=production`).
+Backwater Outfitters' client (`client/`) is a React 18 + Redux Toolkit single-page app, developed and shipped inside an npm-workspaces monorepo alongside an Express + lowdb API server (`server/`). The client currently uses Vite for both its dev server and production build (`npm run dev` serves it at `http://localhost:5173`, proxying `/api` to the Express server at `4100`; `npm run build` produces static assets the production server serves when `NODE_ENV=production`).
 
 Vite was carried over from the original standalone "Loadout Builder" prototype this app was ported from, and no ADR had ever recorded why it's the right tool versus the other mainstream React tooling options. This ADR exists to make that choice explicit and reviewable rather than implicit — the incumbent had never been re-affirmed against the alternatives below.
 

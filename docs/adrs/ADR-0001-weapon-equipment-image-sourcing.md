@@ -10,7 +10,7 @@ decision-makers: [jmstump]
 
 ## Context and Problem Statement
 
-The Outfitter is a fan-made Hunt: Showdown loadout planner ("Not affiliated with Crytek," per the app's own footer). Today, only the Weapons picker renders any imagery — a small set of hand-authored schematic SVG silhouettes (`THUMBS` in `client/src/data/catalog.js`, dispatched by `weaponThumb()`) grouped by weapon class (pistol/carbine/rifle/shotgun/melee/bow/crossbow). Tools, Traits, and Consumables currently render with no imagery at all — just name, category badge, and cost.
+Backwater Outfitters is a fan-made Hunt: Showdown loadout planner ("Not affiliated with Crytek," per the app's own footer). Today, only the Weapons picker renders any imagery — a small set of hand-authored schematic SVG silhouettes (`THUMBS` in `client/src/data/catalog.js`, dispatched by `weaponThumb()`) grouped by weapon class (pistol/carbine/rifle/shotgun/melee/bow/crossbow). Tools, Traits, and Consumables currently render with no imagery at all — just name, category badge, and cost.
 
 The request that prompted this ADR was to "grab actual images for weapons, tools, traits, and consumables ... from https://huntshowdown.wiki.gg/" — i.e., replace/extend the current placeholder icons with real, recognizable game art scraped from a third-party fan wiki. How should item imagery actually be sourced, given that this is an unaffiliated fan tool with no license to Crytek's IP?
 

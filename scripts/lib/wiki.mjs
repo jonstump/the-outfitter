@@ -36,7 +36,7 @@ import { WEAPONS, TOOLS, TRAITS, CONS } from "../../client/src/data/catalog.js";
 export const WIKI_ORIGIN = "https://huntshowdown.wiki.gg";
 export const DEFAULT_DELAY_MS = 1500;
 export const USER_AGENT =
-  "TheOutfitterScrapeBot/1.0 (+https://github.com/jonstump/the-outfitter; contact: jmstump@gmail.com; " +
+  "BackwaterOutfittersScrapeBot/1.0 (+https://github.com/jonstump/the-outfitter; contact: jmstump@gmail.com; " +
   "offline, human-invoked catalog scrape per ADR-0002 and ADR-0005, not a crawler)";
 
 // ---------------------------------------------------------------------------

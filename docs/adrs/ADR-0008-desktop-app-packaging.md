@@ -10,7 +10,7 @@ related: [ADR-0003, ADR-0004]
 
 ## Context and Problem Statement
 
-The Outfitter today has exactly one distribution story: self-hosting. A user who
+Backwater Outfitters today has exactly one distribution story: self-hosting. A user who
 wants their own instance must have Docker, or Node 20 plus a checkout, plus a
 persistent volume mounted at `server/data`, plus a free port — the README's
 "Deployment" section spends three subsections on constraints that exist only
@@ -139,8 +139,8 @@ mitigation is part of the decision rather than a caveat about it:
   is correct for `curl` against an operator's instance and wrong for a machine
   where any local process can reach the port.
 
-The reasoning: an unauthenticated loopback listener means installing The
-Outfitter silently exposes a read/write API to every other process on the
+The reasoning: an unauthenticated loopback listener means installing Backwater
+Outfitters silently exposes a read/write API to every other process on the
 machine, and to any web page the user visits that scripts `fetch` at
 `127.0.0.1`. Electron IPC would avoid this by construction — that is its genuine
 advantage over the in-process server, and the reason this obligation is stated

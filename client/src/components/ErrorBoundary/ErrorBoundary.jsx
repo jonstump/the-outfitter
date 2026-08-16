@@ -35,7 +35,7 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     // Logged, not shown. The message is a stack from a minified bundle — it tells the user
     // nothing they can act on, and the console is where anyone who can act on it looks.
-    console.error("The Outfitter failed to render:", error, info?.componentStack);
+    console.error("Backwater Outfitters failed to render:", error, info?.componentStack);
   }
 
   render() {

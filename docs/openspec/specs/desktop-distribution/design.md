@@ -2,7 +2,7 @@
 
 ## Context
 
-The Outfitter runs today as a single Node process serving an Express API and the Vite-built client from one origin, persisting to `server/data/db.json` through lowdb. Getting an instance requires Docker or a Node 20 checkout, a free port, and a persistent volume — three README subsections of operator concerns imposed on an audience of Hunt: Showdown players.
+Backwater Outfitters runs today as a single Node process serving an Express API and the Vite-built client from one origin, persisting to `server/data/db.json` through lowdb. Getting an instance requires Docker or a Node 20 checkout, a free port, and a persistent volume — three README subsections of operator concerns imposed on an audience of Hunt: Showdown players.
 
 ADR-0008 chose to add an Electron desktop target rather than rewrite for Tauri or settle for an installable PWA, on one dominant fact: the backend is Node and it is not incidental. `server/src/lib/ownership.js` carries the token-scoped boundary that closed issue #17, `db.js` quarantines pre-ownership legacy records, and 63 server tests hold both. ADR-0006 names the cross-token ownership rule "the rule most likely to be missed." Electron's main process is a Node process, so that code runs as-is; every alternative either reimplements it (Rust) or ships a Node binary anyway (sidecar) at comparable size and greater pipeline complexity.
 
@@ -49,7 +49,7 @@ The one thing the packaging choice costs is a trust boundary. That is what most 
 
 **Choice**: The main process generates a ≥128-bit random secret per launch, injects it into the renderer through a preload bridge, and rejects any `/api` request lacking it with `403` — in middleware registered before every router. Bind is `127.0.0.1` explicitly; the port is OS-assigned.
 
-**Rationale**: "Only on localhost" is not access control. Every other process on the machine can reach the port, and a web page the user visits can script `fetch` at `127.0.0.1` on their behalf. Without this, installing The Outfitter silently exposes a read/write API over the user's saved data.
+**Rationale**: "Only on localhost" is not access control. Every other process on the machine can reach the port, and a web page the user visits can script `fetch` at `127.0.0.1` on their behalf. Without this, installing Backwater Outfitters silently exposes a read/write API over the user's saved data.
 
 CORS specifically cannot do this job here, and the reason is worth stating because it looks like it could. `server/src/index.js` admits any request with no `Origin` header — deliberately, so `curl` and same-origin static serving work against an operator's instance. A local process issuing a raw HTTP request sends no `Origin` at all, so it lands in the permitted path. The allowlist protects a *hosted* server from *browser-borne* cross-origin scripting; it says nothing about a machine where the attacker is a peer process.
 

@@ -24,7 +24,7 @@ export default function Header() {
   return (
     <header className="app-header">
       <div>
-        <div className="app-title">The Outfitter</div>
+        <div className="app-title">Backwater Outfitters</div>
         <div className="app-subtitle">Frontier armory &amp; loadout ledger — 1896</div>
       </div>
       <div className="header-stats">

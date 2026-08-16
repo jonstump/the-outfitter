@@ -2,7 +2,7 @@
 
 ## Context
 
-The Outfitter's weapon picker renders a small icon for every weapon via `THUMBS` (a map of hand-drawn SVG path strings keyed by weapon silhouette class) and `weaponThumb(w)`, a dispatch function in `client/src/data/catalog.js`. `WeaponSlot.jsx` and `PickerRow.jsx` render the result as an inline `<svg><path d="..."/></svg>`. Tools, Traits, and Consumables have no equivalent today.
+Backwater Outfitters' weapon picker renders a small icon for every weapon via `THUMBS` (a map of hand-drawn SVG path strings keyed by weapon silhouette class) and `weaponThumb(w)`, a dispatch function in `client/src/data/catalog.js`. `WeaponSlot.jsx` and `PickerRow.jsx` render the result as an inline `<svg><path d="..."/></svg>`. Tools, Traits, and Consumables have no equivalent today.
 
 The previous revision of this spec (implementing ADR-0001) planned to extend that same SVG approach to all four categories, on the grounds that Hunt: Showdown's art is Crytek's copyrighted IP with no license granted to this app. ADR-0002 supersedes that decision: Crytek's fan content policy is understood to permit non-commercial fan-tool use of its assets, and this app has no commercialization plans. This revision replaces the SVG-primary approach with a scraped-image-primary approach — real, recognizable Hunt: Showdown imagery, sourced via a bounded, ethically-run scrape of huntshowdown.wiki.gg and self-hosted, with the existing SVG icons demoted to a fallback role rather than discarded.
 

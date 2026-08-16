@@ -99,7 +99,7 @@ so that the 26 static fields ship now and the 8 the equipped round moves wait fo
 
 **Never compute, and this is the identity decision the report identified.** Displaying `Damage: 145` is
 a UI change. Computing a time-to-kill, a damage-at-range curve, or a "this beats that" ranking makes
-The Outfitter a theorycrafting tool rather than a budget planner — a different obligation to be right,
+Backwater Outfitters a theorycrafting tool rather than a budget planner — a different obligation to be right,
 and a different exposure when the dataset is stale. The rule is one sentence: **every number the app
 shows from the stat block is a value the wiki stated, rendered as such; the app performs no arithmetic
 on stat fields.** `totalCost`, `capUsed` and `upTotal` remain the only arithmetic, and they read
