@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 date: 2026-08-13
 implements: [ADR-0014]
 requires: [SPEC-0007, SPEC-0009]
@@ -465,6 +465,11 @@ direct call, so those edges are dashed; the registry is the seam that makes a fo
 
 ## Cross-Spec Changes This Capability Requires
 
+**Done, 2026-08-16, via issue #348 (epic #338).** All four items below landed — SPEC-0003, SPEC-0006
+and SPEC-0007 were amended, and SPEC-0009's version table was checked and found not to have drifted
+(its own REQ "A Pair Carries One Weapon's Ammo" needed no change, as anticipated). No requirement was
+renamed in any of the four specs. Left below as a record of what was required, not as outstanding work.
+
 1. **SPEC-0003 REQ "A Write Stores Only What the Wire Format Defines"** — its weapon-entry scenario
    is written against a two-element entry, and SPEC-0009 already moves it to three. Version 4 moves
    it again and changes the ammo element's *type* from integer to identifier. Both changes must land
@@ -482,11 +487,22 @@ direct call, so those edges are dashed; the registry is the seam that makes a fo
    as `2 × price` or as two independently priced selections. This spec requires the second — a price
    per filled slot — because it is the shape that survives one slot being empty. If the game's
    pricing turns out to be a single purchase covering both slots, this requirement is what changes.
+   *(Answered, 2026-08-16, issue #344: shipped as the second option. `ammoCostFor` in
+   `client/src/utils/calc.js` sums a price per filled slot — `(w.ammo || []).reduce(...)` — rather
+   than doubling a single price, and this held through #346's second-control review.)*
 2. **Does `ammoClass` earn its keep at all?** The requirement above lets it survive as a grouping
    label. Nothing in this spec needs it. Deleting it is a smaller change than keeping a field with no
    authority, and the argument for keeping it is display grouping in the picker — which the picker
-   may not need once rounds are per-weapon.
+   may not need once rounds are per-weapon. *(Answered, 2026-08-16, issue #348: kept, not deleted.
+   SPEC-0007 REQ "Fields the Scraper Must Not Derive" now records `ammoClass` explicitly as a
+   display-grouping label with no rules authority — `AMMO_LABEL[def[4]]` in `WeaponSlot.jsx`'s
+   `weapon-meta` line is its one remaining live use. Kept rather than deleted because that display
+   use still exists and a hand-authored field with a narrowed, documented scope was judged simpler
+   than removing it and re-deriving a class label some other way.)*
 3. **How large does the dataset get?** A per-pair list adds a second shape to the generated stats
    file — per-pair, where everything in it today is per-item. ADR-0014 flags this as a cost without
    quantifying it, and the 1,268 stat-change deltas in the same source sections will want the same
-   key. Measure before committing to a file layout.
+   key. Measure before committing to a file layout. *(Answered, 2026-08-16, issue #341: embedded, not
+   sibling. Each weapon's own entry in `client/src/data/itemStats.json` carries an `ammo: {accepted,
+   reserve}` field directly — no separate per-pair file was needed; the per-pair shape's "second key"
+   concern didn't materialize because the pair is implicit in which weapon's entry the record sits in.)*
