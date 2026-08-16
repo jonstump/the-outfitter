@@ -52,15 +52,27 @@ export const AMMO = {
   xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
   hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
   bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
-  // "Special" pool, empty by fact rather than by omission. Six weapons draw from it as of #233 —
-  // Dolch 96, Nitro Express, Bomb Launcher, Chu Ko Nu, Flame Rifle and Shredder — and none of their
-  // custom rounds can be bought with Hunt Dollars, so there is nothing purchasable to list.
+  // "Special" pool, empty by fact rather than by omission. Membership in the "special"
+  // ammoClass is DERIVED — WEAPONS.filter(w => w[4] === "special") — not enumerated here,
+  // because an enumerated list goes stale the moment a weapon is added or reclassified
+  // (#233 named six weapons; #254 added three Dolch 96 variants that draw from this same
+  // pool and the comment was never updated to say so — the drift is exactly what let #361
+  // ship, where the picker's ammo filter silently dropped every weapon in this class).
+  // The substantive claim this empty array encodes is that none of those weapons' custom
+  // rounds can be bought with Hunt Dollars, so there is nothing purchasable to list — see
+  // catalog.test.js for a pinning assertion over the current membership.
   //
   // The Dolch's and Nitro's ammo (Dumdum / Explosive / Shredder) has been Scarce since Update 2.8.
-  // The four added by #233 are the same shape: each page states an ammo type the game does not sell
-  // per-variant. Chu Ko Nu is the one worth flagging — its infobox says "Special" while its prose
-  // says "fires Compact Bolts", and the infobox is what this pool follows, because offering it the
-  // `xbow` pool's three bolts would price rounds the wiki does not list for it.
+  // Bomb Launcher, Chu Ko Nu, Flame Rifle and Shredder are the same shape: each page states an
+  // ammo type the game does not sell per-variant. Chu Ko Nu is the one worth flagging — its
+  // infobox says "Special" while its prose says "fires Compact Bolts", and the infobox is what
+  // this pool follows, because offering it the `xbow` pool's three bolts would price rounds the
+  // wiki does not list for it. [UNVERIFIED, single-source, contested]: Bomb Launcher's and Chu Ko
+  // Nu's rounds may in fact be purchasable, per a claim this audit could not confirm against the
+  // wiki (unreachable throughout). Not encoded as fact either way — resolve before trusting this
+  // pool's purchasability claim for those two weapons specifically.
+  //
+  // Governing: issue #373. Related: #361, #233, #254.
   special: [],
   none: [],
 };
