@@ -1,4 +1,5 @@
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { legacyAmmoId } from "../data/ammoIds.js";
 import { TRAIT_MAX, capCategory, equipOverCapacity } from "./calc.js";
 
 export const LS_CUR = "hunt-outfitter-current";
@@ -174,7 +175,16 @@ export function emptyLoadout() {
   // Governing: ADR-0009 (fixed eight-cell sparse grid, `null` = empty),
   // SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
   // Malformed decodes land here as the well-formed empty grid rather than throwing.
-  return { weapons: [null, null], equip: Array(8).fill(null), traits: [], blocked: [], name: "", decodeNotices: [] };
+  // `ammoIds` is issue #343's resolved-id-per-weapon-slot field — see withDecodeNotices.
+  return {
+    weapons: [null, null],
+    equip: Array(8).fill(null),
+    traits: [],
+    blocked: [],
+    name: "",
+    decodeNotices: [],
+    ammoIds: [null, null],
+  };
 }
 
 // loadout -> compact wire shape, e.g. for localStorage / share links / saved records.
@@ -638,11 +648,79 @@ function fromV3(d) {
   };
 }
 
+// Version 4 (SPEC-0010): exactly Version 3's shape, except the ammo element is a stable
+// catalog id (string) rather than a live-pool index — the type change #342's server
+// validator (isIslandV4) already accepts. FORMAT_VERSION stays at 3; this client does not
+// WRITE version 4 yet (that is #345's job — toData() is untouched by this story).
+//
+// There is no old-model index to populate `a` with here, and `a` MUST stay an integer:
+// loadoutSlice.js's isValidLoadoutShape() asserts `Number.isInteger(w.a)` on every weapon
+// slot, so writing a string id into `a` would make setLoadout() throw the instant a
+// version-4 record reached the store. `a` therefore stays -1 for every version-4 entry —
+// exactly the existing "no variant selected" value every other decoder already uses — and
+// withDecodeNotices()'s post-pass below is what actually carries the id forward, in the
+// new `result.ammoIds` field. Switching the READERS that consume `a` (WeaponSlot, calc.js's
+// totalCost) over to `ammoIds` is migration step 5 (design.md), not this decoder's job.
+//
+// SPEC-0010's own wire-format requirement describes a version-4 weapon carrying its "ammo
+// SELECTIONS" (plural) and includes a two-round encode/decode scenario. That is NOT what
+// this decoder implements: #342's already-merged, already-deployed-assumption isIslandV4
+// validates a weapon entry as exactly `[weaponRef, oneAmmoId, dualFlag]` — one ammo id, not
+// two. Building a decoder for a two-id shape here would produce payloads the live server
+// rejects the moment #345 tries to encode one. This decoder matches what #342 actually
+// shipped; representing a second ammo slot on the wire needs a coordinated client+server
+// change (a widened version 4, or a version 5) and is out of scope for #343 — flagged here,
+// and in this PR's body, for whoever picks up the second ammo control story (#346/#347).
+//
+// Governing: ADR-0014, SPEC-0010 REQ "Wire Format Version 4 References Rounds by Stable Id", issue #343
+function fromV4(d) {
+  const slotWeapon = (k) => {
+    const w = d.w && d.w[k];
+    if (!w) return null;
+    const id = aliasWeaponId(w[0]);
+    if (!WEAPON_BY_ID.has(id)) return null;
+    const i = indexOfItem(WEAPONS, id);
+    return { i, a: -1, d: w[2] === true };
+  };
+  const empty = Array(8).fill(null);
+  const raw = d.e || [];
+  const equip = Array.isArray(raw)
+    ? empty.map((_, k) => {
+        if (!(k in raw)) return null; // a sparse input hole stays a cell hole
+        const entry = raw[k];
+        if (!entry || !Array.isArray(entry) || (entry[0] !== "T" && entry[0] !== "C")) return null;
+        const byId = entry[0] === "T" ? TOOL_BY_ID : CONS_BY_ID;
+        if (!byId.has(entry[1])) return null; // leaves a hole; later cells must not shift
+        return { t: entry[0], i: indexOfItem(entry[0] === "T" ? TOOLS : CONS, entry[1]) };
+      })
+    : empty;
+
+  const weapons = [0, 1].map(slotWeapon);
+  // The promotion reads back over the RAW entries; a malformed `e` (not an array)
+  // simply promotes nothing — the empty grid, not an exception.
+  const rawEntries = Array.isArray(raw) ? raw : [];
+  promoteToWeaponSlots(
+    weapons,
+    rawEntries.filter((e) => e && e[0] === "T" && PROMOTED_TO_WEAPON.has(e[1])).map((e) => e[1])
+  );
+
+  const v4blocked = boundedBlocked(d.b);
+
+  return {
+    weapons,
+    equip: boundedEquip(equip, v4blocked),
+    traits: boundedTraits((Array.isArray(d.tr) ? d.tr : []).filter((id) => TRAIT_BY_ID.has(id))),
+    name: d.n || "",
+    blocked: v4blocked,
+  };
+}
+
 // Wire-format decoders, oldest to newest. fromData() picks the decoder whose
 // version entry matches the record's declared `v`, so a future FORMAT_VERSION bump
 // only needs a new decoder added here — older records keep migrating instead of
 // silently dropping.
 const DECODERS = [
+  { v: 4, decode: fromV4 },
   { v: 3, decode: fromV3 },
   { v: 2, decode: fromV2 },
   { v: 1, decode: fromV1 },
@@ -652,7 +730,7 @@ const DECODERS = [
 // written by a newer client and cannot be decoded by this bundle — fromData
 // returns a "cannot decode" result rather than routing it through a decoder
 // that would misread its shape (issue #360).
-const MAX_KNOWN_VERSION = 3;
+const MAX_KNOWN_VERSION = 4;
 
 // compact wire shape -> loadout, dropping anything that no longer resolves against the catalog.
 //
@@ -693,8 +771,43 @@ export function fromData(d) {
 // This post-pass compares the raw record's ammo indices against the decoded values:
 // a raw index >= 0 that decoded to -1 means the selection was dropped because the pool
 // can no longer hold it — distinct from a raw -1 (no selection was ever made).
+//
+// Governing: ADR-0014, SPEC-0010 REQ "Every Legacy Ammo Selection Migrates to the Round
+// It Named", issue #339/#343. Also resolves `ammoIds` — the round each weapon slot's ammo
+// selection actually NAMES, by stable catalog id.
+//
+// For a version-4 entry, the wire already carries the id directly (`rawAmmo` is a string);
+// it is passed through unchanged (an empty string is "no round chosen", same as -1
+// elsewhere).
+//
+// For every older version, `rawAmmo` is a bare index and there is no id on the wire at
+// all — it has to be resolved. This intentionally resolves `decoded.a` (the ALREADY
+// clamped, and for fromLegacy's frontier-73c case ALREADY remapped, index — see
+// remapFrontierAmmo above) against the FROZEN `LEGACY_AMMO_IDS` snapshot
+// (client/src/data/ammoIds.js), not the raw wire value and not the LIVE `AMMO` pool:
+//   - Resolving the raw value would relive the frontier-73c hazard for every OTHER
+//     reclassified weapon this decoder doesn't special-case — `decoded.a` already carries
+//     whatever remap the decoder itself applied, so resolving THAT keeps this in lockstep
+//     with `a`'s own validity check instead of a second, independent (and possibly
+//     disagreeing) one.
+//   - Resolving against the LIVE pool is exactly the bug this migration exists to close
+//     (the Frontier 73C incident: a corrected `ammoClass` silently re-pointing a stored
+//     index at a different round with no error). It is also observably wrong for the
+//     opposite direction — the `special` pool was empty when this table was frozen and has
+//     nine rows today (#340); a decoded `dolch-96` at index 2 legitimately resolves via the
+//     LIVE pool (see loadoutCodec.test.js's issue #359 block, pinned intentionally), but no
+//     genuine historical record could have MEANT anything at that index while the pool it
+//     drew from was empty. The frozen table correctly resolves that case to null — "no
+//     round chosen" is the honest answer, not a fabricated one — while `a` (unchanged by
+//     this story) keeps working exactly as the pinned regression test requires.
+//
+// This is a NEW, additive field, not a change to `weapons[k].a`: every existing decoder
+// test asserts `.a` via `toEqual`, and #343's acceptance criteria requires those to pass
+// unmodified. Only the READERS that switch from `.a` to `.ammoIds` (migration step 5,
+// design.md — a later story) can retire the live-index reading `.a` still gets today.
 function withDecodeNotices(result, d) {
   const notices = [];
+  const ammoIds = [null, null];
   if (Array.isArray(d.w)) {
     for (let k = 0; k < d.w.length && k < 2; k++) {
       const entry = d.w[k];
@@ -704,9 +817,12 @@ function withDecodeNotices(result, d) {
       if (rawAmmo >= 0 && decoded && decoded.a === -1) {
         notices.push({ kind: "ammo-dropped", slot: k });
       }
+      if (!decoded) continue;
+      ammoIds[k] = typeof rawAmmo === "string" ? rawAmmo || null : legacyAmmoId(WEAPONS[decoded.i][4], decoded.a);
     }
   }
   result.decodeNotices = notices;
+  result.ammoIds = ammoIds;
   return result;
 }
 

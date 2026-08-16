@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
+import { legacyAmmoId } from "../data/ammoIds.js";
 import {
   FORMAT_VERSION,
   LEGACY_CONS_IDS,
@@ -1515,5 +1516,145 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
     const dec = readHashLoadout();
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Café");
+  });
+});
+
+// Governing: ADR-0014, SPEC-0010 REQ "Wire Format Version 4 References Rounds by Stable Id",
+// SPEC-0010 REQ "Every Legacy Ammo Selection Migrates to the Round It Named", issue #339/#343.
+//
+// `emptyLoadout()` gains the new field too, unconditionally.
+describe("issue #343 — ammoIds: version-4 decoding and legacy ammo resolution", () => {
+  const NAGANT = WEAPONS.findIndex((w) => w[0] === "nagant-m1895"); // compact, 5 variants
+  const NAGANT_LEGACY_INDEX = LEGACY_WEAPON_IDS.indexOf("nagant-m1895");
+  const CROSSBOW = WEAPONS.findIndex((w) => w[0] === "crossbow"); // xbow, 3 variants
+  const DOLCH = WEAPONS.findIndex((w) => w[0] === "dolch-96"); // special — empty when #339 froze it
+  const FRONTIER = WEAPONS.findIndex((w) => w[0] === "frontier-73c"); // moved medium -> compact, #351
+
+  it("emptyLoadout() carries ammoIds: [null, null]", () => {
+    expect(emptyLoadout().ammoIds).toEqual([null, null]);
+  });
+
+  it("a hand-built version-4 payload decodes, and the ammo slot arrives as an id — a is -1, never the id", () => {
+    const dec = fromData({
+      v: 4,
+      w: [["nagant-m1895", "ammo-compact-high-velocity", false], null],
+      e: [],
+      tr: [],
+      n: "",
+      b: [],
+    });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: -1, d: false });
+    expect(dec.ammoIds).toEqual(["ammo-compact-high-velocity", null]);
+  });
+
+  it("a version-4 dual-wield pair decodes both slots, each with its own id", () => {
+    const dec = fromData({
+      v: 4,
+      w: [
+        ["nagant-m1895", "ammo-compact-high-velocity", true],
+        ["nagant-m1895", "ammo-compact-poison", true],
+      ],
+      e: [],
+      tr: [],
+      n: "",
+      b: [],
+    });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: -1, d: true });
+    expect(dec.weapons[1]).toEqual({ i: NAGANT, a: -1, d: true });
+    expect(dec.ammoIds).toEqual(["ammo-compact-high-velocity", "ammo-compact-poison"]);
+  });
+
+  it("a version-4 weapon with no round selected decodes an empty ammo slot explicitly, not by omission", () => {
+    const dec = fromData({ v: 4, w: [["nagant-m1895", "", false], null], e: [], tr: [], n: "", b: [] });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: -1, d: false });
+    expect(dec.ammoIds).toEqual([null, null]);
+  });
+
+  it("FORMAT_VERSION is unchanged — this story does not raise it", () => {
+    expect(FORMAT_VERSION).toBe(3);
+  });
+
+  it("a version-3 payload's ammo index resolves to the round it named, in ammoIds — not just 'a' unchanged", () => {
+    const dec = fromData({ v: 3, w: [["nagant-m1895", 1, false], null], e: [], tr: [], n: "", b: [] });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: 1, d: false }); // unchanged existing behavior
+    expect(dec.ammoIds[0]).toBe(legacyAmmoId("compact", 1));
+    expect(dec.ammoIds[0]).toBe("ammo-compact-high-velocity");
+  });
+
+  it("a version-2 payload's ammo index resolves the same way", () => {
+    const dec = fromData({ v: 2, w: [["nagant-m1895", 1], null], e: [], tr: [], n: "", b: [] });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: 1 });
+    expect(dec.ammoIds[0]).toBe("ammo-compact-high-velocity");
+  });
+
+  it("a version-1 payload's ammo index resolves the same way", () => {
+    const dec = fromData({ v: 1, w: [["nagant-m1895", 1], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: 1 });
+    expect(dec.ammoIds[0]).toBe("ammo-compact-high-velocity");
+  });
+
+  it("an unversioned legacy payload's ammo index resolves the same way", () => {
+    const dec = fromData({ w: [[NAGANT_LEGACY_INDEX, 1], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: NAGANT, a: 1 });
+    expect(dec.ammoIds[0]).toBe("ammo-compact-high-velocity");
+  });
+
+  it("an unresolvable index decodes ammoIds to null — 'no round chosen', matching the existing -1 in a", () => {
+    const dec = fromData({ v: 3, w: [["crossbow", 9999, false], null], e: [], tr: [], n: "", b: [] });
+    expect(dec.weapons[0]).toEqual({ i: CROSSBOW, a: -1, d: false });
+    expect(dec.ammoIds).toEqual([null, null]);
+  });
+
+  it("no weapon in the slot leaves ammoIds null for that slot too", () => {
+    const dec = fromData({ v: 3, w: [null, null], e: [], tr: [], n: "", b: [] });
+    expect(dec.ammoIds).toEqual([null, null]);
+  });
+
+  // The pinned regression in the issue #359 block above requires dolch-96 index 2 to decode
+  // `a: 2` via the LIVE `special` pool (nine rows since #340) — and that pinned assertion is
+  // NOT touched by this story. But no genuine historical record could have meant index 2 while
+  // `special` was still empty (nothing was there to select), and the frozen table this story
+  // wires in (client/src/data/ammoIds.js) records `special` as empty, exactly as it was when
+  // #339 took the snapshot. So `ammoIds` for the SAME payload resolves to null — the honest
+  // answer for a selection the FROZEN table has no record of — while `a` keeps working exactly
+  // as the existing pinned test requires. This is the frozen-table-vs-live-pool divergence the
+  // whole migration exists to protect against, demonstrated on real data already in the catalog.
+  it("dolch-96 at ammo index 2 resolves via the live pool for a (pinned above), but ammoIds is null — the frozen table has no record of it", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [["dolch-96", 2], null], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[0]).toEqual({ i: DOLCH, a: 2, d: false }); // unchanged — same as the #359 pinned test
+    expect(dec.ammoIds).toEqual([null, null]);
+    expect(legacyAmmoId("special", 2)).toBeNull();
+  });
+
+  // frontier-73c moved medium -> compact (#351). fromLegacy remaps the raw index by round NAME
+  // before boundedAmmo clamps it, so `a` already reflects the current (compact) class. ammoIds
+  // resolves the SAME already-remapped index against the frozen table for that SAME (compact)
+  // class — not the raw wire value against `medium` — so it stays in lockstep with `a` instead
+  // of re-deriving a second, independently-computed answer.
+  it("frontier-73c's legacy remap threads through to ammoIds: Spitzer (no compact equivalent) resolves to null", () => {
+    // Legacy weapon index 20 is frontier-73c (see the issue #351 describe block above).
+    const dec = fromData({ w: [[0, -1], [20, 1]], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: -1 }); // unchanged — same as the #351 pinned test
+    expect(dec.ammoIds[1]).toBeNull();
+  });
+
+  it("frontier-73c's legacy remap threads through to ammoIds: Dumdum (same index in both pools) resolves correctly", () => {
+    const dec = fromData({ w: [[0, -1], [20, 2]], e: [], tr: [], n: "", b: 0 });
+    expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: 2 }); // unchanged — same as the #351 pinned test
+    expect(dec.ammoIds[1]).toBe(legacyAmmoId("compact", 2));
+    expect(dec.ammoIds[1]).toBe("ammo-compact-dumdum");
+  });
+
+  it("a native (non-legacy) v2 record for frontier-73c is NOT remapped — index 1 resolves to High Velocity", () => {
+    const dec = fromData({
+      v: 2,
+      w: [["nagant-m1895", -1], ["frontier-73c", 1]],
+      e: [],
+      tr: [],
+      n: "",
+      b: [],
+    });
+    expect(dec.weapons[1]).toEqual({ i: FRONTIER, a: 1 }); // unchanged — same as the #351 pinned test
+    expect(dec.ammoIds[1]).toBe("ammo-compact-high-velocity");
   });
 });
