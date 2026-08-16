@@ -107,6 +107,40 @@ anyway. A derivation would be right 28 times and wrong 4 times, silently. This i
 the dual-wield discriminator in SPEC-0009: a property that *nearly* falls out of another column, and
 does not.
 
+**Amended 2026-08-16 in #431**: "its per-slot signal" turned out to be two signals sharing one field,
+not one. A second slot comes from either the "(N per slot)" marker (split reserve, always one family)
+or the reserve's family-marking slash (dual-family, one slot per barrel) — see "Dual-family slots are
+bound to their family" below. Reading only the "(N per slot)" marker undercounts a dual-family
+weapon whose reserve carries the slash without that marker. The scraper now records both as separate
+observations (spec REQ "The Scrape Observes and Does Not Decide"); which mechanism applies is decided
+downstream, from those two recorded fields, not folded into one boolean at the source.
+
+### Dual-family slots are bound to their family
+
+**Choice**: A dual-family weapon's two slots each accept rounds from exactly one of its two families.
+The weapon's whole accepted-round list (the union of both) is what the "which rounds can this weapon
+take at all" requirement uses; it is not what either slot individually offers.
+
+**Rationale**: The spec originally modelled slot count and family membership as independent
+properties — a weapon declares its accepted-round list, and each slot draws from that list
+independently. For the seven dual-family weapons that is wrong: the Drilling's list is Medium ∪
+Shells, and two independently-drawn slots can both land on Medium, leaving no Shell — a build the game
+refuses (the Drilling has a rifle barrel and a shotgun barrel; you choose one round for each, not two
+from either). Raised from the live game, not the wiki: *"You can select only one ammo for the rifle
+and one for the shotgun."* This is the ammo-side sibling of #353 — a decoder that enforces shape but
+not rules — except here the flaw was in the *spec's* model, not an implementation gap, so it is fixed
+before Part B's scraper (#341) commits to a shape that cannot express the binding.
+
+**Alternatives considered**:
+- *Leave slots unbound, validate at the reducer boundary instead*: rejected. The same problem SPEC-0009
+  already solved for equipment — "no decoder enforces any equipment rule" — recurs if slot binding is
+  left to a downstream check rather than stated as what a slot's accepted list *is*. A validator can be
+  forgotten per write path; a per-slot accepted list cannot be bypassed by construction.
+- *Give each dual-family weapon two separate `ammoClass`-shaped fields instead of one bound-slot
+  model*: rejected. It would special-case the seven dual-family rows against the one-slot and
+  split-reserve shapes the rest of the catalog uses, multiplying the decoder and control logic by
+  weapon type rather than by slot.
+
 ### The migration uses a frozen table, not the live catalog
 
 **Choice**: Legacy index resolution reads a frozen index-to-id table committed with the decoder.
@@ -147,8 +181,8 @@ graph TD
 
   subgraph after["After — per-weapon rows"]
     rows["ammo catalog rows<br/>stable ids"]
-    avail["per-weapon accepted list<br/>scraped, with per-pair price<br/>and per-slot signal"]
-    sel["stored selection<br/>up to two stable ids"]
+    avail["per-weapon accepted list<br/>scraped, with per-pair price,<br/>split-reserve signal, and<br/>family-binding signal (#431)"]
+    sel["stored selection<br/>up to two stable ids,<br/>each bound to its slot's family<br/>when dual-family (#431)"]
     avail --> sel
     rows --> avail
   end
@@ -218,6 +252,13 @@ hand-edited share URL cannot smuggle a pair the data forbids.
 - **Ordering against SPEC-0009.** Version 4 assumes version 3 shipped. → If dual-wielding slips, this
   capability takes version 3 instead and SPEC-0009 takes 4; the specs are independent in content and
   only the numbers move. Say so at plan time rather than discovering it in a decoder.
+- **A spec-level defect can ship as a data-model defect if caught late.** #431 found this one before
+  #341's scraper committed to a shape — modelling slot count and family membership as independent let
+  the spec itself permit a Drilling holding two Medium rounds and no Shell, a combination the game
+  refuses. → Caught here because it was checked against the *seven affected rows* before any code
+  existed to check against, not after. The same class of gap — a requirement that composes legally on
+  paper into an illegal state — is worth the same per-row check on any future spec touching these
+  seven weapons.
 
 ## Migration Plan
 

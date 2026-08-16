@@ -129,6 +129,13 @@ from the source's per-slot signal. It MUST NOT be derived from the weapon's acti
 four Berthier 1892 rows are bolt-action carbines and split anyway. A weapon with one ammo slot is the
 degenerate case of a weapon with two.
 
+*(Amended 2026-08-16 in #431 — a second slot has two distinct sources; the field that carries both is
+not one flag.)* A weapon reaches two slots by exactly one of two mechanisms: **a split reserve** (the
+source's own "(N per slot)" marker, always within one family) or **dual-family barrel binding** (the
+reserve's family-marking slash, defined in "A Dual-Family Weapon Declares Both Families" below). These
+SHALL be read as separate observations, not folded into one boolean — a dual-family weapon's reserve
+MAY carry the slash without the "(N per slot)" marker, and its second slot SHALL still be offered.
+
 #### Scenario: A bolt-action carbine splits its ammo
 
 - **WHEN** a weapon whose source states a per-slot reserve is loaded, regardless of its action type
@@ -138,6 +145,12 @@ degenerate case of a weapon with two.
 
 - **WHEN** a Single-Shot weapon whose source states no per-slot reserve is loaded
 - **THEN** it SHALL offer one ammo slot
+
+#### Scenario: A dual-family weapon's second slot does not depend on the split-reserve marker
+
+- **WHEN** a dual-family weapon's reserve carries the family-binding slash but not the "(N per slot)"
+  marker
+- **THEN** it SHALL still offer two ammo slots
 
 ### Requirement: A Dual-Family Weapon Declares Both Families
 
@@ -149,6 +162,14 @@ types the Drilling to its *secondary* family and the LeMat and Haymaker to their
 seven are wrong today in a way no correction to a single-class field can fix. A double-barrel weapon
 whose barrels feed one family SHALL NOT be treated as dual-family.
 
+*(Amended 2026-08-16 in #431 — a dual-family weapon's two slots are bound to its two families, not
+free to draw from either.)* Each slot SHALL be bound to exactly one of the weapon's two families. A
+weapon's whole accepted-round list — the union of both families — SHALL remain the record of what the
+weapon can take; it is not the record of what either individual slot can take. A round from the family
+bound to the *other* slot MUST NOT be offered in this one, even though the weapon's own accepted list
+includes it. This binding applies only to dual-family weapons; a single-family weapon's two slots (the
+split-reserve case above) both draw from its one accepted list, unrestricted between them.
+
 #### Scenario: The Drilling offers both its families
 
 - **WHEN** a Drilling is equipped
@@ -159,12 +180,28 @@ whose barrels feed one family SHALL NOT be treated as dual-family.
 - **WHEN** a weapon with two barrels feeding one ammo family is equipped
 - **THEN** it SHALL offer that one family only
 
+#### Scenario: A Drilling cannot hold two rounds of one family
+
+- **WHEN** a Drilling's rifle-barrel slot is given a round from its shotgun-barrel family, or the
+  reverse
+- **THEN** the selection SHALL be refused
+
 ## Part C — Loadout State and Wire Format
 
 ### Requirement: A Weapon Holds Up to Two Independently Chosen Rounds
 
 A weapon SHALL hold up to as many rounds as its declared slot count, each chosen independently from
-that weapon's accepted list. The two selections MAY name the same round or different rounds.
+that slot's accepted list — the weapon's whole accepted list for a split-reserve weapon, or the bound
+family's subset for a dual-family weapon's slot, per "A Dual-Family Weapon Declares Both Families"
+above.
+
+*(Amended 2026-08-16 in #431 — "the two selections MAY name the same round" held without qualification
+before this amendment, which is the wording that let a Drilling hold two Medium rounds and no Shell.)*
+The two selections MAY name the same round only where both slots draw from the same accepted list —
+the split-reserve case, where two identical rounds (e.g. two Special Long rounds in a Berthier 1892)
+are legal. Where the slots are family-bound, each slot's round MUST come from its own family; the two
+selections can share a round only if that round belongs to both families, which for the seven
+dual-family weapons in this data, none do.
 
 A dual-wielded pair SHALL carry exactly the slots its single weapon has, per SPEC-0009 REQ "A Pair
 Carries One Weapon's Ammo and Doubles Only the Weapon Price". Pairing a weapon MUST NOT add, remove,
@@ -176,6 +213,11 @@ Total ammo cost SHALL be the sum of the chosen rounds' per-pair prices, one pric
 
 - **WHEN** a two-slot weapon is given a different round in each slot
 - **THEN** both selections SHALL persist, and total cost SHALL include both prices
+
+#### Scenario: A split-reserve weapon may repeat a round across its two slots
+
+- **WHEN** a split-reserve (not dual-family) weapon is given the same round in both slots
+- **THEN** both selections SHALL persist as that one round
 
 #### Scenario: Pairing a two-slot weapon leaves both slots
 
@@ -241,7 +283,15 @@ is a labelling convenience, not a fallback.
 ### Requirement: The Scrape Observes and Does Not Decide
 
 The scraper SHALL record what a page states — round name, stated price, Scarce marker, per-slot
-signal — into the generated dataset. It MUST NOT apply a rule to that observation.
+signal, and family-binding signal — into the generated dataset. It MUST NOT apply a rule to that
+observation.
+
+*(Amended 2026-08-16 in #431 — the reserve field carries two independent signals, and the scraper
+SHALL record them as two.)* A weapon's reserve field MAY carry a "(N per slot)" marker, a
+family-binding slash, both, or neither, and the scraper SHALL record each as its own observation
+rather than folding them into one per-slot flag. Which slot mechanism a weapon uses — split reserve,
+dual-family binding, both, or one slot — is decided downstream of the scrape from those two recorded
+observations, not by the scraper itself.
 
 A Scarce round's zero cost SHALL be authored by a person applying ADR-0013, not inferred by the
 scraper, consistent with SPEC-0007 REQ "Fields the Scraper Must Not Derive".
@@ -258,6 +308,11 @@ flagged for review rather than silently resolved.
 
 - **WHEN** the scraper reads a round its page marks Scarce
 - **THEN** it SHALL record the Scarce marker, and SHALL NOT write a price of zero on its own authority
+
+#### Scenario: The split-reserve marker and the family-binding slash are recorded independently
+
+- **WHEN** a weapon's reserve field carries both the "(N per slot)" marker and the family-binding slash
+- **THEN** the scraper SHALL record both observations, and SHALL NOT collapse them into a single flag
 
 ## Security Requirements
 
