@@ -103,7 +103,7 @@ import {
   ACQUISITIONS,
   FAVORITES_SECTION,
   HAS_UNKNOWN_ACQUISITION,
-  HUNTERS,
+  HUNTERS_BY_NAME,
   UNKNOWN_ACQUISITION,
   acquisitionLabel,
   filterHunters,
@@ -196,8 +196,22 @@ export default function HunterPicker({
   // arrives with empty groups already dropped, so mapping over it faithfully is what
   // satisfies "a section with no members SHALL be omitted rather than rendered as an empty
   // heading" — there is no empty-check to forget here.
+  //
+  // Governing: SPEC-0004, SPEC-0003, issue #387 — `HUNTERS_BY_NAME` rather than `HUNTERS`.
+  // `HUNTERS` is scrape-id order, which equals name order for every hunter except
+  // `the-statesman` (name "The Statesman", id without the "the-" prefix its name implies),
+  // so consuming it directly here put that one hunter 171 tiles from its variant. Sorting at
+  // this consumption seam fixes the picker's presentation without touching the generated
+  // dataset or re-keying an id that stored `hunterId` references depend on.
   const { sections, total } = useMemo(
-    () => filterHunters(HUNTERS, { query, acquisition, obtainable, favorites: favored, favoritesOnly }),
+    () =>
+      filterHunters(HUNTERS_BY_NAME, {
+        query,
+        acquisition,
+        obtainable,
+        favorites: favored,
+        favoritesOnly,
+      }),
     [query, acquisition, obtainable, favored, favoritesOnly]
   );
 
@@ -528,7 +542,7 @@ export default function HunterPicker({
             narrows. Not to be confused with the count of already-used hunters that "Does
             Not Restrict or Mark Reuse" forbids — this component cannot compute that one. */}
         <p className="hp-count" aria-live="polite">
-          {total} of {HUNTERS.length} hunters
+          {total} of {HUNTERS_BY_NAME.length} hunters
         </p>
 
         {total === 0 && (

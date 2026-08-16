@@ -185,12 +185,30 @@ describe("HunterPicker filtering", () => {
     expect(screen.getByText("2 of 5 hunters")).toBeInTheDocument();
   });
 
-  it("does not reorder the roster when filtering", () => {
+  // Governing: SPEC-0004, SPEC-0003, issue #387
+  //
+  // The picker now consumes `HUNTERS_BY_NAME`, not the fixture's own insertion order —
+  // which is why this fixture deliberately lists its entries out of alphabetical order
+  // (the-rat, the-raven, bad-hand, the-ol-cowpoke, kingsnake): a picker that silently fell
+  // back to dataset order would still pass a test built on an already-alphabetical fixture.
+  it("orders the roster alphabetically by name, not the dataset's own order", () => {
+    render(<Harness />);
+    openPicker();
+    expect(tileNames()).toEqual([
+      "Bad Hand",
+      "Kingsnake",
+      "The Ol' Cowpoke",
+      "The Rat",
+      "The Raven",
+      "No portrait",
+    ]);
+  });
+
+  it("keeps alphabetical order when filtering — narrowing is the only effect", () => {
     render(<Harness />);
     openPicker();
     fireEvent.change(screen.getByLabelText("Filter hunters by name"), { target: { value: "the" } });
-    // Dataset order preserved, minus the non-matches. Filtering narrows and does nothing else.
-    expect(tileNames().slice(0, 3)).toEqual(["The Rat", "The Raven", "The Ol' Cowpoke"]);
+    expect(tileNames().slice(0, 3)).toEqual(["The Ol' Cowpoke", "The Rat", "The Raven"]);
   });
 });
 
@@ -302,14 +320,15 @@ describe("HunterPicker favorites", () => {
     render(<Harness initialFavorites={["kingsnake", "bad-hand"]} />);
     openPicker();
     expect(namesInSection("favorites")).toEqual(["Bad Hand", "Kingsnake"]);
-    expect(namesInSection("roster")).toEqual(["The Rat", "The Raven", "The Ol' Cowpoke"]);
+    // Alphabetical (issue #387), not the fixture's own insertion order.
+    expect(namesInSection("roster")).toEqual(["The Ol' Cowpoke", "The Rat", "The Raven"]);
     // …and the sections render in that order, favorites first, with everyone still present.
     expect(tileNames()).toEqual([
       "Bad Hand",
       "Kingsnake",
+      "The Ol' Cowpoke",
       "The Rat",
       "The Raven",
-      "The Ol' Cowpoke",
       "No portrait",
     ]);
   });
@@ -562,15 +581,16 @@ describe("HunterPicker focus and keyboard", () => {
 
     options[0].focus();
     // Right walks the row's own cells first — this tile's favorite button — then on to the
-    // next tile, so Right always means "the next thing to the right".
+    // next tile, so Right always means "the next thing to the right". With no favorites the
+    // roster is one alphabetical section (issue #387), so options[0] is Bad Hand.
     fireEvent.keyDown(grid(), { key: "ArrowRight" });
-    expect(document.activeElement).toBe(favButton("the-rat"));
+    expect(document.activeElement).toBe(favButton("bad-hand"));
 
     fireEvent.keyDown(grid(), { key: "ArrowRight" });
     expect(document.activeElement).toBe(options[1]);
 
     fireEvent.keyDown(grid(), { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(favButton("the-rat"));
+    expect(document.activeElement).toBe(favButton("bad-hand"));
 
     fireEvent.keyDown(grid(), { key: "End" });
     // The "no portrait" row has nothing to favorite, so its last cell is the tile itself.
@@ -660,13 +680,14 @@ describe("HunterPicker focus and keyboard", () => {
 
     // Bad Hand is the lone favorite, so it is the last row of the Favorites section. Right
     // walks its own cells, then steps into the NEXT section without the keys knowing that
-    // sections exist.
+    // sections exist. The roster is alphabetical (issue #387), so its first tile is
+    // Kingsnake, not the fixture's own first non-favorite entry.
     screen.getByTestId("hunter-tile-bad-hand").focus();
     fireEvent.keyDown(grid(), { key: "ArrowRight" });
     expect(document.activeElement).toBe(favButton("bad-hand"));
 
     fireEvent.keyDown(grid(), { key: "ArrowRight" });
-    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-kingsnake"));
 
     // …and back over the boundary in the other direction.
     fireEvent.keyDown(grid(), { key: "ArrowLeft" });
@@ -688,11 +709,12 @@ describe("HunterPicker focus and keyboard", () => {
     render(<Harness initialFavorites={["bad-hand"]} />);
     openPicker();
 
-    // Favorites holds Bad Hand alone; the roster holds the other four, two per row; the
+    // Favorites holds Bad Hand alone; the roster holds the other four, alphabetical
+    // (issue #387) as Kingsnake, The Ol' Cowpoke, The Rat, The Raven, two per row; the
     // "no portrait" rowgroup trails both. offsetTop is a document coordinate, so it keeps
     // climbing ACROSS sections — which is exactly why a first-row measurement saw only the
     // one-tile Favorites section and reported one column for the whole widget.
-    const y = { "bad-hand": 0, "the-rat": 100, "the-raven": 100, "the-ol-cowpoke": 180, kingsnake: 180 };
+    const y = { "bad-hand": 0, kingsnake: 100, "the-ol-cowpoke": 100, "the-rat": 180, "the-raven": 180 };
     rows().forEach((el) => {
       Object.defineProperty(el, "offsetWidth", { configurable: true, value: 120 });
       Object.defineProperty(el, "offsetHeight", { configurable: true, value: 80 });
@@ -701,35 +723,35 @@ describe("HunterPicker focus and keyboard", () => {
 
     // Down inside the roster is a whole row of the ROSTER's two columns — not one tile,
     // which is what the one-member Favorites section's width would have given.
-    focusTile("the-rat");
+    focusTile("kingsnake");
     fireEvent.keyDown(grid(), { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-ol-cowpoke"));
-
-    fireEvent.keyDown(grid(), { key: "ArrowUp" });
     expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
 
-    // The second column moves straight down its own column, too.
-    focusTile("the-raven");
-    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    fireEvent.keyDown(grid(), { key: "ArrowUp" });
     expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-kingsnake"));
+
+    // The second column moves straight down its own column, too.
+    focusTile("the-ol-cowpoke");
+    fireEvent.keyDown(grid(), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-raven"));
 
     // Down out of a section shorter than a row crosses into the next one, keeping the
     // column; Up out of the roster's first row comes back to it.
     focusTile("bad-hand");
     fireEvent.keyDown(grid(), { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-kingsnake"));
 
     fireEvent.keyDown(grid(), { key: "ArrowUp" });
     expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-bad-hand"));
 
     // Down off the roster's last row lands on the "no portrait" rowgroup rather than
     // stopping at the boundary; Up out of it returns to that row, not to the roster's first.
-    focusTile("the-ol-cowpoke");
+    focusTile("the-rat");
     fireEvent.keyDown(grid(), { key: "ArrowDown" });
     expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-none"));
 
     fireEvent.keyDown(grid(), { key: "ArrowUp" });
-    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-ol-cowpoke"));
+    expect(document.activeElement).toBe(screen.getByTestId("hunter-tile-the-rat"));
   });
 
   // Governing: SPEC-0003 REQ "Focus Management"
