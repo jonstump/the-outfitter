@@ -43,6 +43,24 @@
 // This table is also NEVER written by a scrape (SPEC-0007 REQ "Fields the Scraper Must Not Derive"):
 // the wiki has no per-pool source page — /wiki/Ammo is prose, and prices are stated per weapon
 // inside each weapon's own progression table, not per class.
+//
+// PROVENANCE (added 2026-08-15, issue #367). Unlike the TRAITS `up` costs above — which record a
+// verification date and source (huntshowdown.wiki.gg, current through Update 2.8.1) — these 31
+// prices carry no such record anywhere in this repo: no `itemStats.json` entry, no test asserting
+// any individual value, and no note of who entered them or when. They are hand-authored, source
+// not recorded. That is consistent with SPEC-0007 REQ "Fields the Scraper Must Not Derive" (this
+// table is by design outside the scrape's reach, per the paragraph above), but design-by-necessity
+// isn't the same as sourced-and-dated, and this table has never had either.
+//
+// This note does not assert any of the 31 values are wrong — the wiki was unreachable for the audit
+// this issue stems from, so nothing here is a correction. It also does not pin them: issue #365
+// covers adding a golden-snapshot test so a future edit can't silently change these numbers on a
+// green suite. That is a corroborating, separately-tracked fix, not this one — a pin without a
+// provenance note freezes unsourced numbers silently, and a provenance note without a pin leaves
+// them editable in silence. Both are wanted; neither substitutes for the other.
+//
+// Governing: issue #367, SPEC-0007 REQ "Fields the Scraper Must Not Derive", ADR-0014 (Per-Weapon
+// Ammo Compatibility and Slots).
 export const AMMO = {
   compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
   medium: [["FMJ", 22], ["Spitzer", 60], ["Dumdum", 28], ["Incendiary", 24], ["Poison", 21]],
