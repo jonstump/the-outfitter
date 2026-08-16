@@ -625,23 +625,49 @@ function fromV3(d) {
   };
 }
 
-// Wire-format decoders, oldest to newest. fromData() picks the newest decoder
-// whose version entry matches, so a future FORMAT_VERSION bump only needs a new
-// decoder added here — older records keep migrating instead of silently dropping.
+// Wire-format decoders, oldest to newest. fromData() picks the decoder whose
+// version entry matches the record's declared `v`, so a future FORMAT_VERSION bump
+// only needs a new decoder added here — older records keep migrating instead of
+// silently dropping.
 const DECODERS = [
   { v: 3, decode: fromV3 },
   { v: 2, decode: fromV2 },
   { v: 1, decode: fromV1 },
-  // Legacy (unversioned) records are the fallback — anything unrecognized routes
-  // here, and fromLegacy's bounds checks safely drop what it can't place.
-  { v: null, decode: fromLegacy },
 ];
 
-// compact wire shape -> loadout, dropping anything that no longer resolves against the catalog
+// The highest known wire-format version. A record declaring a higher `v` was
+// written by a newer client and cannot be decoded by this bundle — fromData
+// returns a "cannot decode" result rather than routing it through a decoder
+// that would misread its shape (issue #360).
+const MAX_KNOWN_VERSION = 3;
+
+// compact wire shape -> loadout, dropping anything that no longer resolves against the catalog.
+//
+// Governing: issue #26 (created the version envelope), issue #360 (unknown versions
+// must not fall through to the legacy positional decoder).
+//
+// Selection is by declared version, never by shape. Three cases:
+//   1. `v` matches a known decoder → decode through it.
+//   2. `v` is absent (undefined/null) → genuine pre-versioning legacy record → fromLegacy.
+//   3. `v` is a number higher than any known version, or a non-matching type (e.g. "2")
+//      → a record from a newer or malformed client → return `{ ok: false }` so callers
+//        can surface a message instead of silently fabricating data.
+//
+// Before this fix, case 3 fell through to fromLegacy, which reads item references as
+// raw array positions — so a crafted `{v: 99, w: [[20, 1]], ...}` fabricated a real
+// weapon (Frontier 73C, $13) from a bare integer. Worse, once `FORMAT_VERSION` bumps
+// to 4, every old-client client opening a v4 share link would decode it through
+// fromLegacy and persist the fabricated result to localStorage, silently overwriting
+// the reader's own stored build (issue #201's persistence-before-render hazard).
 export function fromData(d) {
   if (!d || typeof d !== "object") return emptyLoadout();
-  const decoder = DECODERS.find((x) => x.v !== null && d.v === x.v) || DECODERS.find((x) => x.v === null);
-  return decoder.decode(d);
+  // Case 2: genuine legacy records carry no `v` field (or explicitly null).
+  if (d.v === undefined || d.v === null) return fromLegacy(d);
+  // Case 1: a known version with a matching decoder.
+  const decoder = DECODERS.find((x) => d.v === x.v);
+  if (decoder) return decoder.decode(d);
+  // Case 3: a version this client does not know, or a malformed `v` type.
+  return { ok: false, v: d.v };
 }
 
 /**
@@ -654,11 +680,27 @@ export function emptyEquipGrid() {
   return Array(8).fill(null);
 }
 
+/**
+ * Whether a `fromData` result is an undecodable record (a version the client does
+ * not know). Callers use this to surface a message instead of feeding the result
+ * to `setLoadout`, which would throw on the missing `weapons` field.
+ *
+ * Governing: issue #360.
+ */
+export function isUndecodable(result) {
+  return result !== null && typeof result === "object" && result.ok === false;
+}
+
 export function readStoredLoadout() {
   try {
     const raw = localStorage.getItem(LS_CUR);
     if (!raw) return null;
-    return fromData(JSON.parse(raw));
+    const result = fromData(JSON.parse(raw));
+    // Governing: issue #360. An undecodable record (unknown version) must not be
+    // fed to setLoadout — it has no weapons/equip/traits. Return null so the caller
+    // starts fresh rather than crashing or persisting a fabricated loadout.
+    if (isUndecodable(result)) return null;
+    return result;
   } catch {
     return null;
   }
@@ -697,7 +739,12 @@ export function readHashLoadout() {
   const m = location.hash.match(/#L=([A-Za-z0-9+/=]+)/);
   if (!m) return null;
   try {
-    return fromData(JSON.parse(atob(m[1])));
+    const result = fromData(JSON.parse(atob(m[1])));
+    // Governing: issue #360. An undecodable record (unknown version) must not be
+    // fed to setLoadout — return null so the caller starts fresh instead of
+    // fabricating data or persisting a corrupted loadout to localStorage.
+    if (isUndecodable(result)) return null;
+    return result;
   } catch {
     return null;
   }
