@@ -211,7 +211,14 @@ export default function WeaponSlot({ slot }) {
               groups are disjoint, so the families themselves are always distinct — and an
               unbound two-slot weapon (split-reserve; both slots share one group and can
               repeat a round) falls back to an ordinal, since there is no family to
-              distinguish them by. A one-slot weapon just gets the weapon's own name. */}
+              distinguish them by. A one-slot weapon just gets the weapon's own name.
+
+              `minWidth: 0` overrides a `<select>`'s intrinsic default of `min-width: auto`,
+              which otherwise refuses to shrink below its content's natural width no matter
+              what `flex` says — invisible with one control in the row (there was always
+              slack), but on a two-slot weapon (Drilling, Berthier, Haymaker, Romero, ...) the
+              second control had nothing forcing it to respect the row's width and spilled
+              past the panel edge at narrow/two-column layouts. Reported as a live bug. */}
           {slots.groups.map((group, slotIndex) => (
             <select
               key={slotIndex}
@@ -225,7 +232,7 @@ export default function WeaponSlot({ slot }) {
               onChange={(e) =>
                 dispatch(loadoutActions.setAmmo({ slot, ammoSlotIndex: slotIndex, ammoId: e.target.value || null }))
               }
-              style={{ flex: 1, maxWidth: 260 }}
+              style={{ flex: 1, minWidth: 0, maxWidth: 260 }}
             >
               <option value="">Standard</option>
               {group.map((round) => (
