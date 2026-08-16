@@ -109,7 +109,7 @@ function hunterLine(hunterId) {
  * Traits") — an invariant this application enforces too: `addTrait` refuses a sixteenth
  * unconditionally regardless of `upBudgetOn`, every decoder in `loadoutCodec.js` bounds a
  * decoded trait list to fifteen, `randomize` never draws past the cap, and the server rejects
- * a write over `MAX_TRAITS = 15` (server/src/routes/loadouts.js:113). None of that is a
+ * a write over `MAX_TRAITS = 15` (server/src/routes/loadouts.js, `MAX_TRAITS`). None of that is a
  * function of the trait catalog's size, which holds 58 traits today. See `traitOverflow`
  * below for why the grid still defends against an over-cap loadout despite the cap being
  * enforced everywhere it is written.
