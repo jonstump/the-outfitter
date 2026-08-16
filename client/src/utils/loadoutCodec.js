@@ -773,19 +773,60 @@ export function readHashLoadout() {
   const m = location.hash.match(/#L=([A-Za-z0-9+/=]+)/);
   if (!m) return null;
   try {
-    const result = fromData(JSON.parse(atob(m[1])));
+    // Governing: issue #358. Share codes may carry non-Latin-1 characters in the loadout
+    // name (emoji, CJK, Cyrillic, etc.). `btoa` throws on code points above U+00FF, so the
+    // encoder now encodes the JSON as UTF-8 before base64. Old share codes produced by the
+    // raw-Latin-1 `btoa(JSON.stringify(...))` path are a strict subset of the new path for
+    // plain-ASCII names, so they decode correctly through the safe path. If the safe decode
+    // fails, fall back to the legacy raw `atob` path so a genuinely old link still loads
+    // rather than silently returning null.
+    const safe = decodeBase64Utf8(m[1]);
+    const result = fromData(JSON.parse(safe));
     // Governing: issue #360. An undecodable record (unknown version) must not be
     // fed to setLoadout — return null so the caller starts fresh instead of
     // fabricating data or persisting a corrupted loadout to localStorage.
     if (isUndecodable(result)) return null;
     return result;
   } catch {
-    return null;
+    try {
+      const result = fromData(JSON.parse(atob(m[1])));
+      if (isUndecodable(result)) return null;
+      return result;
+    } catch {
+      return null;
+    }
   }
 }
 
+// Governing: issue #358. `btoa` throws `InvalidCharacterError` on any code point above
+// U+00FF, so a loadout named with an emoji or CJK/Cyrillic/Greek characters made
+// `encodeShareUrl` throw uncaught — the try wrapped `history.replaceState`, not `btoa`.
+// Encode the JSON string as UTF-8 bytes before base64 to handle the full Unicode range.
+// The symmetric decode tries UTF-8-safe decoding first, falling back to raw `atob` for
+// legacy codes produced before this change (the raw-Latin-1 path is a subset of the
+// UTF-8 path for plain-ASCII content, so old codes round-trip correctly either way).
+function encodeBase64Utf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  // `fatal: true` is load-bearing: without it, TextDecoder silently substitutes U+FFFD
+  // for invalid byte sequences instead of throwing, so a legacy Latin-1 share code
+  // containing an accented character (e.g. "Café", raw-btoa'd pre-#358) would "succeed"
+  // here as mangled text instead of throwing and letting readHashLoadout's catch fall
+  // through to the legacy atob path that decodes it correctly.
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 export function encodeShareUrl(loadout) {
-  const code = btoa(JSON.stringify(toData(loadout)));
+  // Governing: issue #358. UTF-8-safe base64 so non-Latin-1 names don't throw.
+  const code = encodeBase64Utf8(JSON.stringify(toData(loadout)));
   try {
     history.replaceState(null, "", "#L=" + code);
   } catch {

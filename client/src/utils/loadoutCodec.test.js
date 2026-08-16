@@ -1359,3 +1359,82 @@ describe("issue #359 — ammo-drop notice when decode drops a saved selection", 
     expect(emptyLoadout().decodeNotices).toEqual([]);
   });
 });
+
+// Governing: issue #358. `encodeShareUrl` used `btoa(JSON.stringify(toData(loadout)))`, and
+// `btoa` throws `InvalidCharacterError` on any code point above U+00FF — so a loadout named
+// with an emoji or CJK/Cyrillic/Greek characters made the Share button do nothing (the throw
+// escaped uncaught; the `try` wrapped `history.replaceState`, not `btoa`). The fix encodes the
+// JSON as UTF-8 before base64, with a symmetric decode that falls back to the legacy raw path.
+describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
+  function loadoutNamed(name) {
+    const lo = emptyLoadout();
+    lo.name = name;
+    return lo;
+  }
+
+  it("encodes a loadout named with an emoji without throwing", () => {
+    const lo = loadoutNamed("Loadout 🔥");
+    const url = encodeShareUrl(lo);
+    expect(url).toMatch(/#L=[A-Za-z0-9+/=]+$/);
+  });
+
+  it("encodes a loadout named with CJK characters without throwing", () => {
+    const lo = loadoutNamed("日本");
+    const url = encodeShareUrl(lo);
+    expect(url).toMatch(/#L=[A-Za-z0-9+/=]+$/);
+  });
+
+  it("round-trips a non-Latin-1 name through encodeShareUrl and readHashLoadout", () => {
+    const lo = loadoutNamed("Loadout 🔥");
+    const url = encodeShareUrl(lo);
+    // readHashLoadout reads location.hash, which encodeShareUrl set via history.replaceState.
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Loadout 🔥");
+  });
+
+  it("round-trips a CJK name through encodeShareUrl and readHashLoadout", () => {
+    const lo = loadoutNamed("日本");
+    encodeShareUrl(lo);
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("日本");
+  });
+
+  it("a legacy share code (raw Latin-1 base64 of plain-ASCII) still decodes correctly", () => {
+    // Simulate a pre-fix share code: raw btoa(JSON.stringify(toData(loadout))) on a
+    // plain-ASCII name. This is the code the OLD encoder produced.
+    const lo = loadoutNamed("Plain ASCII build");
+    const legacyCode = btoa(JSON.stringify(toData(lo)));
+    // Set the hash so readHashLoadout can read it.
+    history.replaceState(null, "", "#L=" + legacyCode);
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Plain ASCII build");
+  });
+
+  it("a legacy share code naming a Latin-1 accented character (not plain ASCII) still decodes correctly", () => {
+    // The regression this guards: a pre-fix share code built by the OLD raw-btoa encoder
+    // can carry a Latin-1 character in U+0080..U+00FF (e.g. "é" is U+00E9) — `btoa` allows
+    // these, it only throws above U+00FF. Read as raw bytes, "é" is the single byte 0xE9,
+    // which is NOT valid standalone UTF-8 (0xE9 starts a 3-byte sequence with no
+    // continuation bytes following). `decodeBase64Utf8` must throw on this so
+    // readHashLoadout's catch falls through to the legacy `atob` path — if it instead
+    // silently substitutes U+FFFD (TextDecoder's default, non-fatal behavior), the name
+    // decodes as mangled text instead of falling back.
+    const lo = loadoutNamed("Café");
+    const legacyCode = btoa(JSON.stringify(toData(lo)));
+    history.replaceState(null, "", "#L=" + legacyCode);
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Café");
+  });
+
+  it("a plain-ASCII name round-trips through the new encoder too", () => {
+    const lo = loadoutNamed("Café");
+    encodeShareUrl(lo);
+    const dec = readHashLoadout();
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Café");
+  });
+});
