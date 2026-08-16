@@ -64,7 +64,8 @@ export default function WeaponSlot({ slot }) {
   // this resolves it to an object instead of asserting one, so a future decode bug degrades
   // to "Standard" rather than back to a white screen.
   const variant = w.a >= 0 ? variants[w.a] : null;
-  const ammoCost = variant ? variant[1] : 0;
+  // variant[0] is now a stable id (issue #340), so name shifted to [1] and cost to [2].
+  const ammoCost = variant ? variant[2] : 0;
 
   // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot".
   //
@@ -149,7 +150,7 @@ export default function WeaponSlot({ slot }) {
             <div className="weapon-name">{def[1]}</div>
             <div className="weapon-meta">
               Size {def[2]} · {AMMO_LABEL[def[4]]}
-              {variant ? ` · ${variant[0]}` : ""}
+              {variant ? ` · ${variant[1]}` : ""}
             </div>
           </div>
         </div>
@@ -179,8 +180,12 @@ export default function WeaponSlot({ slot }) {
           >
             <option value="-1">Standard</option>
             {variants.map((v, idx) => (
-              <option key={idx} value={String(idx)}>
-                {v[0]} (+${v[1]})
+              // v[0] is the row's stable id (issue #340) — the <option> value is still the
+              // positional index (`idx`), not the id, because the wire format and this select
+              // still key ammo selection off `w.a`, a bare index, until #343 wires id-based
+              // decoding in. v[1] is name, v[2] is cost.
+              <option key={v[0]} value={String(idx)}>
+                {v[1]} (+${v[2]})
               </option>
             ))}
           </select>

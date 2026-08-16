@@ -3,6 +3,11 @@
 // Tool tuple shape: [id, name, cost, group]
 // Consumable tuple shape: [id, name, cost, category, group]
 // Trait tuple shape: [id, name, up, group]
+// Ammo tuple shape: [id, name, cost] — added by issue #340 (SPEC-0010 REQ "Ammo Rows Are Addressed
+// by Stable Id"). `cost` is a deliberate placeholder, not a design decision: ADR-0014 moves ammo
+// pricing to a per-(weapon, round) pair, which is issue #341's job, not this one's. Keeping a single
+// `cost` on the row for now preserves today's app behavior (one price per round, shared across every
+// weapon in the class) until #341 replaces it with `itemStats.json`'s scraped `availableAmmo`.
 //
 // `id` is a stable, slug-style identifier, unique within its category and never
 // reused after removal. The wire format (loadoutCodec.js), localStorage, saved
@@ -31,76 +36,166 @@
 
 // WIRE-FORMAT GATE — read before editing any pool below.
 //
+// issue #340 gives every row below a stable, slug-style `id` — the same property every other
+// category in this file already has (see the header comment). That is a step TOWARD retiring the
+// hazard this comment describes, not the retirement itself: nothing downstream resolves a selection
+// by id yet. Wiring id-based resolution into the decoder is issue #343's job; until it lands, the
+// rule below is unchanged and every pool stays exactly as dangerous to reorder as it always was.
+//
 // A saved ammo selection persists as a BARE INDEX into AMMO[ammoClass] (loadoutCodec.js writes it,
 // calc.js reads it back). So inserting, removing, or reordering a variant inside a pool silently
 // re-points every saved selection in that class: a loadout that stored "index 2" keeps storing 2
 // and starts meaning a different round. Nothing errors, and the cost line just changes.
 //
 // Any such edit therefore needs a FORMAT_VERSION bump and a saved-selection migration, on the same
-// terms already required for changing a weapon's `ammoClass`. Appending to the END of a pool is the
-// one safe edit, because it cannot move an existing index.
+// terms already required for changing a weapon's `ammoClass`. Appending to the END of a pool, or
+// populating a pool that was previously empty (ADR-0014 — there is no existing index to move), is
+// the one safe structural edit; repricing a row IN PLACE is also safe, because it moves no index.
 //
 // This table is also NEVER written by a scrape (SPEC-0007 REQ "Fields the Scraper Must Not Derive"):
 // the wiki has no per-pool source page — /wiki/Ammo is prose, and prices are stated per weapon
 // inside each weapon's own progression table, not per class.
+//
+// Governing: ADR-0013 (Scarce items cost nothing), ADR-0014, SPEC-0010 REQ "Ammo Rows Are Addressed
+// by Stable Id", REQ "A Scarce Round Costs Nothing and Is Still Selectable", issue #340
 export const AMMO = {
-  compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
-  medium: [["FMJ", 22], ["Spitzer", 60], ["Dumdum", 28], ["Incendiary", 24], ["Poison", 21]],
-  long: [["FMJ", 30], ["Spitzer", 75], ["Dumdum", 34], ["Incendiary", 28]],
-  slong: [["FMJ", 35], ["Spitzer", 90], ["Incendiary", 32]],
-  shotgun: [["Slug", 28], ["Flechette", 26], ["Penny Shot", 22], ["Dragon Breath", 30], ["Starshell", 18]],
-  xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
-  hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
-  bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
-  // "Special" pool, empty by fact rather than by omission. Membership in the "special"
-  // ammoClass is DERIVED — WEAPONS.filter(w => w[4] === "special") — not enumerated here,
-  // because an enumerated list goes stale the moment a weapon is added or reclassified
-  // (#233 named six weapons; #254 added three Dolch 96 variants that draw from this same
-  // pool and the comment was never updated to say so — the drift is exactly what let #361
-  // ship, where the picker's ammo filter silently dropped every weapon in this class).
-  // The substantive claim this empty array encodes is that none of those weapons' custom
-  // rounds can be bought with Hunt Dollars, so there is nothing purchasable to list — see
-  // catalog.test.js for a pinning assertion over the current membership.
+  compact: [
+    ["ammo-compact-fmj", "FMJ", 15],
+    ["ammo-compact-high-velocity", "High Velocity", 13],
+    // Corrected 2026-08-16 (#340): was 22. Dumdum Ammo is Scarce on all 10 compact-class weapons
+    // that list it (huntshowdown.wiki.gg, § Ammo Types, read 2026-08-12 — docs/reports/
+    // suggested-adrs.md § 3.8/§3.10). ADR-0013: a Scarce round costs 0 and stays selectable.
+    ["ammo-compact-dumdum", "Dumdum", 0],
+    ["ammo-compact-incendiary", "Incendiary", 18],
+    ["ammo-compact-poison", "Poison", 16],
+  ],
+  medium: [
+    ["ammo-medium-fmj", "FMJ", 22],
+    ["ammo-medium-spitzer", "Spitzer", 60],
+    // Corrected 2026-08-16 (#340): was 28. Dumdum Ammo is Scarce on all 25 medium-class weapons
+    // that list it (same source as compact's Dumdum above). ADR-0013 applies identically.
+    ["ammo-medium-dumdum", "Dumdum", 0],
+    ["ammo-medium-incendiary", "Incendiary", 24],
+    ["ammo-medium-poison", "Poison", 21],
+  ],
+  long: [
+    ["ammo-long-fmj", "FMJ", 30],
+    ["ammo-long-spitzer", "Spitzer", 75],
+    ["ammo-long-dumdum", "Dumdum", 34],
+    ["ammo-long-incendiary", "Incendiary", 28],
+  ],
+  slong: [
+    ["ammo-slong-fmj", "FMJ", 35],
+    // Corrected 2026-08-16 (#340): was 90. Spitzer Ammo is Scarce on all 17 special-long-class
+    // weapons that list it (same source as above). ADR-0013 applies identically.
+    ["ammo-slong-spitzer", "Spitzer", 0],
+    ["ammo-slong-incendiary", "Incendiary", 32],
+  ],
+  shotgun: [
+    ["ammo-shotgun-slug", "Slug", 28],
+    ["ammo-shotgun-flechette", "Flechette", 26],
+    ["ammo-shotgun-penny-shot", "Penny Shot", 22],
+    ["ammo-shotgun-dragon-breath", "Dragon Breath", 30],
+    ["ammo-shotgun-starshell", "Starshell", 18],
+  ],
+  xbow: [
+    // Corrected 2026-08-16 (#340): was 40. Explosive Bolt is Scarce on both crossbow-class weapons
+    // that list it (same source as above). ADR-0013 applies identically.
+    ["ammo-xbow-explosive-bolt", "Explosive Bolt", 0],
+    ["ammo-xbow-shot-bolt", "Shot Bolt", 30],
+    ["ammo-xbow-poison-bolt", "Poison Bolt", 25],
+  ],
+  hxbow: [
+    ["ammo-hxbow-chaos-bolt", "Chaos Bolt", 20],
+    ["ammo-hxbow-concertina-bolt", "Concertina Bolt", 35],
+    ["ammo-hxbow-choke-bolt", "Choke Bolt", 25],
+  ],
+  bow: [
+    // Corrected 2026-08-16 (#340): was 45. Frag Arrow is Scarce on the one bow-class weapon that
+    // lists it (same source as above). ADR-0013 applies identically.
+    ["ammo-bow-frag-arrow", "Frag Arrow", 0],
+    ["ammo-bow-concertina-arrow", "Concertina Arrow", 35],
+    ["ammo-bow-poison-arrow", "Poison Arrow", 25],
+  ],
+  // "Special" pool. Populated 2026-08-16 (#340) — it was empty by fact rather than by omission
+  // until this change, and the fact it recorded was wrong for two of the nine weapons that draw
+  // from it (`special`-class membership is DERIVED — WEAPONS.filter(w => w[4] === "special") — not
+  // enumerated here, so this comment describes the current membership rather than restating it).
   //
-  // The Dolch's and Nitro's ammo (Dumdum / Explosive / Shredder) has been Scarce since Update 2.8.
-  // Bomb Launcher, Chu Ko Nu, Flame Rifle and Shredder are the same shape: each page states an
-  // ammo type the game does not sell per-variant. Chu Ko Nu is the one worth flagging — its
-  // infobox says "Special" while its prose says "fires Compact Bolts", and the infobox is what
-  // this pool follows, because offering it the `xbow` pool's three bolts would price rounds the
-  // wiki does not list for it.
+  // The retired justification claimed "none of their custom rounds can be bought with Hunt
+  // Dollars." Checked per round against every special/none-class weapon's own wiki page (read
+  // 2026-08-12, docs/reports/suggested-adrs.md § 3.1/§A6, ADR-0014's Decision Outcome and
+  // "Consequence for ADR-0013"): that is true for six of the nine (Dolch 96 and its three variants,
+  // Nitro Express, Flame Rifle, the Shredder weapon) but false for Bomb Launcher and Chu Ko Nu, both
+  // of which sell rounds for Hunt Dollars. The nine rows below correct both directions at once —
+  // ADR-0013's Scarce-costs-zero rule applied to Dolch/Nitro's rounds, and real prices applied to
+  // Bomb Launcher/Chu Ko Nu's:
   //
-  // Bomb Launcher and Chu Ko Nu are the two exceptions to "nothing purchasable to list" above, and
-  // this is settled, not open: ADR-0014 (accepted, backed by a wiki read of all 140 weapons on
-  // 2026-08-12, unlike the single unreachable-wiki audit this comment otherwise draws on) states
-  // Bomb Launcher has four Hunt-Dollar-priced charges and Chu Ko Nu's Incendiary Bolt is priced at
-  // 25 — both weapons DO have a purchasable round. `special`'s binary empty-pool model can't
-  // represent that (it has no per-weapon pricing, only per-class), so their entries here are a
-  // known simplification, not a wrong fact — the per-weapon redesign ADR-0014 specifies (SPEC-0010,
-  // CLAUDE.md gate 7) is what actually fixes it.
+  //   Bomb Launcher — Dragon Breath Charge 10, Harpoon 5, Steel Ball 5, Waxed Frag Charge 50. All
+  //   four are wiki-stated PER SLOT prices (`Extra: 6 (3 per slot)`); this app has one ammo
+  //   selection per weapon today (SPEC-0010 Part C's two-slot model is #342-#344's job), so the row
+  //   prices one slot, same as every other pool here prices one round. A build that could fill both
+  //   slots with the same round would cost double this figure once slots are modeled.
+  //   Chu Ko Nu — Incendiary Bolt 25 (purchasable) and Explosive Bolt (Scarce, cost 0 under
+  //   ADR-0013 — a DIFFERENT row from `AMMO.xbow`'s "Explosive Bolt", because /wiki/Ammo states the
+  //   Crossbow and Chu Ko Nu "do not share compatible ammo types despite sharing a name").
+  //   Dolch 96 (and its Bullseye/Claw/Precision variants) — Dumdum, Scarce, cost 0.
+  //   Nitro Express — Explosive and Shredder, both Scarce, cost 0.
   //
-  // Governing: issue #373, ADR-0014 (Per-Weapon Ammo Compatibility and Slots). Related: #361, #233,
-  // #254.
-  special: [],
+  // NOT FIXED HERE, ON PURPOSE: Bomb Lance sells the same four rounds as Bomb Launcher at the same
+  // prices but is typed `ammoClass: "none"` (melee) — "the one weapon in the whole catalog that
+  // both has four purchasable rounds and is modelled as having none" (docs/reports/suggested-adrs.md
+  // § A6). Reclassifying it belongs in the per-weapon compatibility work (#341+): changing a
+  // weapon's `ammoClass` is exactly the WIRE-FORMAT-GATED edit described above, and is out of this
+  // story's scope. SPEC-0010's "false for three weapons" language names Bomb Launcher, Chu Ko Nu,
+  // AND Bomb Lance; this pool now correctly serves the first two, and Bomb Lance's fix remains open.
+  //
+  // A known, pre-existing limitation this correction inherits rather than introduces: `special` is
+  // one shared pool for nine weapons with different real offers (this is the same class-pool
+  // simplification every other pool in this file already has), so a Dolch 96 slot will show Bomb
+  // Launcher's Harpoon as a selectable option even though the wiki gives Dolch 96 no such round.
+  // ADR-0014's per-weapon `availableAmmo` (#341+) is what actually scopes offers to the weapon that
+  // has them; this story only fixes what the shared pool contains and what it charges.
+  //
+  // Governing: issue #340, issue #373, ADR-0013, ADR-0014 (Per-Weapon Ammo Compatibility and
+  // Slots), SPEC-0010 REQ "A Scarce Round Costs Nothing and Is Still Selectable". Related: #361,
+  // #233, #254.
+  special: [
+    ["ammo-special-dragon-breath-charge", "Dragon Breath Charge", 10],
+    ["ammo-special-harpoon", "Harpoon", 5],
+    ["ammo-special-steel-ball", "Steel Ball", 5],
+    ["ammo-special-waxed-frag-charge", "Waxed Frag Charge", 50],
+    ["ammo-special-incendiary-bolt", "Incendiary Bolt", 25],
+    ["ammo-special-explosive-bolt", "Explosive Bolt", 0],
+    ["ammo-special-dumdum", "Dumdum", 0],
+    ["ammo-special-explosive", "Explosive", 0],
+    ["ammo-special-shredder", "Shredder", 0],
+  ],
   none: [],
 };
 
-// PROVENANCE (added 2026-08-15, issue #367). Unlike the TRAITS `up` costs above — which record a
-// verification date and source (huntshowdown.wiki.gg, current through Update 2.8.1) — the 31 prices
-// in AMMO above carry no such record anywhere in this repo: no `itemStats.json` entry, no test
-// asserting any individual value, and no note of who entered them or when. They are hand-authored,
-// source not recorded. That is consistent with SPEC-0007 REQ "Fields the Scraper Must Not Derive"
-// (AMMO is by design outside the scrape's reach, per the comment above the export), but
-// design-by-necessity isn't the same as sourced-and-dated, and this table has never had either.
+// PROVENANCE (added 2026-08-15, issue #367; updated 2026-08-16, issue #340). Unlike the TRAITS `up`
+// costs above — which record a verification date and source (huntshowdown.wiki.gg, current through
+// Update 2.8.1) — most of the prices in AMMO above still carry no such record anywhere in this
+// repo: no `itemStats.json` entry, no test asserting any individual value, and no note of who
+// entered them or when. They are hand-authored, source not recorded. That is consistent with
+// SPEC-0007 REQ "Fields the Scraper Must Not Derive" (AMMO is by design outside the scrape's reach,
+// per the comment above the export), but design-by-necessity isn't the same as sourced-and-dated,
+// and most of this table has never had either.
 //
-// This note does not assert any of the 31 values are wrong — the wiki was unreachable for the audit
-// this issue stems from, so nothing here is a correction. It also does not pin them: issue #365
-// covers adding a golden-snapshot test so a future edit can't silently change these numbers on a
-// green suite. That is a corroborating, separately-tracked fix, not this one — a pin without a
-// provenance note freezes unsourced numbers silently, and a provenance note without a pin leaves
-// them editable in silence. Both are wanted; neither substitutes for the other.
+// This note originally asserted that NONE of the 31 then-current values were known to be wrong,
+// because the wiki was unreachable for the audit issue #367 stemmed from. That is no longer true for
+// all of them: issue #340 corrected five (the compact/medium/slong/xbow/bow Scarce rows, each now
+// carrying its own dated comment above with a source) and added nine new `special`-pool rows, also
+// individually sourced above. The remaining ~26 original rows are unchanged and this paragraph's
+// original caveat still applies to exactly those: not known wrong, just not sourced either. It also
+// does not pin them: issue #365 covers adding a golden-snapshot test so a future edit can't silently
+// change these numbers on a green suite. That is a corroborating, separately-tracked fix, not this
+// one — a pin without a provenance note freezes unsourced numbers silently, and a provenance note
+// without a pin leaves them editable in silence. Both are wanted; neither substitutes for the other.
 //
-// Governing: issue #367, SPEC-0007 REQ "Fields the Scraper Must Not Derive", ADR-0014 (Per-Weapon
-// Ammo Compatibility and Slots).
+// Governing: issue #367, issue #340, SPEC-0007 REQ "Fields the Scraper Must Not Derive", ADR-0013,
+// ADR-0014 (Per-Weapon Ammo Compatibility and Slots).
 
 export const AMMO_LABEL = {
   compact: "Compact ammo",

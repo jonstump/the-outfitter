@@ -47,22 +47,82 @@ const entry = (arr, name) => arr.find((t) => t[1] === name);
 // is only safe with a FORMAT_VERSION bump (see loadoutCodec.js) and a migration for existing saved
 // selections. Do not "fix" a failure here by updating the expected value; fix it by doing the
 // migration the WIRE-FORMAT GATE comment requires, or by reverting the catalog change.
-describe("the AMMO wire-format pin (WIRE-FORMAT GATE, catalog.js ~32-45)", () => {
-  it("pins every AMMO pool's [name, price] contents, including the two empty pools", () => {
-    // A failure here means AMMO's contents changed — an insert, removal, reorder, or price edit to
-    // any pool. Per the WIRE-FORMAT GATE comment in catalog.js, that requires a FORMAT_VERSION bump
-    // and a saved-selection migration (a saved selection is a bare index into this array, so
-    // reordering or renumbering silently re-points existing saved loadouts at a different round).
+describe("the AMMO wire-format pin (WIRE-FORMAT GATE, catalog.js ~37-58)", () => {
+  // Governing: issue #340. Updated 2026-08-16 to the post-#340 shape: every row now carries a
+  // stable id as its first element (name shifted to [1], price to [2] — see the AMMO tuple shape
+  // note in catalog.js's header), five rows that were priced for a Scarce round were corrected to
+  // 0 (ADR-0013), and `special` gained nine rows instead of staying empty (ADR-0014). None of this
+  // reorders or renumbers an EXISTING index within a pool — the array lengths and orders of the
+  // eight previously-populated pools are byte-identical to before, and `special` went from empty
+  // to populated, which the WIRE-FORMAT GATE comment already calls the one safe structural edit
+  // (there is no existing index to move). So this pin is deliberately, consciously updated in the
+  // same commit that changed the data — exactly what the comment above it asks for — rather than
+  // silently regenerated.
+  it("pins every AMMO pool's [id, name, price] contents, including the still-empty none pool", () => {
+    // A failure here means AMMO's contents changed further — an insert, removal, or reorder that
+    // moves an EXISTING index. Per the WIRE-FORMAT GATE comment in catalog.js, that requires a
+    // FORMAT_VERSION bump and a saved-selection migration (a saved selection is a bare index into
+    // this array, so reordering or renumbering silently re-points existing saved loadouts at a
+    // different round).
     expect(AMMO, "AMMO pool contents changed — see the WIRE-FORMAT GATE comment in catalog.js and bump FORMAT_VERSION").toEqual({
-      compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
-      medium: [["FMJ", 22], ["Spitzer", 60], ["Dumdum", 28], ["Incendiary", 24], ["Poison", 21]],
-      long: [["FMJ", 30], ["Spitzer", 75], ["Dumdum", 34], ["Incendiary", 28]],
-      slong: [["FMJ", 35], ["Spitzer", 90], ["Incendiary", 32]],
-      shotgun: [["Slug", 28], ["Flechette", 26], ["Penny Shot", 22], ["Dragon Breath", 30], ["Starshell", 18]],
-      xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
-      hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
-      bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
-      special: [],
+      compact: [
+        ["ammo-compact-fmj", "FMJ", 15],
+        ["ammo-compact-high-velocity", "High Velocity", 13],
+        ["ammo-compact-dumdum", "Dumdum", 0],
+        ["ammo-compact-incendiary", "Incendiary", 18],
+        ["ammo-compact-poison", "Poison", 16],
+      ],
+      medium: [
+        ["ammo-medium-fmj", "FMJ", 22],
+        ["ammo-medium-spitzer", "Spitzer", 60],
+        ["ammo-medium-dumdum", "Dumdum", 0],
+        ["ammo-medium-incendiary", "Incendiary", 24],
+        ["ammo-medium-poison", "Poison", 21],
+      ],
+      long: [
+        ["ammo-long-fmj", "FMJ", 30],
+        ["ammo-long-spitzer", "Spitzer", 75],
+        ["ammo-long-dumdum", "Dumdum", 34],
+        ["ammo-long-incendiary", "Incendiary", 28],
+      ],
+      slong: [
+        ["ammo-slong-fmj", "FMJ", 35],
+        ["ammo-slong-spitzer", "Spitzer", 0],
+        ["ammo-slong-incendiary", "Incendiary", 32],
+      ],
+      shotgun: [
+        ["ammo-shotgun-slug", "Slug", 28],
+        ["ammo-shotgun-flechette", "Flechette", 26],
+        ["ammo-shotgun-penny-shot", "Penny Shot", 22],
+        ["ammo-shotgun-dragon-breath", "Dragon Breath", 30],
+        ["ammo-shotgun-starshell", "Starshell", 18],
+      ],
+      xbow: [
+        ["ammo-xbow-explosive-bolt", "Explosive Bolt", 0],
+        ["ammo-xbow-shot-bolt", "Shot Bolt", 30],
+        ["ammo-xbow-poison-bolt", "Poison Bolt", 25],
+      ],
+      hxbow: [
+        ["ammo-hxbow-chaos-bolt", "Chaos Bolt", 20],
+        ["ammo-hxbow-concertina-bolt", "Concertina Bolt", 35],
+        ["ammo-hxbow-choke-bolt", "Choke Bolt", 25],
+      ],
+      bow: [
+        ["ammo-bow-frag-arrow", "Frag Arrow", 0],
+        ["ammo-bow-concertina-arrow", "Concertina Arrow", 35],
+        ["ammo-bow-poison-arrow", "Poison Arrow", 25],
+      ],
+      special: [
+        ["ammo-special-dragon-breath-charge", "Dragon Breath Charge", 10],
+        ["ammo-special-harpoon", "Harpoon", 5],
+        ["ammo-special-steel-ball", "Steel Ball", 5],
+        ["ammo-special-waxed-frag-charge", "Waxed Frag Charge", 50],
+        ["ammo-special-incendiary-bolt", "Incendiary Bolt", 25],
+        ["ammo-special-explosive-bolt", "Explosive Bolt", 0],
+        ["ammo-special-dumdum", "Dumdum", 0],
+        ["ammo-special-explosive", "Explosive", 0],
+        ["ammo-special-shredder", "Shredder", 0],
+      ],
       none: [],
     });
   });
@@ -129,6 +189,48 @@ describe("the AMMO wire-format pin (WIRE-FORMAT GATE, catalog.js ~32-45)", () =>
   });
 });
 
+// Governing: issue #340, SPEC-0010 REQ "Ammo Rows Are Addressed by Stable Id" ("Every ammo round
+// SHALL be an ordinary catalog row carrying a stable, slug-style identifier, unique within the ammo
+// category"). Every OTHER category in this file has always carried unique, slug-style ids as its
+// first tuple element; ammo did not, until #340. This is that category's guard, extended across all
+// five now that ammo has ids too — not a new mechanism, the same one WEAPONS/TOOLS/CONS/TRAITS have
+// always needed and never had a standing check for either.
+describe("catalog id uniqueness and slug style", () => {
+  // Matches slugify()'s output shape (client/src/utils/slugify.js): lowercase, digits, and single
+  // hyphens, no leading/trailing hyphen. Ammo ids additionally carry an `ammo-{class}-` prefix
+  // (ADR-0014), which is itself slug-style, so the same pattern covers both.
+  const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+  const categories = {
+    WEAPONS,
+    TOOLS,
+    CONS,
+    TRAITS,
+  };
+
+  it.each(Object.entries(categories))("%s: every id is unique and slug-style", (_name, rows) => {
+    const ids = rows.map((r) => r[0]);
+    expect(new Set(ids).size, "duplicate id found").toBe(ids.length);
+    const malformed = ids.filter((id) => !SLUG_RE.test(id));
+    expect(malformed, "id(s) not in slug style").toEqual([]);
+  });
+
+  it("every AMMO id is unique across all ten pools and matches the ammo-{class}-{slug} convention", () => {
+    const allRows = Object.entries(AMMO).flatMap(([ammoClass, rows]) => rows.map((r) => ({ ammoClass, id: r[0] })));
+    const ids = allRows.map((r) => r.id);
+    expect(new Set(ids).size, "duplicate ammo id found").toBe(ids.length);
+
+    const malformed = ids.filter((id) => !SLUG_RE.test(id));
+    expect(malformed, "ammo id(s) not in slug style").toEqual([]);
+
+    // ADR-0014's convention: `ammo-{ammoClass}-{slugified round name}`. Asserted per row so a
+    // future addition that mints an id in the wrong pool's namespace fails here rather than only
+    // on a uniqueness collision (which a typo in the class segment could still dodge).
+    const wrongPrefix = allRows.filter((r) => !r.id.startsWith(`ammo-${r.ammoClass}-`)).map((r) => r.id);
+    expect(wrongPrefix, "ammo id(s) not prefixed with their own pool's ammo-{class}- namespace").toEqual([]);
+  });
+});
+
 describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", () => {
   it("reflects the Update 2.8 trait UP-cost rebalance", () => {
     expect(entry(TRAITS, "Frontiersman")[2]).toBe(6);
@@ -166,14 +268,18 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
     expect(entry(WEAPONS, "Nitro Express")[4]).toBe("special");
   });
 
-  // Governing: issue #373. Related: #361, #233, #254.
-  // The comment above AMMO.special in catalog.js justifies the pool's emptiness by
-  // saying every "special"-class weapon has no purchasable round — as a DERIVED claim,
-  // not a fixed roster, so it can't go stale the way the six-weapon prose enumeration
-  // did (#233 named six; #254 added three Dolch variants the comment never mentioned).
-  // This pins that invariant: it passes against today's nine special-class weapons and
-  // would fail the moment a weapon with a purchasable round were given ammoClass "special".
-  it("keeps AMMO.special empty for as long as every special-class weapon has it (#373)", () => {
+  // Governing: issue #340 (superseding #373), ADR-0013, ADR-0014. Related: #361, #233, #254.
+  //
+  // #373 pinned AMMO.special as empty, on the claim that every special-class weapon has no
+  // purchasable round. #340 corrected that claim: it was false for two of the nine (Bomb Launcher,
+  // Chu Ko Nu sell rounds for Hunt Dollars) and incomplete for another three (Dolch 96 and its
+  // variants, and Nitro Express, whose Scarce rounds should be selectable at 0 under ADR-0013,
+  // not omitted). See the block comment above AMMO.special in catalog.js for the full sourcing.
+  //
+  // This test now pins the OPPOSITE invariant #373 pinned: the membership list is unchanged (still
+  // the same nine weapons), but the pool itself is no longer empty, and every row's cost is
+  // consistent with ADR-0013 — zero iff the round is Scarce.
+  it("keeps AMMO.special's membership list, but the pool is no longer empty (#340)", () => {
     const specialWeapons = WEAPONS.filter((w) => w[4] === "special").map((w) => w[0]);
     expect(specialWeapons.sort()).toEqual(
       [
@@ -188,10 +294,40 @@ describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", 
         "shredder",
       ].sort(),
     );
-    // The substantive claim: as long as any weapon is "special"-class, the pool it draws
-    // from must stay empty, because none of those weapons' rounds are purchasable.
     expect(specialWeapons.length).toBeGreaterThan(0);
-    expect(AMMO.special).toEqual([]);
+    // The substantive claim #340 corrects: Bomb Launcher and Chu Ko Nu do sell rounds, so the pool
+    // that serves them must not be empty.
+    expect(AMMO.special.length).toBeGreaterThan(0);
+    expect(AMMO.special.map((r) => r[0]).sort()).toEqual(
+      [
+        "ammo-special-dragon-breath-charge",
+        "ammo-special-harpoon",
+        "ammo-special-steel-ball",
+        "ammo-special-waxed-frag-charge",
+        "ammo-special-incendiary-bolt",
+        "ammo-special-explosive-bolt",
+        "ammo-special-dumdum",
+        "ammo-special-explosive",
+        "ammo-special-shredder",
+      ].sort(),
+    );
+    // ADR-0013 both ways: the four Bomb Launcher rounds and Chu Ko Nu's Incendiary Bolt are
+    // purchasable (nonzero); the rest are Scarce rounds carried at 0.
+    const purchasable = ["Dragon Breath Charge", "Harpoon", "Steel Ball", "Waxed Frag Charge", "Incendiary Bolt"];
+    const scarce = ["Explosive Bolt", "Dumdum", "Explosive", "Shredder"];
+    AMMO.special.forEach((row) => {
+      if (purchasable.includes(row[1])) expect(row[2], row[1]).toBeGreaterThan(0);
+      if (scarce.includes(row[1])) expect(row[2], row[1]).toBe(0);
+    });
+  });
+
+  // Bomb Lance is the known, deliberately-not-fixed gap #340 leaves open: it sells the same four
+  // rounds as Bomb Launcher (same source, docs/reports/suggested-adrs.md § A6) but is still typed
+  // `ammoClass: "none"`, so it draws from no pool at all. Reclassifying it is a WIRE-FORMAT-GATED
+  // ammoClass change that belongs to the per-weapon compatibility work (#341+), not this story —
+  // pinned here so the gap is visible rather than silently assumed closed.
+  it("still types Bomb Lance as ammoClass none — a known gap #340 does not close", () => {
+    expect(entry(WEAPONS, "Bomb Lance")[4]).toBe("none");
   });
 
   it("moves beetles to Consumables and adds Fire Beetle (#38)", () => {

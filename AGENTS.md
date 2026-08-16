@@ -89,13 +89,19 @@ Style/rules that matter a great deal:
 - **Items are referenced by stable slug `id`, never by array position.** The wire format
   (`utils/loadoutCodec.js`), localStorage, saved loadout records, and share URLs all key on
   `id`. Reordering/inserting/removing entries is safe **only** because ids are stable.
-- **`AMMO` is the one exception and the closest thing to a foot-gun in this codebase.** A saved
-  ammo selection persists as a **bare index into `AMMO[ammoClass]`**. Inserting/removing/
-  reordering a variant inside a pool silently re-points every saved selection in that class,
-  and **nothing errors** — the cost line just changes. Appending to the END of a pool is the one
-  safe edit. Any other edit needs a `FORMAT_VERSION` bump + saved-selection migration, on the
-  same terms as changing a weapon's `ammoClass`. This is spelled out in a WIRE-FORMAT GATE
-  comment at the top of the file — read it.
+- **`AMMO` now carries a stable id too (issue #340), and is no longer the exception to the rule
+  above — every category in this file, `AMMO` included, is addressed by id.** What has NOT
+  changed yet is the *wire format itself*: `utils/loadoutCodec.js` still stores and reads a saved
+  ammo selection as a **bare index into `AMMO[ammoClass]`**, not by the new id, so inserting,
+  removing, or reordering a variant inside a pool still silently re-points every saved selection
+  in that class today, and **nothing errors** — the cost line just changes. Appending to the END
+  of a pool, or populating a pool that was previously empty, is still the one safe structural
+  edit; anything else still needs a `FORMAT_VERSION` bump + saved-selection migration, on the same
+  terms as changing a weapon's `ammoClass`. Wiring the decoder to resolve a selection by id — the
+  change that actually retires this hazard — is tracked separately (issue #343); until it lands,
+  edit `AMMO` with the same caution this file has always asked for. The full detail (and the
+  reasoning for why ids alone don't yet close the gap) is spelled out in a WIRE-FORMAT GATE
+  comment at the top of `catalog.js` — read it before editing any pool.
 - `AMMO` is **never written by a scrape** (wiki has no per-pool source page).
 
 ## The loadout wire format (`client/src/utils/loadoutCodec.js`)

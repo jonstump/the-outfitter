@@ -85,7 +85,12 @@ describe("WeaponSlot", () => {
 // state built some way nobody has thought of yet — costs a wrong label, not a white page.
 describe("WeaponSlot — an unresolvable ammo variant", () => {
   const compact = WEAPONS.findIndex((w) => w[4] === "compact");
-  const special = WEAPONS.findIndex((w) => w[4] === "special"); // no purchasable variants
+  // Governing: issue #340. Was `w[4] === "special"` until #340 populated AMMO.special with nine
+  // rows (Bomb Launcher/Chu Ko Nu's real prices, Dolch/Nitro's Scarce rounds at 0 — see the block
+  // comment above AMMO.special in catalog.js) — a special-class weapon now DOES draw a select with
+  // options, so it stopped fitting "no purchasable variants at all". `none`-class (melee) weapons
+  // are the ones that still genuinely have no ammo pool.
+  const none = WEAPONS.findIndex((w) => w[4] === "none"); // no purchasable variants
 
   it("renders a weapon whose ammo index is past the end of its variant list", () => {
     const { container } = renderSlot({
@@ -100,10 +105,10 @@ describe("WeaponSlot — an unresolvable ammo variant", () => {
 
   it("renders a weapon that has no purchasable variants at all", () => {
     const { container } = renderSlot({
-      loadout: loadoutState({ weapons: [{ i: special, a: 0 }, null] }),
+      loadout: loadoutState({ weapons: [{ i: none, a: 0 }, null] }),
     });
-    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[special][1]);
-    expect(container.querySelector(".weapon-cost")).toHaveTextContent(`$${WEAPONS[special][3]}`);
+    expect(container.querySelector(".weapon-name")).toHaveTextContent(WEAPONS[none][1]);
+    expect(container.querySelector(".weapon-cost")).toHaveTextContent(`$${WEAPONS[none][3]}`);
     // An empty pool renders no ammo row, so there is no control to fall back to — the
     // assertion that matters is simply that the slot drew at all.
     expect(container.querySelector("select")).not.toBeInTheDocument();

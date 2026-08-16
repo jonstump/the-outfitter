@@ -70,9 +70,13 @@ describe("totalCost", () => {
     const compact = WEAPONS.findIndex((w) => w[4] === "compact");
     expect(totalCost(loadoutWith({ weapons: [{ i: compact, a: 9999 }] }))).toBe(WEAPONS[compact][3]);
 
-    // `special` weapons have no purchasable variants at all — an empty pool, not a short one.
-    const special = WEAPONS.findIndex((w) => w[4] === "special");
-    expect(totalCost(loadoutWith({ weapons: [{ i: special, a: 0 }] }))).toBe(WEAPONS[special][3]);
+    // Governing: issue #340. `special` weapons used to have no purchasable variants at all — an
+    // empty pool, not a short one — but #340 populated AMMO.special with nine rows (see the block
+    // comment above AMMO.special in catalog.js), so index 0 now resolves to a real, priced round
+    // for a special-class weapon. `none`-class (melee) weapons are the ones still genuinely
+    // ammo-less; the assertion moves there to keep testing "a truly empty pool clamps to no ammo".
+    const none = WEAPONS.findIndex((w) => w[4] === "none");
+    expect(totalCost(loadoutWith({ weapons: [{ i: none, a: 0 }] }))).toBe(WEAPONS[none][3]);
   });
 });
 
