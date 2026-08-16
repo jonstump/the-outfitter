@@ -229,6 +229,8 @@ graph TD
 
 *(Read the version labels above as this capability's delta, not as current state — reviewed 2026-08-15. `FORMAT_VERSION` is now **3** and `db.json` holds a mix of v1, v2 and v3. The diagram is deliberately left at v2 because it documents what SPEC-0006 changed; v3 added the weapon-entry flag under SPEC-0009 and touched none of the nodes or edges drawn here — `CODEC` gained a `fromV3`, `VAL` gained a version-aware weapon check, and the equipment grid path is byte-for-byte the one shown.)*
 
+*(Also reviewed 2026-08-16, via `/sdd:audit`: `placement.js` as its own file was never built. `hasFreeCell`/`firstFreeCell` landed in `calc.js` instead, and the stack-run helper shipped as `equipRuns` in `utils/stacking.js` rather than as `runsOf`/`canDrop` in a dedicated module. Read every `placement.js` reference below — the diagram node, the sequence-diagram participant, and Migration Plan step 2 — as the six-consumers *problem statement* this design was solving, not as the shipped file layout. The capacity/placement rules the diagram argues for are still centralized and consistent; they're just not in the file this document names.)*
+
 The new `placement.js` is the answer to the six-consumers problem: every question about where an item may go is asked there, by the reducer, the picker, the drag sensors, and the randomizer alike.
 
 A stack move is the interaction with the most moving parts, and the one where the pointer and keyboard routes must provably agree:

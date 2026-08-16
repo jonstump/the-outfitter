@@ -93,48 +93,45 @@ is by some distance the largest gate on this list.
       derivations and a shape guard that accepts a short array are not soundness a desktop build should
       be sealed around.
 
-- [ ] **The rebrand to "Backwater Outfitters" — not started, and it goes first.** #424. The app is
-      branded "The Outfitter" in-app and across the docs; the name is changing. This gates the desktop
-      build by *ordering* rather than by size: an installed application carries its name in the
-      installer, the bundle identifier and the artifact filenames, and a desktop user cannot be
-      renamed out of it the way a web page can be redeployed. Doing it before the packaging work is
-      nearly free; doing it after a build ships is not doing it at all.
+- [x] **The rebrand to "Backwater Outfitters" — clear, 2026-08-16 (PR #463).** #424. The app was
+      branded "The Outfitter" in-app and across the docs; it was renamed. This gate existed by
+      *ordering* rather than by size: an installed application carries its name in the installer, the
+      bundle identifier and the artifact filenames, and a desktop user cannot be renamed out of it the
+      way a web page can be redeployed. Doing it before the packaging work was nearly free; doing it
+      after a build ships would not have been doing it at all.
 
-      **The copy rename is low-risk. A grep for the name is not.** The surface is 40 files and 80
-      occurrences, almost all prose — but the same grep hits identifiers that are not brand, and
-      renaming those fails *silently*, with no error and no way for a user to recover. These MUST NOT
-      be renamed by this work: `hunt-outfitter-token` (`client/src/api/loadouts.js`) — the ownership
-      token SPEC-0003 scopes every saved loadout by, so a new key makes a user's own server-side
+      **The copy rename was low-risk. A grep for the name was not.** The surface was 40 files and 80
+      occurrences, almost all prose — but the same grep hit identifiers that are not brand, and
+      renaming those would have failed *silently*, with no error and no way for a user to recover.
+      These were verified untouched by reading their live literal values post-merge, not just trusting
+      the PR's own grep claims: `hunt-outfitter-token` (`client/src/api/loadouts.js`) — the ownership
+      token SPEC-0003 scopes every saved loadout by, so a new key would make a user's own server-side
       loadouts unreachable and undeletable; `hunt-outfitter-current`
       (`client/src/utils/loadoutCodec.js`) and `hunt-outfitter-selected-list`
-      (`client/src/store/uiSlice.js`) — a new key reads empty, so every returning user opens to a blank
-      build; `OUTFITTER_DB_FILE` (`server/src/db.js`, `.env.example`, `server/package.json`) — the env
-      var every deployment sets, and the exact seam the Per-User Data Directory requirement below
-      relies on; and `render.yaml`'s service name `the-outfitter` and disk name `outfitter-data` —
-      renaming a persistent disk provisions a new empty volume and strands the deployed data. The
-      npm workspace names (`@the-outfitter/client`, `@the-outfitter/server`) are safe to change but
-      are internal plumbing rather than brand, so leaving them is the smaller diff.
+      (`client/src/store/uiSlice.js`) — a new key would read empty, so every returning user would open
+      to a blank build; `OUTFITTER_DB_FILE` (`server/src/db.js`, `.env.example`, `server/package.json`)
+      — the env var every deployment sets, and the exact seam the Per-User Data Directory requirement
+      below relies on; and `render.yaml`'s service name `the-outfitter` and disk name `outfitter-data`
+      — renaming a persistent disk would provision a new empty volume and strand the deployed data. The
+      npm workspace names (`@the-outfitter/client`, `@the-outfitter/server`) were left unrenamed as the
+      smaller diff — they were safe to change, just internal plumbing rather than brand, not something
+      this work needed to touch.
 
-      **The rule: rename display strings and prose; leave every storage key, env var, deployment name
-      and package name exactly as it is.** #424's own wording is "everywhere the name shows up to a
-      user or a reader of the docs", which is correct — this bullet exists so that a grep is not
-      mistaken for that instruction.
+      Reviewed independently twice before merging: once in the session that filed this correction, once
+      in a separate session sharing the same local repo.
 
-- [ ] **The application icon — not started, and the app has no mark at all.** #428. This is not
-      "replace the placeholder": verified against `main` = `1a5791e`, there is no `<link rel="icon">`
-      in `client/index.html` and no `favicon.*` anywhere in the repo, so the page renders the browser's
-      default document glyph. A packaged build with no icon ships the framework's default Electron
-      logo, which reads to a user as someone else's application.
-
-      Every packaging target in "Reproducible Three-Platform Release Artifacts" names an icon, and an
-      NSIS installer, a DMG and a Linux desktop entry all display it before the app runs. The
-      deliverable is one high-resolution master plus the web wiring; electron-builder generates the
-      `.icns`, `.ico` and PNG sets from that master, so this is not three hand-made icon sets. The web
-      favicon must come from the same mark — the hosted app and the desktop app are one product.
+- [x] **The application icon — clear, 2026-08-16 (PR #459).** #428. Landed *ahead of* the rebrand above
+      on the owner's explicit call — the mark is a pure pictorial symbol with no wordmark baked in,
+      confirmed to contain no text, so it doesn't visually contradict either name. `client/index.html`
+      now wires `favicon.ico`, `favicon.svg`, and `apple-touch-icon.png`, all present under
+      `client/public/`; electron-builder's `.icns`/`.ico`/PNG sets generate from the same master.
+      Review caught and fixed one defect before merge: the original `sizes="any"` on the `.ico`
+      `<link>` tag is deprecated for that exact purpose (it made Chrome download both the ICO and the
+      SVG instead of preferring one) — corrected to `sizes="32x32"`.
 
       **Not SPEC-0001 "Equipment Iconography".** That governs the in-app item artwork under
-      `client/public/images/`, which is shipped, generated by the image scrape, and unrelated. Do not
-      conflate the two, and do not let this work touch that tree.
+      `client/public/images/`, which is shipped, generated by the image scrape, and unrelated to this
+      gate.
 
 - [ ] **The ammo data is corrected — not started, and this is the largest gate here.** SPEC-0010
       (`status: draft`), epic #338 with ten stories, none begun. The case is this section's own bar

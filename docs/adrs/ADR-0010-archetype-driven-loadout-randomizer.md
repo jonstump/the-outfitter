@@ -8,6 +8,8 @@ related: [ADR-0005, ADR-0009]
 
 # ADR-0010: Generate Random Loadouts from Weighted Archetypes with an Injectable RNG
 
+**Implementation status (added 2026-08-16, via `/sdd:audit`): this decision is accepted but not yet implemented.** `client/src/utils/archetypes.js` does not exist, and `randomize.js` is still the uniform-sampling pipeline described as the problem below — the rewrite this ADR decides on hasn't started. SPEC-0008 (the governing spec) discloses this in its own "Implementation status" section; this ADR's body below reads as if the pipeline already shipped and should be read as decision rationale, not as a description of current code.
+
 ## Context and Problem Statement
 
 `client/src/utils/randomize.js` builds a random loadout by sampling each part of the
@@ -223,7 +225,7 @@ graph TD
 * The three defects this ADR addresses, concretely: traits are drawn at
   [randomize.js:18-27](client/src/utils/randomize.js:18) before weapons are drawn at
   [randomize.js:30-37](client/src/utils/randomize.js:30), so no pairing rule can exist;
-  `Math.random()` is called directly seven times, so nothing is seedable; and the budget
+  `Math.random()` is called directly ten times (re-verified 2026-08-16, per SPEC-0008), so nothing is seedable; and the budget
   loop at [randomize.js:62-71](client/src/utils/randomize.js:62) re-rolls blindly 80 times
   and keeps the cheapest miss, while the UP cap is a greedy accept/skip at
   [randomize.js:23](client/src/utils/randomize.js:23) with no retry at all

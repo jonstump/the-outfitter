@@ -1,7 +1,7 @@
 ---
 status: implemented
 date: 2026-08-11
-implements: [ADR-0006, ADR-0011, ADR-0012, ADR-0013]
+implements: [ADR-0006, ADR-0011, ADR-0012, ADR-0013, ADR-0022]
 requires: [SPEC-0001, SPEC-0004]
 ---
 
@@ -19,12 +19,12 @@ Portrait assets are self-hosted scraped images and therefore inherit the sourcin
 
 See ADR-0006 for the decision record and the rejected alternatives.
 
-**Two requirements were added 2026-08-13** *(per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md), tracked by #102 and #315)*; **the server half of the first has now shipped**.
+**Two requirements were added 2026-08-13** *(per [ADR-0022](../../../adrs/ADR-0022-loadout-identity-and-derived-names.md), tracked by #102, #314 and #315)*; **both have since shipped**, confirmed via `/sdd:audit` 2026-08-16.
 
-- **"Loadout Identity Is Scoped to Its List"** — ~~the server still upserts on `(owner, name)`, so two loadouts sharing a name in different lists silently overwrite one another~~ — **the upsert key became the triple `(owner, listId, name)` in #319**, so the same name in two lists is two records and neither relocates. **One clause of the requirement is still outstanding**: its last paragraph puts a loaded loadout's write-back on the record id rather than the triple, and that provenance is client-side — #314. Read the requirement as implemented on the server and unbuilt on the client.
-- **"A Loadout's Name Is Derived From Its Weapons Until the User Owns It"** — specified below and **still unbuilt** (#315).
+- **"Loadout Identity Is Scoped to Its List"** — ~~the server still upserts on `(owner, name)`, so two loadouts sharing a name in different lists silently overwrite one another~~ — **the upsert key became the triple `(owner, listId, name)` in #319**, so the same name in two lists is two records and neither relocates. The requirement's last paragraph, the loaded loadout's write-back onto the record id, **shipped client-side in #320/#321** — `loadSavedThunk` sets `savedId: record.id` on load (`client/src/store/thunks.js`).
+- **"A Loadout's Name Is Derived From Its Weapons Until the User Owns It"** — **shipped in #322** (`nameIsDerived`/`derivedName()` in `client/src/store/loadoutSlice.js`), with integration coverage added in #324.
 
-The `status: implemented` field below covers the capability **as originally specified**; it is left unchanged rather than reverted because the original scope did ship, and this paragraph is what stops that field being read as covering these two.
+The `status: implemented` field below now correctly covers these two requirements as well as the capability's original scope.
 
 **The ordering constraint is load-bearing and is easy to lose at planning time:** the identity fix must land and deploy before derived naming. A derived name is a pure function of the weapon pair, so shipping naming first makes same-name collisions the default outcome rather than a rare one — silently, and in exactly the case the identity fix exists to prevent. **Landing is done (#319); the constraint now rests on deployment** — #315 MUST NOT ship until the triple key is live, not merely merged.
 

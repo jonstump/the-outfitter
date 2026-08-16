@@ -26,7 +26,7 @@ A Hunt: Showdown loadout builder — pick weapons, equipment, and traits, then s
 Install dependencies from the repo root:
 
 ```bash
-npm install
+npm ci
 ```
 
 Run the client and server together in dev mode:

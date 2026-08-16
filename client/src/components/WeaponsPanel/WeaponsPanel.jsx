@@ -2,6 +2,10 @@ import { useSelector } from "react-redux";
 import { selectCapMax, selectCapUsed } from "../../store/selectors.js";
 import WeaponSlot from "./WeaponSlot.jsx";
 
+// Governing: ADR-0009 (size cap derived from the equipment grid model), SPEC-0009
+// (weapon slot count and capacity display). Renders the two weapon slots plus the
+// shared capacity/pip readout that ADR-0009's size cap feeds.
+
 export default function WeaponsPanel() {
   const max = useSelector(selectCapMax);
   const used = useSelector(selectCapUsed);
