@@ -143,6 +143,11 @@ function isValidData(data) {
   }
   if (!Array.isArray(data.tr) || data.tr.length > MAX_TRAITS) return reject("tr");
   if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return reject("tr");
+  // Governing: issue #357. A trait list carrying duplicate ids inflates the decoded
+  // loadout's upgrade-point total and burns the trait budget on one entry. The same
+  // distinctness check already used for `data.b` (line 154) applies here — the cap is
+  // fifteen DISTINCT traits, not fifteen copies of one.
+  if (new Set(data.tr).size !== data.tr.length) return reject("tr");
   if (typeof data.n !== "string" || data.n.length > 200) return reject("n");
   if (data.b !== undefined) {
     if (isV2OrLater) {

@@ -16,7 +16,7 @@ import {
   readStoredLoadout,
   toData,
 } from "./loadoutCodec.js";
-import { TRAIT_MAX, capUsed } from "./calc.js";
+import { TRAIT_MAX, capUsed, upTotal } from "./calc.js";
 
 // Governing: issue #26 (stable catalog ids + schema versioning for saved/share encodings)
 //
@@ -464,6 +464,44 @@ describe("every decoder clamps a trait list to the cap", () => {
     // clamps rather than throwing (a decoded loadout is persisted before it is rendered).
     const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
     expect(toData(dec).tr).toHaveLength(TRAIT_MAX);
+  });
+});
+
+// Governing: issue #357 (boundedTraits admits duplicate trait ids), ADR-0012 (fifteen-trait cap)
+//
+// `boundedTraits` slices to TRAIT_MAX but never deduped, so a crafted v2/legacy payload of
+// fifteen copies of `quartermaster` decoded to fifteen copies, burned the whole trait budget,
+// and inflated `upTotal` (which charges per copy). The dedupe happens before the slice so the
+// cap counts fifteen DISTINCT traits. Asserted against both the current and legacy decoders.
+describe("boundedTraits dedupes trait ids before the fifteen-trait clamp (issue #357)", () => {
+  const QM = "quartermaster";
+  const QM_UP = TRAITS.find((t) => t[0] === QM)[2];
+
+  it("a v2 payload of fifteen copies of one trait decodes to a single trait", () => {
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: Array(TRAIT_MAX).fill(QM) });
+    expect(dec.traits).toEqual([QM]);
+    expect(upTotal(dec)).toBe(QM_UP);
+  });
+
+  it("fifteen copies through the legacy decoder produce the same single-trait result", () => {
+    // Legacy trait index 0 is `quartermaster` (LEGACY_TRAIT_IDS[0]).
+    expect(LEGACY_TRAIT_IDS[0]).toBe(QM);
+    const dec = fromData({ w: [null, null], e: [], tr: Array(TRAIT_MAX).fill(0) });
+    expect(dec.traits).toEqual([QM]);
+    expect(upTotal(dec)).toBe(QM_UP);
+  });
+
+  it("fifteen DISTINCT trait ids still decode to fifteen (regression guard)", () => {
+    const distinct = TRAITS.slice(0, TRAIT_MAX).map((t) => t[0]);
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: distinct });
+    expect(dec.traits).toEqual(distinct);
+    expect(dec.traits).toHaveLength(TRAIT_MAX);
+  });
+
+  it("does not over-dedupe a list with repeats under the cap", () => {
+    // Two copies of one trait and one other: the dedupe keeps two distinct traits.
+    const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: [QM, QM, "fanning"] });
+    expect(dec.traits).toEqual([QM, "fanning"]);
   });
 });
 

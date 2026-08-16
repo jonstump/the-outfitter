@@ -87,11 +87,18 @@ function boundedAmmo(weaponIndex, value) {
  * decoder's own resolution step (id filter in v1, positional translation in legacy) so the cap
  * counts traits the loadout actually holds rather than entries that were about to be dropped.
  *
+ * Governing: issue #357. Duplicate trait ids are collapsed BEFORE the slice, so the cap counts
+ * fifteen DISTINCT traits — without this, a crafted payload of fifteen copies of `quartermaster`
+ * decoded to fifteen copies, burned the whole trait budget, and inflated `upTotal` (which charges
+ * per copy). The manual UI already guards against re-adding a present trait (`addTrait`); this
+ * only matters for hand-crafted or tampered records, but the decoder is the single chokepoint
+ * every decode path shares, so fixing it here covers all three decoders at once.
+ *
  * Both decoders call this. A bound carried by one decoder and not the other is the defect PR
  * #203 had to fix for the ammo index, and is the reason this lives in one function.
  */
 function boundedTraits(ids) {
-  return ids.slice(0, TRAIT_MAX);
+  return [...new Set(ids)].slice(0, TRAIT_MAX);
 }
 
 /**
