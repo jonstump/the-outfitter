@@ -97,7 +97,8 @@ export const AMMO_LABEL = {
 // column drifts from the dataset. Rows the dataset does not cover are skipped, not failed.
 export const WEAPONS = [
   ["nagant-m1895", "Nagant M1895", 1, 24, "compact", "Pistols"],
-  ["caldwell-conversion-pistol", "Conversion", 1, 55, "medium", "Pistols"],
+  // Governing: issue #355. Wiki confirms AmmoType: Compact for both Conversion variants.
+  ["caldwell-conversion-pistol", "Conversion", 1, 55, "compact", "Pistols"],
   ["scottfield-model-3", "Scottfield", 1, 77, "medium", "Pistols"],
   ["bornheim-no-3", "Bornheim No. 3", 1, 146, "compact", "Pistols"],
   ["caldwell-pax", "Pax", 1, 80, "medium", "Pistols"],
@@ -282,7 +283,7 @@ export const WEAPONS = [
   ["centennial-shorty-silencer", "Centennial Shorty Silencer", 2, 137, "medium", "Rifles"],
   ["centennial-sniper", "Centennial Sniper", 4, 181, "medium", "Rifles"],
   ["centennial-trauma", "Centennial Trauma", 4, 167, "medium", "Rifles"],
-  ["conversion-chain-pistol", "Conversion Chain Pistol", 1, 84, "medium", "Pistols"],
+  ["conversion-chain-pistol", "Conversion Chain Pistol", 1, 84, "compact", "Pistols"],
   ["crossbow-deadeye", "Crossbow Deadeye", 4, 53, "xbow", "Bows"],
   ["dolch-96-bullseye", "Dolch 96 Bullseye", 2, 725, "special", "Pistols"],
   ["dolch-96-claw", "Dolch 96 Claw", 2, 700, "special", "Pistols"],
