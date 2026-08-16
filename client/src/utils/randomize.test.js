@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CONS, FIRST_AID_KIT, TOOLS } from "../data/catalog.js";
+import { CONS, FIRST_AID_KIT, TOOLS, WEAPONS } from "../data/catalog.js";
+import { ammoSlotsFor } from "../data/itemStats.js";
 import { fromData, toData } from "./loadoutCodec.js";
 
 import { TRAIT_MAX } from "./calc.js";
@@ -95,5 +96,34 @@ describe("randomizeLoadout", () => {
     const result = randomizeLoadout({ blocked: [], budgetOn: true, budget: 150 });
     expect(result.weapons.length).toBe(2);
     expect(held(result).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Governing: ADR-0014, SPEC-0010 REQ "A Weapon Holds Up to Two Independently Chosen
+  // Rounds", issue #344/#462. #344's own acceptance criteria asked for exactly this as a
+  // "regression guard": a generated loadout whose weapon holds an incompatible round must
+  // fail this suite. `mkAmmo` (randomize.js) draws each slot from
+  // `ammoSlotsFor(weaponId).groups[slotIndex]` — this pins that every non-null draw, across
+  // many generated loadouts, really is a member of that weapon's own group for that slot,
+  // never some other weapon's or the retired shared AMMO[ammoClass] pool.
+  it("never selects an ammo id outside the weapon's own accepted list, across many generated loadouts", () => {
+    let checkedAtLeastOneFilledSlot = false;
+    for (let k = 0; k < 50; k++) {
+      const r = randomizeLoadout({ blocked: [] });
+      for (const w of r.weapons) {
+        if (!w) continue;
+        const weaponId = WEAPONS[w.i][0];
+        const slots = ammoSlotsFor(weaponId);
+        w.ammo.forEach((ammoId, slotIndex) => {
+          if (ammoId === null) return;
+          checkedAtLeastOneFilledSlot = true;
+          const group = slots.groups[slotIndex] ?? [];
+          expect(group.some((round) => round.id === ammoId)).toBe(true);
+        });
+      }
+    }
+    // The draw is random (30% per slot per #384/#344's odds) but near-certain to fill at
+    // least one slot across 50 loadouts of up to 2 weapons x 2 slots each — if this is ever
+    // false, the assertions above were vacuously true rather than exercising anything.
+    expect(checkedAtLeastOneFilledSlot).toBe(true);
   });
 });
