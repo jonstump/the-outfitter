@@ -230,7 +230,8 @@ describe("setLoadout", () => {
     store.dispatch(
       loadoutActions.setLoadout({
         weapons: [{ i: 0, a: -1 }, null],
-        equip: [{ t: "T", i: 0 }],
+        // Padded to eight cells (ADR-0009): the shape guard requires exactly eight (#382).
+        equip: [{ t: "T", i: 0 }, null, null, null, null, null, null, null],
         traits: ["quartermaster"],
       })
     );
@@ -250,12 +251,60 @@ describe("setLoadout", () => {
     ).toThrow();
   });
 
+  // Governing: ADR-0009 (fixed eight-cell grid), SPEC-0006, issue #382
+  //
+  // The shape guard used to be an UPPER bound only (`equip.length > 8`), so a shorter
+  // array passed through verbatim — after which `hasFreeCell` finds no `null` and
+  // reports the grid full, while EquipmentPanel still renders eight cells. The guard
+  // is now exact, matching the server's existing check (server/src/routes/loadouts.js).
+  describe("the equip shape guard is exact, not an upper bound (#382)", () => {
+    const validWeapons = [null, null];
+
+    it("rejects a three-cell equip array, leaving the store unchanged", () => {
+      const store = makeStore();
+      store.dispatch(loadoutActions.setName("Keep me"));
+      const before = store.getState().loadout;
+      expect(() =>
+        store.dispatch(
+          loadoutActions.setLoadout({ weapons: validWeapons, equip: [null, null, null], traits: [] })
+        )
+      ).toThrow();
+      expect(store.getState().loadout).toEqual(before);
+    });
+
+    it("still rejects a nine-cell equip array (the upper bound must not regress)", () => {
+      const store = makeStore();
+      store.dispatch(loadoutActions.setName("Keep me"));
+      const before = store.getState().loadout;
+      expect(() =>
+        store.dispatch(
+          loadoutActions.setLoadout({ weapons: validWeapons, equip: Array(9).fill(null), traits: [] })
+        )
+      ).toThrow();
+      expect(store.getState().loadout).toEqual(before);
+    });
+
+    it("accepts an exactly-eight-cell equip array", () => {
+      const store = makeStore();
+      store.dispatch(
+        loadoutActions.setLoadout({
+          weapons: validWeapons,
+          equip: [{ t: "T", i: 0 }, null, null, null, null, null, null, null],
+          traits: [],
+        })
+      );
+      expect(store.getState().loadout.equip).toHaveLength(8);
+      expect(store.getState().loadout.equip[0]).toEqual({ t: "T", i: 0 });
+    });
+  });
+
   it("stores traits by stable id, consistent with upTotal/QM checks", () => {
     const store = makeStore();
     store.dispatch(
       loadoutActions.setLoadout({
         weapons: [null, null],
-        equip: [],
+        // Padded to eight cells (ADR-0009): the shape guard requires exactly eight (#382).
+        equip: Array(8).fill(null),
         traits: ["quartermaster", "fanning"],
         name: "x",
         blocked: [],
@@ -748,7 +797,8 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
           { i: HAYMAKER, a: -1, d: true }, // haymaker: shared size with the Uppercut, NOT pairable
           null,
         ],
-        equip: [],
+        // Padded to eight cells (ADR-0009): the shape guard requires exactly eight (#382).
+        equip: Array(8).fill(null),
         traits: [],
       })
     );
@@ -764,7 +814,9 @@ describe("SPEC-0009: the dual-wield pair flag in state", () => {
     store.dispatch(loadoutActions.setAmmo({ slot: 0, ammoIndex: AMMO_INDEX }));
     const before = store.getState().loadout.weapons[0].a;
     // The pair flag is normalized onto a state entry that already carries its ammo.
-    store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }, null], equip: [], traits: [] }));
+    // `equip` comes from the emptyLoadout() spread (already eight cells, ADR-0009) —
+    // the shape guard requires exactly eight, not overridden here (#382).
+    store.dispatch(loadoutActions.setLoadout({ ...emptyLoadout(), weapons: [{ i: PISTOL, a: AMMO_INDEX, d: true }, null], traits: [] }));
     expect(store.getState().loadout.weapons[0].a).toBe(before);
     expect(store.getState().loadout.weapons[0].d).toBe(true);
     expect(Object.keys(store.getState().loadout.weapons[0]).sort()).toEqual(["a", "d", "i"].sort());

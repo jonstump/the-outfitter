@@ -22,7 +22,12 @@ import { emptyLoadout } from "../utils/loadoutCodec.js";
 function isValidLoadoutShape(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (typeof payload.weapons !== "object" || !Array.isArray(payload.weapons) || payload.weapons.length !== 2) return false;
-  if (typeof payload.equip !== "object" || !Array.isArray(payload.equip) || payload.equip.length > 8) return false;
+  // Governing: ADR-0009 (fixed eight-cell grid), SPEC-0006, issue #382
+  // Exact, not an upper bound — a shorter array used to pass through verbatim, after
+  // which hasFreeCell finds no `null` and reports the grid full while EquipmentPanel
+  // still renders eight cells. The server enforces this same exact check
+  // (server/src/routes/loadouts.js), so this brings the client guard in line.
+  if (typeof payload.equip !== "object" || !Array.isArray(payload.equip) || payload.equip.length !== 8) return false;
   // Steady-state blocked cells are array-shaped (ADR-0009, v2), but bulk payloads
   // are still accepted for the legacy/blind-merge shape guard, and #278's flagged
   // gap means a payload may carry either a count or an array.
