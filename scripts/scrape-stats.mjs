@@ -118,6 +118,7 @@ import {
   readRlconf,
   recordResult,
   resolveWikiPath,
+  slugify,
   tidyProse,
 } from "./lib/wiki.mjs";
 
@@ -471,6 +472,10 @@ export async function scrapeItemStats(target, deps) {
   const categories = parsePageCategories(html);
   // Also whole-page. A page's description describes the base item; variant sub-pages have their own.
   const description = parseDescription(html);
+  // Also whole-page: the `== Ammo Types ==` section is a body section, not an infobox row, so it is
+  // read from `html` directly rather than from `fields`. null on the eight pages with no such section
+  // (six melee weapons, Flame Rifle, Shredder) — see buildAmmoRecord.
+  const ammo = buildAmmoRecord(html, fields);
 
   return {
     status: "succeeded",
@@ -481,6 +486,7 @@ export async function scrapeItemStats(target, deps) {
     canonicalTitle,
     categories,
     description,
+    ammo,
     // SPEC-0007 REQ "Canonical Titles Are Read From the Page": an HTTP 200 does not confirm the
     // catalog's display name is current, because MediaWiki serves renamed pages through redirects.
     // Comparing what the page calls itself against what the catalog calls it turns a rename into a
@@ -517,6 +523,10 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
     // description string satisfies §3.0 while leaving dual-wieldability locked inside a blob of text —
     // it must be lifted to its own boolean to be queryable." Three-valued; see dualWieldFrom.
     dualWield: dualWieldFrom(result.description),
+    // Per-weapon ammo compatibility, price and slot signals (SPEC-0010, issue #341). `null` on the
+    // eight pages with no Ammo Types section; see buildAmmoRecord. Never derived into ammoClass or
+    // AMMO — both stay NEVER_DERIVED, per SPEC-0007 and this issue's own AGENTS.md correction.
+    ammo: result.ammo ?? null,
     // Scrape metadata, never a catalog field, and never `group` (SPEC-0007 REQ "Acquisition Class
     // Is Captured So Roster Membership Is Checkable"). This is what makes "should this item have a
     // row?" checkable instead of arguable.
@@ -898,6 +908,345 @@ const DUAL_WIELD_SIGNAL = /can be dual[-\s]?wielded/i;
 export function dualWieldFrom(description) {
   if (description === null || description === undefined || String(description).trim() === "") return null;
   return DUAL_WIELD_SIGNAL.test(String(description));
+}
+
+// ---------------------------------------------------------------------------
+// Per-weapon ammo (issue #341; part of epic #338).
+//
+// Governing: SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts", REQ "Price Belongs to the
+// Weapon-and-Round Pair", REQ "A Weapon Declares Its Own Ammo Slot Count", REQ "A Dual-Family Weapon
+// Declares Both Families", REQ "The Scrape Observes and Does Not Decide", issue #341
+//
+// A weapon page carries a `== Ammo Types ==` body section (located the same way parseDescription
+// locates `== Description ==`: by the `mw-headline` span's id, not by a positional `<h2>` count,
+// because the page's own table of contents is itself an `<h2>` with no headline span). Eight pages
+// have none — six melee weapons (Cavalry Saber, Combat Axe, Railroad Hammer, Baseball Bat, Machete,
+// Katana), Flame Rifle, and Shredder. A seventh melee catalog row, Bomb Lance, DOES carry a section
+// (it takes Lance ammo) and is deliberately not in that list.
+//
+// REQ "A Weapon Declares Which Rounds It Accepts" requires the accepted-round list come from THIS
+// section, never from the page's own category tags (`#catlinks`). Category membership agrees with
+// the section on 138 of 147 pages; the nine failures share one shape — a round's own wiki category
+// is a BARE name ("Explosive_Ammo", "Poison_Ammo", "Flechette") with no family qualifier, and that
+// bare name is reused across genuinely different ammo pools. The Crossbow's Explosive Bolt and a
+// Long-class rifle's Explosive Ammo both carry `Category:Explosive_Ammo`; a reader keyed on that tag
+// alone cannot tell them apart, and /wiki/Ammo itself warns of exactly this for Hand Crossbow vs. Chu
+// Ko Nu: "they do not share compatible ammo types despite sharing a name and description." So this
+// module reads the SECTION, and only uses categories after the fact, to flag disagreements for
+// review — see findAmmoCategoryDisagreements.
+//
+// Each round paragraph in the section carries its own family, encoded in its icon's filename
+// (`/images/thumb/Ammo_{Family}_{Round}.png/...`) rather than in any visible text. That filename is
+// the one place on the page a round's TRUE pool is stated unambiguously per-round rather than
+// per-page — AMMO_FAMILY_TOKENS below is that vocabulary, sampled from real pages fetched 2026-08-16
+// (Nagant M1895, Drilling [+ Hatchet, Shorty], LeMat [+ Carbine, Carbine Marksman], Haymaker, Nitro
+// Express, Rival 78 [+ Mace], Crossbow, Hand Crossbow, Chu Ko Nu, Berthier 1892, Bomb Lance, Dolch 96,
+// Mako 1895 [+ Aperture, Claw]) and mapped to the existing ammoIds.js class tokens wherever one of the
+// 8 legacy classes genuinely corresponds (compact/medium/long/slong/shotgun/xbow/hxbow/bow), so a
+// round already in LEGACY_AMMO_IDS mints the SAME id here (`ammo-compact-fmj`, not a second spelling).
+// Three families have no legacy home at all — Chu Ko Nu's own icons, Nitro Express's, and Dolch 96's —
+// because the old ten-pool model had nowhere to put them; those mint new tokens (`chukonu`, `nitro`,
+// `dolch`) rather than being folded into `special`, which is exactly the conflation trap #1 above.
+//
+// A round unmatched by this table is NOT guessed at: `family` and `id` are both recorded null, same
+// posture as `purchasable: null` elsewhere in this file — no evidence either way, reported rather than
+// defaulted.
+export const AMMO_FAMILY_TOKENS = [
+  // Longest prefix wins (see ammoFamilyFromIcon) so "Compact_Bolt" is never shadowed by "Compact".
+  ["Compact_Bolt", "hxbow"],
+  ["Special_Long", "slong"],
+  ["Chu_Ko_Nu", "chukonu"],
+  ["Compact", "compact"],
+  ["Medium", "medium"],
+  ["Long", "long"],
+  ["Shell", "shotgun"],
+  ["Bolt", "xbow"],
+  ["Nitro", "nitro"],
+  ["Arrow", "bow"],
+  ["Dolch", "dolch"],
+  ["Lance", "lance"],
+];
+
+const AMMO_FAMILY_TOKENS_BY_LENGTH = [...AMMO_FAMILY_TOKENS].sort((a, b) => b[0].length - a[0].length);
+
+/** Resolve an icon filename's family segment (e.g. "Compact_Dumdum") to an id-family, or null. */
+export function ammoFamilyFromIcon(iconSlug) {
+  if (!iconSlug) return null;
+  for (const [prefix, family] of AMMO_FAMILY_TOKENS_BY_LENGTH) {
+    if (iconSlug === prefix || iconSlug.startsWith(`${prefix}_`)) return family;
+  }
+  return null;
+}
+
+/**
+ * The `== Ammo Types ==` section body, or null when the page carries none.
+ *
+ * Same technique as parseDescription: locate the `mw-headline` span by id, not by counting `<h2>`
+ * tags, because the page's own table-of-contents heading is itself an unheadlined `<h2>`.
+ */
+export function parseAmmoTypesSection(html) {
+  const headline =
+    /<span\b[^>]*class="mw-headline"[^>]*id="Ammo_Types"[^>]*>[\s\S]*?<\/span>\s*<\/h[23]>/i.exec(html);
+  if (!headline) return null;
+  const after = html.slice(headline.index + headline[0].length);
+  const nextHeading = after.search(/<h[23]\b/i);
+  return nextHeading === -1 ? after : after.slice(0, nextHeading);
+}
+
+const AMMO_ROUND_PARAGRAPH = /<p>([\s\S]*?)<\/p>/gi;
+// The wiki's own round link carries a generic title ("Ammo"), never the round's name — the name is
+// the anchor's TEXT, read the same way an infobox value is (decodeEntities over the raw text).
+const AMMO_ROUND_NAME = /<a\s+href="\/wiki\/Ammo#[^"]*"\s+title="Ammo">([^<]+)<\/a>/i;
+const AMMO_ROUND_ICON = /Ammo_([A-Za-z0-9_]+)\.png/;
+const AMMO_ROUND_PRICE = /-\s*([0-9]+)\s*<a\s+href="\/wiki\/Hunt_Dollars"/i;
+
+/**
+ * Every round paragraph in one weapon's Ammo Types section.
+ *
+ * REQ "The Scrape Observes and Does Not Decide": a round the page marks Scarce is recorded with
+ * `scarce: true` and `price: null` — NEVER `price: 0`. Zero is a value a person writes under ADR-0013,
+ * not a value this parser is entitled to author.
+ */
+export function parseAmmoRounds(sectionHtml) {
+  const rounds = [];
+  if (!sectionHtml) return rounds;
+  AMMO_ROUND_PARAGRAPH.lastIndex = 0;
+  let match;
+  while ((match = AMMO_ROUND_PARAGRAPH.exec(sectionHtml)) !== null) {
+    const block = match[1];
+    const nameMatch = AMMO_ROUND_NAME.exec(block);
+    // A paragraph with no round link is not a round entry (the section has none besides round
+    // paragraphs on every page sampled, but this guards a page that ever adds one).
+    if (!nameMatch) continue;
+    const name = decodeEntities(nameMatch[1]).trim();
+    const iconMatch = AMMO_ROUND_ICON.exec(block);
+    const iconSlug = iconMatch ? iconMatch[1] : null;
+    const family = ammoFamilyFromIcon(iconSlug);
+    const scarce = /\bScarce\b/i.test(block);
+    const priceMatch = scarce ? null : AMMO_ROUND_PRICE.exec(block);
+    const price = priceMatch ? Number(priceMatch[1]) : null;
+    // Trailing " Ammo" is a generic suffix on most (not all) round names — "Dumdum Ammo" but
+    // "Explosive Bolt", "Flechette", "Slug" carry no such suffix at all. Stripped only when present,
+    // so "Steel Ball Ammo" -> "steel-ball" while "Explosive Bolt" is untouched.
+    const roundSlug = slugify(name.replace(/\s+Ammo$/i, ""));
+    rounds.push({
+      name,
+      id: family ? `ammo-${family}-${roundSlug}` : null,
+      family,
+      iconSlug,
+      scarce,
+      price,
+    });
+  }
+  return rounds;
+}
+
+const AMMO_PER_SLOT = /\(\s*(\d+)\s*per\s*slot\s*\)/i;
+
+/**
+ * The weapon's reserve-field observations, read directly from the infobox `Loaded`/`Extra` fields
+ * already captured in `fields` — no new markup to parse, just two independent regexes over text this
+ * scrape already has.
+ *
+ * Two SEPARATE signals per SPEC-0010's #431 amendment to REQ "A Weapon Declares Its Own Ammo Slot
+ * Count" and REQ "A Dual-Family Weapon Declares Both Families" — a weapon's reserve may carry the
+ * "(N per slot)" marker, the family-binding "/", both, or neither, and this file records both rather
+ * than folding them into one flag. Which slot mechanism a weapon actually uses is decided downstream
+ * of the scrape (REQ "The Scrape Observes and Does Not Decide"), not here:
+ *
+ *   - `perSlotOf`: the split-reserve marker, e.g. Berthier 1892's `Extra: "12 (6 per slot)"` -> 6.
+ *     28 of 32 weapons carrying this are Single-Shot; four Berthier 1892 rows are bolt-action
+ *     carbines and split anyway — read directly, never inferred from action type.
+ *   - `familySplit`: the dual-family "/", e.g. Drilling's `Loaded: "2 / 1"`, `Extra: "20 / 5"`. Seven
+ *     rows carry it: Drilling, Drilling Hatchet, Drilling Shorty, LeMat, LeMat Carbine, LeMat Carbine
+ *     Marksman, Haymaker — each pairs a core family (named by the `AmmoType` field) with Shells.
+ *     Nitro Express and the four Rival 78 rows are double-barrel with NO slash — both barrels feed
+ *     one family, so `familySplit` is false for them despite also being multi-barrel weapons.
+ */
+export function parseAmmoReserve(fields = {}) {
+  const loaded = fields.Loaded ?? null;
+  const extra = fields.Extra ?? null;
+  const perSlotMatch = AMMO_PER_SLOT.exec(extra ?? "") || AMMO_PER_SLOT.exec(loaded ?? "");
+  return {
+    loaded,
+    extra,
+    perSlotOf: perSlotMatch ? Number(perSlotMatch[1]) : null,
+    familySplit: /\//.test(loaded ?? "") || /\//.test(extra ?? ""),
+  };
+}
+
+/**
+ * The full per-weapon ammo record for `itemStats.json`, or null when the page has no Ammo Types
+ * section at all (the eight non-custom-ammo pages named above).
+ */
+export function buildAmmoRecord(html, fields) {
+  const section = parseAmmoTypesSection(html);
+  if (section === null) return null;
+  return {
+    accepted: parseAmmoRounds(section),
+    reserve: parseAmmoReserve(fields),
+  };
+}
+
+// Categories that describe the page itself rather than naming a round: the weapon's own two
+// membership tags (issue #178's SIZE_ROW hazard again, for a different field) and MediaWiki's
+// maintenance tracking categories. Never round-level, so never a source of the trap trap #1 names.
+//
+// Governing: issue #341 review fix (2026-08-16). `parsePageCategories` (this file, ~line 1032)
+// decodes each category's URL segment and replaces underscores with spaces before returning it —
+// `Category:Pages_with_DRUID_infoboxes` becomes the string "Pages with DRUID infoboxes" — because
+// that is the one place in this file categories are turned into human-readable names rather than
+// left as MediaWiki's own slug form. This constant and the exclusion set below originally matched
+// against the underscore form, so neither ever matched a real category and every maintenance tag
+// and every weapon's own primary-family tag fell through as "round-level" — 139 weapons flagged by
+// a live run instead of the ~9 the issue names. Space-separated throughout now, matching what
+// `parsePageCategories` actually returns.
+const AMMO_NON_ROUND_CATEGORY = /^(Weapons(\/Size \d+)?|Pages using .*|Pages with .*)$/i;
+
+/**
+ * A page's round-level category tags — everything in `categories` except the page-level tags above
+ * and the weapon's own primary-family tag(s).
+ *
+ * The primary tag is derived from the SAME `AmmoType` infobox field already captured
+ * (`"Special Long"` -> `Category:Special_Long_Ammo`, decoded by `parsePageCategories` to "Special
+ * Long Ammo"), which is how the wiki names a weapon's family category consistently. A dual-family
+ * weapon (per `reserve.familySplit`) also excludes "Shells Ammo" — the second family SPEC-0010 and
+ * the wiki both name literally "Shells" for all seven dual-family rows, confirmed against Drilling's,
+ * LeMat's and Haymaker's own catlinks.
+ */
+export function ammoRoundLevelCategories(categories, { ammoType, familySplit } = {}) {
+  const primary = ammoType ? `${String(ammoType).trim().replace(/\s+/g, " ")} Ammo` : null;
+  const excluded = new Set([primary, familySplit ? "Shells Ammo" : null].filter(Boolean));
+  return (categories ?? []).filter((c) => !AMMO_NON_ROUND_CATEGORY.test(c) && !excluded.has(c));
+}
+
+// Common round names (FMJ, Dumdum, Poison, Incendiary, High Velocity, Subsonic, ...) recur across
+// MANY families with the identical bare category tag — every "regular ammo" family mints its own
+// FMJ, and the wiki tags all of them `Category:FMJ_Ammo` with no family qualifier. That is expected
+// multi-membership, not the trap: flagging every tag two or more families share flagged 139 of 139
+// weapons carrying an Ammo Types section on a real run (2026-08-16), which is not a review list, it
+// is the whole catalog.
+//
+// The actual trap has a distinct SHAPE, visible in that same run: a tag whose membership is
+// overwhelmingly one family, plus a tiny handful of pages from a genuinely different, unrelated
+// family that happen to reuse the same bare name. `Category:Explosive_Ammo` is long:11 (rifles)
+// against xbow:2 (Crossbow, Crossbow Deadeye), nitro:1 (Nitro Express) and chukonu:1 (Chu Ko Nu) — a
+// category-keyed reader summarizing "Explosive_Ammo" by its dominant member reads "Long Explosive
+// Ammo" and is right for 11 pages and wrong for the other 4, which is the exact failure REQ "A
+// Weapon Declares Which Rounds It Accepts" names. `Category:Dragon_Breath` is shotgun:19 against
+// lance:2 (Bomb Lance, Bomb Launcher) and hxbow:1 (Hand Crossbow) the same way.
+//
+// These thresholds are tuned against that run, not guessed: minority membership of two or fewer
+// pages, outnumbered at least 5-to-1 by the tag's largest family, isolates exactly nine weapons —
+// Crossbow, Crossbow Deadeye, Hand Crossbow, Chu Ko Nu, Bomb Lance, Bomb Launcher, Dolch 96 Claw,
+// Haymaker, Nitro Express — matching the nine this REQ's prose names. A softer minority (say,
+// shotgun:7 against medium:27 for `FMJ_Ammo`) is a real, substantial family sharing an ordinary round
+// name, not a mislabeling artifact, and stays unflagged.
+const AMMO_CATEGORY_MINORITY_MAX = 2;
+const AMMO_CATEGORY_DOMINANCE_RATIO = 5;
+
+/**
+ * Flags weapons caught in trap #1: a round-level category tag whose membership is dominated by one
+ * family, with this weapon among a small handful from a different family reusing the same bare name.
+ * A category-keyed reader summarizing the tag by its majority gets this weapon's round wrong.
+ *
+ * `entries` is built during the run (see runStatsScrape), one per weapon whose page carried an Ammo
+ * Types section: `{ id, item, url, categories, ammoType, ammo }`.
+ *
+ * REQ "A Weapon Declares Which Rounds It Accepts": "Categories MAY be used to flag those pages for
+ * review; they MUST NOT be the source of truth." This is that flag — informational only, never fed
+ * back into `accepted`.
+ */
+export function findAmmoCategoryDisagreements(entries) {
+  // tag -> family -> the entries carrying that tag under that family
+  const tagFamilyEntries = new Map();
+  for (const entry of entries) {
+    const families = new Set((entry.ammo?.accepted ?? []).map((r) => r.family).filter(Boolean));
+    const tags = ammoRoundLevelCategories(entry.categories, {
+      ammoType: entry.ammoType,
+      familySplit: entry.ammo?.reserve?.familySplit,
+    });
+    for (const tag of tags) {
+      if (!tagFamilyEntries.has(tag)) tagFamilyEntries.set(tag, new Map());
+      const byFamily = tagFamilyEntries.get(tag);
+      for (const family of families) {
+        if (!byFamily.has(family)) byFamily.set(family, []);
+        byFamily.get(family).push(entry);
+      }
+    }
+  }
+
+  const flagged = new Map();
+  for (const [tag, byFamily] of tagFamilyEntries) {
+    if (byFamily.size < 2) continue;
+    const groups = [...byFamily.values()].sort((a, b) => b.length - a.length);
+    const [majority, ...minorities] = groups;
+    for (const minority of minorities) {
+      if (minority.length > AMMO_CATEGORY_MINORITY_MAX) continue;
+      if (majority.length < AMMO_CATEGORY_DOMINANCE_RATIO * minority.length) continue;
+      for (const entry of minority) {
+        if (!flagged.has(entry.id)) flagged.set(entry.id, { id: entry.id, item: entry.item, url: entry.url, tags: [] });
+        flagged.get(entry.id).tags.push(tag);
+      }
+    }
+  }
+  return [...flagged.values()];
+}
+
+/** "Weapons/Mako_1895/Claw" -> "Weapons/Mako_1895" — the base weapon a variant subpage belongs to. */
+function ammoSiblingGroupKey(wikiPath) {
+  const parts = String(wikiPath ?? "").split("/");
+  return parts.length > 2 ? parts.slice(0, 2).join("/") : (wikiPath ?? null);
+}
+
+/**
+ * Flags a round whose price or Scarce marker disagrees across sibling pages (a base weapon and its
+ * variants) that share the SAME reserve shape — REQ "The Scrape Observes and Does Not Decide": "A
+ * round whose value differs across pages sharing a reserve shape within one weapon family SHALL be
+ * flagged for review rather than silently resolved."
+ *
+ * Siblings are grouped by their wiki path's base ("Weapons/Mako_1895" covers the base page and its
+ * Aperture/Claw variants), and only compared when their `Loaded`/`Extra` text matches EXACTLY — two
+ * variants of one weapon with genuinely different reserves are not "the same shape" and a price
+ * difference between them is expected, not a disagreement.
+ *
+ * `entries` is the same array findAmmoCategoryDisagreements consumes, plus `wikiPath`.
+ */
+export function findAmmoSiblingPriceDisagreements(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = ammoSiblingGroupKey(entry.wikiPath);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+
+  const flagged = [];
+  for (const [key, members] of groups) {
+    if (members.length < 2) continue;
+    const byShape = new Map();
+    for (const m of members) {
+      const shape = `${m.ammo?.reserve?.loaded}|${m.ammo?.reserve?.extra}`;
+      if (!byShape.has(shape)) byShape.set(shape, []);
+      byShape.get(shape).push(m);
+    }
+    for (const shapeMembers of byShape.values()) {
+      if (shapeMembers.length < 2) continue;
+      const byRoundId = new Map();
+      for (const m of shapeMembers) {
+        for (const round of m.ammo?.accepted ?? []) {
+          if (!round.id) continue;
+          if (!byRoundId.has(round.id)) byRoundId.set(round.id, []);
+          byRoundId.get(round.id).push({ id: m.id, item: m.item, url: m.url, price: round.price, scarce: round.scarce });
+        }
+      }
+      for (const [roundId, observations] of byRoundId) {
+        if (observations.length < 2) continue;
+        const distinct = new Set(observations.map((o) => `${o.price}|${o.scarce}`));
+        if (distinct.size > 1) flagged.push({ group: key, roundId, observations });
+      }
+    }
+  }
+  return flagged;
 }
 
 // ---------------------------------------------------------------------------
@@ -1715,6 +2064,11 @@ export async function runStatsScrape(options, deps) {
   // by no class argument whatsoever. It fires on no row today because all 167 pages carry descriptions,
   // which is precisely why it needs reporting: the day one stops, this is the only thing that says so.
   const dualWieldUnresolved = [];
+  // Raw per-item data findAmmoCategoryDisagreements / findAmmoSiblingPriceDisagreements need but
+  // itemStats.json does not carry (page categories, the wiki path used for sibling grouping) — kept
+  // local to this run rather than persisted, matching SPEC-0007's Open Question 3 posture that the
+  // dataset should not grow a second shape just to carry a review-only signal.
+  const ammoEntries = [];
 
   for (const target of items) {
     try {
@@ -1726,6 +2080,17 @@ export async function runStatsScrape(options, deps) {
         records[result.id] = record;
         if (record.dualWield === null) {
           dualWieldUnresolved.push({ id: result.id, category: target.category, item: target.name, url: result.url });
+        }
+        if (record.ammo !== null) {
+          ammoEntries.push({
+            id: result.id,
+            item: target.name,
+            url: result.url,
+            wikiPath: target.wikiPath,
+            categories: result.categories,
+            ammoType: result.fields?.AmmoType ?? null,
+            ammo: record.ammo,
+          });
         }
       }
       log({
@@ -1860,6 +2225,13 @@ export async function runStatsScrape(options, deps) {
     }
   }
 
+  // REQ "A Weapon Declares Which Rounds It Accepts" ("Categories MAY be used to flag those pages for
+  // review") and REQ "The Scrape Observes and Does Not Decide" ("A round whose value differs across
+  // pages ... SHALL be flagged for review"). Both are reported, never silently resolved into
+  // `records`.
+  const ammoCategoryDisagreements = findAmmoCategoryDisagreements(ammoEntries);
+  const ammoSiblingPriceDisagreements = findAmmoSiblingPriceDisagreements(ammoEntries);
+
   log({
     level: "info",
     event: "run-summary",
@@ -1873,12 +2245,18 @@ export async function runStatsScrape(options, deps) {
     ...(catalogWritten ? { catalogWritten } : {}),
     ...(renames.length ? { renameCandidates: renames.length } : {}),
     ...(dualWieldUnresolved.length ? { dualWieldUnresolved: dualWieldUnresolved.length } : {}),
+    ...(ammoCategoryDisagreements.length ? { ammoCategoryDisagreements: ammoCategoryDisagreements.length } : {}),
+    ...(ammoSiblingPriceDisagreements.length
+      ? { ammoSiblingPriceDisagreements: ammoSiblingPriceDisagreements.length }
+      : {}),
     ...(catalogSkipped ? { catalogSkipped } : {}),
   });
 
   summary.records = records;
   summary.renames = renames;
   summary.dualWieldUnresolved = dualWieldUnresolved;
+  summary.ammoCategoryDisagreements = ammoCategoryDisagreements;
+  summary.ammoSiblingPriceDisagreements = ammoSiblingPriceDisagreements;
   summary.datasetPath = written;
   summary.droppedIds = dropped;
   summary.catalogPlan = catalogPlan;
@@ -1942,6 +2320,29 @@ export function formatSummary(summary) {
     );
     for (const u of summary.dualWieldUnresolved) {
       lines.push(`    unresolved  ${u.category}/${u.id} ("${u.item}") — ${u.url}`);
+    }
+  }
+  // REQ "A Weapon Declares Which Rounds It Accepts": categories flagged for review, never resolved.
+  if (summary.ammoCategoryDisagreements?.length > 0) {
+    lines.push(
+      `  ${summary.ammoCategoryDisagreements.length} weapon(s) with an AMMO CATEGORY DISAGREEMENT — a ` +
+        `round-name category tag on the page is shared by another weapon's different ammo family:`
+    );
+    for (const d of summary.ammoCategoryDisagreements) {
+      lines.push(`    ${d.id} ("${d.item}") — tags: ${d.tags.join(", ")} — ${d.url}`);
+    }
+  }
+  // REQ "The Scrape Observes and Does Not Decide": sibling pages disagree, flagged rather than picked.
+  if (summary.ammoSiblingPriceDisagreements?.length > 0) {
+    lines.push(
+      `  ${summary.ammoSiblingPriceDisagreements.length} AMMO SIBLING PRICE DISAGREEMENT(S) — one round ` +
+        `priced differently across sibling pages sharing a reserve shape:`
+    );
+    for (const d of summary.ammoSiblingPriceDisagreements) {
+      lines.push(`    ${d.group} / ${d.roundId}:`);
+      for (const o of d.observations) {
+        lines.push(`      ${o.id} ("${o.item}") — price ${JSON.stringify(o.price)}, scarce ${o.scarce} — ${o.url}`);
+      }
     }
   }
   if (summary.droppedIds?.length > 0) {
