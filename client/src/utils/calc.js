@@ -164,10 +164,6 @@ export function heldItems(loadout) {
   return loadout.equip.filter(Boolean);
 }
 
-export function consCount(loadout, consIndex) {
-  return heldItems(loadout).filter((e) => e.t === "C" && e.i === consIndex).length;
-}
-
 /**
  * Whether the equipment grid is over its capacity, and why.
  *
