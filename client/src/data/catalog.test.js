@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { statFieldFor, statsFor } from "./itemStats.js";
 import {
+  AMMO,
   CONS,
   CONS_CAP_CATEGORIES,
   CONS_GROUPS,
@@ -27,6 +28,106 @@ import { descriptionFor } from "./itemStats.js";
 // (tuple[1]) so these tests read naturally against the game's names while still
 // asserting the stable id is present.
 const entry = (arr, name) => arr.find((t) => t[1] === name);
+
+// Governing: SPEC-0007, issue #365. Related: #351, #359, #355, #339.
+//
+// The WIRE-FORMAT GATE comment above `AMMO` in catalog.js (around lines 32-45) says an edit to
+// `AMMO` or to any weapon's `ammoClass` needs a FORMAT_VERSION bump and a saved-selection
+// migration, because a saved ammo selection persists as a bare INDEX into `AMMO[ammoClass]` — no
+// bounds check trips when a pool is reordered or a weapon is re-pointed at a different pool, so the
+// failure is a silently wrong price, not a crash. Before this file, that invariant was enforced by
+// nothing but the comment: only two of 147 weapons' `ammoClass` values were asserted anywhere
+// (loadoutCodec.test.js), and no test pinned `AMMO`'s actual contents at all. Mutation testing
+// showed pool-index swaps, price tampering, and most ammoClass flips passing the full suite
+// undetected — the shape of bugs #351 and #359 actually were.
+//
+// These two snapshots are deliberately literal, hardcoded values copied from the real catalog.js
+// data (not vitest's `toMatchSnapshot()`, which is designed to be regenerated with `-u` and would
+// let a silent index-remap through with a single flag). If either fails, the data changed — which
+// is only safe with a FORMAT_VERSION bump (see loadoutCodec.js) and a migration for existing saved
+// selections. Do not "fix" a failure here by updating the expected value; fix it by doing the
+// migration the WIRE-FORMAT GATE comment requires, or by reverting the catalog change.
+describe("the AMMO wire-format pin (WIRE-FORMAT GATE, catalog.js ~32-45)", () => {
+  it("pins every AMMO pool's [name, price] contents, including the two empty pools", () => {
+    // A failure here means AMMO's contents changed — an insert, removal, reorder, or price edit to
+    // any pool. Per the WIRE-FORMAT GATE comment in catalog.js, that requires a FORMAT_VERSION bump
+    // and a saved-selection migration (a saved selection is a bare index into this array, so
+    // reordering or renumbering silently re-points existing saved loadouts at a different round).
+    expect(AMMO, "AMMO pool contents changed — see the WIRE-FORMAT GATE comment in catalog.js and bump FORMAT_VERSION").toEqual({
+      compact: [["FMJ", 15], ["High Velocity", 13], ["Dumdum", 22], ["Incendiary", 18], ["Poison", 16]],
+      medium: [["FMJ", 22], ["Spitzer", 60], ["Dumdum", 28], ["Incendiary", 24], ["Poison", 21]],
+      long: [["FMJ", 30], ["Spitzer", 75], ["Dumdum", 34], ["Incendiary", 28]],
+      slong: [["FMJ", 35], ["Spitzer", 90], ["Incendiary", 32]],
+      shotgun: [["Slug", 28], ["Flechette", 26], ["Penny Shot", 22], ["Dragon Breath", 30], ["Starshell", 18]],
+      xbow: [["Explosive Bolt", 40], ["Shot Bolt", 30], ["Poison Bolt", 25]],
+      hxbow: [["Chaos Bolt", 20], ["Concertina Bolt", 35], ["Choke Bolt", 25]],
+      bow: [["Frag Arrow", 45], ["Concertina Arrow", 35], ["Poison Arrow", 25]],
+      special: [],
+      none: [],
+    });
+  });
+
+  it("pins every weapon's id -> ammoClass mapping, all 147 rows", () => {
+    // A failure here means some weapon's ammoClass changed (or a weapon was added/removed). Per the
+    // WIRE-FORMAT GATE comment in catalog.js, changing a weapon's ammoClass has the exact same
+    // migration shape as editing an AMMO pool — it re-points that weapon's saved ammo selections at
+    // a different pool's index space — so this needs a FORMAT_VERSION bump too, on the terms the
+    // comment already states.
+    const idToAmmoClass = Object.fromEntries(WEAPONS.map((w) => [w[0], w[4]]));
+    expect(WEAPONS, "WEAPONS row count changed — update this pin deliberately, in step with a FORMAT_VERSION bump if any ammoClass moved").toHaveLength(147);
+    expect(idToAmmoClass, "a weapon's ammoClass changed — see the WIRE-FORMAT GATE comment in catalog.js and bump FORMAT_VERSION").toEqual({
+      "nagant-m1895": "compact", "caldwell-conversion-pistol": "compact", "scottfield-model-3": "medium",
+      "bornheim-no-3": "compact", "caldwell-pax": "medium", "hand-crossbow": "hxbow",
+      "cavalry-saber": "none", "combat-axe": "none", "railroad-hammer": "none",
+      "lemat-mark-ii": "compact", "sparks-pistol": "long", "caldwell-conversion-uppercut": "long",
+      "nagant-officer-carbine": "compact", "hunting-bow": "bow", "dolch-96": "special",
+      "springfield-1866": "medium", "winfield-m1873": "compact", "romero-77": "shotgun",
+      "crossbow": "xbow", "frontier-73c": "compact", "bomb-lance": "none",
+      "caldwell-rival-78": "shotgun", "vetterli-71-karabiner": "medium", "specter-1882": "shotgun",
+      "slate": "shotgun", "sparks-lrr": "long", "martini-henry-ic1": "long",
+      "winfield-1876-centennial": "medium", "berthier-1892": "slong", "drilling": "shotgun",
+      "krag-m1894": "slong", "mosin-nagant-m1891": "slong", "lebel-1886": "slong",
+      "crown-king-auto-5": "shotgun", "mosin-nagant-avtomat": "slong", "nitro-express": "special",
+      "haymaker": "long", "1890-cavalry": "long", "1865-carbine": "medium",
+      "auto-4-shorty": "shotgun", "baseball-bat": "none", "bomb-launcher": "special",
+      "chu-ko-nu": "special", "infantry-73l": "compact", "machete": "none",
+      "mako-1895": "long", "marathon": "compact", "maynard-sniper": "medium",
+      "mosin-obrez": "slong", "new-army": "compact", "officer": "compact",
+      "terminus": "shotgun", "vandal-73c": "compact", "flame-rifle": "special",
+      "homestead-78": "shotgun", "shredder": "special", "wildland": "medium",
+      "katana": "none", "1865-carbine-aperture": "medium", "1865-carbine-silencer": "medium",
+      "berthier-1892-deadeye": "slong", "berthier-1892-marksman": "slong", "berthier-1892-riposte": "slong",
+      "bornheim-no-3-extended": "compact", "bornheim-no-3-match": "compact", "bornheim-no-3-silencer": "compact",
+      "centennial-pointman": "medium", "centennial-shorty": "medium", "centennial-shorty-silencer": "medium",
+      "centennial-sniper": "medium", "centennial-trauma": "medium", "conversion-chain-pistol": "compact",
+      "crossbow-deadeye": "xbow", "dolch-96-bullseye": "special", "dolch-96-claw": "special",
+      "dolch-96-precision": "special", "drilling-hatchet": "shotgun", "drilling-shorty": "shotgun",
+      "frontier-73c-marksman": "compact", "frontier-73c-silencer": "compact", "infantry-73l-bayonet": "compact",
+      "infantry-73l-sniper": "compact", "krag-bayonet": "slong", "krag-silencer": "slong",
+      "krag-sniper": "slong", "lebel-1886-aperture": "slong", "lebel-1886-marksman": "slong",
+      "lebel-1886-talon": "slong", "lemat-carbine": "compact", "lemat-carbine-marksman": "compact",
+      "mako-1895-aperture": "long", "mako-1895-claw": "long", "marathon-swift": "compact",
+      "martini-henry-deadeye": "long", "martini-henry-ironside": "long", "martini-henry-marksman": "long",
+      "martini-henry-riposte": "long", "maynard-sniper-silencer": "medium", "mosin-obrez-extended": "slong",
+      "mosin-obrez-mace": "slong", "mosin-obrez-match": "slong", "mosin-obrez-sharpeye": "slong",
+      "mosin-nagant-bayonet": "slong", "mosin-nagant-sniper": "slong", "nagant-m1895-deadeye": "compact",
+      "nagant-m1895-precision": "compact", "nagant-m1895-silencer": "compact", "new-army-swift": "compact",
+      "officer-brawler": "compact", "officer-carbine-deadeye": "compact", "pax-claw": "medium",
+      "pax-trueshot": "medium", "ranger-73-aperture": "compact", "ranger-73-swift": "compact",
+      "ranger-73-talon": "compact", "rival-78-mace": "shotgun", "rival-78-shorty": "shotgun",
+      "rival-78-trauma": "shotgun", "romero-77-alamo": "shotgun", "romero-77-hatchet": "shotgun",
+      "romero-77-shorty": "shotgun", "romero-77-talon": "shotgun", "scottfield-brawler": "medium",
+      "scottfield-precision": "medium", "scottfield-spitfire": "medium", "scottfield-swift": "medium",
+      "slate-riposte": "shotgun", "sparks-pistol-silencer": "long", "sparks-silencer": "long",
+      "sparks-sniper": "long", "specter-1882-bayonet": "shotgun", "specter-1882-shorty": "shotgun",
+      "springfield-1866-bayonet": "medium", "springfield-1866-bullseye": "medium", "springfield-1866-marksman": "medium",
+      "springfield-1866-shorty": "medium", "springfield-1866-striker": "medium", "terminus-shorty": "shotgun",
+      "uppercut-deadeye": "long", "uppercut-precision": "long", "vandal-73c-bullseye": "compact",
+      "vandal-73c-striker": "compact", "vetterli-71-bayonet": "medium", "vetterli-71-cyclone": "medium",
+      "vetterli-71-deadeye": "medium", "vetterli-71-marksman": "medium", "vetterli-71-silencer": "medium",
+    });
+  });
+});
 
 describe("data accuracy (verified against huntshowdown.wiki.gg, Update 2.8.1)", () => {
   it("reflects the Update 2.8 trait UP-cost rebalance", () => {
