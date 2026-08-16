@@ -60,6 +60,12 @@ export function weaponSize(w) {
  * at a blocked position does not count as room. Every caller (reducer, picker,
  * generator) consults this one predicate rather than re-deriving capacity, so the
  * picker's enabled state and the reducer's acceptance cannot drift apart.
+ *
+ * Governing: issue #383. The generator (`randomize.js`'s `place()`) now imports and
+ * calls this directly instead of re-deriving the same scan inline — the two
+ * implementations previously agreed character-for-character, which made the drift
+ * this comment warns against invisible until it actually happened. `loadout.blocked`
+ * may be a Set or a plain array; the `new Set(...)` below accepts either.
  */
 export function hasFreeCell(loadout) {
   const blocked = new Set(loadout.blocked || []);

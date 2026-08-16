@@ -1,6 +1,6 @@
 import { CONS, FIRST_AID_KIT, QM, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { ammoSlotsFor } from "../data/itemStats.js";
-import { TRAIT_MAX, consAllowed, totalCost, weaponSize } from "./calc.js";
+import { TRAIT_MAX, consAllowed, hasFreeCell, totalCost, weaponSize } from "./calc.js";
 
 const RANDOM_TRAIT_COUNT = 3;
 const BUDGET_RETRY_ATTEMPTS = 80;
@@ -14,9 +14,17 @@ const EQUIP_FILL_GUARD = 60;
 // per-category consumable cap (ADR-0015) is respected via the SAME predicates the
 // reducer uses — consAllowed/hasFreeCell. Holes may remain at blocked positions;
 // the starter tool goes into the lowest free cell.
+//
+// Governing: issue #383. `hasFreeCell` (calc.js) is genuinely imported and called
+// below, not just claimed — a prior version re-derived its predicate inline here,
+// so a future change to `hasFreeCell` would have been picked up by the reducer and
+// the picker and silently missed by the generator. The `findIndex` scan that follows
+// still has to run to locate WHICH cell is free (`hasFreeCell` only answers whether
+// one exists), so it is not redundant with the `hasFreeCell` call — it is the same
+// existence check `hasFreeCell` makes, reused as a guard before the index lookup.
 function place(equip, blocked, entry) {
+  if (!hasFreeCell({ equip, blocked })) return false;
   const free = equip.findIndex((e, k) => e === null && !blocked.has(k));
-  if (free === -1) return false;
   equip[free] = entry;
   return true;
 }
