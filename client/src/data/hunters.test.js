@@ -60,3 +60,21 @@ describe("HUNTERS_BY_NAME", () => {
     expect(hunterNameFor("desolations-delegate")).toBe("The Statesman: Desolation's Delegate");
   });
 });
+
+// Governing: SPEC-0004 (hunter roster dataset), SPEC-0003 REQ "The Hunter Picker Is
+// Filterable and Bounded", issue #388, issue #127
+//
+// `deriveObtainable` (scripts/scrape-hunters.mjs) can currently only emit `true` or `null`
+// — `false` requires `acquisition === "mythic"`, and no stored `source` in the live scrape
+// matches `/\bmythic\b/i`. Two audit passes (docs/audits/adversarial-data-qa-2026-08-14.md,
+// finding S4-F4) re-derived the domain over all 242 entries and found it exactly
+// {true: 240, null: 2, false: 0}. Whether it SHOULD be able to produce `false` is #127's
+// open question, not settled here — this test only pins what the generated dataset
+// actually contains today, so it fails loudly the moment a re-scrape (or a #127 fix)
+// changes that, which is precisely the event #127 is deciding about.
+describe("HUNTERS obtainable domain", () => {
+  it("is exactly {true, null} — deriveObtainable cannot currently produce false", () => {
+    const distinct = new Set(HUNTERS.map((h) => h.obtainable));
+    expect(distinct).toEqual(new Set([true, null]));
+  });
+});

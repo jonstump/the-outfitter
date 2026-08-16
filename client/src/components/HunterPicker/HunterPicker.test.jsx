@@ -16,6 +16,12 @@ import HunterPicker from "./HunterPicker.jsx";
 // repo-root `data/hunters.json`, not a client-workspace path. If the two ever disagree the
 // mock silently stops applying and this suite quietly runs against the real 242-hunter
 // roster instead of the five below.
+// "bad-hand"'s `obtainable: false` is deliberately synthetic (issue #388, #127).
+// `deriveObtainable` (scripts/scrape-hunters.mjs) can currently only emit `true` or `null` —
+// no hunter in the generated dataset carries `false` (see the domain assertion in
+// hunters.test.js) — but OBTAINABLE_OPTIONS below still renders a "Not obtainable" filter
+// option, and the "filters by availability" test exercises its "no" branch defensively so
+// it keeps working for the day #127 resolves whether the dataset should ever emit it.
 vi.mock("../../../../data/hunters.json", () => ({
   default: [
     { id: "the-rat", name: "The Rat", portrait: "the-rat", acquisition: "dlc", obtainable: true },

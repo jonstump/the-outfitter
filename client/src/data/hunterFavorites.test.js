@@ -21,6 +21,12 @@ import { FAVORITES_SECTION, ROSTER_SECTION, filterHunters, UNKNOWN_ACQUISITION }
 // sort; it does not layer on top of it, so nothing here asserts a flat favorites-first order
 // any more.
 
+// "c"'s `obtainable: false` is deliberately synthetic (issue #388, #127). `deriveObtainable`
+// (scripts/scrape-hunters.mjs) cannot currently produce `false` — no hunter in the generated
+// dataset carries it (see the domain assertion in hunters.test.js) — but the picker's
+// availability filter still exposes a "Not obtainable" option (HunterPicker.jsx,
+// OBTAINABLE_OPTIONS), and `filterHunters`'s `obtainable: "no"` branch (line 123 below) needs
+// to keep working for the day #127 resolves whether the dataset should ever emit it.
 const ROSTER = [
   { id: "a", name: "Alpha", acquisition: "dlc", obtainable: true },
   { id: "b", name: "Bravo", acquisition: "event", obtainable: true },
@@ -120,6 +126,8 @@ describe("filterHunters sections", () => {
     expect(flatIds(filterHunters(ROSTER, { query: "AR" }))).toEqual(["c"]); // case-insensitive
     expect(flatIds(filterHunters(ROSTER, { query: "a" }))).toEqual(["a", "b", "c", "d"]);
     expect(flatIds(filterHunters(ROSTER, { acquisition: UNKNOWN_ACQUISITION }))).toEqual(["d"]);
+    // "c"'s obtainable: false is synthetic — see the ROSTER comment above — but the "no"
+    // branch still needs a regression guard as long as the picker exposes it.
     expect(flatIds(filterHunters(ROSTER, { obtainable: "no" }))).toEqual(["c"]);
     expect(flatIds(filterHunters(ROSTER, { obtainable: UNKNOWN_ACQUISITION }))).toEqual(["d"]);
   });
