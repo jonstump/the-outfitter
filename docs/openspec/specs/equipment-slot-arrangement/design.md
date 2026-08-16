@@ -107,6 +107,18 @@ The cost is that inertia, auto-scroll, and drag-image rendering become ours to w
 
 **Alternatives considered**: A drag-and-drop library (`dnd-kit`, `react-beautiful-dnd`) would supply the keyboard sensor and the ARIA announcements this design otherwise writes by hand. Rejected on dependency weight for an eight-cell grid in an app whose only runtime client dependencies today are React and Redux Toolkit — but this is the decision most worth revisiting if the hand-written keyboard sensor proves fiddly.
 
+### Removal is a dedicated control, not a gesture the drag/click path infers *(named 2026-08-16, per #241)*
+
+**Choice**: A filled cell's tile is a drag source and nothing else — it carries no click handler. Removal is a separate, always-rendered `.equip-remove-btn` per filled cell, an ordinary `<button>` with its own click handler and native tab/Enter/Space semantics. Blocking an empty cell is likewise that cell's own `onClick`, not a side effect the drop handler produces.
+
+**Rationale**: ADR-0009 settles what removal does to state — `removeEquip` writes `null` in place — and says nothing about what gesture triggers it; this spec inherited that silence and then filled it with "the existing click-to-remove," a phrase that predates the drag model and was never reconciled against it. Once dragging exists, "click the tile" and "drop back onto the tile you dragged from" are the same event sequence, and a design that assigns both an outcome has to pick one or collide. A dedicated control sidesteps the question instead of answering it: the tile body has exactly one interpretation (a drag source, or a no-op if released without moving), and removal lives on an element a drag never targets.
+
+The same shape resolves blocking. `startGrab` (`EquipmentSlot.jsx`) calls `setPointerCapture` on the cell the drag *originates* from, which retargets every subsequent pointer event for that gesture — move, up, cancel — to the origin element, per the Pointer Events spec. The destination cell's own `onPointerDown`/`onClick` never fire during someone else's drag; `EquipmentPanel`'s grid-root `onPointerUp` resolves the drop target separately, via `elementFromPoint` on release coordinates. So an empty cell's click handler firing IS the signal that no drag targeted it — the browser's capture semantics do the disambiguation that a hand-rolled movement threshold would otherwise have to.
+
+**Alternatives considered**:
+- *A movement threshold, per #241's original suggestion*: distinguish a click from a drag by pointer travel distance, keep removal on the tile body past that threshold. Rejected once the dedicated-control shape was on the table — a threshold is a magic number to tune and re-test at every input type (mouse, pen, touch have different practical precision), where a separate element needs neither.
+- *Delete/Backspace as the keyboard removal key, per #241's original suggestion*: rejected in favor of making the remove control itself tab-reachable and Enter/Space-activatable, consistent with every other button in the app rather than inventing a grid-specific key binding.
+
 ### Capacity is one predicate, named and exported
 
 **Choice**: `firstFreeCell(loadout)` returns the lowest-numbered free unblocked cell index or `-1`; `hasFreeCell(loadout)` is `firstFreeCell(loadout) !== -1`. `Picker.jsx`, `addEquip`, and the randomizer all use them. The `loadout.equip.length < sMax` comparison is deleted, not adapted.
