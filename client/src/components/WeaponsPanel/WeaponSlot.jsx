@@ -12,6 +12,18 @@ import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
 // SPEC-0001 REQ "Consistent Visual Presentation"
 
+// Governing: issue #346, SPEC-0010 REQ "Each Ammo Slot Is Individually Labelled and
+// Operable". See the ammo-row comment in the component below for why bound (dual-family)
+// and unbound (split-reserve) two-slot weapons name their slots differently.
+function ammoSlotLabel(weaponName, slots, slotIndex) {
+  if (slots.count < 2) return `${weaponName} ammo`;
+  if (slots.bound) {
+    const family = slots.groups[slotIndex]?.[0]?.family;
+    return `${weaponName} — ${AMMO_LABEL[family] ?? `ammo slot ${slotIndex + 1}`}`;
+  }
+  return `${weaponName} — ammo slot ${slotIndex + 1}`;
+}
+
 export default function WeaponSlot({ slot }) {
   const dispatch = useDispatch();
   // selectWeaponSlot is a selector factory; memoize the instance so its
@@ -44,6 +56,26 @@ export default function WeaponSlot({ slot }) {
       prevPair.current = paired;
     }
   }, [w]);
+  // Governing: issue #346, SPEC-0010 REQ "Each Ammo Slot Is Individually Labelled and
+  // Operable" ("the change SHALL be announced through a live region"). `ammoCostFor` is
+  // null-safe (returns 0 for an empty slot), so this hook can run unconditionally
+  // alongside the pair effect above — the Rules-of-Hooks constraint the comment above
+  // already explains. Same store-driven-not-click-driven discipline as `prevPair`:
+  // `prevAmmoCost` starts null so a loadout that decodes with ammo already selected
+  // stays silent on first render.
+  const ammoCost = ammoCostFor(w);
+  const prevAmmoCost = useRef(null);
+  useEffect(() => {
+    const name = w ? WEAPONS[w.i][1] : null;
+    if (prevAmmoCost.current === null || !name) {
+      prevAmmoCost.current = ammoCost;
+      return;
+    }
+    if (prevAmmoCost.current !== ammoCost) {
+      setAnnounced(`${name} ammo cost is now $${ammoCost}.`);
+      prevAmmoCost.current = ammoCost;
+    }
+  }, [w, ammoCost]);
 
   if (!w) {
     return (
@@ -60,11 +92,7 @@ export default function WeaponSlot({ slot }) {
   // #344. The weapon's OWN accepted rounds and slot count — never the shared class pool
   // `AMMO[ammoClass]` retired from this component's compatibility/price decisions here.
   const slots = ammoSlotsFor(def[0]);
-  // Slot 0 is the only slot this component renders a control for; a second slot's UI is
-  // #346/#347's story. `w.ammo[0]` still prices and displays correctly even before that
-  // control exists — `ammoCostFor` below sums BOTH slots regardless of which have UI.
   const variant = ammoRoundFor(def[0], 0, w.ammo?.[0] ?? null);
-  const ammoCost = ammoCostFor(w);
 
   // Governing: ADR-0023, SPEC-0009 REQ "The Pair Affordance Lives on the Weapon Slot".
   //
@@ -169,36 +197,50 @@ export default function WeaponSlot({ slot }) {
               the WIDTH stays inline, because it is this slot's layout and nobody else's.
 
               Governing: ADR-0014, SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts",
-              issue #344. Options come from `slots.groups[0]` — this weapon's OWN accepted
-              rounds for slot 0, never the shared class pool — and the value IS the round's
-              stable id, not a positional index (#343 already made the wire/store id-based;
-              this is the last reader still keying off a bare index before #344).
+              REQ "Each Ammo Slot Is Individually Labelled and Operable", issue #344, issue
+              #346. One `<select>` per entry in `slots.groups` — `slots.count` is 0, 1, or 2,
+              so this renders exactly one control for a one-slot weapon (never a second,
+              disabled one) and two independently-operable controls for a two-slot weapon.
+              Each slot's options come from `slots.groups[slotIndex]` — this weapon's OWN
+              accepted rounds for THAT slot, never the shared class pool nor the other
+              slot's group — and the value IS the round's stable id, not a positional index.
 
-              Slot 0 only: a two-slot weapon (dual-family or split-reserve) has a second slot
-              in state and price (ammoSlotsFor/ammoCostFor above), but its own control is
-              #346/#347's story, not this one's. */}
-          <select
-            className="select-sm"
-            // An unresolved id has no matching <option>, which renders the control on
-            // "Standard" without correcting the stored value — see ammoRoundFor's contract:
-            // an id the weapon's list no longer contains reads back as no round chosen.
-            value={w.ammo?.[0] ?? ""}
-            onChange={(e) =>
-              dispatch(loadoutActions.setAmmo({ slot, ammoSlotIndex: 0, ammoId: e.target.value || null }))
-            }
-            style={{ flex: 1, maxWidth: 260 }}
-          >
-            <option value="">Standard</option>
-            {slots.groups[0].map((round) => (
-              <option key={round.id} value={round.id}>
-                {round.name} (+${round.price ?? 0})
-              </option>
-            ))}
-          </select>
+              `aria-label` gives each control a name a screen reader can use to tell the two
+              apart without relying on visual order (WCAG 2.1 AA, SPEC-0001): a bound
+              (dual-family) weapon names the slot by the round family it holds — the two
+              groups are disjoint, so the families themselves are always distinct — and an
+              unbound two-slot weapon (split-reserve; both slots share one group and can
+              repeat a round) falls back to an ordinal, since there is no family to
+              distinguish them by. A one-slot weapon just gets the weapon's own name. */}
+          {slots.groups.map((group, slotIndex) => (
+            <select
+              key={slotIndex}
+              className="select-sm"
+              aria-label={ammoSlotLabel(def[1], slots, slotIndex)}
+              // An unresolved id has no matching <option>, which renders the control on
+              // "Standard" without correcting the stored value — see ammoRoundFor's
+              // contract: an id the slot's list no longer contains reads back as no round
+              // chosen.
+              value={w.ammo?.[slotIndex] ?? ""}
+              onChange={(e) =>
+                dispatch(loadoutActions.setAmmo({ slot, ammoSlotIndex: slotIndex, ammoId: e.target.value || null }))
+              }
+              style={{ flex: 1, maxWidth: 260 }}
+            >
+              <option value="">Standard</option>
+              {group.map((round) => (
+                <option key={round.id} value={round.id}>
+                  {round.name} (+${round.price ?? 0})
+                </option>
+              ))}
+            </select>
+          ))}
         </div>
       )}
-      {/* Live region: capacity changes from pairing/unpairing are announced to assistive
-          tech (SPEC-0009 "Operable and Named in Every State"). Rendered permanently —
+      {/* Live region: capacity changes from pairing/unpairing (SPEC-0009 "Operable and
+          Named in Every State") and ammo cost changes from either ammo control (issue
+          #346, SPEC-0010 REQ "Each Ammo Slot Is Individually Labelled and Operable") are
+          both announced here — one region, whichever changed last. Rendered permanently —
           inserting a live region together with its content is the way to get silence from
           a screen reader (same pattern as ActionsPanel.jsx). */}
       <div className="sr-only pair-live-region" role="status" aria-live="polite" aria-atomic="true">
