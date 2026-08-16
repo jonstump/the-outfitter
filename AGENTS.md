@@ -102,7 +102,10 @@ Style/rules that matter a great deal:
   edit `AMMO` with the same caution this file has always asked for. The full detail (and the
   reasoning for why ids alone don't yet close the gap) is spelled out in a WIRE-FORMAT GATE
   comment at the top of `catalog.js` — read it before editing any pool.
-- `AMMO` is **never written by a scrape** (wiki has no per-pool source page).
+- The `AMMO` pool table in `catalog.js` is **never written by a scrape** (wiki has no per-pool
+  source page) — that stays true. Per-weapon ammo compatibility, price and slot data is a
+  different story: it comes from a scrape as of issue #341, read from each weapon page's own
+  `== Ammo Types ==` section into `client/src/data/itemStats.json`, never into `AMMO` itself.
 
 ## The loadout wire format (`client/src/utils/loadoutCodec.js`)
 
