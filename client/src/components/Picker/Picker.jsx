@@ -25,13 +25,18 @@ import PickerRow from "./PickerRow.jsx";
 
 const TABS = ["Weapons", "Tools", "Consumables", "Traits"];
 const GROUP_SETS = { Weapons: WEAPON_GROUPS, Tools: TOOL_GROUPS, Consumables: CONS_GROUPS, Traits: TRAIT_GROUPS };
-const AMMO_FILTERS = {
+// Governing: issue #361
+export const AMMO_FILTERS = {
   Compact: ["compact"],
   Medium: ["medium"],
   Long: ["long"],
   "Special Long": ["slong"],
   Shotgun: ["shotgun"],
-  Other: ["none", "bow", "xbow", "hxbow"],
+  // "special" is included here so the "Other" chip stays exhaustive over every
+  // ammoClass value the catalog carries (see the exhaustiveness test in
+  // Picker.test.jsx) — without it, every special-class weapon vanished from the
+  // Weapons tab whenever any ammo filter chip was active.
+  Other: ["none", "bow", "xbow", "hxbow", "special"],
 };
 
 function buildRows(tab, ui, loadout, dispatch) {

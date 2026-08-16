@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import { act, fireEvent, render } from "@testing-library/react";
-import Picker from "./Picker.jsx";
+import Picker, { AMMO_FILTERS } from "./Picker.jsx";
 import EquipmentPanel from "../EquipmentPanel/EquipmentPanel.jsx";
 import { CONS, TOOLS, TRAITS, WEAPONS } from "../../data/catalog.js";
 import * as itemStats from "../../data/itemStats.js";
@@ -323,5 +323,44 @@ describe("Picker ammo filter reflects Conversion's correct compact class (issue 
     fireEvent.click(chips[0]);
     const rows = getAllByRole("button").filter((b) => b.textContent.includes("Conversion"));
     expect(rows).toEqual([]);
+  });
+});
+
+// Governing: issue #361. AMMO_FILTERS declared six buckets covering nine of the
+// ten ammoClass values, leaving "special" in no bucket (not even "Other"), so
+// every special-class weapon (dolch-96, nitro-express, bomb-launcher, chu-ko-nu,
+// flame-rifle, shredder, and the three dolch-96 variants) vanished from the
+// Weapons tab whenever any ammo filter chip was active.
+describe("Picker ammo filter bucket exhaustiveness (issue #361)", () => {
+  it("every AMMO_FILTERS bucket member is unique and every WEAPONS ammoClass is covered by some bucket", () => {
+    // This is the guard against a repeat: the special pool has silently grown
+    // (2 -> 6 -> 9 rows) without anyone re-checking the filter buckets. If a new
+    // ammoClass value is ever introduced without adding it to AMMO_FILTERS, this
+    // assertion fails loudly instead of silently hiding weapons from the picker.
+    const covered = new Set(Object.values(AMMO_FILTERS).flat());
+    const classes = new Set(WEAPONS.map((w) => w[4]));
+    for (const cls of classes) {
+      expect(covered.has(cls)).toBe(true);
+    }
+  });
+
+  it("with the Other chip active, the weapon list includes nitro-express and all three dolch-96 variants", () => {
+    const { getAllByRole } = renderPicker({
+      loadout: loadoutState({ weapons: [null, null] }),
+      ui: { tab: "Weapons", upBudgetOn: false, upBudget: 10, message: "", search: "", group: "" },
+    });
+    const chips = getAllByRole("button").filter((b) => b.textContent === "Other");
+    fireEvent.click(chips[0]);
+    const buttons = getAllByRole("button");
+    const names = [
+      WEAPONS.find((w) => w[0] === "nitro-express")[1],
+      WEAPONS.find((w) => w[0] === "dolch-96")[1],
+      WEAPONS.find((w) => w[0] === "dolch-96-bullseye")[1],
+      WEAPONS.find((w) => w[0] === "dolch-96-claw")[1],
+      WEAPONS.find((w) => w[0] === "dolch-96-precision")[1],
+    ];
+    for (const name of names) {
+      expect(buttons.some((b) => b.textContent.includes(name))).toBe(true);
+    }
   });
 });
