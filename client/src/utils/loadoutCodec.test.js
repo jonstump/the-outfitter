@@ -403,6 +403,59 @@ describe("frozen legacy catalog tables", () => {
     // failure this whole mechanism exists to prevent. Append to catalog.js instead.
     expect(table).toHaveLength(length);
   });
+
+  // Governing: issue #371. Related: #351, #339, #26.
+  //
+  // The resolvability test above proves every non-null entry still names a live catalog
+  // id — it does NOT prove the entries are in the right ORDER. A transposition (e.g.
+  // swapping two adjacent ids) leaves every id individually valid, so that test passes
+  // right through it while every legacy record referencing either position now decodes
+  // to the wrong item. This pins the literal, ordered contents of all four tables so a
+  // transposition fails here instead.
+  //
+  // CHANGING THIS PIN MEANS CHANGING HISTORY. These arrays are a frozen reconstruction of
+  // the pre-versioning catalog at 2a6bd05^ (see the header comment above LEGACY_WEAPON_IDS).
+  // A deliberate edit — a newly discovered substitution, a correction to the reconstruction
+  // itself — is allowed, but the commit message MUST carry the git provenance for it (the
+  // issue/commit that justifies the change), not just an updated literal here.
+  it("pins each table's literal, ordered contents against transposition", () => {
+    expect(LEGACY_WEAPON_IDS).toEqual([
+      "nagant-m1895", "caldwell-conversion-pistol", "scottfield-model-3", "bornheim-no-3",
+      "caldwell-pax", "hand-crossbow", "cavalry-saber", "combat-axe", "railroad-hammer",
+      "lemat-mark-ii", "sparks-pistol", "caldwell-conversion-uppercut", "nagant-officer-carbine",
+      "hunting-bow", "dolch-96", "springfield-1866", "winfield-m1873c", "winfield-m1873",
+      "romero-77", "crossbow", "frontier-73c", "bomb-lance", "caldwell-rival-78",
+      "vetterli-71-karabiner", "specter-1882", "slate", "sparks-lrr", "martini-henry-ic1",
+      "winfield-1876-centennial", "berthier-1892", "drilling", "krag-m1894",
+      "mosin-nagant-m1891", "lebel-1886", "crown-king-auto-5", "mosin-nagant-avtomat",
+      "nitro-express",
+    ]);
+    expect(LEGACY_TOOL_IDS).toEqual([
+      "first-aid-kit", "knife", "heavy-knife", "dusters", "throwing-knives", "throwing-axes",
+      "katana", "flare-pistol", "fusees",
+      null,
+      "spyglass", "decoys", "blank-fire-decoys", "decoy-fuses", "alert-trip-mine",
+      "concertina-trip-mine", "poison-trip-mine", "quad-derringer",
+      "choke-beetle", "stalker-beetle",
+    ]);
+    expect(LEGACY_CONS_IDS).toEqual([
+      "vitality-shot", "regeneration-shot", "stamina-shot", "antidote-shot", "dynamite-stick",
+      "dynamite-bundle", "big-dynamite-bundle", "frag-bomb", "sticky-bomb", "fire-bomb",
+      "liquid-fire-bomb", "hive-bomb", "chaos-bomb",
+      "choke-bombs",
+      "flash-bomb", "concertina-bomb",
+    ]);
+    expect(LEGACY_TRAIT_IDS).toEqual([
+      "quartermaster", "fanning", "levering", "doctor", "physician", "packmule", "frontiersman",
+      "greyhound", "kiteskin", "lightfoot", "pitcher", "bulletgrubber",
+      "iron-eye",
+      "bolt-thrower", "serpent", "ghoul", "determination", "resilience", "salveskin",
+      "necromancer", "beastface", "hundred-hands", "steady-aim", "silent-killer", "vulture",
+      "whispersmith",
+      "pain-sense",
+      "conduit", "magpie", "ambidextrous", "dauntless", "vigilant",
+    ]);
+  });
 });
 
 // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
