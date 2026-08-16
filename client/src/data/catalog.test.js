@@ -7,6 +7,7 @@ import {
   CONS_GROUPS,
   CONS_TYPES,
   CONS_TYPE_COLOR,
+  THUMB_GROUP_COUNTS,
   TOOLS,
   TOOL_COLOR,
   TOOL_GROUPS,
@@ -509,6 +510,28 @@ describe("consThumb", () => {
   it("falls back to the Utility icon for an unrecognized group", () => {
     const utilityIcon = consThumb(["fixture", "Fixture", 0, "Throwable", "Utility"]);
     expect(consThumb(["fixture", "Fixture", 0, "Throwable", "NotARealGroup"])).toBe(utilityIcon);
+  });
+});
+
+// Governing: #393 (image-model header correction). catalog.js's header comment above THUMBS/
+// TOOL_THUMBS/TRAIT_THUMBS/CONS_THUMBS states the real per-category group count for each of the
+// four SVG fallback maps. #166's group split already invalidated one hardcoded count in that
+// comment once (silently, since nothing pinned it); this test makes the next split fail loudly
+// instead of leaving stale prose behind again.
+describe("THUMB_GROUP_COUNTS (pins catalog.js's image-model header comment)", () => {
+  it("matches the counts documented in the header comment", () => {
+    expect(THUMB_GROUP_COUNTS).toEqual({
+      weapons: 7,
+      tools: 7,
+      traits: 5,
+      consumables: 6,
+    });
+  });
+
+  it("matches TOOL_GROUPS/TRAIT_GROUPS/CONS_GROUPS, which key the same dispatch functions", () => {
+    expect(THUMB_GROUP_COUNTS.tools).toBe(TOOL_GROUPS.length);
+    expect(THUMB_GROUP_COUNTS.traits).toBe(TRAIT_GROUPS.length);
+    expect(THUMB_GROUP_COUNTS.consumables).toBe(CONS_GROUPS.length);
   });
 });
 

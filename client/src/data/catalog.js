@@ -20,10 +20,16 @@
 //
 // Image resolution model: scraped photos are primary, the SVG icons below (THUMBS/TOOL_THUMBS/
 // TRAIT_THUMBS/CONS_THUMBS + their *Thumb() dispatch functions) are the fallback safety net for
-// any item that hasn't been scraped yet (or ever, e.g. brand-new DLC). Each dispatch function
-// checks a per-item override map first, then falls back to the item's group icon — the per-item
-// maps are empty today (no per-item SVGs are authored yet) but the two-tier lookup is structured
-// so per-item icons can be dropped in later without touching any call site.
+// any item that hasn't been scraped yet (or ever, e.g. brand-new DLC). Each dispatch function is a
+// single-tier lookup keyed on group data (ammoClass/size for weapons, the `group` field for
+// tools/traits/consumables) that resolves straight to a group-level glyph, falling back to a
+// default (rifle for weapons, Utility for the other three) when the group is unrecognized. There
+// is no per-item override map: #22 found the four per-item maps this header used to describe
+// (ITEM_THUMBS, TOOL_ITEM_THUMBS, TRAIT_ITEM_THUMBS, CONS_ITEM_THUMBS) permanently empty and the
+// two-tier lookup built around them unused indirection, and removed both — this comment simply
+// never caught up. ADR-0020 (docs/adrs/ADR-0020-ammo-iconography.md) flagged the drift; #393 is
+// the correction it called for. A real per-item override, if wanted again, is a code change for
+// its own issue, not a rewrite of this comment.
 //
 // The scraped-image side of the lookup (see slugify() and the <img onError> chain in
 // client/src/components/ItemThumb/ItemThumb.jsx) does not use a hardcoded IMAGES manifest keyed
@@ -1066,9 +1072,15 @@ export function weaponThumb(w) {
 
 // Tools/Traits/Consumables SVG fallback layer (mirrors THUMBS/weaponThumb above). These didn't
 // exist before this change — Tools, Traits, and Consumables previously rendered no imagery at
-// all. One simple line-art path silhouette per group (5 groups per category), dispatched by the
-// item's `group` field. Kept intentionally schematic/simple, consistent with the weapon THUMBS
-// visual language — this is now a fallback tier behind scraped photos, not primary art (see
+// all. One simple line-art path silhouette per group, dispatched by the item's `group` field —
+// the group count differs per category and has moved since this was first written (most recently
+// by #37's Tarot Cards split): tools 7, traits 5, consumables 6 (weapons' THUMBS above is a
+// separate 7-entry set, keyed differently — see the header note at the top of this file). This
+// file previously and wrongly claimed "5 groups per category" here; catalog.test.js now pins all
+// four counts against Object.keys(...).length so the next group split fails loudly instead of
+// leaving this comment stale again (#393, following #166's split doing exactly that once already).
+// Kept intentionally schematic/simple, consistent with the weapon THUMBS visual language — this is
+// now a fallback tier behind scraped photos, not primary art (see
 // docs/openspec/specs/equipment-iconography/design.md).
 const TOOL_THUMBS = {
   // A thrown noise-maker with sound trailing off it, and a compact break-action derringer. Both drawn
@@ -1103,6 +1115,17 @@ const CONS_THUMBS = {
   // picker's tile size. `consThumb` falls back to Utility for an unrecognised group, so a group
   // without an entry here renders as a wrench and is indistinguishable from Utility (#37 review).
   "Tarot Cards": "M32 4h24v40H32zM44 14l3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1z",
+};
+
+// Exported so catalog.test.js can pin the real per-category group counts (see the header note
+// above and #393) against Object.keys(...).length, rather than a comment restating a number that
+// can drift silently the next time a group is added or split. Not meant as a general-purpose API —
+// callers that need a fallback glyph should go through weaponThumb/toolThumb/traitThumb/consThumb.
+export const THUMB_GROUP_COUNTS = {
+  weapons: Object.keys(THUMBS).length,
+  tools: Object.keys(TOOL_THUMBS).length,
+  traits: Object.keys(TRAIT_THUMBS).length,
+  consumables: Object.keys(CONS_THUMBS).length,
 };
 
 export function toolThumb(tool) {
