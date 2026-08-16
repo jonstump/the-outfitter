@@ -953,6 +953,8 @@ Payload validation SHALL be an **allowlist**, not a required-fields check. The s
 
 - The set of accepted `data` keys SHALL be declared as a named constant and SHALL be exactly the keys the client encoder emits
 - A tuple inside a known field SHALL be required to have its **exact** length — a floor alone (`>= 2`) is the same hole wearing the shape of a defined field. *(amended 2026-08-15 for wire format version 3, per SPEC-0009 and ADR-0023. The exact length is the one **the payload's own declared version** defines, not a single fixed count: a weapon slot is `[ref, ammo]` at v1 and v2 and `[ref, ammo, d]` at v3, so the validator dispatches on `data.v` and applies that version's count. This does not loosen the rule — "exact" still binds as tightly as before, and the floor is still forbidden; the version is what selects which exact length applies. An equipment entry is unchanged at v3.)*
+
+  *(further amended 2026-08-16 for wire format version 4, per SPEC-0010, ADR-0014, and issue #348. Version 4 keeps the weapon slot's element count at three, unchanged from v3 — `[ref, ammo, d]` — but narrows what its `ammo` element may hold. At v1 through v3, `ammo` is a single integer index into a shared pool; at v4 it is a two-element array, each entry a bounded identifier string or `null`, naming a round directly rather than by position. "Exact length" therefore now binds at two levels for a v4 weapon slot: the entry itself is exactly three elements, and its `ammo` element, when present, is exactly two. This is a type narrowing of an already-defined field, not a widening of the allowlist — see SPEC-0010 REQ "The Weapon Entry Is Validated at Version 4's Shape", which owns the check's implementation in `server/src/routes/loadouts.js`'s `isIslandV4`/`isAmmoSlotArray`.)*
 - A rejected payload SHALL be a `400`, and **nothing SHALL be persisted** under the attempted name
 - Type checks on individual fields SHALL survive allowlisting — a key being permitted SHALL NOT be taken as evidence its value is well-shaped
 
@@ -974,6 +976,13 @@ This requirement governs the **stored** shape. It does not constrain what a futu
 - **THEN** the response SHALL be a `400`
 
 *(**WHEN** amended 2026-08-15 for wire format version 3. It previously read "more elements than the format defines", which was written when a weapon slot was two elements at every version and so implied one count for all of them. Version 3 makes the weapon slot three, and the scenario is unchanged in force — an over-long entry is still a `400` — but "the format" is now read as the payload's own `v`. A three-element weapon slot is over-long at v1 and v2 and exactly right at v3; the scenario refuses it in the first case and not the second, which is the behaviour `isValidData` implements. See SPEC-0009 REQ "The Weapon Entry Is Validated at an Exact Element Count", which owns the count itself.)*
+
+#### Scenario: A version-4 ammo element must be an id array, not an integer
+
+*(added 2026-08-16 for wire format version 4, per SPEC-0010 and issue #348)*
+
+- **WHEN** a write declares version 4 and carries a weapon slot whose `ammo` element is an integer, rather than a two-element array each entry of which is a bounded identifier string or `null`
+- **THEN** the response SHALL be a `400`, and nothing SHALL be persisted — a type check on an allowlisted field is not bypassed by the field being permitted, per the type-checks clause of this requirement above
 
 ### Requirement: One Owner Cannot Accumulate Records Without Bound
 

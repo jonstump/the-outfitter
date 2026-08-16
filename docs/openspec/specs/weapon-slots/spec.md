@@ -398,7 +398,7 @@ region rather than only rendered.
 **Implementation status, 2026-08-15.** Part A was codification of code that already existed. Part B has
 now shipped in four merged stories: the v3 decoder (#396), the pair cost and the stored-attribute gate
 (#397), the wire-format encode at version 3 (#398), and the pair affordance on the weapon slot (#399).
-`FORMAT_VERSION` is 3 and the decoder registry holds v3, v2, v1 and a legacy fallback.
+`FORMAT_VERSION` is 3 and the decoder registry holds v3, v2, v1 and a legacy fallback. *(Stale as of 2026-08-16, per SPEC-0010 and issue #348 — recorded rather than silently updated, since it was an accurate snapshot of this capability's own implementation date. `FORMAT_VERSION` is now **4**: SPEC-0010 took the version ADR-0023 scheduled for it, unswapped, and the decoder registry now holds v4, v3, v2, v1 and the legacy fallback. Nothing this spec's own Part A or Part B requires changed — see "Cross-Spec Changes This Capability Requires" below, and REQ "A Pair Carries One Weapon's Ammo and Doubles Only the Weapon Price", which SPEC-0010 confirmed needs no amendment.)*
 
 **The status moved to `implemented` on 2026-08-15**, when the last of the named work closed. The list
 that held it at `approved` is now empty: the affordance's tests (#334), the amendments this version bump
@@ -407,9 +407,9 @@ owed SPEC-0003, SPEC-0006 and SPEC-0007 (#335), an over-capacity loadout that co
 them, all eleven stories done.
 
 **`implemented` describes this capability as specified, and nothing more.** It is not a claim that the
-weapon-slot model is finished — SPEC-0010 raises the wire format to v4 and replaces the shared ammo
-pools, and this spec's own call graphs below are still pre-#396 and unregenerated. Read each
-requirement's text rather than this word before assuming a behaviour is live.
+weapon-slot model is finished — SPEC-0010 has since raised the wire format to v4 and replaced the
+shared ammo pools (2026-08-16), and this spec's own call graphs below are still pre-#396 and
+unregenerated. Read each requirement's text rather than this word before assuming a behaviour is live.
 
 > Call graphs below were generated from the codebase **before** any Part B work and have not been
 > regenerated — the mapping beneath them has been brought up to date by hand, but the mermaid graph

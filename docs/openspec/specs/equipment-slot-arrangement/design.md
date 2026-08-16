@@ -178,6 +178,8 @@ The v2 branch is *stricter* than v1's, not looser: `e` must be exactly eight ele
 
 *(Updated 2026-08-15: it is now **three** shapes, not two — v3 arrived with SPEC-0009. The choice above is unchanged and was the right one; what v3 demonstrated is that "branches on `data.v`" has to mean **`>= 2`, not `== 2`**, for anything v3 inherits. Version 3 alters only the weapon entry, so it reuses v2's equipment grid and blocked array wholesale; an equality check instead routed v3 down the v1 packed path, where a `null` grid hole and an array `b` each fail, breaking every save from a v3 client. That was #329. The rationale for permanence holds a fortiori at three versions, and will at four — SPEC-0010 schedules v4 — which is why the validator is a validator of every defined shape rather than a translator between adjacent ones.)*
 
+*(Updated 2026-08-16, per SPEC-0010 and issue #348: it is now **four**. Version 4 confirms the prediction above rather than complicating it — the ammo element inside the weapon entry narrows from an integer to a two-entry id array, and the equipment grid and blocked array need no branch of their own, exactly as v3 needed none. `isIslandV4` widened the existing v4 branch in place rather than adding a fifth, because nothing had shipped against the single-id v4 shape an earlier story first stubbed in.)*
+
 ## Architecture
 
 The change is concentrated in the client store and codec; the server contributes one validator branch. What follows is every module that reads or writes equipment state, annotated with what this capability does to it.
@@ -228,6 +230,8 @@ graph TD
 ```
 
 *(Read the version labels above as this capability's delta, not as current state — reviewed 2026-08-15. `FORMAT_VERSION` is now **3** and `db.json` holds a mix of v1, v2 and v3. The diagram is deliberately left at v2 because it documents what SPEC-0006 changed; v3 added the weapon-entry flag under SPEC-0009 and touched none of the nodes or edges drawn here — `CODEC` gained a `fromV3`, `VAL` gained a version-aware weapon check, and the equipment grid path is byte-for-byte the one shown.)*
+
+*(Reviewed again 2026-08-16, per SPEC-0010 and issue #348: `FORMAT_VERSION` is now **4** and `db.json` holds a mix of v1 through v4. The diagram remains deliberately left at v2 for the same reason as above — v4, like v3, added a `CODEC` decoder (`fromV4`) and a `VAL` branch (`isIslandV4`) without touching the equipment-grid path this diagram draws. Version 4 is SPEC-0010's, not this capability's, but it is recorded here because this document is where a reader checks what the labelled version actually is.)*
 
 *(Also reviewed 2026-08-16, via `/sdd:audit`: `placement.js` as its own file was never built. `hasFreeCell`/`firstFreeCell` landed in `calc.js` instead, and the stack-run helper shipped as `equipRuns` in `utils/stacking.js` rather than as `runsOf`/`canDrop` in a dedicated module. Read every `placement.js` reference below — the diagram node, the sequence-diagram participant, and Migration Plan step 2 — as the six-consumers *problem statement* this design was solving, not as the shipped file layout. The capacity/placement rules the diagram argues for are still centralized and consistent; they're just not in the file this document names.)*
 

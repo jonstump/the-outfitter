@@ -126,6 +126,21 @@ Parsing SHALL be strict: a value that is not a whole number SHALL be refused rat
 
 The `AMMO` table SHALL NOT be written by any scrape. It models ten shared per-class pools; the wiki has no equivalent page, pricing custom ammo per weapon inside each weapon's own progression table. A scraper that reaches for `/wiki/Ammo` finds prose and will extract something plausible from the wrong place. Per-weapon ammo prices MAY be collected into `itemStats.json` instead.
 
+*(Amended 2026-08-16, per SPEC-0010, ADR-0014 and issue #348.)* `ammoClass` on a weapon row remains hand-authored, exactly as it is today — this requirement does not newly forbid deriving it, and nothing here changes `catalog.js`'s existing gated tier for it. What changes is **authority, not authorship**: per SPEC-0010 REQ "`ammoClass` Survives as a Grouping Label Without Rules Authority", no code path that decides which rounds a weapon accepts, what a round costs, or how many ammo slots a weapon has SHALL read `ammoClass`. Those questions are answered by each weapon's own scraped accepted-round list instead — see "Ammo Compatibility, Price and Slot Data Is Per-Pair" below. `ammoClass` SHALL continue to exist as a display grouping only, and its hand-authored status is unaffected by this amendment; a field losing rules authority is not a field newly opened to derivation.
+
+### Requirement: Ammo Compatibility, Price and Slot Data Is Per-Pair
+
+*(added 2026-08-16, per SPEC-0010, ADR-0014 and issue #348.)*
+
+Every field this file has recorded to date is **per-item**, keyed by a single catalog `id`. Per-weapon ammo compatibility, price and slot data introduces the dataset's first **per-pair** shape, keyed by a (weapon, round) pair rather than by either id alone, because the facts it carries — whether a weapon accepts a round, what that pair costs, whether the round fills a split-reserve or a family-bound slot — belong to neither item individually. SPEC-0010 REQ "A Weapon Declares Which Rounds It Accepts", REQ "Price Belongs to the Weapon-and-Round Pair", and REQ "A Weapon Declares Its Own Ammo Slot Count" own what the shape records; this requirement records only that `itemStats.json` gains it, alongside the per-item records the rest of this file describes.
+
+The per-pair shape SHALL live in `itemStats.json` beside the per-item records, or in a sibling generated file, per whichever layout the implementation measures as appropriate — this requirement does not mandate one file over the other, consistent with SPEC-0010's own open question on the point. Either way, it SHALL be subject to the same rules already stated for every scraped field here: it MUST NOT be hand-edited, SHALL carry provenance, and the scrape SHALL only observe — see "The Scrape Observes and Does Not Decide" in SPEC-0010, which governs how a per-pair record is built and is not restated here.
+
+#### Scenario: A per-pair record does not collapse into either item's own entry
+
+- **WHEN** `itemStats.json` is inspected for a weapon that accepts more than one round
+- **THEN** the compatibility, price and slot data for each (weapon, round) pair SHALL be independently recorded, and SHALL NOT be inferable from either the weapon's or the round's per-item entry alone
+
 #### Scenario: A new item lands without a derived group
 
 - **WHEN** the scrape proposes a catalog row for an item not previously present

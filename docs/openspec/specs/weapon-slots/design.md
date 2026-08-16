@@ -223,7 +223,9 @@ loadout enters state, and it happens again for every other route that writes one
   reportable, where a wrongly-permitted pair would quietly mis-cost a build.
 - **Two migrations over the same records.** Version 3 now, version 4 with ADR-0014. → Accepted
   deliberately, and the reasoning is recorded above so a later reader does not mistake it for an
-  oversight.
+  oversight. *(Landed 2026-08-16, unswapped: SPEC-0010 took v4 as scheduled, confirming the ordering
+  assumed here rather than the "numbers move, content doesn't" contingency `per-weapon-ammo`'s own
+  design.md names for the case dual-wielding had slipped instead.)*
 - **A stale client mangles a version-3 record.** → Chosen over the alternative of silently
   undercounting the budget. Visible breakage is recoverable by reloading; wrong arithmetic is not
   noticed at all.
@@ -269,4 +271,8 @@ of a format change before the server accepts it produces failing saves for every
 - Should the unresolved state of the stored attribute be recovered by a re-scrape, or by hand-curating
   the small number of rows that matter?
 - When ADR-0014 lands, does the weapon entry stay a positional tuple? A fourth attribute would be the
-  point at which an object shape stops being speculative.
+  point at which an object shape stops being speculative. *(Answered 2026-08-16, per SPEC-0010 and
+  issue #348: yes, and no fourth attribute arrived to force the question. Version 4 stayed a
+  three-element tuple — `[ref, ammo, d]`, unchanged from v3 — and nested the second ammo slot inside
+  the existing `ammo` position as a two-entry array instead of appending a new top-level element. The
+  "point at which an object shape stops being speculative" has not been reached.)*
