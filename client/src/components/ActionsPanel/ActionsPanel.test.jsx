@@ -262,6 +262,47 @@ describe("the save control names its destination", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------
+// Issue #136 follow-up — "a distinct way to save a loadout vs saving it as a new one".
+//
+// Governing: ADR-0022 "The exception, and what it costs" — a save with no `savedId` already
+// upserts on (owner, listId, name), so with nothing loaded, Save and Save-as-new would be the
+// same request. The button only earns its keep once there is a loaded record to diverge FROM.
+// ---------------------------------------------------------------------------------------
+
+describe("Save as new (issue #136 follow-up)", () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "rec-new", name: "long ammo", data: {}, listId: null, updatedAt: "2026-01-01" }),
+    }));
+  });
+
+  it("is absent when nothing is loaded — Save would do the same thing", () => {
+    renderWith(withList([alpha]));
+    expect(screen.queryByRole("button", { name: "Save as new" })).not.toBeInTheDocument();
+  });
+
+  it("appears once a loadout is loaded (savedId set)", () => {
+    renderWith({ ...withList([alpha]), loadout: loadoutState({ name: "long ammo", savedId: "rec-original" }) });
+    expect(screen.getByRole("button", { name: "Save as new" })).toBeInTheDocument();
+  });
+
+  it("saves without id, and re-points the session at the new record", async () => {
+    const store = renderWith({
+      ...withList([alpha]),
+      loadout: loadoutState({ name: "long ammo", savedId: "rec-original" }),
+    });
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save as new" })));
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).not.toHaveProperty("id");
+    expect(store.getState().loadout.savedId).toBe("rec-new");
+    expect(store.getState().ui.message).toBe("Saved “long ammo” as a new loadout.");
+  });
+});
+
 // Governing: issue #292 (picker panel collapses to 2px on stacked viewports), #294.
 //
 // The regression: `.picker-panel` used `flex: 1 1 0` at every width. Side by side that

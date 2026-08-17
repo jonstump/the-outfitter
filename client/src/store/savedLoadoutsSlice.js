@@ -61,6 +61,62 @@ export const saveCurrent = createAsyncThunk("savedLoadouts/save", async (_arg, {
   }
 });
 
+// Governing: ADR-0022 "The exception, and what it costs" — "Saving without [savedId] upserts
+// on (owner, listId, name)". ADR-0022 lists "any UI for resolving a deliberate
+// same-name-same-list collision" as out of scope for THAT decision, made when the only caller
+// of the no-id path was a build with nothing loaded — a collision there means the user typed an
+// existing name on purpose. `saveCurrentAsNew` reopens exactly that question, because its
+// caller is different: a build that already has a name, inherited by branching off a loaded
+// record, so the ordinary case is "unchanged name, unchanged destination" — silently upserting
+// onto the record it branched from would make "Save as new" indistinguishable from a plain
+// re-save, which is the one outcome this button exists to rule out.
+//
+// So the collision is resolved HERE, client-side, before the request is sent: `uniqueName`
+// appends " (2)", " (3)", … against the caller's OWN `savedLoadouts.items` until the
+// (listId, name) pair is free, then that name is what gets saved and what `loadout.name`
+// becomes. Renaming after the fact, rather than before, would leave a save in flight that could
+// still collide if two saves race; renaming the local name first and using the result for both
+// the request and `setName` keeps the two in agreement by construction.
+function uniqueName(baseName, listId, items) {
+  const collides = (candidate) => items.some((l) => (l.listId ?? null) === listId && l.name === candidate);
+  if (!collides(baseName)) return baseName;
+  let n = 2;
+  while (collides(`${baseName} (${n})`)) n++;
+  return `${baseName} (${n})`;
+}
+
+// On success `savedId` is set to the NEW record's id, same as `saveCurrent` — the session
+// becomes attached to the copy it just wrote, the way a conventional "Save As" leaves the editor
+// pointed at the new file rather than the one it was opened from. `loadout.name` is set too,
+// via `setName` rather than left at the un-renamed value: `saveCurrent`'s id-addressed path
+// always writes `loadout.name` back onto the record it addresses (savedLoadoutsSlice.js's own
+// POST handler comment, "an id-addressed write updates the record where it lives"), so a save
+// after this one — with the field still reading the ORIGINAL name — would rename the new record
+// straight back to the name it was just disambiguated away from, recreating the collision this
+// thunk exists to prevent.
+export const saveCurrentAsNew = createAsyncThunk("savedLoadouts/saveAsNew", async (_arg, { getState, dispatch }) => {
+  const state = getState();
+  const baseName = state.loadout.name.trim() || "Unnamed loadout";
+  const loadout = state.loadout;
+  const listId = resolveSaveListId(state);
+  const name = uniqueName(baseName, listId, state.savedLoadouts.items);
+
+  try {
+    const record = await upsertLoadout(name, toData({ ...loadout, name }), listId, null);
+    dispatch(loadoutActions.setSavedId(record.id));
+    if (name !== baseName) dispatch(loadoutActions.setName(name));
+    dispatch(uiActions.setMessage(
+      name === baseName
+        ? `Saved “${name}” as a new loadout.`
+        : `Saved as a new loadout, renamed to “${name}” to avoid overwriting “${baseName}”.`
+    ));
+    return record;
+  } catch (err) {
+    dispatch(uiActions.setMessage(`!Couldn't save “${baseName}” as a new loadout: ${err.message}`));
+    throw err;
+  }
+});
+
 // Governing: ADR-0022, SPEC-0003 REQ "Loadout Identity Is Scoped to Its List"
 //
 // Deleting the record a loaded loadout came from CLEARS that loadout's `savedId`. The
@@ -158,6 +214,15 @@ const savedLoadoutsSlice = createSlice({
         state.error = action.error.message;
       })
       .addCase(saveCurrent.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((l) => l.id === action.payload.id);
+        if (idx >= 0) state.items[idx] = action.payload;
+        else state.items.push(action.payload);
+      })
+      // Same list-reconciliation rule as saveCurrent.fulfilled above — the record this
+      // resolves to is new far more often than not (that's the point of the button), but the
+      // same-name-same-list collision ADR-0022 leaves unresolved can still land on an id
+      // already in `items`, so this stays an upsert-by-id rather than an unconditional push.
+      .addCase(saveCurrentAsNew.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
         else state.items.push(action.payload);
