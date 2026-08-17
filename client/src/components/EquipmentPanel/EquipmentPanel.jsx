@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { selectEquipCount, selectEquipOverCapacity } from "../../store/selectors.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import EquipmentSlot from "./EquipmentSlot.jsx";
-import { equipRuns } from "../../utils/stacking.js";
+import { canPlaceRun, equipRuns } from "../../utils/stacking.js";
 import { arrowTarget, readArrangement } from "./gridMove.js";
 
 // Governing: ADR-0009 (fixed eight-cell grid, no quantity field), SPEC-0006
@@ -84,13 +84,33 @@ export default function EquipmentPanel() {
     // "dragged off the grid").
     const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-slot-index]");
     const target = over ? Number(over.dataset.slotIndex) : -1;
+    // Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One Stack",
+    // issue #464. `grab.from` is always the run's ANCHOR by the time it reaches here
+    // (EquipmentSlot's startGrab anchors it at grab time) and never changes for a
+    // pointer drag, so `length` is the whole run's size throughout.
+    const length = grab.length ?? 1;
     grabRef.current = null;
     if (target === -1) {
-      dispatch(loadoutActions.moveEquip({ from: grab.from, to: -1 }));
+      // Dragging any cell of a stack off the grid unequips the ENTIRE run at once,
+      // not just the pressed cell — off-grid is one more destination for "the entire
+      // run as a unit" (SPEC-0006), not an exception carved out for single items.
+      dispatch(loadoutActions.moveEquip({ from: grab.from, to: -1, length }));
       return;
     }
     if (target === grab.from) return;
-    dispatch(loadoutActions.moveEquip({ from: grab.from, to: target }));
+    if (length > 1) {
+      const run = equipRuns(loadout.equip).find((r) => r.cells[0] === grab.from);
+      const cells = run ? run.cells : [grab.from];
+      if (!canPlaceRun(loadout.equip, loadout.blocked, cells, target)) {
+        // Rejected as a no-op (SPEC-0006 "Any other drop SHALL be rejected as a
+        // no-op") — announce on the same channel a keyboard rejection uses below, so
+        // a screen-reader user watching this region sees pointer and keyboard
+        // rejections identically.
+        setGridAnnounceMessage(`Cannot place here, ${length} cells needed`);
+        return;
+      }
+    }
+    dispatch(loadoutActions.moveEquip({ from: grab.from, to: target, length }));
   };
   // Governing: issue #312. A gesture the BROWSER takes over — a touch it claims as a
   // page pan, a native drag, a system edge swipe — ends in pointercancel and never
@@ -150,7 +170,28 @@ export default function EquipmentPanel() {
         // origin's item to the current cell — the keyboard mirror of the pointer
         // swap/place. Dropping back onto the origin is the no-op the pointer path
         // also has.
-        dispatch(loadoutActions.moveEquip({ from: grab.origin, to: grab.from }));
+        //
+        // Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One
+        // Stack", issue #464. For a run grab (`length > 1`), `grab.origin` is
+        // already the run's anchor (EquipmentSlot's Space-grab anchors it), so this
+        // dispatch needs no extra lookup — but a REJECTED run drop needs its own
+        // path here, matching design.md's sequence diagram: announce on the same
+        // live region a rejected arrow-at-the-edge already uses, and return focus
+        // to the anchor cell rather than leaving it on whichever cell the arrows
+        // walked to, with the loadout left unchanged.
+        const length = grab.length ?? 1;
+        if (length > 1 && grab.from !== grab.origin) {
+          const run = equipRuns(loadout.equip).find((r) => r.cells[0] === grab.origin);
+          const cells = run ? run.cells : [grab.origin];
+          if (!canPlaceRun(loadout.equip, loadout.blocked, cells, grab.from)) {
+            setGridAnnounceMessage(`Cannot place here, ${length} cells needed`);
+            grabRef.current = null;
+            const anchorCell = gridRef.current?.querySelector(`[data-slot-index="${grab.origin}"]`);
+            (anchorCell?.querySelector(".equip-tile-main") ?? anchorCell)?.focus();
+            return;
+          }
+        }
+        dispatch(loadoutActions.moveEquip({ from: grab.origin, to: grab.from, length }));
         grabRef.current = null;
       }
     }

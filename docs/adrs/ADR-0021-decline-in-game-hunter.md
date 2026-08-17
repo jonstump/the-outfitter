@@ -12,6 +12,13 @@ related: [ADR-0012]
 > Points". That disclosure is now declined too — see the amendment in Decision Outcome. This ADR adopts
 > nothing and requires no code.
 
+> **Amended 2026-08-16.** A narrower disclosure — labelled "Estimated Minimum Level", a worst-case-computed
+> floor on the hunter level a loadout's trait-point cost requires — is now adopted. See "Amendment:
+> Estimated Minimum Level Disclosure" below. This does not reopen the entity: no hunter identity, no
+> persisted per-hunter state, and no per-hunter data of any kind is added. It is a pure function of a
+> value the app already computes (`upTotal`) against a hand-authored constant, in the same category as
+> `TRAIT_MAX` — a fixed game rule, not an entity.
+
 ## Context and Problem Statement
 
 ADR-0006 reserved this decision by name:
@@ -120,7 +127,63 @@ applies, and it is the test to apply to the next "we could also disclose…" pro
 
 **What survives is the decline.** The in-game hunter entity is not built, `upTotal`, `totalCost`,
 `capUsed`, `slotMax` and `TRAIT_MAX` stay untouched, and `uiSlice`'s `upBudget` gains no companion
-field — which is now the whole of this ADR's effect on the code: none.
+field — which was the whole of this ADR's effect on the code, until the amendment below.
+
+### Amendment 2026-08-16: Estimated Minimum Level Disclosure
+
+**What is adopted.** A loadout's trait-point total (`upTotal`) is disclosed against a fixed,
+hand-authored leveling constant as the **Estimated Minimum Level** required to afford it — labelled as
+an estimate of a floor, never a precise "you are level N" claim. The computation itself is a worst-case
+one (zero bonus Upgrade Points assumed): a player who has picked up any in-match Upgrade Points, or
+spent Dark Tribute, could need a lower level than the figure shown, never a higher one. "Estimated
+Minimum Level" is the label chosen to carry that honestly to the player — "minimum" states that it is a
+floor, "estimated" states that it is not exact.
+
+**The rate is hand-authored, not wiki-cited, and that is recorded rather than hidden.** The wiki page
+this ADR already cites (`/wiki/Hunters`) states the mechanic — "Each level grants Upgrade Points" — but
+does not quantify it, and no per-level table exists on the site to check it against (verified
+2026-08-16: no dedicated XP/level table page exists at the obvious URL). The rate — **exactly one
+Upgrade Point per level** — comes from the product owner's own knowledge of the game, not a scrape.
+This is the same category of hand-authoring ADR-0021's own "Considered Options" already accepts as
+legitimate precedent (`group`, `ammoClass`, ADR-0017's four axes: a real, fixed, non-random game rule
+that merely isn't published in exact form) — categorically different from the recruit-delta kit this
+ADR declined to hand-author, which was rejected specifically because the kit *is* random by design and
+so has no fixed truth to record.
+
+**Scoped to Legendary hunters only.** A Legendary hunter starts at level 1 with **10** Upgrade Points —
+independently corroborated by `uiSlice.js`'s pre-existing `upBudget: 10` default, chosen before this
+amendment for the same reason. A Free hunter starts differently (three random traits drawn from a
+pool, no starting Upgrade Points), which this amendment does not model. Free-hunter support is future
+work contingent on the randomizer/settings work needed to represent a starting trait pool at all —
+tracked as a follow-up, not built here.
+
+**The formula, and where it deliberately stops.** `UP(level) = 10 + (level - 1)`, for `level` in
+`[1, 50]` — level 1 has 10, level 50 has 59. The worst-case level for a loadout costing `upTotal` points
+is the lowest level whose `UP(level) >= upTotal`, **clamped to a ceiling of 50**:
+`level = min(50, max(1, upTotal - 9))`.
+
+The clamp is deliberate, not an oversight. The 15 most expensive traits in the catalog sum to 83 points
+(verified 2026-08-16 against `TRAITS` in `catalog.js`), which exceeds `UP(50) = 59` — a real, reachable
+build can cost more than this formula's level-50 figure. Past level 50, a hunter keeps earning Bloodline
+XP with a stated 50/50 match-XP split (versus 100% to the hunter below 50), and the product owner
+believes — without being certain, and with no wiki citation — that some further XP-to-Upgrade-Point
+conversion continues past 50 (anecdotally, "a couple level 50s with like 70+ upgrade points"). **That
+mechanic is explicitly NOT modeled here**: it is exactly the kind of unquantified, unconfirmed rule this
+ADR's whole discipline exists to refuse rather than guess at. The clamp is how the worst-case property
+survives contact with it — "at least level 50" stays true no matter what the real post-50 curve turns
+out to be, where guessing a specific number past 59 could just as easily be wrong in the unsafe
+direction. A build over 59 UP therefore reads "Estimated Minimum Level: 50", identically to a build at
+exactly 59 — no separate "exceeds" state, and no claim that level 50 is sufficient, only that it is the
+floor.
+
+**Why "minimum," and why "estimated."** The wiki (`/wiki/Hunters`) states a second, level-independent
+source of Upgrade Points in the same passage this ADR already cites: *"If a player kills and loots an
+enemy Hunter that has previously downed him, 2 Upgrade Points are rewarded... as a Retaliation bonus."*
+Dark Tribute is a further, explicitly out-of-scope source per the product owner. Both mean a hunter's
+actual Upgrade Points at a given level can exceed the leveling-only figure, so the true level needed can
+be lower than the figure shown — never higher — which is exactly what "minimum" promises and nothing
+more. "Estimated" is the companion word doing the opposite job: it tells the player the number is not
+a verified fact the way a scraped stat is, but the best floor this ADR's data supports.
 
 ### Consequences
 
@@ -185,6 +248,22 @@ This decision mostly forbids things, so the assertions are mostly that nothing h
    `source` text ADR-0007 scoped them as, so this decision cannot be mistaken for having admitted
    hunter pricing by the back door.
 5. `npm test` covers 1, 2 and 4 offline.
+
+**Added 2026-08-16, for the Estimated Minimum Level Disclosure amendment:**
+
+6. **The formula is pinned by name, not re-derived.** A test asserts `UP(1) === 10`, `UP(50) === 59`,
+   and `estimatedMinimumLevel`'s inverse (`estimatedMinimumLevel(10) === 1`,
+   `estimatedMinimumLevel(11) === 2`, `estimatedMinimumLevel(59) === 50`) — pinning the exact
+   hand-authored constants this amendment records, so a future edit to either number is a visible,
+   reviewable diff rather than a silent drift.
+7. **The clamp is exercised, not assumed.** A test asserts that a trait-point total above 59 (the
+   15-most-expensive-traits sum of 83 is available in `catalog.js` for this) still returns exactly `50`,
+   never a number above it — the deliberate stopping point, not an accidental one, and never a distinct
+   "exceeds" value or state that would imply a claim about what happens past level 50.
+8. **No hunter identity is added.** The disclosure reads only `upTotal` (already computed) and the two
+   hand-authored constants above — no `loadoutLists` field, no per-hunter state, nothing that varies by
+   which hunter the player has in mind. This keeps assertion 1 above true after the amendment, not just
+   before it.
 
 ## Pros and Cons of the Options
 
@@ -305,8 +384,13 @@ graph TD
 * **Health-chunk configuration is unmodelled and that is correct.** Distributing 150 HP across 50s and
   25s costs nothing; only *restoring* a depleted chunk costs points. So the arrangement is a preference,
   not a budget item, and a planner has no reason to hold it.
-* **Out of scope**: permadeath, XP and levelling, the roster slot limit (10 rising to 75 at 150 BB
-  each), Soul Survivor's granted loadout, and any per-hunter state whatsoever.
+* **Out of scope**: permadeath, the roster slot limit (10 rising to 75 at 150 BB each), Soul Survivor's
+  granted loadout, Dark Tribute, in-match Upgrade Point pickups, Free-hunter starting kits, and any
+  *persisted* per-hunter state whatsoever. **Narrowed 2026-08-16**: "XP and levelling" is no longer
+  blanket out of scope — see "Amendment: Estimated Minimum Level Disclosure" above. What remains
+  declined is modeling a hunter's *actual* level or XP as state; what is now in scope is a stateless,
+  worst-case-computed floor from a loadout's own trait-point total, needing no hunter identity to
+  compute.
 * **Revisit when**: the wiki begins stating a per-hunter starting loadout, or the game introduces fixed
   recruit kits. Either would restore the recruit-delta feature's data and make the entity worth
   reconsidering on ADR-0006's original terms. Absent that, this decision should be reopened only by

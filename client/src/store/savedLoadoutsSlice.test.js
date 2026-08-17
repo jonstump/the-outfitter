@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import loadoutReducer from "./loadoutSlice.js";
 import uiReducer from "./uiSlice.js";
+import loadoutListsReducer from "./loadoutListsSlice.js";
 import savedLoadoutsReducer, {
   fetchSaved,
   saveCurrent,
+  saveCurrentAsNew,
   deleteSaved,
   describeSaved,
 } from "./savedLoadoutsSlice.js";
@@ -23,11 +25,13 @@ function makeStore() {
     reducer: {
       loadout: loadoutReducer,
       ui: uiReducer,
+      loadoutLists: loadoutListsReducer,
       savedLoadouts: savedLoadoutsReducer,
     },
     preloadedState: {
       loadout: { ...emptyLoadout(), name: "My Loadout", savedId: null },
       ui: { message: "" },
+      loadoutLists: { items: [], status: "idle", error: null },
       savedLoadouts: { items: [], status: "idle", error: null },
     },
   });
@@ -261,6 +265,149 @@ describe("savedId on save (id-addressed writes)", () => {
 
     await store.dispatch(saveCurrent());
     expect(store.getState().loadout.savedId).toBe("rec-3");
+  });
+});
+
+// Governing: ADR-0022 "The exception, and what it costs" (issue #136's follow-up,
+// "a distinct way to save a loadout vs saving it as a new one")
+//
+// saveCurrentAsNew is the second caller of the upsert-without-id path ADR-0022 already
+// built for a build with nothing loaded. These tests pin the one thing that path is FOR:
+// it must never carry `id`, even when `loadout.savedId` is set — the whole point is to
+// stop addressing the record the build was loaded from.
+describe("saveCurrentAsNew (issue #136 follow-up)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const bodyOf = (call) => JSON.parse(call[1].body);
+
+  it("omits id even when savedId is set — it must not write back to the loaded record", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-new", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+
+    await store.dispatch(saveCurrentAsNew());
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts$/);
+    expect(opts.method).toBe("POST");
+    expect(bodyOf(global.fetch.mock.calls.at(-1))).not.toHaveProperty("id");
+  });
+
+  it("attaches savedId to the NEW record returned, not the one it started from", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-new", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+
+    await store.dispatch(saveCurrentAsNew());
+
+    expect(store.getState().loadout.savedId).toBe("rec-new");
+  });
+
+  it("adds the new record to savedLoadouts.items without disturbing the original", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ id: "rec-new", name: "My Loadout", data: {}, listId: null }));
+    const store = makeStore();
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [{ id: "rec-original", name: "My Loadout", data: {}, listId: null }],
+    });
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+
+    await store.dispatch(saveCurrentAsNew());
+
+    const ids = store.getState().savedLoadouts.items.map((l) => l.id).sort();
+    expect(ids).toEqual(["rec-new", "rec-original"]);
+  });
+
+  it("surfaces a failure with the error prefix, naming it as a save-as-new", async () => {
+    global.fetch.mockResolvedValueOnce(respond({}, 500));
+    const store = makeStore();
+
+    await store.dispatch(saveCurrentAsNew());
+
+    expect(store.getState().ui.message.startsWith("!")).toBe(true);
+    expect(store.getState().ui.message).toContain("as a new loadout");
+  });
+
+  // The scenario the button exists for: branch off a loaded record without touching it. The
+  // ordinary case is an UNCHANGED name and destination, which is exactly the triple ADR-0022's
+  // upsert-without-id path matches on — left alone, this would silently overwrite the very
+  // record "Save as new" promises not to touch.
+  it("auto-renames on a same-name-same-list collision instead of overwriting the original", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond({ id: "rec-copy", name: "My Loadout (2)", data: {}, listId: null })
+    );
+    const store = makeStore();
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [{ id: "rec-original", name: "My Loadout", data: {}, listId: null }],
+    });
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+    // makeStore's preloaded name is already "My Loadout" — the exact name of the item just
+    // seeded above, so this collides without any further setup.
+
+    await store.dispatch(saveCurrentAsNew());
+
+    const [, opts] = global.fetch.mock.calls.at(-1);
+    const body = JSON.parse(opts.body);
+    expect(body.name).toBe("My Loadout (2)");
+    expect(body).not.toHaveProperty("id");
+    // The field itself is updated too, so the NEXT save (id-addressed, since savedId is now
+    // set) writes the disambiguated name back onto the new record rather than reverting it.
+    expect(store.getState().loadout.name).toBe("My Loadout (2)");
+    expect(store.getState().loadout.savedId).toBe("rec-copy");
+    expect(store.getState().ui.message).toContain("renamed to “My Loadout (2)”");
+    expect(store.getState().ui.message).toContain("avoid overwriting “My Loadout”");
+  });
+
+  it("counts up past a taken (2) to find a free disambiguator", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond({ id: "rec-copy-3", name: "My Loadout (3)", data: {}, listId: null })
+    );
+    const store = makeStore();
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [
+        { id: "rec-original", name: "My Loadout", data: {}, listId: null },
+        { id: "rec-copy-2", name: "My Loadout (2)", data: {}, listId: null },
+      ],
+    });
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+
+    await store.dispatch(saveCurrentAsNew());
+
+    const body = JSON.parse(global.fetch.mock.calls.at(-1)[1].body);
+    expect(body.name).toBe("My Loadout (3)");
+  });
+
+  it("does not rename when the destination list differs, even with the same name", async () => {
+    // The collision key is (listId, name), matching the server's own upsert key — a same-named
+    // loadout in a DIFFERENT list is not the record this save would touch, so nothing needs to
+    // change to keep it distinct.
+    global.fetch.mockResolvedValueOnce(
+      respond({ id: "rec-copy", name: "My Loadout", data: {}, listId: "other-list" })
+    );
+    const store = makeStore();
+    store.dispatch({
+      type: "loadoutLists/fetch/fulfilled",
+      payload: [{ id: "other-list", name: "Other list", hunterId: null, accent: "#000", createdAt: "2026-01-01" }],
+    });
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [{ id: "rec-original", name: "My Loadout", data: {}, listId: null }],
+    });
+    store.dispatch({ type: "ui/selectList", payload: "other-list" });
+    store.dispatch({ type: "loadout/setSavedId", payload: "rec-original" });
+
+    await store.dispatch(saveCurrentAsNew());
+
+    const body = JSON.parse(global.fetch.mock.calls.at(-1)[1].body);
+    expect(body.name).toBe("My Loadout");
+    expect(store.getState().loadout.name).toBe("My Loadout");
   });
 });
 

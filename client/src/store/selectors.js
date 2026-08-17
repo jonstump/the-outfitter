@@ -1,5 +1,5 @@
 import { createSelector } from "@reduxjs/toolkit";
-import { capMax, capUsed, equipOverCapacity, totalCost, upTotal } from "../utils/calc.js";
+import { capMax, capUsed, equipOverCapacity, estimatedMinimumLevel, totalCost, upTotal } from "../utils/calc.js";
 import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
@@ -20,6 +20,12 @@ export const selectCapUsed = createSelector([selectLoadout], capUsed);
 export const selectUpTotal = createSelector([selectLoadout], upTotal);
 
 export const selectTotalCost = createSelector([selectLoadout], totalCost);
+
+// Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure". Composed
+// off `selectUpTotal` rather than `selectLoadout` directly, since `estimatedMinimumLevel` is a
+// pure function of the trait-point total, not of the loadout shape — the same reason its own
+// unit tests pass numbers rather than loadouts.
+export const selectEstimatedMinimumLevel = createSelector([selectUpTotal], estimatedMinimumLevel);
 
 // Governing: ADR-0009, SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
 // `equip.length` is always 8 under this model, so the count the panel header shows is

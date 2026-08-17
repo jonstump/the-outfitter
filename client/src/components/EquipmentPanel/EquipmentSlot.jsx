@@ -47,21 +47,39 @@ export default function EquipmentSlot({ index, run, grabRef }) {
   // are handled at the grid root so the grab is one state machine instead of eight.
   const handleKeyDown = (e) => {
     if (e.key === "Escape" || e.key === "Esc") {
-      // Governing: issue #417. Compare against the grab's ORIGIN, not `from`:
-      // the arrow keys move `from` away from the origin cell (EquipmentPanel's
-      // onGridKeyDown), so Escape on the origin cell (which keeps focus) must
-      // still release the grab even after arrowing.
-      if (ref.current && ref.current.origin === index) {
+      // Governing: issue #417 (compare against the PRESSED cell, not `from` — the
+      // arrow keys move `from` away from it) and issue #464 (compare against
+      // `pressedIndex`, not `origin` — a grab started on a stack's CONTINUATION cell
+      // anchors `origin`/`from` at the run's head, while DOM focus, and therefore
+      // this keydown, stays on the cell that was actually pressed for the rest of
+      // the gesture; arrows move `from`, never focus).
+      if (ref.current && ref.current.pressedIndex === index) {
         ref.current = null;
         e.preventDefault();
       }
       return;
     }
     if (e.key === " " || e.key === "Spacebar") {
-      // Space on a filled cell starts a keyboard grab of THAT cell, stored in the
-      // shared ref so the grid root's Enter handler reads it synchronously.
+      // Space on a filled cell starts a keyboard grab, stored in the shared ref so
+      // the grid root's Enter handler reads it synchronously.
+      //
+      // Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One Stack",
+      // issue #464. "Dragging any cell of a stack... move[s] the entire run as a
+      // unit" applies to the keyboard grab too: when this cell is part of a run of
+      // more than one cell, the grab's `origin`/`from` anchor at the run's HEAD
+      // (its lowest-numbered cell), never at the pressed cell's own index — whether
+      // the press landed on the head or a continuation cell. `pressedIndex` keeps
+      // the cell that was actually pressed, for the Escape check above only.
       if (entry && !ref.current) {
-        ref.current = { origin: index, from: index, mode: "keyboard" };
+        const isRun = run && run.cells.length > 1;
+        const anchor = isRun ? run.cells[0] : index;
+        ref.current = {
+          origin: anchor,
+          from: anchor,
+          mode: "keyboard",
+          length: isRun ? run.cells.length : 1,
+          pressedIndex: index,
+        };
         e.preventDefault();
       }
       return;
@@ -88,7 +106,21 @@ export default function EquipmentSlot({ index, run, grabRef }) {
     if (!entry) return;
     if (e.button !== undefined && e.button !== 0) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    ref.current = { origin: index, from: index, mode: "pointer", pointerId: e.pointerId };
+    // Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One Stack",
+    // issue #464. Same anchoring as the keyboard Space-grab above: the grab
+    // originates at the run's HEAD, never the pressed cell's own index, whether the
+    // press landed on the head or a continuation cell (the continuation branch below
+    // wires its own `onPointerDown` to this same function).
+    const isRun = run && run.cells.length > 1;
+    const anchor = isRun ? run.cells[0] : index;
+    ref.current = {
+      origin: anchor,
+      from: anchor,
+      mode: "pointer",
+      pointerId: e.pointerId,
+      length: isRun ? run.cells.length : 1,
+      pressedIndex: index,
+    };
   };
 
   // Governing: SPEC-0006 REQ "Items Are Rearranged by Direct Manipulation", issue #312.

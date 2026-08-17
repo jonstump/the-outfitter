@@ -1,13 +1,14 @@
 import { useDispatch, useSelector } from "react-redux";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
-import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
+import { saveCurrent, saveCurrentAsNew } from "../../store/savedLoadoutsSlice.js";
 import { randomizeThunk, clearBuildThunk, shareThunk } from "../../store/thunks.js";
 import { selectSaveDestinationName, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
   const dispatch = useDispatch();
   const name = useSelector((s) => s.loadout.name);
+  const savedId = useSelector((s) => s.loadout.savedId);
   const total = useSelector(selectTotalCost);
   const up = useSelector(selectUpTotal);
   const ui = useSelector((s) => s.ui);
@@ -123,6 +124,16 @@ export default function ActionsPanel() {
         <button className="btn-gold" onClick={() => dispatch(saveCurrent())}>
           Save to <span className="save-dest">{destination ?? "Unassigned"}</span>
         </button>
+        {/* Governing: ADR-0022 "The exception, and what it costs" — visible only once there is
+            a loaded record to diverge FROM. With no `savedId`, Save already upserts on
+            (owner, listId, name) — the same thing this button does — so showing both would be
+            two controls for one action (issue #136's follow-up, "a distinct way to save a
+            loadout vs saving it as a new one"). */}
+        {savedId && (
+          <button className="btn-outline" onClick={() => dispatch(saveCurrentAsNew())}>
+            Save as new
+          </button>
+        )}
         <button className="btn-outline" onClick={() => dispatch(shareThunk())}>
           Share link
         </button>

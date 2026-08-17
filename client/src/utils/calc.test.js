@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { QM, WEAPONS } from "../data/catalog.js";
+import { QM, TRAITS, WEAPONS } from "../data/catalog.js";
 import { ammoRoundFor } from "../data/itemStats.js";
-import { capMax, capUsed, equipOverCapacity, hasFreeCell, slotMax, totalCost, upTotal, weaponSize } from "./calc.js";
+import {
+  capMax,
+  capUsed,
+  equipOverCapacity,
+  estimatedMinimumLevel,
+  hasFreeCell,
+  slotMax,
+  totalCost,
+  upgradePointsAtLevel,
+  upTotal,
+  weaponSize,
+} from "./calc.js";
 
 // Governing: issue #26 (calc.js reads the post-refactor catalog tuples)
 //
@@ -152,6 +163,44 @@ describe("upTotal / slotMax", () => {
     // Control: distinct blocked cells are unaffected by the dedup.
     const distinct = loadoutWith({ equip: Array(8).fill(null), blocked: [0, 1] });
     expect(slotMax(distinct)).toBe(6);
+  });
+});
+
+// Governing: ADR-0021, "Amendment 2026-08-16: Estimated Minimum Level Disclosure". Pins the
+// exact hand-authored constants that amendment records, so a future edit to either number is
+// a visible, reviewable diff rather than a silent drift (ADR-0021 Confirmation #6/#7/#8).
+describe("upgradePointsAtLevel / estimatedMinimumLevel", () => {
+  it("is 10 at level 1 and 59 at level 50 — the hand-authored rate, one point per level", () => {
+    expect(upgradePointsAtLevel(1)).toBe(10);
+    expect(upgradePointsAtLevel(50)).toBe(59);
+  });
+
+  it("inverts upgradePointsAtLevel for costs within the leveling range", () => {
+    expect(estimatedMinimumLevel(10)).toBe(1);
+    expect(estimatedMinimumLevel(11)).toBe(2);
+    expect(estimatedMinimumLevel(59)).toBe(50);
+  });
+
+  it("floors at level 1 for any cost at or below the level-1 starting total", () => {
+    expect(estimatedMinimumLevel(0)).toBe(1);
+    expect(estimatedMinimumLevel(1)).toBe(1);
+    expect(estimatedMinimumLevel(10)).toBe(1);
+  });
+
+  // The clamp is the deliberate stopping point ADR-0021's amendment records — past-level-50
+  // progression is a real mechanic the product owner is not certain of and the wiki does not
+  // quantify, so this MUST return exactly 50, never a guessed higher number or a distinct
+  // "exceeds" value.
+  it("clamps at level 50 for a cost beyond what level 50 can afford, never exceeding it", () => {
+    expect(estimatedMinimumLevel(60)).toBe(50);
+    expect(estimatedMinimumLevel(1000)).toBe(50);
+
+    // The clamp is reachable by a real build, not just a synthetic large number: the 15
+    // most expensive traits in the live catalog sum to more than upgradePointsAtLevel(50).
+    const mostExpensive = [...TRAITS].map((t) => t[2]).sort((a, b) => b - a).slice(0, 15);
+    const worstCaseBuild = mostExpensive.reduce((a, b) => a + b, 0);
+    expect(worstCaseBuild).toBeGreaterThan(upgradePointsAtLevel(50));
+    expect(estimatedMinimumLevel(worstCaseBuild)).toBe(50);
   });
 });
 

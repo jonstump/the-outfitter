@@ -83,8 +83,10 @@ is by some distance the largest gate on this list.
       does not retroactively validate skipping the decision; it recorded a real risk this run of the
       burn-down happened not to hit. Whoever next opens this gate on a slower-moving item should still
       settle its granularity before picking either.
-- [ ] **Equipment slot drag and drop is sound — shipped, not settled. The two blockers have cleared;
-      the gate has not.** SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
+- [x] **Equipment slot drag and drop is sound — clear, 2026-08-17 (PR #491).** This gate was the last
+      of the seven to fall, and the only one that was ever held open on a requirement rather than a
+      ticket count; the history below is kept because that distinction is the reusable part.
+      SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
       bullet called blockers are closed: **#352** (`moveEquip` duplicated an item from an empty source
       cell) took the reducer guard in #415 and the grab-ref lifetime, Escape-origin guard and
       pointer-identity check in #420; **#353** (no decoder enforced any equipment rule) took the
@@ -117,11 +119,18 @@ is by some distance the largest gate on this list.
       `EquipmentPanel.test.jsx` or `EquipmentSlot.test.jsx` exercises stack dragging or the
       insufficient-room rejection at all.
 
-      **The owner decided on 2026-08-16 that this gate stays unchecked until #464 closes.** "Sound" is
-      the bar this gate sets, and an unimplemented SHALL that visibly breaks a stack apart on an
-      ordinary drag does not meet it — the gate follows the requirement, not the issue count, and five
-      blockers closing did not settle drag and drop while a required behaviour is missing. Unlike the
-      granularity question in the gate above, this one was settled deliberately rather than overtaken.
+      **The owner decided on 2026-08-16 that this gate stays unchecked until #464 closes, and PR #491
+      closed it on 2026-08-17.** "Sound" is the bar this gate sets, and an unimplemented SHALL that
+      visibly breaks a stack apart on an ordinary drag did not meet it — the gate follows the
+      requirement, not the issue count, and five blockers closing did not settle drag and drop while a
+      required behaviour was missing. `moveEquip` now carries the run's length, so a stack moves as one
+      unit.
+
+      **This is the precedent worth reusing, and it is why the history above is kept rather than
+      collapsed to a checkmark.** The gate was held on a requirement and released by a fix — not by
+      re-reading the bar until the behaviour that had already shipped qualified. It took eight hours.
+      Unlike the granularity question in the gate above, which was overtaken rather than answered, this
+      one was decided deliberately and then satisfied.
 
 - [x] **The rebrand to "Backwater Outfitters" — clear, 2026-08-16 (PR #463).** #424. The app was
       branded "The Outfitter" in-app and across the docs; it was renamed. This gate existed by
