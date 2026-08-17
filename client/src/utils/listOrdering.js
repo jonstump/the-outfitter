@@ -108,3 +108,78 @@ export function groupByList(loadouts, lists) {
   }
   return groups;
 }
+
+/**
+ * Order the loadouts within ONE list (or Unassigned) by their `order` field.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order". Unlike
+ * `sortLists` above, this is not a client-chosen VIEW — the server always materialises a
+ * numeric `order` on every loadout it returns (`server/src/routes/loadouts.js`'s
+ * `publicLoadout`), computed from the record's storage position when nothing has been
+ * explicitly written yet, so this is a plain ascending sort with no fallback of its own to
+ * carry: an absent value here would mean the record came from a path that skipped the
+ * server's projection (a stale fixture in a test, never a real API response), not a case
+ * this function needs to paper over. `?? 0` keeps the sort from throwing on `undefined - 5`
+ * (`NaN` and Array.prototype.sort do not mix) rather than asserting anything about what an
+ * absent order MEANS.
+ *
+ * A plain numeric sort is stable for ties in every engine this app ships to (Array.prototype
+ * .sort has been spec-stable since ES2019) — two loadouts that somehow shared an `order`
+ * would keep their incoming relative order rather than being shuffled on every render.
+ */
+export function sortByOrder(loadouts) {
+  return [...loadouts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+/**
+ * Move the loadout with id `id` so it sits at `toIndex` in the result.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order". This is the
+ * KEYBOARD path's move: LoadoutListsPanel.jsx computes the on-screen preview during an
+ * in-progress keyboard grab by calling this on every arrow press, and commits the same
+ * result on drop — the displayed order and the order actually sent are the same value,
+ * never two computations that could drift apart.
+ *
+ * `toIndex` is clamped to the valid range of the array WITHOUT the moved item, so a caller
+ * stepping one past either end lands on "first" or "last" rather than throwing or leaving a
+ * gap. An unknown id is a no-op — returns `items` unchanged, not a copy with nothing moved,
+ * so a caller can cheaply check `result === items` to tell "nothing happened" from "moved to
+ * where it already was" (the latter still returns a new array).
+ */
+export function moveToIndex(items, id, toIndex) {
+  const from = items.findIndex((i) => i.id === id);
+  if (from === -1) return items;
+  const without = items.filter((i) => i.id !== id);
+  const clamped = Math.max(0, Math.min(toIndex, without.length));
+  const next = [...without];
+  next.splice(clamped, 0, items[from]);
+  return next;
+}
+
+/**
+ * Move the loadout with id `movedId` to sit immediately before or after the loadout with id
+ * `targetId`.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order". This is the
+ * POINTER path's move: a drop is resolved against whichever card the pointer released over
+ * (`targetId`) and which half of that card's height the pointer was in (`placeBefore`),
+ * never against a raw index — the equipment grid's pointer drop is resolved the same way,
+ * against a cell under the pointer rather than a tracked coordinate.
+ *
+ * Dropping onto itself, or naming an id this list does not contain, is a no-op — returns
+ * `items` unchanged. That covers both "the drag ended over its own card" (the ordinary
+ * no-op drop) and a stale target from a race between the drop and a concurrent change to
+ * the list, without the caller needing to check either case separately.
+ */
+export function moveBesideTarget(items, movedId, targetId, placeBefore) {
+  if (movedId === targetId) return items;
+  const moved = items.find((i) => i.id === movedId);
+  if (!moved) return items;
+  const without = items.filter((i) => i.id !== movedId);
+  const targetIndex = without.findIndex((i) => i.id === targetId);
+  if (targetIndex === -1) return items;
+  const insertAt = placeBefore ? targetIndex : targetIndex + 1;
+  const next = [...without];
+  next.splice(insertAt, 0, moved);
+  return next;
+}

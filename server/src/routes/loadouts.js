@@ -227,11 +227,79 @@ export { DESCRIPTION_MAX_CHARS };
 // distinction. (It was three states until #181 moved inheritance to the list, where the hunter
 // actually lives; `""` survives as `""` here only because rewriting stored records to say the
 // same thing a different way would be a migration with nothing to gain.)
-const publicLoadout = (rec) => ({
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order", design.md
+// "Loadouts within a list have a user-set order, stored server-side".
+//
+// `order` is materialised for every response, never left absent: a record written before
+// this requirement existed has no stored `order`, and rather than push that absence onto
+// every consumer (a second `?? fallback` at every call site, and a client that has to know
+// what the fallback even is), it is computed HERE, once, at the boundary. The fallback is
+// the record's own position among its live, owned list-mates in the array's storage order —
+// which is the creation order every one of today's records already renders in, so nothing
+// changes for a record that has never been touched by a reorder.
+//
+// This is a READ-time projection, not a write: `rec.order` on disk is untouched by a GET,
+// so no migration is triggered merely by serving a request. Three writers set it for real,
+// and all three are internal to this file: the reorder endpoint, the list-move append, and
+// (as of the fix below) record creation via `nextOrderInScope` — never this fallback. A
+// record can only ever reach this fallback by predating the requirement entirely, which is
+// exactly the "nothing in this scope has been reordered yet" case the fallback is FOR. A
+// record that reaches it any other way is a bug: earlier this fallback was ALSO how a
+// brand-new record's order was decided, which meant a fresh save into a list that had been
+// reordered and then partly emptied could land the new record ahead of older, deliberately
+// ordered survivors — the survivors kept real (and, after the scope shrank, comparatively
+// large) stored values while the newcomer got a small raw array-position index with no idea
+// those values existed. Routing creation through the same max-based writer the move path
+// already used closes that gap; see `server/src/routes/reorder.test.js` for the regression.
+function scopedOrderIndex(rec, records) {
+  const scoped = liveRecords(records).filter(
+    (l) => l.owner === rec.owner && (l.listId ?? null) === (rec.listId ?? null)
+  );
+  const idx = scoped.findIndex((l) => l.id === rec.id);
+  return idx === -1 ? 0 : idx;
+}
+
+// Records written before SPEC-0003 have no `listId` key at all, so `rec.listId` is
+// undefined rather than null. Serialise it explicitly so the API shape is uniform: every
+// loadout carries a `listId`, and "Unassigned" is always `null` rather than sometimes an
+// absent field. Without this, every consumer has to coalesce, and the no-op comparison in
+// PATCH below would miss the legacy shape.
+//
+// `description` is coalesced the same way and for the same reason. A loadout's description is
+// the user's own note about the build and NOTHING is inherited into it, so absent, null and ""
+// all render as no note — the coalescing is for a uniform API shape, not to preserve a
+// distinction. (It was three states until #181 moved inheritance to the list, where the hunter
+// actually lives; `""` survives as `""` here only because rewriting stored records to say the
+// same thing a different way would be a migration with nothing to gain.)
+//
+// `records` is the full in-memory collection (`db.data.loadouts`) at call time — needed only
+// to compute the `order` fallback above when `rec.order` is not itself stored.
+const publicLoadout = (rec, records) => ({
   ...publicRecord(rec),
   listId: rec.listId ?? null,
   description: rec.description ?? null,
+  order: rec.order ?? scopedOrderIndex(rec, records),
 });
+
+// Governing: SPEC-0003 REQ "A Loadout Moved Between Lists Lands at the End" (design.md
+// "Moving between lists appends, it does not splice").
+//
+// Called only when `listId` is actually CHANGING (never on an ordinary re-save or a
+// no-op move) — computes one past the highest effective order among the destination
+// scope's CURRENT members, `excludeId` set to the moving record itself so it is never
+// counted against its own destination. An empty destination gets 0.
+//
+// Neither leaving `order` untouched nor trusting the record's array position would land
+// this reliably at the end: a value carried over from the old list is coincidental in the
+// new one, and array position reflects creation time, not move time.
+function nextOrderInScope(records, owner, listId, excludeId) {
+  const scoped = liveRecords(records).filter(
+    (l) => l.owner === owner && l.id !== excludeId && (l.listId ?? null) === listId
+  );
+  if (!scoped.length) return 0;
+  const maxOrder = Math.max(...scoped.map((l, idx) => l.order ?? idx));
+  return maxOrder + 1;
+}
 
 /**
  * Validate a caller-supplied listId against the lists the CALLER owns.
@@ -279,7 +347,7 @@ loadoutsRouter.get("/", readLimiter, async (_req, res) => {
     const token = callerToken(_req);
     const mine = liveRecords(db.data.loadouts)
       .filter((l) => l.owner === token)
-      .map(publicLoadout);
+      .map((l) => publicLoadout(l, db.data.loadouts));
     res.json(mine);
   } catch (err) {
     console.error("GET /api/loadouts failed:", err);
@@ -425,7 +493,29 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       if (describes) existing.description = desc.value;
       record = existing;
     } else {
-      record = { id: randomUUID(), owner: token, name: trimmedName, data, listId: ref.value, updatedAt: now };
+      const newId = randomUUID();
+      record = {
+        id: newId,
+        owner: token,
+        name: trimmedName,
+        data,
+        listId: ref.value,
+        // Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order".
+        //
+        // Assigned explicitly here rather than left for `publicLoadout`'s array-position
+        // fallback to cover — `scopedOrderIndex` bases that fallback on the record's plain
+        // position among its live scope-mates in STORAGE order, which is only correct while
+        // nothing in the scope has ever been reordered. Once a scope HAS been reordered and
+        // then shrunk (an older member deleted or moved out), its survivors keep whatever
+        // explicit `order` the reorder gave them, which can be arbitrarily larger than a new
+        // arrival's storage-position fallback of 0/1/2 — the new loadout would render AHEAD
+        // of older, deliberately-arranged ones. `nextOrderInScope` is the same "one past the
+        // max real value in scope" computation the list-move path already uses for the
+        // identical reason, so every entry point into a list scope — create, and move — goes
+        // through one writer instead of two different answers to "where does this land".
+        order: nextOrderInScope(db.data.loadouts, token, ref.value, newId),
+        updatedAt: now,
+      };
       // The key is written only when the caller supplied one. A record nobody has written a
       // note about carries NO `description` field at all, and the API surfaces that as null
       // through publicLoadout without the store having to hold a placeholder for it.
@@ -434,10 +524,75 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
     }
 
     await db.write();
-    res.status(existing ? 200 : 201).json(publicLoadout(record));
+    res.status(existing ? 200 : 201).json(publicLoadout(record, db.data.loadouts));
   } catch (err) {
     console.error("POST /api/loadouts failed:", err);
     res.status(500).json({ error: "failed to save loadout" });
+  }
+});
+
+/**
+ * Reorder every loadout filed in one list (or Unassigned) in a single write.
+ *
+ * Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order", design.md
+ * "Loadouts within a list have a user-set order, stored server-side".
+ *
+ * Registered BEFORE `PATCH /:id` below — Express matches routes in registration order, and
+ * `/:id` would otherwise treat the literal path segment "reorder" as an id.
+ *
+ * `order` MUST name EXACTLY the caller's own live loadouts currently filed in `listId` — not
+ * a superset, not a subset, no foreign id, no duplicate. This is deliberately stricter than
+ * `PATCH /:id`'s per-field writes: a partial or padded list here would either silently orphan
+ * a card at whatever order it already had (dropped from the request) or hand a stranger's
+ * position to an id that was never validated as belonging to this scope. Rejecting the whole
+ * request outright is the same "reject loudly rather than silently downgrade" instinct
+ * `validateListRef` already applies to a single `listId` reference, extended to a whole
+ * reordering request instead of one write.
+ */
+loadoutsRouter.patch("/reorder", ipLimiter, tokenLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { listId, order } = body;
+
+    if (!Array.isArray(order) || order.length === 0 || !order.every(isId)) {
+      return res.status(400).json({ error: "order must be a non-empty array of loadout ids" });
+    }
+    if (new Set(order).size !== order.length) {
+      return res.status(400).json({ error: "order must not contain duplicate ids" });
+    }
+
+    const token = callerToken(req);
+    await db.read();
+
+    const ref = validateListRef(listId, token, res);
+    if (!ref.ok) return;
+
+    const scoped = liveRecords(db.data.loadouts).filter(
+      (l) => l.owner === token && (l.listId ?? null) === ref.value
+    );
+    const scopedIds = new Set(scoped.map((l) => l.id));
+    const orderIds = new Set(order);
+    const namesExactlyTheScope =
+      scopedIds.size === orderIds.size && [...scopedIds].every((id) => orderIds.has(id));
+    if (!namesExactlyTheScope) {
+      return res.status(400).json({
+        error: "order must name exactly the loadouts currently filed in listId, no more and no fewer",
+      });
+    }
+
+    const byId = new Map(scoped.map((l) => [l.id, l]));
+    order.forEach((id, index) => {
+      byId.get(id).order = index;
+    });
+    order.forEach((id) => {
+      byId.get(id).updatedAt = new Date().toISOString();
+    });
+
+    await db.write();
+    res.json(order.map((id) => publicLoadout(byId.get(id), db.data.loadouts)));
+  } catch (err) {
+    console.error("PATCH /api/loadouts/reorder failed:", err);
+    res.status(500).json({ error: "failed to reorder loadouts" });
   }
 });
 
@@ -502,9 +657,15 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
     const sameDescription = (loadout.description ?? null) === desc.value;
     if (sameList && sameDescription) {
       // Writing what is already there is a no-op, not an error and not a write.
-      return res.json(publicLoadout(loadout));
+      return res.json(publicLoadout(loadout, db.data.loadouts));
     }
 
+    // Governing: SPEC-0003 REQ "A Loadout Moved Between Lists Lands at the End". Only an
+    // ACTUAL list change gets a fresh order — a no-op `files` (re-sending the current
+    // listId) or a description-only write must not disturb where the card already sits.
+    if (files && !sameList) {
+      loadout.order = nextOrderInScope(db.data.loadouts, token, ref.value, loadout.id);
+    }
     if (files) loadout.listId = ref.value;
     if (describes) loadout.description = desc.value;
     loadout.updatedAt = new Date().toISOString();
@@ -517,7 +678,7 @@ loadoutsRouter.patch("/:id", ipLimiter, tokenLimiter, async (req, res) => {
       // what a log needs to say.
       description: sameDescription ? undefined : desc.value === null ? "cleared" : `${charCount(desc.value)} chars`,
     });
-    res.json(publicLoadout(loadout));
+    res.json(publicLoadout(loadout, db.data.loadouts));
   } catch (err) {
     console.error("PATCH /api/loadouts/:id failed:", err);
     res.status(500).json({ error: "failed to update loadout" });

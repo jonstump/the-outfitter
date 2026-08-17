@@ -1915,6 +1915,57 @@ button {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--divider);
 }
+/* Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order" (feedback item
+   3, "loadouts under lists could be dragged and dropped to change the order of them"). Sized
+   and styled to match `.equip-drag-handle`'s corner-chip geometry and cursor language — the
+   same drag affordance, reused rather than reinvented, on a different shape of container.
+   `align-items: baseline` on `.ll-lcard-head` would otherwise sink this to the name's text
+   baseline, so it opts back into `align-self: center`. */
+.ll-lcard-handle {
+  align-self: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(20, 16, 9, 0.85);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: grab;
+  /* The whole fix for touch dragging (SPEC-0006's `.equip-drag-handle` comment explains the
+     mechanism at length): without it, a finger press-and-move here is free to be read as a
+     page pan, which fires pointercancel and never delivers the pointerup this feature's drop
+     depends on. */
+  touch-action: none;
+}
+.ll-lcard-handle:hover {
+  border-color: var(--gold-border);
+}
+.ll-lcard-handle:focus-visible {
+  outline: 2px solid var(--gold-border);
+  outline-offset: 2px;
+}
+.ll-lcard.grabbing {
+  cursor: grabbing;
+}
+.ll-lcard.grabbing .ll-lcard-handle {
+  cursor: grabbing;
+}
+/* WCAG 2.5.5 / Apple HIG's 44px touch target, grown only on coarse pointers — mirrors
+   `.equip-drag-handle`'s own media query exactly, for the same reason: a mouse cursor does
+   not need a thumb-sized chip, so the desktop card keeps its compact one. */
+@media (pointer: coarse) {
+  .ll-lcard-handle {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+}
 .ll-lcard-name {
   flex: 1;
   min-width: 0;
