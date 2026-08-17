@@ -10,8 +10,11 @@ import {
   LS_CUR,
   PROMOTED_TO_WEAPON,
   RETIRED_WEAPON_ALIASES,
+  decodeShareCode,
   emptyLoadout,
+  encodeShareCode,
   encodeShareUrl,
+  extractShareCode,
   fromData,
   readHashLoadout,
   readStoredLoadout,
@@ -1556,6 +1559,86 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
     const dec = readHashLoadout();
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Café");
+  });
+});
+
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
+// `encodeShareCode`/`decodeShareCode` are the bare-code halves `encodeShareUrl` and
+// `readHashLoadout` are now themselves built from — these tests pin the pair directly,
+// independent of the URL/hash machinery, and `extractShareCode` pins the "paste whatever
+// you actually copied" input handling the import UI depends on.
+describe("share codes (item 4 — copy/paste, not just link)", () => {
+  it("round-trips a loadout through encodeShareCode/decodeShareCode with no URL involved", () => {
+    const lo = emptyLoadout();
+    lo.name = "Bare code build";
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("#");
+    expect(code).not.toContain("http");
+    const dec = decodeShareCode(code);
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Bare code build");
+  });
+
+  it("encodeShareUrl's code and encodeShareCode's code are the same string", () => {
+    // They MUST be, since encodeShareUrl is now built from encodeShareCode — this pins
+    // that relationship so the two paths can never quietly drift into different formats.
+    const lo = emptyLoadout();
+    lo.name = "Same code either way";
+    const code = encodeShareCode(lo);
+    const url = encodeShareUrl(lo);
+    expect(url.endsWith("#L=" + code)).toBe(true);
+  });
+
+  it("decodeShareCode returns null for empty, garbage, or undecodable input", () => {
+    expect(decodeShareCode("")).toBeNull();
+    expect(decodeShareCode(null)).toBeNull();
+    expect(decodeShareCode("not valid base64 json!!")).toBeNull();
+  });
+
+  describe("extractShareCode", () => {
+    it("extracts the code from a bare code with no surrounding text", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(code)).toBe(code);
+    });
+
+    it("extracts the code from a full share URL", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      const url = `https://example.com/some/path#L=${code}`;
+      expect(extractShareCode(url)).toBe(code);
+    });
+
+    it("extracts the code from a bare hash fragment", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(`#L=${code}`)).toBe(code);
+    });
+
+    it("trims surrounding whitespace a paste commonly carries", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(`  ${code}  \n`)).toBe(code);
+    });
+
+    it("returns null for empty input, non-string input, and text that isn't a code attempt", () => {
+      expect(extractShareCode("")).toBeNull();
+      expect(extractShareCode("   ")).toBeNull();
+      expect(extractShareCode(undefined)).toBeNull();
+      expect(extractShareCode(null)).toBeNull();
+      expect(extractShareCode(42)).toBeNull();
+      expect(extractShareCode("My Loadout Name")).toBeNull();
+    });
+
+    it("a full round trip: encode, wrap in a URL, extract, decode", () => {
+      const lo = emptyLoadout();
+      lo.name = "Round trip via pasted URL";
+      const url = `https://example.com/#L=${encodeShareCode(lo)}`;
+      const extracted = extractShareCode(url);
+      const dec = decodeShareCode(extracted);
+      expect(dec).not.toBeNull();
+      expect(dec.name).toBe("Round trip via pasted URL");
+    });
   });
 });
 

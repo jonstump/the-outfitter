@@ -1,6 +1,6 @@
 import { TRAITS } from "../data/catalog.js";
 import { totalCost, upTotal } from "../utils/calc.js";
-import { encodeShareUrl, fromData } from "../utils/loadoutCodec.js";
+import { decodeShareCode, encodeShareCode, encodeShareUrl, extractShareCode, fromData } from "../utils/loadoutCodec.js";
 import { randomizeLoadout } from "../utils/randomize.js";
 import { loadoutActions } from "./loadoutSlice.js";
 import { uiActions } from "./uiSlice.js";
@@ -98,5 +98,80 @@ export function shareThunk() {
     } else {
       fallback();
     }
+  };
+}
+
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). The
+// same underlying payload `shareThunk` puts in a URL, copied bare — no domain, no path, no
+// "#L=" marker — for a user who wants something to paste into a text field, a Discord
+// message, or a note, rather than a link to click. ActionsPanel also renders this code in
+// a plain, always-visible, read-only field (computed the same way, via `encodeShareCode`),
+// so a clipboard failure here is a inconvenience, not a dead end: the code is already on
+// screen and selectable by hand either way, which is why the fallback message below points
+// at it instead of repeating `shareThunk`'s "copy the URL" wording — there is no address
+// bar to copy from for a bare code that never touched `location.hash`.
+export function copyCodeThunk() {
+  return (dispatch, getState) => {
+    const { loadout } = getState();
+    let code;
+    try {
+      code = encodeShareCode(loadout);
+    } catch {
+      dispatch(uiActions.setMessage("Could not generate a share code for this loadout."));
+      return;
+    }
+    const done = () => dispatch(uiActions.setMessage("Share code copied to clipboard."));
+    const fallback = () =>
+      dispatch(uiActions.setMessage("Couldn't copy automatically — select the code below and copy it."));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done, fallback);
+    } else {
+      fallback();
+    }
+  };
+}
+
+// Governing: item 4 of the 2026-08-16 feedback batch, ADR-0024 (the decoder's contract is
+// "produce a loadable loadout, not a legal one"). `rawInput` is whatever the user pasted —
+// a bare code, a full share URL, or just its "#L=..." fragment — and `extractShareCode`
+// (loadoutCodec.js) is what accepts all three rather than demanding the user strip a URL
+// down to the code themselves.
+//
+// Two distinct failure messages, not one generic "couldn't load": "that doesn't look like
+// a code" (extraction found nothing code-shaped) and "couldn't load that code" (it looked
+// like a code but didn't decode) are different problems with different fixes on the user's
+// end — mistyped/wrong paste versus a genuinely corrupted or foreign-format string — and
+// collapsing them loses the one piece of information that tells the user which.
+//
+// A successful decode replaces the CURRENT build, exactly like a share link opened in the
+// browser does (`App.jsx`'s mount effect, `readHashLoadout` + `setLoadout`) — this is the
+// same load, triggered from a paste instead of a page load, so it carries no `savedId`:
+// the decoded loadout is a fresh, never-saved build, matching a share link's own behavior.
+// Returns `true` on a successful load and `false` on either failure, so the paste field
+// that calls this (ActionsPanel) can decide whether to clear itself — cleared on success,
+// left in place on failure so the user can see what they actually pasted alongside the
+// error message explaining why it didn't work.
+export function importCodeThunk(rawInput) {
+  return (dispatch) => {
+    const code = extractShareCode(rawInput);
+    if (!code) {
+      dispatch(uiActions.setMessage("!That doesn't look like a share code."));
+      return false;
+    }
+    const decoded = decodeShareCode(code);
+    if (!decoded) {
+      dispatch(
+        uiActions.setMessage("!Couldn't load that code — it may be corrupted or from a version this app no longer reads.")
+      );
+      return false;
+    }
+    dispatch(loadoutActions.setLoadout(decoded));
+    // Governing: issue #359, mirrored from loadSavedThunk's identical notice.
+    if (decoded.decodeNotices?.some((n) => n.kind === "ammo-dropped")) {
+      dispatch(uiActions.setMessage("Loaded from code. This build's ammo selection is no longer available."));
+    } else {
+      dispatch(uiActions.setMessage("Loaded from code."));
+    }
+    return true;
   };
 }

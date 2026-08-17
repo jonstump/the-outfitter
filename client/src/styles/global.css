@@ -1308,6 +1308,26 @@ button {
   flex-wrap: wrap;
 }
 
+/* Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). Same
+   row shape as `.save-row` above (flex, wrap, matching gap) so the export and import rows
+   read as part of the same control group rather than a visually distinct block bolted on —
+   no border-top of its own, since `.save-row`'s divider above already separates this whole
+   cluster of controls from the budget row. */
+.code-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Monospace: a base64 code is easier to scan (and to tell "did I select all of it") set in
+   a fixed-width face than in the app's serif body font, which was never chosen for strings
+   that are read character-by-character. */
+.code-field {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12.5px;
+  cursor: text;
+}
+
 /* Governing: SPEC-0003 REQ "The Selected List Is Client State".
    The list a save will file into, named on the save button (issue #136, replacing the badge
    in the lists panel's expanded header). Italic marks it as the varying part of the sentence
