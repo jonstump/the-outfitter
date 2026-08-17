@@ -199,12 +199,21 @@ export default function EquipmentPanel() {
         // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture"
         // — "SHALL announce the outcome — moved, swapped, or rejected — on commit"
         // and "focus SHALL rest on the destination cell... MUST NOT be lost to the
-        // document body" (corrected 2026-08-17 per `/sdd:audit`). Read occupancy
-        // BEFORE dispatching: `moveEquip` overwrites `grab.from`'s entry either way,
-        // so this is the only point a swap can still be distinguished from a move
-        // into an empty cell. A drop back onto the origin (`grab.from ===
-        // grab.origin`) changes nothing and is left silent, matching Escape-cancel.
-        const destinationHadItem = loadout.equip[grab.from] !== null;
+        // document body" (corrected 2026-08-17 per `/sdd:audit`; the swap-detection
+        // itself corrected 2026-08-17 in response to review). Read occupancy BEFORE
+        // dispatching: `moveEquip` overwrites `grab.from`'s entry either way, so this
+        // is the only point a swap can still be distinguished from a move into an
+        // empty cell. A drop back onto the origin (`grab.from === grab.origin`)
+        // changes nothing and is left silent, matching Escape-cancel.
+        //
+        // Gated on `length === 1`: SPEC-0006 "Stack drops SHALL NOT swap" makes a
+        // run/stack swap structurally impossible — `canPlaceRun` above already
+        // refused any target region containing a FOREIGN occupied cell, so an
+        // occupied `grab.from` for a run move can only be one of the run's own
+        // cells at its pre-move position (the ordinary case of shifting a stack by
+        // less than its own length). Reading raw occupancy without this gate
+        // announced "Swapped" for a plain shift into a previously-empty cell.
+        const destinationHadItem = length === 1 && loadout.equip[grab.from] !== null;
         const destination = grab.from;
         dispatch(loadoutActions.moveEquip({ from: grab.origin, to: destination, length }));
         if (destination !== grab.origin) {

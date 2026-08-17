@@ -767,6 +767,32 @@ describe("keyboard equivalence", () => {
     expect(announcer.textContent).toMatch(/swapped/i);
   });
 
+  it("announces a run shifted within its own footprint as moved, never swapped", () => {
+    // Governing: SPEC-0006 "Stack drops SHALL NOT swap" — found via `/sdd:review`
+    // 2026-08-17. Dragging a stack by LESS than its own length (the ordinary case)
+    // lands the run partly on cells that are still occupied by the run's OWN other
+    // cell at its pre-move position — reading raw occupancy there, without excluding
+    // the run's own cells, previously announced "Swapped" for a plain shift into a
+    // cell that was actually empty beforehand.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitality }, { t: "C", i: vitality }, null, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre }, wide);
+    const head = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(head, { key: " " }); // grab the 2-run anchored at 0
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // shift target to 1 (own footprint)
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(announcer.textContent).toMatch(/moved/i);
+    expect(announcer.textContent).not.toMatch(/swapped/i);
+    // Cell 2 (previously empty) now holds the run's second cell; cell 0 is vacated.
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[1]).toEqual({ t: "C", i: vitality });
+    expect(s[2]).toEqual({ t: "C", i: vitality });
+  });
+
   it("a drop back onto the origin announces nothing new", () => {
     const { container } = renderPanel({ loadout: twoCell() }, wide);
     const cell0 = keyboardCell(container, 0);
