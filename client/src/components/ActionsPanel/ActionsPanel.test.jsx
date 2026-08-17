@@ -347,3 +347,115 @@ describe("picker-panel flex at the stacking breakpoint (issue #292 regression)",
     expect(flexOf([plain], ".picker-panel")).toContain("1 1 0");
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
+// ---------------------------------------------------------------------------------------
+
+function renderPanelWith(loadoutOverrides, preloadedUi) {
+  const store = createTestStore({
+    loadout: loadoutState(loadoutOverrides),
+    ...(preloadedUi ? { ui: preloadedUi } : {}),
+  });
+  const utils = render(
+    <Provider store={store}>
+      <ActionsPanel />
+    </Provider>
+  );
+  return { ...utils, store };
+}
+
+describe("share code export field", () => {
+  it("always shows a live, populated code — no button press needed to generate one", () => {
+    renderPanelWith({ name: "Export me" });
+    const field = screen.getByLabelText("Share code for this loadout");
+    expect(field.value.length).toBeGreaterThan(0);
+    expect(field.value).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(field).toHaveAttribute("readonly");
+  });
+
+  it("updates live as the build changes, with no button press", () => {
+    const { store } = renderPanelWith({ name: "First name" });
+    const field = screen.getByLabelText("Share code for this loadout");
+    const before = field.value;
+
+    act(() => store.dispatch({ type: "loadout/setName", payload: "A totally different name" }));
+
+    expect(field.value).not.toBe(before);
+  });
+
+  it("copies the exact field value to the clipboard on Copy code", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      renderPanelWith({ name: "Clip me" });
+      const code = screen.getByLabelText("Share code for this loadout").value;
+
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copy code" })));
+
+      expect(writeText).toHaveBeenCalledWith(code);
+    } finally {
+      delete navigator.clipboard;
+    }
+  });
+});
+
+describe("share code import field", () => {
+  it("Load is disabled until something is pasted", () => {
+    renderPanel();
+    const loadBtn = screen.getByRole("button", { name: "Load" });
+    expect(loadBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Paste a share code to load it"), { target: { value: "x" } });
+    expect(loadBtn).toBeEnabled();
+  });
+
+  it("loads a pasted code exported from another build, replacing the current one", () => {
+    const exporter = renderPanelWith({ name: "Exported build" });
+    const code = screen.getByLabelText("Share code for this loadout").value;
+    exporter.unmount();
+
+    const { store } = renderPanelWith({ name: "Current build" });
+    fireEvent.change(screen.getByLabelText("Paste a share code to load it"), { target: { value: code } });
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(store.getState().loadout.name).toBe("Exported build");
+    expect(store.getState().ui.message).toBe("Loaded from code.");
+  });
+
+  it("submits on Enter, not just the Load button", () => {
+    const exporter = renderPanelWith({ name: "Enter-key build" });
+    const code = screen.getByLabelText("Share code for this loadout").value;
+    exporter.unmount();
+
+    const { store } = renderPanelWith();
+    const field = screen.getByLabelText("Paste a share code to load it");
+    fireEvent.change(field, { target: { value: code } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(store.getState().loadout.name).toBe("Enter-key build");
+  });
+
+  it("clears the field on a successful load", () => {
+    const exporter = renderPanelWith({ name: "Clears on success" });
+    const code = screen.getByLabelText("Share code for this loadout").value;
+    exporter.unmount();
+
+    renderPanelWith();
+    const field = screen.getByLabelText("Paste a share code to load it");
+    fireEvent.change(field, { target: { value: code } });
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(field).toHaveValue("");
+  });
+
+  it("leaves a failed paste visible, alongside the error explaining why", () => {
+    renderPanel();
+    const field = screen.getByLabelText("Paste a share code to load it");
+    fireEvent.change(field, { target: { value: "not a real code" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(field).toHaveValue("not a real code");
+    expect(screen.getByRole("alert")).toHaveTextContent("That doesn't look like a share code.");
+  });
+});

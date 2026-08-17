@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { saveCurrent, saveCurrentAsNew } from "../../store/savedLoadoutsSlice.js";
-import { randomizeThunk, clearBuildThunk, shareThunk } from "../../store/thunks.js";
-import { selectSaveDestinationName, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
+import { randomizeThunk, clearBuildThunk, shareThunk, copyCodeThunk, importCodeThunk } from "../../store/thunks.js";
+import { selectSaveDestinationName, selectShareCode, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
   const dispatch = useDispatch();
@@ -11,7 +12,17 @@ export default function ActionsPanel() {
   const savedId = useSelector((s) => s.loadout.savedId);
   const total = useSelector(selectTotalCost);
   const up = useSelector(selectUpTotal);
+  const shareCode = useSelector(selectShareCode);
   const ui = useSelector((s) => s.ui);
+  // Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
+  // Local, not Redux — this is a draft the user is typing/pasting, not a fact about the
+  // build, the same reasoning `CreateList`'s `name` field (LoadoutListsPanel.jsx) already
+  // uses for its own draft input.
+  const [pasteValue, setPasteValue] = useState("");
+  const loadFromPaste = () => {
+    const ok = dispatch(importCodeThunk(pasteValue));
+    if (ok) setPasteValue("");
+  };
   // Governing: SPEC-0003 REQ "The Selected List Is Client State".
   //
   // Where the next save lands, named on the control that does it (issue #136). This used to
@@ -136,6 +147,50 @@ export default function ActionsPanel() {
         )}
         <button className="btn-outline" onClick={() => dispatch(shareThunk())}>
           Share link
+        </button>
+      </div>
+
+      {/* Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
+          "Share link" above copies a full URL; this is the same underlying payload with no
+          URL around it, for a user who wants something to paste into a text field, a
+          message, or a note rather than a link to click. Always visible and live-computed
+          from the current build (no button press needed to generate it) so a clipboard
+          failure is never a dead end — the code is already on screen, selectable by hand,
+          the moment there is one. `readOnly` rather than disabled: a disabled input cannot
+          be focused or have its text selected, which would defeat the point of showing it. */}
+      <div className="code-row">
+        <input
+          className="text-input code-field"
+          style={{ flex: 1, minWidth: 160 }}
+          value={shareCode}
+          readOnly
+          aria-label="Share code for this loadout"
+          onFocus={(e) => e.target.select()}
+        />
+        <button className="btn-outline" onClick={() => dispatch(copyCodeThunk())}>
+          Copy code
+        </button>
+      </div>
+
+      {/* The import half: paste a code (or a full URL, or just its "#L=..." fragment —
+          extractShareCode accepts all three) and load it as the current build, without
+          navigating anywhere. This is the thing SPEC-0003's share link could previously do
+          only on initial page load (App.jsx reads location.hash once, on mount); there was
+          previously no way to load a second shared build without a page navigation. */}
+      <div className="code-row">
+        <input
+          className="text-input"
+          style={{ flex: 1, minWidth: 160 }}
+          value={pasteValue}
+          placeholder="Paste a share code…"
+          aria-label="Paste a share code to load it"
+          onChange={(e) => setPasteValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") loadFromPaste();
+          }}
+        />
+        <button className="btn-outline" onClick={loadFromPaste} disabled={!pasteValue.trim()}>
+          Load
         </button>
       </div>
 

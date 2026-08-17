@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 import { WEAPONS } from "../data/catalog.js";
-import { encodeShareUrl, toData } from "../utils/loadoutCodec.js";
+import { encodeShareCode, encodeShareUrl, toData } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer, { uiActions } from "./uiSlice.js";
 import savedLoadoutsReducer, { saveCurrent } from "./savedLoadoutsSlice.js";
-import { loadSavedThunk, randomizeThunk, shareThunk } from "./thunks.js";
+import { copyCodeThunk, importCodeThunk, loadSavedThunk, randomizeThunk, shareThunk } from "./thunks.js";
 
 // Swappable-for-one-test stub for randomizeLoadout, same pattern as selectors.test.js's
 // stubbedRule. Null means "use the real generator"; every test outside the #380 describe
@@ -361,6 +361,143 @@ describe("shareThunk error handling (issue #358)", () => {
       vi.unstubAllGlobals();
       globalThis.btoa = realBtoa;
     }
+  });
+});
+
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
+describe("copyCodeThunk", () => {
+  function withClipboard(impl, fn) {
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { value: impl, configurable: true });
+    try {
+      fn();
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else delete navigator.clipboard;
+    }
+  }
+
+  it("copies the bare code (encodeShareCode's output, not a URL) and confirms success", async () => {
+    const store = makeStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const expectedCode = encodeShareCode(store.getState().loadout);
+    withClipboard({ writeText }, () => store.dispatch(copyCodeThunk()));
+    await Promise.resolve(); // let the writeText promise's .then() run
+    expect(writeText).toHaveBeenCalledWith(expectedCode);
+    expect(writeText.mock.calls[0][0]).not.toContain("#");
+    expect(writeText.mock.calls[0][0]).not.toContain("http");
+    expect(store.getState().ui.message).toBe("Share code copied to clipboard.");
+  });
+
+  it("points at the visible field, not the address bar, when clipboard write fails", async () => {
+    const store = makeStore();
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    withClipboard({ writeText }, () => store.dispatch(copyCodeThunk()));
+    await Promise.resolve().then().then(); // let the rejection's .then(_, fallback) run
+    expect(store.getState().ui.message).toContain("select the code below");
+  });
+
+  it("falls back with the same message when the Clipboard API is unavailable", () => {
+    const store = makeStore();
+    withClipboard(undefined, () => store.dispatch(copyCodeThunk()));
+    expect(store.getState().ui.message).toContain("select the code below");
+  });
+
+  it("dispatches a message when encodeShareCode throws, same as shareThunk", () => {
+    const store = makeStore();
+    const realBtoa = globalThis.btoa;
+    vi.stubGlobal("btoa", () => { throw new Error("encode failed"); });
+    try {
+      store.dispatch(copyCodeThunk());
+      expect(store.getState().ui.message).toContain("Could not generate");
+    } finally {
+      vi.unstubAllGlobals();
+      globalThis.btoa = realBtoa;
+    }
+  });
+});
+
+// Governing: item 4 of the 2026-08-16 feedback batch, ADR-0024.
+describe("importCodeThunk", () => {
+  it("loads a valid pasted code, replacing the current build", () => {
+    const source = { ...emptyLoadout(), name: "Source build" };
+    const code = encodeShareCode(source);
+    const store = makeStore();
+
+    const ok = store.dispatch(importCodeThunk(code));
+
+    expect(ok).toBe(true);
+    expect(store.getState().loadout.name).toBe("Source build");
+    expect(store.getState().ui.message).toBe("Loaded from code.");
+  });
+
+  // Governing: ActionsPanel's paste field clears itself only on a successful load, so it
+  // can leave a failed paste visible beside the error explaining why. That behavior lives
+  // in the component, but it depends entirely on this return-value contract holding.
+  it("returns false on either failure path, so a caller knows not to clear the input", () => {
+    const store = makeStore();
+    expect(store.dispatch(importCodeThunk("not a code at all"))).toBe(false);
+    expect(store.dispatch(importCodeThunk("bm90IHZhbGlkIGpzb24="))).toBe(false);
+  });
+
+  it("accepts a full URL or a bare hash fragment, not just the raw code", () => {
+    const source = { ...emptyLoadout(), name: "Via URL" };
+    const code = encodeShareCode(source);
+    const store = makeStore();
+
+    store.dispatch(importCodeThunk(`https://example.com/#L=${code}`));
+    expect(store.getState().loadout.name).toBe("Via URL");
+
+    const store2 = makeStore();
+    store2.dispatch(importCodeThunk(`#L=${code}`));
+    expect(store2.getState().loadout.name).toBe("Via URL");
+  });
+
+  it("carries no savedId — an imported code is a fresh, never-saved build", () => {
+    const source = { ...emptyLoadout(), name: "Fresh via code" };
+    const code = encodeShareCode(source);
+    const store = makeStore();
+    store.dispatch({ type: "loadout/setSavedId", payload: "should-be-cleared" });
+
+    store.dispatch(importCodeThunk(code));
+
+    expect(store.getState().loadout.savedId).toBeNull();
+  });
+
+  it("names the problem distinctly for garbage input vs. a well-formed-but-bad code", () => {
+    const store = makeStore();
+    store.dispatch(importCodeThunk("this is definitely not a code"));
+    expect(store.getState().ui.message).toBe("!That doesn't look like a share code.");
+
+    const store2 = makeStore();
+    // Base64-alphabet-shaped, but not valid JSON underneath — extraction accepts it,
+    // decode rejects it. A distinct message from the "not a code attempt" case above.
+    store2.dispatch(importCodeThunk("bm90IHZhbGlkIGpzb24="));
+    expect(store2.getState().ui.message).toContain("Couldn't load that code");
+    expect(store2.getState().ui.message).not.toBe("!That doesn't look like a share code.");
+  });
+
+  it("does not touch loadout state on a failed import", () => {
+    const store = makeStore();
+    const before = store.getState().loadout;
+    store.dispatch(importCodeThunk("garbage"));
+    expect(store.getState().loadout).toBe(before);
+  });
+
+  it("surfaces the ammo-dropped notice, mirroring loadSavedThunk's identical wording pattern", () => {
+    // Governing: issue #359. A code built from a v3 payload whose ammo selection no longer
+    // resolves must still load — ADR-0024 — with the drop surfaced, not silent. Fixture
+    // shape matches loadoutCodec.test.js's own pinned "issue #359" cases exactly (a v3
+    // weapon entry is `[stringId, ammoIndex]`; an out-of-range index drops to -1 with a
+    // notice — see that file for why dolch-96/9999 is the reliable out-of-range case).
+    const codeData = { v: 3, w: [["dolch-96", 9999], null], e: [], tr: [], n: "Stale ammo build", b: 0 };
+    const code = btoa(JSON.stringify(codeData));
+    const store = makeStore();
+
+    store.dispatch(importCodeThunk(code));
+
+    expect(store.getState().loadout.name).toBe("Stale ammo build");
+    expect(store.getState().ui.message).toBe("Loaded from code. This build's ammo selection is no longer available.");
   });
 });
 

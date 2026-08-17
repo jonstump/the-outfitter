@@ -1,5 +1,6 @@
 import { createSelector } from "@reduxjs/toolkit";
 import { capMax, capUsed, equipOverCapacity, estimatedMinimumLevel, totalCost, upTotal } from "../utils/calc.js";
+import { encodeShareCode } from "../utils/loadoutCodec.js";
 import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
 // Governing: #24 (memoized derived-state selectors)
@@ -26,6 +27,22 @@ export const selectTotalCost = createSelector([selectLoadout], totalCost);
 // pure function of the trait-point total, not of the loadout shape — the same reason its own
 // unit tests pass numbers rather than loadouts.
 export const selectEstimatedMinimumLevel = createSelector([selectUpTotal], estimatedMinimumLevel);
+
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). Composed
+// off `selectLoadout` directly, unlike `selectEstimatedMinimumLevel` above — a share code
+// encodes the whole build (weapons, equip, traits, blocked, name), not one derived number, so
+// there is no narrower selector to compose it from the way trait-point total lets that one
+// avoid the full loadout. Wrapped in try/catch for the same reason `shareThunk`/`copyCodeThunk`
+// wrap their own call to the same encoder (issue #358): a name carrying an encode failure must
+// not crash the always-visible field that renders this value on every keystroke, only leave it
+// showing nothing until the name is edited back to something encodable.
+export const selectShareCode = createSelector([selectLoadout], (loadout) => {
+  try {
+    return encodeShareCode(loadout);
+  } catch {
+    return "";
+  }
+});
 
 // Governing: ADR-0009, SPEC-0006 REQ "Equipment Occupies a Fixed Eight-Cell Grid".
 // `equip.length` is always 8 under this model, so the count the panel header shows is
