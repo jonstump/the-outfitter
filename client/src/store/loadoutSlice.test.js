@@ -106,6 +106,75 @@ describe("addEquip", () => {
     expect(held(store.getState())).toHaveLength(3);
   });
 
+  // Governing: SPEC-0006 REQ "Repeated Consumables Read as One Stack" — "Adding a
+  // consumable from the picker that is already equipped SHALL place the new copy in
+  // the cell immediately following the last cell of an existing run of that item,
+  // when that cell is free and unblocked. Otherwise it SHALL fall back to the
+  // lowest-numbered free, unblocked cell." Corrected 2026-08-17 per `/sdd:audit`.
+  describe("picker run-append placement (SPEC-0006, corrected 2026-08-17)", () => {
+    it("grows an existing run from the picker, even when a lower cell is free", () => {
+      // The bug this regression-tests: a run at cells 5-6 (indices 4-5) with cell 1
+      // (index 0) free used to always take the lowest free cell, so the third copy
+      // landed AHEAD of the run instead of extending it.
+      const store = makeStore(
+        loadoutState({
+          equip: [
+            null, { t: "T", i: 0 }, { t: "T", i: 5 }, null,
+            { t: "C", i: 0 }, { t: "C", i: 0 }, null, null,
+          ],
+        })
+      );
+      store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+      expect(store.getState().loadout.equip[6]).toEqual({ t: "C", i: 0 });
+      expect(store.getState().loadout.equip[0]).toBeNull();
+    });
+
+    it("falls back to the lowest free cell when the cell after the run is occupied", () => {
+      // Spec's own scenario: run at cells 1-2, cell 3 holds a different item, cell 4
+      // is free — the new copy lands at cell 4, not extending past the occupied cell.
+      const store = makeStore(
+        loadoutState({
+          equip: [
+            { t: "C", i: 0 }, { t: "C", i: 0 }, { t: "T", i: 0 }, null,
+            null, null, null, null,
+          ],
+        })
+      );
+      store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+      expect(store.getState().loadout.equip[3]).toEqual({ t: "C", i: 0 });
+      // The original run is untouched — still exactly two cells.
+      expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: 0 });
+    });
+
+    it("falls back to the lowest free cell when the cell after the run is blocked", () => {
+      const store = makeStore(
+        loadoutState({
+          equip: [
+            null, { t: "C", i: 0 }, { t: "C", i: 0 }, null,
+            null, null, null, null,
+          ],
+          blocked: [3],
+        })
+      );
+      store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+      expect(store.getState().loadout.equip[0]).toEqual({ t: "C", i: 0 });
+      expect(store.getState().loadout.equip[3]).toBeNull();
+    });
+
+    it("falls back to the lowest free cell when no run of that item exists yet", () => {
+      const store = makeStore(
+        loadoutState({
+          equip: [
+            { t: "T", i: 0 }, null, null, null,
+            null, null, null, null,
+          ],
+        })
+      );
+      store.dispatch(loadoutActions.addEquip({ t: "C", i: 0 }));
+      expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: 0 });
+    });
+  });
+
   it("removing an item leaves the others in their cells (no relocation)", () => {
     const store = makeStore(
       loadoutState({

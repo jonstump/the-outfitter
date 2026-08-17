@@ -11,6 +11,12 @@ function emptyRef() {
   return { current: null };
 }
 
+// Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture" — the
+// grid SHALL announce the grabbed item through an `aria-live` region. EquipmentPanel
+// owns that region's state (`gridAnnounceMessage`) and passes its setter down; a
+// standalone slot (its test suite renders it directly) may omit the prop.
+function noopAnnounce() {}
+
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
 // Self-Hosted Scrape)
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback",
@@ -32,7 +38,7 @@ function emptyRef() {
 // keyboard path: ArrowUp/Down/Left/Right grab the adjacent cell, Space/Ctrl+M drop
 // onto the grabbed cell, Escape cancels a grab.
 
-export default function EquipmentSlot({ index, run, grabRef }) {
+export default function EquipmentSlot({ index, run, grabRef, onAnnounce = noopAnnounce }) {
   const ref = grabRef || emptyRef();
   const dispatch = useDispatch();
   // selectEquipEntry is a selector factory; memoize the instance so its
@@ -80,11 +86,25 @@ export default function EquipmentSlot({ index, run, grabRef }) {
           length: isRun ? run.cells.length : 1,
           pressedIndex: index,
         };
+        // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture"
+        // — "a grabbed stack SHALL be announced with its quantity". `def` is defined
+        // below (this branch only runs when `entry` is truthy, so this render did
+        // not take the empty-cell early return and `def` is already assigned).
+        onAnnounce(`Grabbed ${def[1]}${isRun ? `, ${run.cells.length} items` : ""}, cell ${anchor + 1} of 8`);
         e.preventDefault();
       }
       return;
     }
     if (e.key === "Enter" || (e.ctrlKey && (e.key === "m" || e.key === "M"))) {
+      // Governing: SPEC-0006 §129/§618 — Enter on an EMPTY cell toggles its blocked
+      // state via the button's own native activation (the empty-slot button below
+      // carries `onClick`). `preventDefault` must not fire in that case, or the
+      // native click that activation would otherwise produce never happens. A
+      // filled cell has no `onClick` on its tile, so preventing default there is
+      // still safe — it only stops a no-op native activation, not a real one — and
+      // the grid root's own Enter handler (bubbled, not stopped here) is what
+      // commits an in-progress grab.
+      if (!entry) return;
       e.preventDefault();
       return;
     }
@@ -166,6 +186,22 @@ export default function EquipmentSlot({ index, run, grabRef }) {
       ref.current = null;
     }
   }, [removing, index]);
+  // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture" —
+  // "After a completed move, focus SHALL rest on the destination cell... Focus MUST
+  // NOT be lost to the document body by any grid operation" (corrected 2026-08-17
+  // per `/sdd:audit`). A successful keyboard commit in EquipmentPanel's grid-root
+  // handler sets `focusIndex` on the shared ref rather than nulling it outright, the
+  // same one-shot-marker pattern `removing` above already uses — the ORIGIN cell's
+  // `.equip-tile-main` button (which held focus throughout the grab) may unmount on
+  // this same render if the move emptied it, so focus has to be re-acquired on
+  // whichever cell now renders at the destination index, after that render commits.
+  const focusingDestination = ref.current && ref.current.focusIndex === index;
+  useLayoutEffect(() => {
+    if (focusingDestination && cellRef.current) {
+      cellRef.current.focus();
+      ref.current = null;
+    }
+  }, [focusingDestination, index]);
 
   if (!entry) {
     const targetCell = index;
@@ -208,7 +244,13 @@ export default function EquipmentSlot({ index, run, grabRef }) {
         aria-label={`${def[1]} (stack of ${runCells.length})`}
         data-slot-index={index}
         data-stack-head={runCells[0]}
-        tabIndex={index === runCells[0] + 1 ? 0 : -1}
+        // Governing: SPEC-0006 §616 "Every cell SHALL be focusable and operable by
+        // keyboard" — unqualified, so every continuation cell of a stack gets its
+        // own tab stop like every other cell, not just the one immediately after
+        // the head (corrected 2026-08-17 per `/sdd:audit`: a ×3/×4 stack's third and
+        // fourth cells were previously `tabIndex={-1}` and permanently unreachable
+        // by Tab).
+        tabIndex={0}
         onPointerDown={onPointerDown}
         onKeyDown={handleKeyDown}
       >

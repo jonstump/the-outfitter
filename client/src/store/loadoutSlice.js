@@ -202,7 +202,21 @@ const loadoutSlice = createSlice({
       // it against a slot maximum would silently disable the picker entirely.
       if (!hasFreeCell(state)) return;
       const blockSet = new Set(state.blocked);
-      const free = state.equip.findIndex((e, k) => e === null && !blockSet.has(k));
+      // Governing: SPEC-0006 REQ "Repeated Consumables Read as One Stack" — "Adding a
+      // consumable from the picker that is already equipped SHALL place the new copy
+      // in the cell immediately following the last cell of an existing run of that
+      // item, when that cell is free and unblocked. Otherwise it SHALL fall back to
+      // the lowest-numbered free, unblocked cell." Corrected 2026-08-17 per
+      // `/sdd:audit`: this used to always take the lowest free cell, so a run with a
+      // free cell somewhere BEFORE it (e.g. a run at cells 5-6 with cell 1 free) never
+      // grew from the picker — the third copy landed ahead of the run instead of
+      // extending it. Both scenarios this requirement names happen to be satisfiable
+      // by the lowest-free rule alone, which is why the gap went untested.
+      const existingRun = equipRuns(state.equip).find((r) => r.entry.t === t && r.entry.i === i);
+      const afterRun = existingRun ? existingRun.cells[existingRun.cells.length - 1] + 1 : -1;
+      const runAppendFree =
+        afterRun >= 0 && afterRun < state.equip.length && state.equip[afterRun] === null && !blockSet.has(afterRun);
+      const free = runAppendFree ? afterRun : state.equip.findIndex((e, k) => e === null && !blockSet.has(k));
       // One of each specific Tool per loadout — re-verified against the wiki as still
       // in force after Update 2.8's equipment-slot rework (issue #41).
       if (t === "T" && heldItems(state).some((e) => e.t === "T" && e.i === i)) return;
