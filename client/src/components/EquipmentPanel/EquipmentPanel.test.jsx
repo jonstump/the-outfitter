@@ -1018,3 +1018,132 @@ describe("grab ref lifetime (issue #417)", () => {
     expect(after[1]).toEqual({ t: "C", i: vitality });
   });
 });
+
+// Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One Stack",
+// issue #464. `moveEquip` previously only ever moved a single cell index — dragging
+// any cell of a stack (anchor or continuation alike) emptied only that ONE cell and
+// left the rest of the run behind as orphaned tiles. These cover the two literal
+// spec scenarios (translated to 0-indexed cells — the spec's prose is 1-indexed,
+// state.equip and every test in this file are 0-indexed), the continuation-cell
+// defect the issue reports directly, the destination-overlap case, and both the
+// pointer and keyboard routes.
+describe("stack drag moves the whole run (issue #464)", () => {
+  const twoStack = () =>
+    loadoutState({
+      equip: [{ t: "C", i: vitality }, { t: "C", i: vitality }, null, null, null, null, null, null],
+    });
+  const threeStack = (blocked = []) =>
+    loadoutState({
+      equip: [
+        { t: "C", i: vitality }, { t: "C", i: vitality }, { t: "C", i: vitality },
+        null, null, null, null, null,
+      ],
+      blocked,
+    });
+
+  it("SPEC-0006 scenario 'A stack moves as one unit': a ×2 stack anchored at cell 0 (spec's 'cell 1') dragged onto cell 4 (spec's 'cell 5') occupies cells 4-5, cells 0-1 empty, badge still ×2", () => {
+    const { container, store } = renderPanel({ loadout: twoStack() });
+    gridPointerSequence(container, 0, 4);
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, null,
+      { t: "C", i: vitality }, { t: "C", i: vitality }, null, null,
+    ]);
+    expect(container.querySelector('[data-testid="stack-badge-4"]')).toHaveTextContent("×2");
+  });
+
+  it("SPEC-0006 scenario 'A stack drop with insufficient room is rejected': a ×3 stack dragged onto a region where one destination cell is blocked is refused — the stack stays in its origin cells, the loadout is unchanged", () => {
+    // Destination for a drop at target 3 is cells 3,4,5 — cell 5 is blocked.
+    const pre = threeStack([5]);
+    const { container, store } = renderPanel({ loadout: pre });
+    const before = store.getState().loadout;
+    gridPointerSequence(container, 0, 3);
+    const after = store.getState().loadout;
+    expect(after.equip).toEqual(before.equip);
+    expect(after.blocked).toEqual(before.blocked);
+  });
+
+  it("dragging a CONTINUATION cell (not the anchor) moves the whole run — the literal defect this issue reports", () => {
+    const { container, store } = renderPanel({ loadout: twoStack() });
+    // Cell 1 is the continuation of the stack anchored at cell 0.
+    gridPointerSequence(container, 1, 4);
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, null,
+      { t: "C", i: vitality }, { t: "C", i: vitality }, null, null,
+    ]);
+  });
+
+  it("a run dropped partly onto its own origin cells keeps every item — the destination-overlap case", () => {
+    // A ×3 stack at cells 0,1,2 dropped at target 1: destination is 1,2,3. Cell 0
+    // (origin-only) empties; cells 1 and 2 keep an item (the entries that used to
+    // sit at 0 and 1, shifted one cell over); cell 3 gets the third copy. No item
+    // is lost or duplicated.
+    const { container, store } = renderPanel({ loadout: threeStack() });
+    gridPointerSequence(container, 0, 1);
+    expect(store.getState().loadout.equip).toEqual([
+      null,
+      { t: "C", i: vitality }, { t: "C", i: vitality }, { t: "C", i: vitality },
+      null, null, null, null,
+    ]);
+  });
+
+  it("keyboard: Space on the ANCHOR, arrow to a free destination, Enter moves the whole run and keeps the badge", () => {
+    const { container, store } = renderPanel({ loadout: twoStack() });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(keyboardCell(container, 0), { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // wide arrangement: +4, from 0 to 4
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, null,
+      { t: "C", i: vitality }, { t: "C", i: vitality }, null, null,
+    ]);
+    expect(container.querySelector('[data-testid="stack-badge-4"]')).toHaveTextContent("×2");
+  });
+
+  it("keyboard: Space on a CONTINUATION cell still grabs the whole run, anchored at the head", () => {
+    const { container, store } = renderPanel({ loadout: twoStack() });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    // Cell 1 (the continuation) is focusable — it is the cell immediately after
+    // the run's head, the one continuation cell EquipmentSlot keeps in the tab
+    // order.
+    const cell1 = container.querySelector('[data-slot-index="1"]');
+    fireEvent.keyDown(cell1, { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowDown" });
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, null,
+      { t: "C", i: vitality }, { t: "C", i: vitality }, null, null,
+    ]);
+  });
+
+  it("keyboard rejection: arrowing a ×3 stack onto insufficient room is refused, announced, and returns focus to the anchor — the loadout is unchanged", () => {
+    // Destination for from=3 is cells 3,4,5 — cell 5 is blocked.
+    const pre = threeStack([5]);
+    const { container, store } = renderPanel({ loadout: pre });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const before = store.getState().loadout;
+    const cell0 = keyboardCell(container, 0);
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 0 -> 1
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 1 -> 2
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 2 -> 3
+    fireEvent.keyDown(grid, { key: "Enter" });
+    const after = store.getState().loadout;
+    expect(after.equip).toEqual(before.equip);
+    expect(after.blocked).toEqual(before.blocked);
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    expect(announcer.textContent).toMatch(/cannot place here.*3 cells needed/i);
+    // Focus returns to the anchor cell (cell 0), not wherever the arrows left it.
+    expect(document.activeElement).toBe(keyboardCell(container, 0));
+  });
+
+  it("a single-item (non-stack) drag is unaffected — regression guard", () => {
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitality }, null, null, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre });
+    gridPointerSequence(container, 0, 3);
+    expect(store.getState().loadout.equip).toEqual([
+      null, null, null, { t: "C", i: vitality }, null, null, null, null,
+    ]);
+  });
+});
