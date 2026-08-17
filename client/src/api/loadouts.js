@@ -106,6 +106,28 @@ export function moveLoadout(id, listId) {
   return patchLoadout(id, { listId });
 }
 
+// Governing: ADR-0006, SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order"
+//
+// One request per completed drag, not one per displaced card — `order` is the FULL ordered
+// id list for one list (or Unassigned, `listId: null`), and the server rejects anything that
+// isn't exactly the set of loadouts already filed there (see loadouts.js POST /reorder). The
+// guards here mirror `moveLoadout`'s: a caller with the wrong shape is wrong about something,
+// and a 400 whose message blames a key it never meant to omit is not the same bug reported
+// back honestly.
+export function reorderLoadouts(listId, order) {
+  if (listId !== null && typeof listId !== "string") {
+    throw new TypeError("listId must be a string or null");
+  }
+  if (!Array.isArray(order) || order.some((id) => typeof id !== "string")) {
+    throw new TypeError("order must be an array of loadout id strings");
+  }
+  return fetch(`${BASE}/reorder`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify({ listId, order }),
+  }).then(asJson);
+}
+
 /**
  * Set a loadout's description — the user's own note about the build.
  *

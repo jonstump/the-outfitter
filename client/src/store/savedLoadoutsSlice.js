@@ -1,5 +1,12 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { deleteLoadout, describeLoadout, getLoadouts, moveLoadout, upsertLoadout } from "../api/loadouts.js";
+import {
+  deleteLoadout,
+  describeLoadout,
+  getLoadouts,
+  moveLoadout,
+  reorderLoadouts,
+  upsertLoadout,
+} from "../api/loadouts.js";
 import { toData } from "../utils/loadoutCodec.js";
 import { loadoutActions } from "./loadoutSlice.js";
 import { uiActions } from "./uiSlice.js";
@@ -166,6 +173,29 @@ export const moveSaved = createAsyncThunk(
   }
 );
 
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order"
+//
+// One request per completed drag or keyboard drop — `order` is the full ordered id list for
+// one list (or Unassigned), computed by the caller (LoadoutListsPanel.jsx) from the cards
+// currently on screen. No success message on `ui.message`: unlike Save/Move/Delete, the
+// reorder is self-evident on screen the moment it lands, and the move itself is announced on
+// its OWN dedicated live region (mirroring the equipment grid's `equip-announcer`), not the
+// shared banner — two channels for one event would either duplicate the announcement or race
+// to decide which text wins. A failure still goes to `ui.message`, same as every other
+// write: the one time this thunk needs a banner is when the drop DIDN'T take, and silently
+// leaving the card wherever the drag left it would read as a successful reorder that wasn't.
+export const reorderSaved = createAsyncThunk(
+  "savedLoadouts/reorder",
+  async ({ listId, order }, { dispatch }) => {
+    try {
+      return await reorderLoadouts(listId, order);
+    } catch (err) {
+      dispatch(uiActions.setMessage(`!Couldn't reorder loadouts: ${err.message}`));
+      throw err;
+    }
+  }
+);
+
 // Governing: ADR-0006 (list filing model), SPEC-0003 REQ "Loadouts Carry a Description of
 // Their Own"
 //
@@ -233,6 +263,16 @@ const savedLoadoutsSlice = createSlice({
       .addCase(moveSaved.fulfilled, (state, action) => {
         const idx = state.items.findIndex((l) => l.id === action.payload.id);
         if (idx >= 0) state.items[idx] = action.payload;
+      })
+      // The payload is every record in the reordered scope, not one — the reorder endpoint
+      // always rewrites `order` on every id it named, so every one of them needs its local
+      // copy replaced or the newly-authoritative `order` on the untouched-looking members
+      // would silently go stale.
+      .addCase(reorderSaved.fulfilled, (state, action) => {
+        for (const rec of action.payload) {
+          const idx = state.items.findIndex((l) => l.id === rec.id);
+          if (idx >= 0) state.items[idx] = rec;
+        }
       })
       // The server's record replaces the local one wholesale, exactly as a move does. It is
       // the authority on which of the three description states the loadout is now in, and

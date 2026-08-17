@@ -28,7 +28,7 @@ The `status: implemented` field below now correctly covers these two requirement
 
 **The ordering constraint is load-bearing and is easy to lose at planning time:** the identity fix must land and deploy before derived naming. A derived name is a pure function of the weapon pair, so shipping naming first makes same-name collisions the default outcome rather than a rare one — silently, and in exactly the case the identity fix exists to prevent. **Landing is done (#319); the constraint now rests on deployment** — #315 MUST NOT ship until the triple key is live, not merely merged.
 
-**Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120).
+**Implementation status.** The capability as originally specified is **implemented**, following the sequencing ADR-0006 sets out: the `loadoutLists` collection and its endpoints, `listId` filing on the loadout envelope, cross-collection ownership enforcement, retirement without cascade, the empty-list state, the unchanged wire format, the client-state selection cursor, the grouped roster UI, the hunter portrait picker with its filters and favorites (#88, #114), accent assignment and editing against `--list-accent-{1..6}`, portrait rendering against SPEC-0004's dataset (#110), and all four sort orders including hunter name (#109, #120). **"Loadouts Within a List Have a User-Chosen Order" (added 2026-08-17) is a subsequent amendment, and is now implemented**: the `order` field and its two writers (the `PATCH /api/loadouts/reorder` endpoint and the list-move append), the drag-and-drop UI with its full keyboard equivalent, and the dedicated live-region announcement are all live, tested server-side (`server/src/routes/reorder.test.js`) and client-side (`LoadoutListsPanel.test.jsx`, `savedLoadoutsSlice.test.js`, `listOrdering.test.js`), and confirmed live in the browser.
 
 Three changes were accepted on **2026-08-10**; **one has shipped and survived**. A further change was accepted later that day — the row→card preview replacement, which also withdraws the shed-by-width rule, so the set is no longer purely additive. Each is marked where it appears. (Dropping most-recently-used ordering also happened on that date; it was a removal and is recorded in "List Ordering and Sorting".)
 
@@ -581,6 +581,57 @@ A user's chosen sort order SHALL be treated as client state under the same rules
 
 - **WHEN** the server's data file is inspected after a user changes sort order
 - **THEN** no field recording the sort preference SHALL be present, and no write SHALL have occurred as a result
+
+### Requirement: Loadouts Within a List Have a User-Chosen Order
+
+*(added 2026-08-17, per design.md "Loadouts within a list have a user-set order, stored server-side")*
+
+Unlike list ordering above, the order of loadouts WITHIN one list — or within Unassigned — SHALL be a user-arrangeable, server-persisted property, distinct from the sort preference governed by "List Ordering and Sorting", which remains client-only and unaffected by this requirement.
+
+The system SHALL provide a drag-and-drop affordance for reordering loadout cards within their list, and SHALL provide a keyboard-operable equivalent achieving the same result without a pointer: a card SHALL be picked up, moved, and dropped using the keyboard alone, and an in-progress reorder SHALL be cancellable, restoring the card's original position. This requirement exists alongside, and does not relax, "Filing a loadout into a list MUST be achievable without a pointer" under Accessibility Requirements — that requirement governs which list a loadout is filed into and is untouched by this one, which governs only position within a list.
+
+Reordering SHALL be scoped to one list (or Unassigned) at a time — a drag that reorders cards SHALL NOT move a loadout into a different list. Moving a loadout between lists remains the existing explicit control.
+
+A moved loadout — filed into a different list by the existing move control — SHALL be placed at the end of its new list's order rather than at a position carried over from its old one.
+
+The order SHALL persist across a page reload and be visible identically from any browser holding the same owner token, since it is server state.
+
+A loadout record predating this requirement, carrying no stored order, SHALL render in the position implied by its existing storage order, without requiring a migration write, until the first time it or a list-mate is reordered.
+
+#### Scenario: A drag reorders two cards
+
+- **WHEN** a user drags a loadout card to a new position among its list-mates and drops it there
+- **THEN** the cards SHALL render in the new order, and reloading the page SHALL preserve it
+
+#### Scenario: The keyboard equivalent achieves the same result
+
+- **WHEN** a user, without using a pointer, picks up a loadout card via the keyboard, moves it past a list-mate, and confirms the drop
+- **THEN** the resulting order SHALL be identical to the outcome of doing the same move by drag, and the move SHALL be announced on a live region
+
+#### Scenario: An in-progress reorder is cancellable
+
+- **WHEN** a user picks up a card, by pointer or keyboard, and presses Escape before dropping it
+- **THEN** the card SHALL return to its original position and no order SHALL be written
+
+#### Scenario: Reordering does not cross a list boundary
+
+- **WHEN** a user reorders cards within an open list
+- **THEN** no loadout's `listId` SHALL change as a result
+
+#### Scenario: A loadout moved between lists lands at the end
+
+- **WHEN** a loadout is filed into a different list via the existing move control
+- **THEN** it SHALL be positioned after every loadout already in that list, not at a position inherited from the list it left
+
+#### Scenario: Order is server state, not client state
+
+- **WHEN** a user reorders loadouts in one browser and then opens the application from a different browser holding the same owner token
+- **THEN** the same order SHALL be visible in both
+
+#### Scenario: A pre-existing record needs no migration
+
+- **WHEN** a loadout saved before this requirement existed is rendered, and no reorder has touched its list yet
+- **THEN** it SHALL appear in its original creation-order position, and no write SHALL have occurred merely from rendering it
 
 ### Requirement: Filed Loadouts Preview Their Contents
 
@@ -1308,6 +1359,8 @@ Content updated without a page load — the saved-loadouts region after a save, 
 All interactive elements MUST be operable via keyboard: logical tab order following visual layout, Enter or Space to activate controls, Escape to dismiss the portrait picker and the retire confirmation, and arrow keys for navigation within the portrait picker if it is presented as a composite grid widget.
 
 Filing a loadout into a list MUST be achievable without a pointer. The initial move affordance SHALL be an explicit control on the loadout card — a menu or select — rather than drag-and-drop *(re-scoped from row to card 2026-08-10)*. Drag-and-drop is deferred as a future enhancement; if it is later added, the explicit keyboard-operable control MUST remain rather than being replaced by it.
+
+Reordering loadouts WITHIN a list *(added 2026-08-17, per "Loadouts Within a List Have a User-Chosen Order")* is a different affordance from the filing move above and is NOT covered by its drag-and-drop deferral — there is no discrete destination a menu or select can name for "one position earlier than this card." This capability's drag-and-drop MUST ship with a full keyboard equivalent from the start, never as a pointer-only enhancement added later: pick up a card via the keyboard, move it with the arrow keys, confirm the drop, and cancel with Escape, restoring the original position. Each of those four actions MUST be available without a pointer, and the resulting order MUST be identical regardless of which input method performed the move. The move MUST be announced on an `aria-live="polite"` region under "Dynamic Content Regions" below.
 
 Editing a description MUST be achievable without a pointer *(added 2026-08-10; applied to both descriptions 2026-08-11)*. The edit control MUST have an accessible name identifying both the action and its subject — the list or the loadout — MUST be reachable in the tab order of the thing it describes, and MUST support Escape to abandon an in-progress edit without saving. Because a description may be long, the editor MUST NOT trap Tab as a text-insertion key — a keyboard user must be able to leave the field.
 
