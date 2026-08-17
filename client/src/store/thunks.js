@@ -1,6 +1,6 @@
 import { TRAITS } from "../data/catalog.js";
 import { totalCost, upTotal } from "../utils/calc.js";
-import { decodeShareCode, encodeShareCode, encodeShareUrl, extractShareCode, fromData } from "../utils/loadoutCodec.js";
+import { decodeShareCode, encodeShareCode, extractShareCode, fromData } from "../utils/loadoutCodec.js";
 import { randomizeLoadout } from "../utils/randomize.js";
 import { loadoutActions } from "./loadoutSlice.js";
 import { uiActions } from "./uiSlice.js";
@@ -78,38 +78,15 @@ export function loadSavedThunk(record) {
   };
 }
 
-export function shareThunk() {
-  return (dispatch, getState) => {
-    const { loadout } = getState();
-    // Governing: issue #358. encodeShareUrl can throw on a loadout name carrying code
-    // points above U+00FF (if the UTF-8-safe path is somehow bypassed). Wrap the call
-    // so a future encode failure dispatches a message rather than throwing silently.
-    let url;
-    try {
-      url = encodeShareUrl(loadout);
-    } catch {
-      dispatch(uiActions.setMessage("Could not generate a share link for this loadout."));
-      return;
-    }
-    const done = () => dispatch(uiActions.setMessage("Share link copied to clipboard."));
-    const fallback = () => dispatch(uiActions.setMessage("Share code is in the address bar — copy the URL."));
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(done, fallback);
-    } else {
-      fallback();
-    }
-  };
-}
-
-// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). The
-// same underlying payload `shareThunk` puts in a URL, copied bare — no domain, no path, no
-// "#L=" marker — for a user who wants something to paste into a text field, a Discord
-// message, or a note, rather than a link to click. ActionsPanel also renders this code in
-// a plain, always-visible, read-only field (computed the same way, via `encodeShareCode`),
-// so a clipboard failure here is a inconvenience, not a dead end: the code is already on
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). This
+// used to sit alongside a `shareThunk` that copied the same payload wrapped in a URL — the
+// share-LINK feature was removed outright (the app has no live users yet, so there was
+// nothing an old shared link needed to keep working for; see loadoutCodec.js's
+// `decodeShareCode` for the fuller note). ActionsPanel also renders this code in a plain,
+// always-visible, read-only field (computed the same way, via `encodeShareCode`), so a
+// clipboard failure here is an inconvenience, not a dead end: the code is already on
 // screen and selectable by hand either way, which is why the fallback message below points
-// at it instead of repeating `shareThunk`'s "copy the URL" wording — there is no address
-// bar to copy from for a bare code that never touched `location.hash`.
+// at it — there is no address bar to point at for a bare code that never touches a URL.
 export function copyCodeThunk() {
   return (dispatch, getState) => {
     const { loadout } = getState();
@@ -143,10 +120,10 @@ export function copyCodeThunk() {
 // end — mistyped/wrong paste versus a genuinely corrupted or foreign-format string — and
 // collapsing them loses the one piece of information that tells the user which.
 //
-// A successful decode replaces the CURRENT build, exactly like a share link opened in the
-// browser does (`App.jsx`'s mount effect, `readHashLoadout` + `setLoadout`) — this is the
-// same load, triggered from a paste instead of a page load, so it carries no `savedId`:
-// the decoded loadout is a fresh, never-saved build, matching a share link's own behavior.
+// A successful decode replaces the CURRENT build, the same way the now-removed share-link
+// feature once did on page load (`App.jsx`'s mount effect used to try `readHashLoadout()`
+// first) — this is the same kind of load, triggered from a paste instead of a URL, so it
+// carries no `savedId`: the decoded loadout is a fresh, never-saved build.
 // Returns `true` on a successful load and `false` on either failure, so the paste field
 // that calls this (ActionsPanel) can decide whether to clear itself — cleared on success,
 // left in place on failure so the user can see what they actually pasted alongside the

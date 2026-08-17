@@ -5,7 +5,7 @@ import { uiActions } from "./store/uiSlice.js";
 import { fetchLists } from "./store/loadoutListsSlice.js";
 import { fetchFavorites } from "./store/hunterFavoritesSlice.js";
 import { fetchSaved } from "./store/savedLoadoutsSlice.js";
-import { readHashLoadout, readStoredLoadout } from "./utils/loadoutCodec.js";
+import { readStoredLoadout } from "./utils/loadoutCodec.js";
 import Header from "./components/Header/Header.jsx";
 import WeaponsPanel from "./components/WeaponsPanel/WeaponsPanel.jsx";
 import EquipmentPanel from "./components/EquipmentPanel/EquipmentPanel.jsx";
@@ -18,7 +18,11 @@ export default function App() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    const hydrated = readHashLoadout() || readStoredLoadout();
+    // Governing: item 4 of the 2026-08-16 feedback batch. Used to also try
+    // readHashLoadout() first (a share link's URL hash) — removed along with the
+    // share-link feature itself; loadout codes are now loaded live via ActionsPanel's
+    // paste field (importCodeThunk) rather than by navigating to a URL on mount.
+    const hydrated = readStoredLoadout();
     if (hydrated) dispatch(loadoutActions.setLoadout(hydrated));
     // Governing: issue #359. Surface a one-time notice when decode dropped an ammo
     // selection that was valid when the record was written but no longer resolves

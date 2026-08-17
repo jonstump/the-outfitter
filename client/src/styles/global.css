@@ -1309,10 +1309,19 @@ button {
 }
 
 /* Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). Same
-   row shape as `.save-row` above (flex, wrap, matching gap) so the export and import rows
-   read as part of the same control group rather than a visually distinct block bolted on —
-   no border-top of its own, since `.save-row`'s divider above already separates this whole
-   cluster of controls from the budget row. */
+   small-caps, muted-and-letter-spaced treatment as `.picker-filter-label`/`.panel-meta` —
+   this app's existing idiom for a section label rather than body text — so "Loadout Code"
+   reads as a heading for the two rows beneath it, not as a third row of prose. */
+.code-section-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* Same row shape as `.save-row` above (flex, wrap, matching gap) so the export and import
+   rows read as part of one control group under the label above, not two unrelated rows. */
 .code-row {
   display: flex;
   gap: 10px;

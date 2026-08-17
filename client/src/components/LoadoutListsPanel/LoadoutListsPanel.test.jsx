@@ -32,7 +32,7 @@ import {
 } from "../../test/cssRules.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { slugify } from "../../utils/slugify.js";
-import { FORMAT_VERSION, emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
+import { FORMAT_VERSION, emptyLoadout, encodeShareCode, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
 import { createList } from "../../api/loadouts.js";
@@ -3123,25 +3123,25 @@ describe("loadout notes", () => {
 
   // --- The wire format is unchanged ------------------------------------------------------
 
-  it("keeps the description out of the share URL and the local draft", () => {
+  it("keeps the description out of the share code and the local draft", () => {
     // REQ "The Saved-Loadout Wire Format Is Unchanged": `description` is a property of the
-    // user's filing, not of the loadout. A recipient opening a share URL receives the build,
-    // not the sender's notes about it.
+    // user's filing, not of the loadout. A recipient loading a share code receives the
+    // build, not the sender's notes about it.
     const plain = filed("1", "long ammo", LOADED, "a");
     const annotated = describedAs({ ...plain, listId: "b" }, "a note that must not travel");
 
-    const urlPlain = encodeShareUrl(fromData(plain.data));
-    const urlAnnotated = encodeShareUrl(fromData(annotated.data));
+    const codePlain = encodeShareCode(fromData(plain.data));
+    const codeAnnotated = encodeShareCode(fromData(annotated.data));
 
-    expect(urlAnnotated).toBe(urlPlain); // byte-identical
-    expect(urlAnnotated).not.toContain("note");
-    expect(atob(urlAnnotated.split("#L=")[1])).not.toMatch(/description|listId/);
+    expect(codeAnnotated).toBe(codePlain); // byte-identical
+    expect(codeAnnotated).not.toContain("note");
+    expect(atob(codeAnnotated)).not.toMatch(/description|listId/);
 
     // And the encoder drops both fields even when they are handed to it ON the loadout
     // model, which is the shape a future "share what I'm looking at" path would produce.
     // Without this the assertion above only proves that `fromData` never invented them.
     const carrying = { ...fromData(annotated.data), description: annotated.description, listId: "b" };
-    expect(encodeShareUrl(carrying)).toBe(urlPlain);
+    expect(encodeShareCode(carrying)).toBe(codePlain);
     expect(JSON.stringify(toData(carrying))).not.toContain("note");
 
     // The same for the encoder every local draft goes through.
@@ -3151,9 +3151,9 @@ describe("loadout notes", () => {
     expect(JSON.stringify(encoded)).not.toContain("note");
   });
 
-  it("keeps the LIST's description out of the share URL too", () => {
+  it("keeps the LIST's description out of the share code too", () => {
     // REQ "The Saved-Loadout Wire Format Is Unchanged", scenario "Neither description reaches a
-    // share URL". Since #181 split the requirement there are two descriptions, and the case the
+    // share code". Since #181 split the requirement there are two descriptions, and the case the
     // split newly creates is a loadout filed into a DESCRIBED list: the list's text is filing
     // state one level further out, so it must not travel either — including the inherited case,
     // where the text the user sees was never written to any record they own.
@@ -3161,7 +3161,7 @@ describe("loadout notes", () => {
     const bare = filed("1", "long ammo", LOADED, null);
 
     // Byte-identical to the same build with no description anywhere, list or loadout.
-    expect(encodeShareUrl(fromData(inDescribedList.data))).toBe(encodeShareUrl(fromData(bare.data)));
+    expect(encodeShareCode(fromData(inDescribedList.data))).toBe(encodeShareCode(fromData(bare.data)));
 
     // And the list record's own text cannot reach the encoder: it is not on the loadout model at
     // all, so even handing the encoder a loadout carrying every filing field drops all of them.
@@ -3171,9 +3171,9 @@ describe("loadout notes", () => {
       description: "the loadout's note",
       listDescription: "the shelf's own words",
     };
-    const url = encodeShareUrl(carrying);
-    expect(url).toBe(encodeShareUrl(fromData(bare.data)));
-    expect(atob(url.split("#L=")[1])).not.toMatch(/description|listId|shelf/);
+    const code = encodeShareCode(carrying);
+    expect(code).toBe(encodeShareCode(fromData(bare.data)));
+    expect(atob(code)).not.toMatch(/description|listId|shelf/);
     expect(JSON.stringify(toData(carrying))).not.toMatch(/shelf|note|described-list/);
   });
 

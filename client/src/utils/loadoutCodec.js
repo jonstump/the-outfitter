@@ -927,12 +927,13 @@ export function clearStoredLoadout() {
 }
 
 // Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). This
-// is the decode half of a share CODE — the bare base64 payload, with no "#L=" marker and
-// no URL around it — factored out of `readHashLoadout` so a pasted-code import path
-// (ActionsPanel's "Load from code") can decode the exact same way a share LINK does,
-// rather than growing a second, subtly different decode routine. `readHashLoadout` below
-// is now this function plus "where do I find the code" (the URL hash); this function is
-// "given a code, what loadout is it."
+// is the decode half of a loadout CODE — the bare base64 payload, with no URL or "#L="
+// marker around it. ActionsPanel's "Load" (paste-a-code) is the only caller now; the
+// share-LINK feature this was originally factored out of (a URL carrying the same code
+// in its `#L=` hash, decoded once on page load) was removed outright rather than kept
+// around unreachable — see git history for `encodeShareUrl`/`readHashLoadout` if the URL
+// form is ever wanted back. The app has no live users yet, so there was nothing an old
+// shared link needed to keep working for.
 //
 // Reuses `fromData`, so it inherits ADR-0024's decoder contract for free: a malformed or
 // unrecognized-version code degrades to `null` (caller starts fresh) rather than throwing
@@ -967,17 +968,12 @@ export function decodeShareCode(code) {
   }
 }
 
-export function readHashLoadout() {
-  const m = location.hash.match(/#L=([A-Za-z0-9+/=]+)/);
-  return m ? decodeShareCode(m[1]) : null;
-}
-
-// Governing: item 4 of the 2026-08-16 feedback batch. A user pasting a code has three
-// equally likely things sitting in their clipboard: the bare code, a full share URL, or
-// just the URL's "#L=..." fragment (a browser's address bar sometimes yields only the
-// fragment on copy). Accepting all three is what makes "paste whatever you copied" true
-// rather than "paste exactly the substring we wanted," which is not a distinction a user
-// pasting a code back in has any reason to know or care about.
+// Governing: item 4 of the 2026-08-16 feedback batch. A user pasting a code might still
+// have an OLD share link's URL or "#L=..." fragment sitting in their clipboard from
+// before the share-link feature was removed — accepting those alongside a bare code costs
+// nothing and means "paste whatever you copied" stays true rather than "paste exactly the
+// substring we wanted," which is not a distinction a user pasting a code back in has any
+// reason to know or care about.
 //
 // Returns null for anything that is clearly not a code attempt — empty input, or text
 // that contains no "#L=" marker and does not look like base64 — rather than handing
@@ -994,9 +990,9 @@ export function extractShareCode(input) {
 }
 
 // Governing: issue #358. `btoa` throws `InvalidCharacterError` on any code point above
-// U+00FF, so a loadout named with an emoji or CJK/Cyrillic/Greek characters made
-// `encodeShareUrl` throw uncaught — the try wrapped `history.replaceState`, not `btoa`.
-// Encode the JSON string as UTF-8 bytes before base64 to handle the full Unicode range.
+// U+00FF, so a loadout named with an emoji or CJK/Cyrillic/Greek characters made the
+// share code's encoder throw uncaught. Encode the JSON string as UTF-8 bytes before
+// base64 to handle the full Unicode range.
 // The symmetric decode tries UTF-8-safe decoding first, falling back to raw `atob` for
 // legacy codes produced before this change (the raw-Latin-1 path is a subset of the
 // UTF-8 path for plain-ASCII content, so old codes round-trip correctly either way).
@@ -1014,25 +1010,16 @@ function decodeBase64Utf8(b64) {
   // `fatal: true` is load-bearing: without it, TextDecoder silently substitutes U+FFFD
   // for invalid byte sequences instead of throwing, so a legacy Latin-1 share code
   // containing an accented character (e.g. "Café", raw-btoa'd pre-#358) would "succeed"
-  // here as mangled text instead of throwing and letting readHashLoadout's catch fall
+  // here as mangled text instead of throwing and letting decodeShareCode's catch fall
   // through to the legacy atob path that decodes it correctly.
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
 // Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). The
-// bare code, with no URL around it — the encode half of `decodeShareCode` above, and now
-// the thing `encodeShareUrl` itself is built from rather than duplicating.
+// bare code, with no URL around it — the encode half of `decodeShareCode` above. The
+// share-LINK feature this once also fed (a URL carrying the same code in its "#L=" hash)
+// was removed outright; see the note on `decodeShareCode` above for why.
 export function encodeShareCode(loadout) {
   // Governing: issue #358. UTF-8-safe base64 so non-Latin-1 names don't throw.
   return encodeBase64Utf8(JSON.stringify(toData(loadout)));
-}
-
-export function encodeShareUrl(loadout) {
-  const code = encodeShareCode(loadout);
-  try {
-    history.replaceState(null, "", "#L=" + code);
-  } catch {
-    // history API unavailable — the hash still gets set on location by callers reading location.href
-  }
-  return location.origin + location.pathname + "#L=" + code;
 }
