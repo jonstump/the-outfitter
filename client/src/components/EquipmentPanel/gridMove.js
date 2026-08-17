@@ -36,28 +36,37 @@ export function readArrangement(el) {
   return declared === "wide" ? "wide" : "narrow";
 }
 
-/** The cell an arrow moves to from `from`, or null when the arrow would leave the grid. */
+/**
+ * The cell an arrow moves to from `from`, or null when the arrow would leave the grid.
+ *
+ * Corrected 2026-08-17 per `/sdd:audit`. The grid is always 8 cells arranged as two
+ * tracks of four, but the two arrangements fill the DOM order differently (see
+ * global.css's `.equip-grid`): wide is ROW-major (`grid-auto-flow: row`, 4 cols × 2
+ * rows — index = row*4 + col), narrow is COLUMN-major (`grid-auto-flow: column`, 2
+ * cols × 4 rows — index = col*4 + row). The previous implementation modelled narrow
+ * as row-major too (row = floor(from/2), col = from%2), which is the transpose of
+ * what the CSS actually renders — it stepped Right/Left by 1 (actually a same-column
+ * move) and let Up/Down wrap across the column boundary the grid does not have.
+ *
+ * `primary = floor(from/4)` and `secondary = from%4` hold in BOTH arrangements
+ * because both are "two tracks of four" — only which axis is primary/secondary (and
+ * therefore which arrow key is the ±1 step vs the ±4 step) flips with the
+ * arrangement, mirroring the CSS's `grid-auto-flow` swap exactly.
+ */
 export function arrowTarget(from, key, arrangement) {
   const wide = arrangement === "wide";
-  const cols = wide ? 4 : 2;
-  const rows = wide ? 2 : 4;
-  const row = Math.floor(from / cols);
-  const col = from % cols;
-  let target = null;
-  if (key === "Down") {
-    if (row === rows - 1) return null; // at the bottom edge in EITHER arrangement
-    target = from + (wide ? 4 : 1);
-  } else if (key === "Up") {
-    if (row === 0) return null;
-    target = from - (wide ? 4 : 1);
-  } else if (key === "Right") {
-    if (col === cols - 1) return null; // at the right edge
-    target = from + 1;
-  } else if (key === "Left") {
-    if (col === 0) return null;
-    target = from - 1;
-  }
-  return target;
+  const primary = Math.floor(from / 4); // the slow-moving axis: row (wide) or column (narrow)
+  const secondary = from % 4; // the fast-moving axis: column (wide) or row (narrow)
+  // Wide is row-major: moving along a row (Right/Left) is the ±1 step; moving
+  // across rows (Down/Up) is the ±4 step. Narrow is column-major: moving down a
+  // column (Down/Up) is the ±1 step; moving across columns (Right/Left) is ±4.
+  const fineStepKeys = wide ? ["Right", "Left"] : ["Down", "Up"];
+  const coarseStepKeys = wide ? ["Down", "Up"] : ["Right", "Left"];
+  if (key === fineStepKeys[0]) return secondary === 3 ? null : from + 1;
+  if (key === fineStepKeys[1]) return secondary === 0 ? null : from - 1;
+  if (key === coarseStepKeys[0]) return primary === 1 ? null : from + 4;
+  if (key === coarseStepKeys[1]) return primary === 0 ? null : from - 4;
+  return null;
 }
 
 // Governing: issue #419 (same defect class as #400), SPEC-0006 REQ "Keyboard

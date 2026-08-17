@@ -571,30 +571,97 @@ describe("keyboard equivalence", () => {
     expect(store.getState().loadout.equip).toEqual(twoCell().equip);
   });
 
-  it("an arrow at the grid edge is a no-op (narrow)", () => {
+  it("an arrow at the grid edge is a no-op during an active grab (narrow)", () => {
+    // Corrected 2026-08-17 per `/sdd:audit`: this test previously fired ArrowRight
+    // on cell 1 with NO grab in progress, so it passed even under the wrong
+    // (row-major) narrow model — grabRef.current was null and onGridKeyDown's arrow
+    // branch returns before ever calling arrowTarget. Column 1 (indices 4-7) is the
+    // narrow arrangement's last column; a grabbed item there is the real Right edge.
     const { container, store } = renderPanel({ loadout: twoCell() }, narrow);
-    const cell1 = keyboardCell(container, 1); // right edge of row 0 in 2×4
-    fireEvent.keyDown(cell1, { key: "ArrowRight" });
-    expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+    const cell2 = keyboardCell(container, 2); // index 2: tool, no stack, column 0
+    fireEvent.keyDown(cell2, { key: " " });
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 2 -> 6 (last column)
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // at the edge: no-op
+    fireEvent.keyDown(grid, { key: "Enter" });
+    const s = store.getState().loadout.equip;
+    expect(s[2]).toBeNull();
+    expect(s[6]).toEqual({ t: "T", i: kit });
   });
 
-  it("Escape cancels a grab", () => {
+  it("the edge no-op holds in the narrow arrangement too (spec scenario)", () => {
+    // Governing: SPEC-0006 "Scenario: The edge no-op holds in the narrow arrangement
+    // too" — grab in narrow, move the target to cell 4 (index 3), press Down: the
+    // target SHALL remain on cell 4 and MUST NOT move to cell 5 (index 4). The old
+    // row-major model wrapped this into the next column instead of stopping.
+    const { container, store } = renderPanel({ loadout: twoCell() }, narrow);
+    const cell0 = keyboardCell(container, 0);
+    fireEvent.keyDown(cell0, { key: " " }); // grab index 0
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 0 -> 1
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 1 -> 2
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 2 -> 3 (bottom of column 0)
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // at the edge: no-op, stays at 3
+    fireEvent.keyDown(grid, { key: "Enter" });
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[3]).toEqual({ t: "C", i: vitality });
+    expect(s[4]).toBeNull(); // MUST NOT have wrapped into the next column
+  });
+
+  it("Escape cancels a grab, and focus stays on the origin cell", () => {
     const { container, store } = renderPanel({ loadout: twoCell() });
     const cell = keyboardCell(container, 0);
+    cell.focus();
     fireEvent.keyDown(cell, { key: " " }); // grab cell 0
     fireEvent.keyDown(cell, { key: "Escape" });
     // A subsequent Enter must not drop anything (grab is cancelled).
     fireEvent.keyDown(cell, { key: "Enter" });
     expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+    // Governing: SPEC-0006 "after a cancelled grab, [focus rests] on the origin
+    // cell" — arrows never move DOM focus during a keyboard grab (only the
+    // conceptual target), so focus never left cell 0 to begin with.
+    expect(document.activeElement).toBe(keyboardCell(container, 0));
   });
 
-  it("focus follows a moved item", () => {
+  it("focus rests on the destination cell after a completed move, not lost to the body", () => {
+    // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture" —
+    // "focus SHALL rest on the destination cell... MUST NOT be lost to the document
+    // body" (corrected 2026-08-17 per `/sdd:audit` — this test previously never
+    // completed a move or read `document.activeElement`, so it passed regardless of
+    // whether focus was actually managed).
     const { container, store } = renderPanel({ loadout: twoCell() });
-    const cell = keyboardCell(container, 0);
-    fireEvent.keyDown(cell, { key: " " });
-    fireEvent.keyDown(cell, { key: "ArrowRight" });
-    // Focus moves with the grab: the keyboard grab's movement refocuses the grabbed cell.
-    expect(store.getState().loadout.equip).toEqual(twoCell().equip);
+    const cell0 = keyboardCell(container, 0);
+    cell0.focus();
+    fireEvent.keyDown(cell0, { key: " " }); // grab cell 0 (vitality shot)
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 0 -> 1 (empty)
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitality });
+    expect(store.getState().loadout.equip[0]).toBeNull();
+    expect(document.body.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(keyboardCell(container, 1));
+  });
+
+  it("focus rests on the destination cell after a swap", () => {
+    // A swap re-renders the ORIGIN cell in place (still filled, just with the other
+    // item) rather than unmounting it, so focus would naturally survive there without
+    // any explicit management — but the spec requires focus on the DESTINATION
+    // regardless of move vs swap, so this asserts the stronger claim.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitality }, { t: "T", i: kit }, null, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre });
+    const cell0 = keyboardCell(container, 0);
+    cell0.focus();
+    fireEvent.keyDown(cell0, { key: " " }); // grab cell 0 (vitality shot)
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // 0 -> 1 (occupied: kit)
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(store.getState().loadout.equip[0]).toEqual({ t: "T", i: kit });
+    expect(store.getState().loadout.equip[1]).toEqual({ t: "C", i: vitality });
+    expect(document.activeElement).toBe(keyboardCell(container, 1));
   });
 
   it("focus survives a removal", () => {
@@ -606,6 +673,134 @@ describe("keyboard equivalence", () => {
     act(() => store.dispatch({ type: "loadout/removeEquip", payload: 0 }));
     const empty = container.querySelector('[data-slot-index="0"]');
     expect(empty).toBeInTheDocument();
+  });
+
+  it("Enter does not preventDefault on an empty cell, so native activation reaches the toggle", () => {
+    // Governing: SPEC-0006 §129/§618 — "on an empty cell, Enter or Space SHALL
+    // toggle its blocked state" (corrected 2026-08-17 per `/sdd:audit`: Enter
+    // unconditionally called `preventDefault`, including on empty cells, which
+    // cancels a button's native keyboard activation before it reaches `onClick`).
+    // jsdom performs no native Enter-to-click activation, so this asserts the
+    // defect's actual mechanism instead: `dispatchEvent`'s return value is `false`
+    // only when some handler called `preventDefault` on the (cancelable) event —
+    // exactly what the old unconditional `preventDefault()` did here.
+    const { container } = renderPanel({ loadout: twoCell() });
+    const empty = keyboardCell(container, 1); // index 1 is null in twoCell()
+    const notPrevented = fireEvent.keyDown(empty, { key: "Enter", cancelable: true });
+    expect(notPrevented).toBe(true);
+    // Confirm the click this would produce in a real browser does toggle blocking,
+    // so the two halves compose into the behaviour the requirement names.
+    fireEvent.click(empty);
+    expect(empty).toHaveClass("blocked-slot");
+  });
+
+  it("every continuation cell of a stack is individually focusable, not just the second", () => {
+    // Governing: SPEC-0006 §616 "Every cell SHALL be focusable and operable by
+    // keyboard" (corrected 2026-08-17 per `/sdd:audit`: a run of length 3+ left its
+    // third and later cells at tabIndex={-1}, permanently unreachable by Tab).
+    const threeStack = loadoutState({
+      equip: [
+        { t: "C", i: vitality }, { t: "C", i: vitality }, { t: "C", i: vitality },
+        null, null, null, null, null,
+      ],
+    });
+    const { container } = renderPanel({ loadout: threeStack });
+    const third = container.querySelector('[data-slot-index="2"]');
+    expect(third).toHaveAttribute("tabIndex", "0");
+  });
+
+  // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture" —
+  // "the grid SHALL communicate the grabbed item and the current target... and
+  // SHALL announce the outcome — moved, swapped, or rejected — on commit."
+  // Corrected 2026-08-17 per `/sdd:audit`: only the rejection case was ever
+  // announced; grab, target, and successful-commit announcements did not exist.
+  it("announces the grab with the item name and cell number", () => {
+    const { container } = renderPanel({ loadout: twoCell() });
+    const cell0 = keyboardCell(container, 0);
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    expect(announcer.textContent).toMatch(/grabbed/i);
+    expect(announcer.textContent).toMatch(/cell 1/i);
+  });
+
+  it("announces a grabbed stack with its quantity", () => {
+    const { container } = renderPanel({ loadout: stacked });
+    const cell0 = keyboardCell(container, 0);
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    expect(announcer.textContent).toMatch(/2 items/i);
+  });
+
+  it("announces the current target as the grab moves", () => {
+    const { container } = renderPanel({ loadout: twoCell() }, wide);
+    const cell0 = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    expect(announcer.textContent).toMatch(/cell 2/i);
+  });
+
+  it("announces a successful move into an empty cell", () => {
+    const { container } = renderPanel({ loadout: twoCell() }, wide);
+    const cell0 = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(announcer.textContent).toMatch(/moved/i);
+    expect(announcer.textContent).not.toMatch(/swapped/i);
+  });
+
+  it("announces a swap distinctly from a move", () => {
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitality }, { t: "T", i: kit }, null, null, null, null, null, null],
+    });
+    const { container } = renderPanel({ loadout: pre }, wide);
+    const cell0 = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(announcer.textContent).toMatch(/swapped/i);
+  });
+
+  it("announces a run shifted within its own footprint as moved, never swapped", () => {
+    // Governing: SPEC-0006 "Stack drops SHALL NOT swap" — found via `/sdd:review`
+    // 2026-08-17. Dragging a stack by LESS than its own length (the ordinary case)
+    // lands the run partly on cells that are still occupied by the run's OWN other
+    // cell at its pre-move position — reading raw occupancy there, without excluding
+    // the run's own cells, previously announced "Swapped" for a plain shift into a
+    // cell that was actually empty beforehand.
+    const pre = loadoutState({
+      equip: [{ t: "C", i: vitality }, { t: "C", i: vitality }, null, null, null, null, null, null],
+    });
+    const { container, store } = renderPanel({ loadout: pre }, wide);
+    const head = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(head, { key: " " }); // grab the 2-run anchored at 0
+    fireEvent.keyDown(grid, { key: "ArrowRight" }); // shift target to 1 (own footprint)
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(announcer.textContent).toMatch(/moved/i);
+    expect(announcer.textContent).not.toMatch(/swapped/i);
+    // Cell 2 (previously empty) now holds the run's second cell; cell 0 is vacated.
+    const s = store.getState().loadout.equip;
+    expect(s[0]).toBeNull();
+    expect(s[1]).toEqual({ t: "C", i: vitality });
+    expect(s[2]).toEqual({ t: "C", i: vitality });
+  });
+
+  it("a drop back onto the origin announces nothing new", () => {
+    const { container } = renderPanel({ loadout: twoCell() }, wide);
+    const cell0 = keyboardCell(container, 0);
+    const grid = container.querySelector('[data-testid="equip-grid"]');
+    const announcer = container.querySelector('[data-testid="equip-announcer"]');
+    fireEvent.keyDown(cell0, { key: " " });
+    fireEvent.keyDown(grid, { key: "Enter" }); // drop with no arrow move: from === origin
+    expect(announcer.textContent).not.toMatch(/moved|swapped/i);
   });
 });
 
