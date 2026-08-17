@@ -388,27 +388,37 @@ a live region rather than only re-rendered.
 
 ## Implementation
 
-> Call graphs generated from the current codebase, before any of this work. Re-run
-> `/sdd:spec --update SPEC-0010` after implementation to refresh.
+> Call graphs generated from the codebase before any of this work — SPEC-0010 has since shipped
+> (`status: implemented`), and this section was never regenerated against the shipped code. Flagged
+> stale via `/sdd:audit` 2026-08-17; re-run `/sdd:spec --update SPEC-0010` to refresh properly rather
+> than trusting the line citations and mapping below. Known-stale specifics, so a reader isn't misled
+> in the meantime: `boundedAmmo()` still exists and still runs for pre-v4 records — it was not
+> "retired," only narrowed in scope (see the WIRE-FORMAT GATE comment in `catalog.js`); `totalCost()`'s
+> ammo pricing moved to `calc.js:284-291`'s `ammoCostFor()` (id-based via `ammoRoundFor`), not the
+> `calc.js:152` / `AMMO[WEAPONS[w.i][4]][w.a]` shape cited below; `randomizeLoadout()`'s ammo draw is
+> `randomize.js:81-89`, not `:58`, and draws from `ammoSlotsFor()`'s per-weapon groups, not an index
+> into the shared `AMMO` class (the Call Graph mermaid below is stale on this same point). The
+> requirement-to-function *mapping* (which function serves which REQ) is still directionally right;
+> the *line numbers and mechanism descriptions* are what drifted.
 
 ### Requirement-to-Function Mapping
 
 Every function below exists today and reads the pool model. This capability is a replacement, not an
 addition, which is why the mapping is dense:
 
-**REQ "Ammo Rows Are Addressed by Stable Id"**: `boundedAmmo()` → `inRange()` — the bare-index clamp this requirement retires
+**REQ "Ammo Rows Are Addressed by Stable Id"**: `boundedAmmo()` → `inRange()` — the bare-index clamp this requirement retires for v4+ records; still runs for pre-v4 decode
 
-**REQ "A Weapon Declares Which Rounds It Accepts"**: `WeaponSlot()` reads `AMMO[def[4]]` directly (`client/src/components/WeaponsPanel/WeaponSlot.jsx:30`); `statsFor()` is the seam the per-weapon list arrives through
+**REQ "A Weapon Declares Which Rounds It Accepts"**: `WeaponSlot()` reads per-weapon groups via `ammoSlotsFor()` (`client/src/data/itemStats.js`), not `AMMO[def[4]]` directly; `statsFor()` is the seam the per-weapon list arrives through
 
-**REQ "Price Belongs to the Weapon-and-Round Pair"**: `totalCost()` (`client/src/utils/calc.js:152`, currently `AMMO[WEAPONS[w.i][4]][w.a]`)
+**REQ "Price Belongs to the Weapon-and-Round Pair"**: `ammoCostFor()` (`client/src/utils/calc.js:284-291`), summed per filled slot via `ammoRoundFor()`
 
-**REQ "A Weapon Holds Up to Two Independently Chosen Rounds"**: `setAmmo()`, `randomizeLoadout()` (`client/src/utils/randomize.js:58`)
+**REQ "A Weapon Holds Up to Two Independently Chosen Rounds"**: `setAmmo()`, `randomizeLoadout()`'s `mkAmmo()` (`client/src/utils/randomize.js:81-89`)
 
-**REQ "Wire Format Version 4 References Rounds by Stable Id"**: `toData()`, and a new `fromV4()` beside `fromV2()`
+**REQ "Wire Format Version 4 References Rounds by Stable Id"**: `toData()`, and `fromV4()` beside `fromV2()`
 
-**REQ "Every Legacy Ammo Selection Migrates to the Round It Named"**: `fromData()` → `fromV2()` / `fromV1()` / `fromLegacy()`, each via its own `slotWeapon()` → `boundedAmmo()`
+**REQ "Every Legacy Ammo Selection Migrates to the Round It Named"**: `fromData()` → `fromV2()` / `fromV1()` / `fromLegacy()`, each via its own `slotWeapon()` → `boundedAmmo()`, with final id resolution via `legacyAmmoId()` (`client/src/data/ammoIds.js`) against the frozen snapshot
 
-**REQ "The Weapon Entry Is Validated at Version 4's Shape"**: `isValidData()` → `isIsland()` → `isRef()`
+**REQ "The Weapon Entry Is Validated at Version 4's Shape"**: `isValidData()` → `isIslandV4()` → `isRef()`
 
 ### Call Graph
 
@@ -431,7 +441,7 @@ graph TD
   boundedAmmo["boundedAmmo — the bare-index clamp"]
   inRange["inRange"]
   writeStoredLoadout["writeStoredLoadout"]
-  encodeShareUrl["encodeShareUrl"]
+  encodeShareCode["encodeShareCode"]
   readStoredLoadout["readStoredLoadout"]
   isValidData["isValidData (server)"]
   isIsland["isIsland — Number.isInteger on ammo"]
@@ -440,7 +450,7 @@ graph TD
   WeaponSlot --> setAmmo
   randomizeLoadout --> totalCost
   writeStoredLoadout --> toData
-  encodeShareUrl --> toData
+  encodeShareCode --> toData
   readStoredLoadout --> fromData
   fromData -.registry.-> fromV4
   fromData -.registry.-> fromV2

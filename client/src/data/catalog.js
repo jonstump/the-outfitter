@@ -4,14 +4,15 @@
 // Consumable tuple shape: [id, name, cost, category, group]
 // Trait tuple shape: [id, name, up, group]
 // Ammo tuple shape: [id, name, cost] — added by issue #340 (SPEC-0010 REQ "Ammo Rows Are Addressed
-// by Stable Id"). `cost` is a deliberate placeholder, not a design decision: ADR-0014 moves ammo
-// pricing to a per-(weapon, round) pair, which is issue #341's job, not this one's. Keeping a single
-// `cost` on the row for now preserves today's app behavior (one price per round, shared across every
-// weapon in the class) until #341 replaces it with `itemStats.json`'s scraped `availableAmmo`.
+// by Stable Id"). `cost` was a deliberate placeholder, not a design decision: #341 has since moved
+// ammo pricing to a per-(weapon, round) pair, read from `itemStats.json`'s scraped `ammo.accepted`
+// (each entry's own `price`) rather than this row's `cost` — see `ammoCostFor` in `calc.js`. This
+// row's `cost` now serves only pre-#341 legacy decode paths (confirmed via `/sdd:audit` 2026-08-17;
+// this comment previously named the field `availableAmmo`, which was never the shipped name).
 //
 // `id` is a stable, slug-style identifier, unique within its category and never
 // reused after removal. The wire format (loadoutCodec.js), localStorage, saved
-// loadout records, and share URLs all reference items by `id` rather than by
+// loadout records, and share codes all reference items by `id` rather than by
 // array position, so reordering/inserting/removing entries here never silently
 // remaps an existing saved loadout to a different item.
 //
@@ -42,16 +43,19 @@
 
 // WIRE-FORMAT GATE — read before editing any pool below.
 //
-// issue #340 gives every row below a stable, slug-style `id` — the same property every other
-// category in this file already has (see the header comment). That is a step TOWARD retiring the
-// hazard this comment describes, not the retirement itself: nothing downstream resolves a selection
-// by id yet. Wiring id-based resolution into the decoder is issue #343's job; until it lands, the
-// rule below is unchanged and every pool stays exactly as dangerous to reorder as it always was.
+// issue #340 gave every row below a stable, slug-style `id` — the same property every other
+// category in this file already has (see the header comment). #343 has since landed and wired
+// id-based resolution into the decoder for legacy (pre-v4) records: a bare index is resolved
+// against the FROZEN `LEGACY_AMMO_IDS` snapshot in `ammoIds.js`, not against this live pool's
+// current order, via `legacyAmmoId` (confirmed via `/sdd:audit` 2026-08-17). Current (v4+) records
+// reference rounds by stable id directly and never read this pool's order at all.
 //
-// A saved ammo selection persists as a BARE INDEX into AMMO[ammoClass] (loadoutCodec.js writes it,
-// calc.js reads it back). So inserting, removing, or reordering a variant inside a pool silently
-// re-points every saved selection in that class: a loadout that stored "index 2" keeps storing 2
-// and starts meaning a different round. Nothing errors, and the cost line just changes.
+// This comment previously described a decoder that had no id-based resolution and read a saved
+// selection as a BARE INDEX into the live AMMO[ammoClass] at decode time — that decoder no longer
+// exists. What has NOT been re-verified here is whether every remaining edit to this pool (removing
+// a row, which shrinks `boundedAmmo`'s live-length clamp independently of the frozen snapshot) is
+// safe — that analysis is still owed. Treat this pool as append-only and re-price-in-place-only
+// until that verification happens; do not treat the above as license to freely reorder or remove.
 //
 // Any such edit therefore needs a FORMAT_VERSION bump and a saved-selection migration, on the same
 // terms already required for changing a weapon's `ammoClass`. Appending to the END of a pool, or
@@ -138,30 +142,33 @@ export const AMMO = {
   // Bomb Launcher/Chu Ko Nu's:
   //
   //   Bomb Launcher — Dragon Breath Charge 10, Harpoon 5, Steel Ball 5, Waxed Frag Charge 50. All
-  //   four are wiki-stated PER SLOT prices (`Extra: 6 (3 per slot)`); this app has one ammo
-  //   selection per weapon today (SPEC-0010 Part C's two-slot model is #342-#344's job), so the row
-  //   prices one slot, same as every other pool here prices one round. A build that could fill both
-  //   slots with the same round would cost double this figure once slots are modeled.
+  //   four are wiki-stated PER SLOT prices (`Extra: 6 (3 per slot)`). SPEC-0010 Part C's two-slot
+  //   model has since shipped (#342-#344) — a build filling both slots with the same round is priced
+  //   per filled slot via `ammoCostFor` in `calc.js`, so it does cost double this row's figure, as
+  //   this comment originally anticipated (confirmed via `/sdd:audit` 2026-08-17).
   //   Chu Ko Nu — Incendiary Bolt 25 (purchasable) and Explosive Bolt (Scarce, cost 0 under
   //   ADR-0013 — a DIFFERENT row from `AMMO.xbow`'s "Explosive Bolt", because /wiki/Ammo states the
   //   Crossbow and Chu Ko Nu "do not share compatible ammo types despite sharing a name").
   //   Dolch 96 (and its Bullseye/Claw/Precision variants) — Dumdum, Scarce, cost 0.
   //   Nitro Express — Explosive and Shredder, both Scarce, cost 0.
   //
-  // NOT FIXED HERE, ON PURPOSE: Bomb Lance sells the same four rounds as Bomb Launcher at the same
-  // prices but is typed `ammoClass: "none"` (melee) — "the one weapon in the whole catalog that
-  // both has four purchasable rounds and is modelled as having none" (docs/reports/suggested-adrs.md
-  // § A6). Reclassifying it belongs in the per-weapon compatibility work (#341+): changing a
-  // weapon's `ammoClass` is exactly the WIRE-FORMAT-GATED edit described above, and is out of this
-  // story's scope. SPEC-0010's "false for three weapons" language names Bomb Launcher, Chu Ko Nu,
-  // AND Bomb Lance; this pool now correctly serves the first two, and Bomb Lance's fix remains open.
+  // FIXED SINCE: Bomb Lance sells the same four rounds as Bomb Launcher at the same prices but is
+  // typed `ammoClass: "none"` (melee) here in the shared pool — "the one weapon in the whole catalog
+  // that both has four purchasable rounds and is modelled as having none" (docs/reports/
+  // suggested-adrs.md § A6). This is no longer a live gap: #341's per-weapon scrape gives Bomb Lance
+  // its own `ammo.accepted` list in `itemStats.json` (family `lance`, ids `ammo-lance-*`, distinct
+  // from this shared pool's `ammo-special-*` ids), which is what actually scopes its offers now —
+  // `ammoClass: "none"` on the catalog row below no longer decides anything (SPEC-0010 REQ
+  // "`ammoClass` Survives as a Grouping Label Without Rules Authority"). Confirmed via
+  // `/sdd:audit` 2026-08-17. This comment previously said Bomb Lance's fix "remains open"; it shipped.
   //
-  // A known, pre-existing limitation this correction inherits rather than introduces: `special` is
-  // one shared pool for nine weapons with different real offers (this is the same class-pool
-  // simplification every other pool in this file already has), so a Dolch 96 slot will show Bomb
-  // Launcher's Harpoon as a selectable option even though the wiki gives Dolch 96 no such round.
-  // ADR-0014's per-weapon `availableAmmo` (#341+) is what actually scopes offers to the weapon that
-  // has them; this story only fixes what the shared pool contains and what it charges.
+  // A known, pre-existing limitation this correction inherited, and which #341 also resolved: this
+  // `special` pool used to be one shared pool for nine weapons with different real offers, so a
+  // Dolch 96 slot would show Bomb Launcher's Harpoon as a selectable option even though the wiki
+  // gives Dolch 96 no such round. Per-weapon scraped `ammo.accepted` (read via `ammoSlotsFor` in
+  // `client/src/data/itemStats.js`) is what a weapon's ammo control actually offers today; this
+  // shared pool below now serves only as catalog-level id/name/cost bookkeeping and the legacy
+  // decode path, not as the live source of what a given weapon can select.
   //
   // Governing: issue #340, issue #373, ADR-0013, ADR-0014 (Per-Weapon Ammo Compatibility and
   // Slots), SPEC-0010 REQ "A Scarce Round Costs Nothing and Is Still Selectable". Related: #361,
@@ -227,9 +234,11 @@ export const AMMO_LABEL = {
 // next write-through run without anyone noticing. Correct the wiki, or re-run the scrape.
 //
 // Everything else in these tuples IS hand-authored and is never written by a scrape: `id`, the
-// display `name` (it feeds slugify() and therefore the on-disk image path), `ammoClass` (a saved
-// ammo selection is a bare index into that pool), and `group`. The AMMO table below is likewise
-// never scraped — see the note beside it.
+// display `name` (it feeds slugify() and therefore the on-disk image path), `ammoClass` (a grouping
+// label only, per SPEC-0010 REQ "`ammoClass` Survives as a Grouping Label Without Rules Authority" —
+// a current saved ammo selection references a round by stable id, not by index into this class; see
+// the WIRE-FORMAT GATE comment above `AMMO` for what the pool ordering still governs), and `group`.
+// The AMMO table below is likewise never scraped — see the note beside it.
 //
 // The two are pinned against each other by itemStats.test.js, which fails if any machine-maintained
 // column drifts from the dataset. Rows the dataset does not cover are skipped, not failed.
@@ -259,7 +268,9 @@ export const WEAPONS = [
   // 73C as a lightened Ranger 73 (a Compact rifle), so "medium" was wrong and was pricing this
   // weapon's ammo out of the wrong AMMO pool. See docs/audits/weapon-catalog-wiki-audit.md.
   //
-  // Known one-time cost of this correction (PR #116 review): a weapon's selected ammo is
+  // Known one-time cost of this correction (PR #116 review, historical — this describes the wire
+  // format before FORMAT_VERSION 4; a saved selection today references a round by stable id, not an
+  // index, per the WIRE-FORMAT GATE comment above `AMMO`): a weapon's selected ammo was
   // persisted as a bare INDEX into AMMO[ammoClass] (loadoutCodec.js `w.a`, read back by
   // calc.js's `AMMO[WEAPONS[w.i][4]][w.a][2]` — cost moved from [1] to [2] when #340 gave
   // every row a stable id at [0]), not as an ammo id. AMMO.medium and AMMO.compact

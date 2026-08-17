@@ -20,7 +20,7 @@ So: **should the application enforce a rule the game enforces, and if so, what h
 
 * **Fifteen does not vary.** This is the distinction that decides the shape of the answer. The UP budget is opt-in *because* it varies with hunter level, so the app cannot know a player's real ceiling. Fifteen is fixed for every hunter, which removes the reason the other ceiling is a toggle.
 * **The roster is about to double.** #157 takes traits from 32 to 58. An unenforced cap gets easier to cross precisely as the catalog grows.
-* **A value is only bounded if every path that writes it is bounded.** Traits reach the store from two places — the interactive `addTrait`, and decode (share link, `localStorage`, server payload) which assigns wholesale through `setLoadout`. Bounding one is not bounding the value. This repo has already learned that: PR #203 had to bound a decoded ammo index in **both** decoders because the legacy one carried a bound the current one had lost.
+* **A value is only bounded if every path that writes it is bounded.** Traits reach the store from two places — the interactive `addTrait`, and decode (pasted share code, `localStorage`, server payload) which assigns wholesale through `setLoadout`. Bounding one is not bounding the value. This repo has already learned that: PR #203 had to bound a decoded ammo index in **both** decoders because the legacy one carried a bound the current one had lost.
 * **An approved spec currently says the opposite.** SPEC-0003 renders traits as a fifteen-cell grid and explicitly records fifteen as *"a fact about the game, not an invariant this application enforces"*, then specifies what a preview does when a loadout exceeds it. This decision retires that premise, and the spec has to move with it.
 * **The honest severity is low.** Unlike the ammo index, an over-cap trait list crashes nothing — unknown ids are already filtered at decode and no read site indexes past an array end. The argument here is that the builder should not produce loadouts the game rejects, not that it is unsafe today.
 
@@ -55,7 +55,7 @@ Concretely:
 * Good, because the bound holds regardless of how a loadout arrives — typed, shared, restored, or randomly generated.
 * Good, because over-cap records self-heal on next save rather than needing a migration.
 * Bad, because **it retires a specified behaviour.** SPEC-0003's preview requirement handles the over-fifteen case and says the grid must state the remainder as a count. Once nothing can exceed fifteen, that clause describes an unreachable state. SPEC-0003 needs an amendment in the same change; leaving it is exactly the drift this project has spent the week closing.
-* Bad, because clamping silently drops traits from an old share link. Bounded in practice — the live store's largest loadout holds five, and the encoder has never produced more than the user clicked — but a hand-edited code that used to decode to twenty now decodes to fifteen with no notice. Refusing outright would be louder and worse: a link that worked becomes an error with nothing recoverable.
+* Bad, because clamping silently drops traits from an old share code. Bounded in practice — the live store's largest loadout holds five, and the encoder has never produced more than the user clicked — but a hand-edited code that used to decode to twenty now decodes to fifteen with no notice. Refusing outright would be louder and worse: a code that worked becomes an error with nothing recoverable.
 * Neutral, because the *severity* is low. This is a correctness-of-model change, not a defect fix, and should not be described as one when it is planned.
 
 ### Confirmation
@@ -83,7 +83,7 @@ Five checks, one per write path plus the composition:
 
 * Good, because it is one edit and closes the path a real user actually takes.
 * Good, because it needs no spec amendment if the wire bound stays at forty — SPEC-0003's overflow clause remains true.
-* Bad, because a share link, a restored `localStorage` draft, and a direct API write all bypass it. The rule would be advisory in exactly the cases where a loadout came from somewhere untrusted.
+* Bad, because a share code, a restored `localStorage` draft, and a direct API write all bypass it. The rule would be advisory in exactly the cases where a loadout came from somewhere untrusted.
 * Bad, because it leaves two numbers in the codebase — fifteen in the client, forty on the wire — with neither being the answer to "what is the maximum".
 
 ### Gate it on the upgrade-point toggle
@@ -106,7 +106,7 @@ Five checks, one per write path plus the composition:
 ```mermaid
 graph TD
     TYPE["user clicks a trait"] --> ADD["addTrait"]
-    SHARE["share link #L="] --> DEC["fromData / fromLegacy"]
+    SHARE["pasted share code"] --> DEC["fromData / fromLegacy"]
     LS["localStorage draft"] --> DEC
     SRV["GET /api/loadouts"] --> DEC
     RNG["randomize.js"] --> SET

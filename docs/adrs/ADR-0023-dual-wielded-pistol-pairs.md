@@ -117,18 +117,23 @@ repriced to zero under ADR-0013. Coupling dual-wield to it means dualies ship wh
 The cost of declining is honest and bounded: a second widening of the server validator and a second
 migration over the same records, in a decoder registry explicitly built to hold several versions.
 
-The two bumps compose rather than conflict:
+The two bumps compose rather than conflict. **Table corrected 2026-08-17 per `/sdd:audit`** — the v4
+row below was a forward projection written before SPEC-0010 shipped, and the shipped shape nests the
+two ammo slots into one array element rather than spreading them across two, which this table never
+recorded:
 
 | Version | Weapon entry | Carries |
 |---|---|---|
-| 2 (today) | `[id, ammo]` | — |
+| 2 | `[id, ammo]` | — |
 | 3 (this decision) | `[id, ammo, d]` | the pair flag |
-| 4 (ADR-0014) | `[id, ammoA, ammoB, d]` | two-slot stable-id ammo |
+| 4 (ADR-0014/SPEC-0010, shipped) | `[ref, [ammoA, ammoB], d]` | two-slot stable-id ammo, nested |
 
 `ammoA` and `ammoB` are ADR-0014's **per-weapon** ammo split — the two rounds one weapon may load at
 once, which a lone pistol carries just the same. They are not one round per pistol of a pair, and a
 pair never gets its own extra ammo field. A pair keeps exactly the slots its single weapon has, so `d`
-is orthogonal to the ammo fields and neither version needs a dual-specific ammo case.
+is orthogonal to the ammo fields and neither version needs a dual-specific ammo case. This ADR's own
+consequence about the two bumps composing rather than conflicting held regardless of the exact shape
+the ammo pair ended up taking — see `weapon-slots/design.md` for the shipped shape's own record.
 
 ### Consequences
 
@@ -234,9 +239,9 @@ graph TD
   fromV2["fromV2"]
   fromV3["fromV3 (new)"]
   writeStoredLoadout["writeStoredLoadout"]
-  encodeShareUrl["encodeShareUrl"]
+  encodeShareCode["encodeShareCode"]
   readStoredLoadout["readStoredLoadout"]
-  readHashLoadout["readHashLoadout"]
+  decodeShareCode["decodeShareCode"]
   isValidData["isValidData (server)"]
   isIsland["isIsland (length === 2 today)"]
 
@@ -247,9 +252,9 @@ graph TD
   WeaponSlot --> setAmmo
   addWeapon --> capMax
   writeStoredLoadout --> toData
-  encodeShareUrl --> toData
+  encodeShareCode --> toData
   readStoredLoadout --> fromData
-  readHashLoadout --> fromData
+  decodeShareCode --> fromData
   fromData -.registry dispatch.-> fromV2
   fromData -.registry dispatch.-> fromV3
   isValidData --> isIsland

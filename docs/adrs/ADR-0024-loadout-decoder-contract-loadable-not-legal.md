@@ -114,6 +114,19 @@ same kind — as part of decoding. Rule *enforcement* belongs to the reducer and
 a live user action, where the player can see and choose to fix an over-cap record rather than have it
 silently rewritten underneath them.
 
+**Reconciling note added 2026-08-17, per `/sdd:audit`.** SPEC-0003 requires the server to reject a
+`POST`/`PATCH` write carrying more than fifteen traits with a `400` (`server/src/routes/loadouts.js`'s
+`MAX_TRAITS` check). Read against this ADR's "MUST NOT enforce... the fifteen-trait cap... as part of
+decoding," those two statements can look contradictory without this note: they are not, because they
+govern different operations. **Decode** is turning an already-stored or already-submitted payload into
+an in-memory loadout — that is what `boundedTraits`/`boundedEquip` do, and what this ADR forbids
+clamping in. **Write-time validation** is the gate a NEW submission passes through before it is ever
+stored at all — refusing an oversized write outright, with a `400` the caller sees immediately, is not
+"clamping and silently proceeding," it is the opposite: the record never enters the system in the
+degraded state this ADR is about. The `MAX_TRAITS` rejection in `loadouts.js` is therefore consistent
+with, not a violation of, this decision, and this ADR intentionally does not touch it (see "What this
+ADR does not do" below).
+
 This is the contract every other decode path in this codebase already implements (ammo resolution,
 weapon-id aliasing/retirement, equipment-hole preservation, malformed-input decay to the empty grid).
 `boundedTraits` and `boundedEquip` are the two decode-time rule-enforcement outliers against that
@@ -308,6 +321,7 @@ ADR's merge also files (see below), not by this one.
 | Item | Kind | Fix |
 |---|---|---|
 | (1) duplicate blocked cells | syntactic mismatch | make `isValidData` and `boundedBlocked` agree — dedupe on both ends (recommended) or reject on both |
+| (1b) duplicate trait ids *(added 2026-08-17 per `/sdd:audit` — the identical mismatch to (1), missed here originally: `boundedTraits` dedupes client-side, `isValidData`'s `data.tr` duplicate check on the server still rejects outright)* | syntactic mismatch | same resolution as (1), applied to `tr` |
 | (2) occupied-and-blocked overlap | syntactic mismatch, currently unhandled at both ends | define one resolution and implement it on both ends; re-check `slotMax`/`equipOverCapacity` arithmetic once overlap has a meaning |
 | (3) trait/equipment cap enforcement at decode | rule-enforcement inconsistency | remove `TRAIT_MAX` clamping from `boundedTraits` AND remove the cap/`slotMax` clamp from `boundedEquip`, sequenced behind confirming a live over-cap warning exists for traits (equipment's already does, PR #416) |
 

@@ -440,7 +440,7 @@ Part B requirements are implemented; the functions listed are the ones that carr
 
 **REQ "Version 2 and Version 1 Records Continue to Decode"**: `fromData()` → `fromV2()` / `fromV1()` / `fromLegacy()` → `promoteToWeaponSlots()`
 
-**REQ "The Weapon Entry Is Validated at an Exact Element Count"**: `isValidData()` → `isIsland()`
+**REQ "The Weapon Entry Is Validated at an Exact Element Count"**: `isValidData()` → `isIslandV4()` *(corrected 2026-08-17 per `/sdd:audit` — SPEC-0010 raised the wire format to v4, and validation moved to `isIslandV4()`; this mapping still named the pre-v4 `isIsland()`)*
 
 **REQ "The Pair Affordance Lives on the Weapon Slot"**: `WeaponSlot()`, `buildRows()`, and the `togglePair()` reducer in `loadoutSlice.js` — which owns the refusal, both the stored-attribute check and the capacity check
 
