@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { uiActions } from "../../store/uiSlice.js";
 import { saveCurrent, saveCurrentAsNew } from "../../store/savedLoadoutsSlice.js";
-import { randomizeThunk, clearBuildThunk, shareThunk, copyCodeThunk, importCodeThunk } from "../../store/thunks.js";
+import { randomizeThunk, clearBuildThunk, copyCodeThunk, importCodeThunk } from "../../store/thunks.js";
 import { selectSaveDestinationName, selectShareCode, selectTotalCost, selectUpTotal } from "../../store/selectors.js";
 
 export default function ActionsPanel() {
@@ -145,45 +145,47 @@ export default function ActionsPanel() {
             Save as new
           </button>
         )}
-        <button className="btn-outline" onClick={() => dispatch(shareThunk())}>
-          Share link
-        </button>
       </div>
 
       {/* Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
-          "Share link" above copies a full URL; this is the same underlying payload with no
-          URL around it, for a user who wants something to paste into a text field, a
-          message, or a note rather than a link to click. Always visible and live-computed
-          from the current build (no button press needed to generate it) so a clipboard
-          failure is never a dead end — the code is already on screen, selectable by hand,
-          the moment there is one. `readOnly` rather than disabled: a disabled input cannot
-          be focused or have its text selected, which would defeat the point of showing it. */}
+          Both directions — view/copy your own build's code, or paste someone else's — sit
+          under one visible "Loadout Code" heading, matching this app's own vocabulary
+          ("loadout" is the noun used everywhere else) rather than the generic "Copy code"
+          wording. There used to be a "Share link" button that wrapped this same payload in
+          a URL; it was removed outright rather than kept alongside this (the app has no
+          live users yet, so there was nothing an old shared link needed to keep working
+          for — see loadoutCodec.js's `decodeShareCode` for the fuller note). */}
+      <div className="code-section-label">Loadout Code</div>
+
+      {/* Export: always visible and live-computed from the current build (no button press
+          needed to generate it) so a clipboard failure is never a dead end — the code is
+          already on screen, selectable by hand, the moment there is one. `readOnly` rather
+          than disabled: a disabled input cannot be focused or have its text selected, which
+          would defeat the point of showing it. */}
       <div className="code-row">
         <input
           className="text-input code-field"
           style={{ flex: 1, minWidth: 160 }}
           value={shareCode}
           readOnly
-          aria-label="Share code for this loadout"
+          aria-label="Your loadout code"
           onFocus={(e) => e.target.select()}
         />
         <button className="btn-outline" onClick={() => dispatch(copyCodeThunk())}>
-          Copy code
+          Copy
         </button>
       </div>
 
-      {/* The import half: paste a code (or a full URL, or just its "#L=..." fragment —
-          extractShareCode accepts all three) and load it as the current build, without
-          navigating anywhere. This is the thing SPEC-0003's share link could previously do
-          only on initial page load (App.jsx reads location.hash once, on mount); there was
-          previously no way to load a second shared build without a page navigation. */}
+      {/* Import: paste a code (or an old share link's URL, or just its "#L=..." fragment —
+          extractShareCode accepts all three) and load it as the current build, live,
+          without navigating anywhere. */}
       <div className="code-row">
         <input
           className="text-input"
           style={{ flex: 1, minWidth: 160 }}
           value={pasteValue}
-          placeholder="Paste a share code…"
-          aria-label="Paste a share code to load it"
+          placeholder="Paste a loadout code…"
+          aria-label="Paste a loadout code to load it"
           onChange={(e) => setPasteValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") loadFromPaste();

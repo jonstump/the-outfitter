@@ -632,7 +632,17 @@ describe("the controls that share a row share a step", () => {
     const saveRow = document.querySelector(".save-row");
     expect(saveRow.querySelector("input")).toHaveClass("text-input");
     expect(within(saveRow).getByRole("button", { name: /^Save to / })).toHaveClass("btn-gold");
-    expect(within(saveRow).getByRole("button", { name: "Share link" })).toHaveClass("btn-outline");
+
+    // The loadout-code rows (item 4, 2026-08-16 feedback batch) sit below the save row
+    // but share its step — the same .text-input/.btn-outline default-step pairing, not
+    // the dense (-sm) step used elsewhere in the panel.
+    const codeRows = document.querySelectorAll(".code-row");
+    expect(codeRows).toHaveLength(2);
+    for (const row of codeRows) {
+      expect(row.querySelector("input")).toHaveClass("text-input");
+    }
+    expect(within(codeRows[0]).getByRole("button", { name: "Copy" })).toHaveClass("btn-outline");
+    expect(within(codeRows[1]).getByRole("button", { name: "Load" })).toHaveClass("btn-outline");
   });
 
   it("puts the budget row's toggle and its number field on the same -sm step", () => {

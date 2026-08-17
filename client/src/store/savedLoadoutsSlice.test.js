@@ -12,7 +12,7 @@ import savedLoadoutsReducer, {
   reorderSaved,
 } from "./savedLoadoutsSlice.js";
 import { describeLoadout, moveLoadout } from "../api/loadouts.js";
-import { encodeShareUrl, emptyLoadout, toData } from "../utils/loadoutCodec.js";
+import { encodeShareCode, emptyLoadout, toData } from "../utils/loadoutCodec.js";
 
 // Governing: issue #20 (failed save/delete/fetch attempts must surface in the UI)
 //
@@ -413,9 +413,9 @@ describe("saveCurrentAsNew (issue #136 follow-up)", () => {
 });
 
 // Governing: SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged" — `savedId`
-// MUST NOT appear in `data`, in a share URL, or in a local draft. `toData()` never reads
-// it, and `encodeShareUrl` routes through `toData`, so both are clean by construction.
-// These tests pin that invariant: they fail if `toData` or `encodeShareUrl` ever reads
+// MUST NOT appear in `data`, in a share code, or in a local draft. `toData()` never reads
+// it, and `encodeShareCode` routes through `toData`, so both are clean by construction.
+// These tests pin that invariant: they fail if `toData` or `encodeShareCode` ever reads
 // `savedId`.
 describe("savedId never enters the wire format", () => {
   it("toData output contains no savedId key", () => {
@@ -426,11 +426,11 @@ describe("savedId never enters the wire format", () => {
     expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
   });
 
-  it("an encoded share URL does not contain the savedId", () => {
+  it("an encoded share code does not contain the savedId", () => {
     const lo = { ...emptyLoadout(), savedId: "leaked-id", name: "Test" };
-    const url = encodeShareUrl(lo);
-    expect(url).not.toContain("leaked-id");
-    expect(url).not.toContain("savedId");
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("leaked-id");
+    expect(code).not.toContain("savedId");
   });
 });
 

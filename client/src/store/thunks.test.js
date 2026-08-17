@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
 import { WEAPONS } from "../data/catalog.js";
-import { encodeShareCode, encodeShareUrl, toData } from "../utils/loadoutCodec.js";
+import { encodeShareCode, toData } from "../utils/loadoutCodec.js";
 import loadoutReducer, { loadoutActions } from "./loadoutSlice.js";
 import uiReducer, { uiActions } from "./uiSlice.js";
 import savedLoadoutsReducer, { saveCurrent } from "./savedLoadoutsSlice.js";
-import { copyCodeThunk, importCodeThunk, loadSavedThunk, randomizeThunk, shareThunk } from "./thunks.js";
+import { copyCodeThunk, importCodeThunk, loadSavedThunk, randomizeThunk } from "./thunks.js";
 
 // Swappable-for-one-test stub for randomizeLoadout, same pattern as selectors.test.js's
 // stubbedRule. Null means "use the real generator"; every test outside the #380 describe
@@ -150,15 +150,15 @@ describe("derived name on setLoadout paths", () => {
     expect(store.getState().loadout.name).toBe("Test build");
   });
 
-  it("toData output contains no nameIsDerived key, and a share URL does not carry it", () => {
+  it("toData output contains no nameIsDerived key, and a share code does not carry it", () => {
     const store = makeStore();
     store.dispatch(loadoutActions.addWeapon(0));
     const lo = store.getState().loadout;
     const enc = toData(lo);
     expect(enc).not.toHaveProperty("nameIsDerived");
     expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
-    const url = encodeShareUrl(lo);
-    expect(url).not.toContain("nameIsDerived");
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("nameIsDerived");
   });
 });
 
@@ -344,26 +344,6 @@ describe("fresh vs loaded save addressing (triple vs id)", () => {
   });
 });
 
-// Governing: issue #358. `shareThunk` had no try/catch around `encodeShareUrl`, so an encode
-// failure (e.g. `btoa` throwing on non-Latin-1 characters) escaped uncaught and the Share
-// button did nothing — no toast, no error. The thunk now wraps the call so a failure
-// dispatches a `setMessage` instead of throwing silently.
-describe("shareThunk error handling (issue #358)", () => {
-  it("dispatches a message when encodeShareUrl throws", () => {
-    const store = makeStore();
-    // Force encodeShareUrl to throw by stubbing btoa (which encodeShareUrl calls internally).
-    const realBtoa = globalThis.btoa;
-    vi.stubGlobal("btoa", () => { throw new Error("encode failed"); });
-    try {
-      store.dispatch(shareThunk());
-      expect(store.getState().ui.message).toContain("Could not generate");
-    } finally {
-      vi.unstubAllGlobals();
-      globalThis.btoa = realBtoa;
-    }
-  });
-});
-
 // Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes").
 describe("copyCodeThunk", () => {
   function withClipboard(impl, fn) {
@@ -403,7 +383,7 @@ describe("copyCodeThunk", () => {
     expect(store.getState().ui.message).toContain("select the code below");
   });
 
-  it("dispatches a message when encodeShareCode throws, same as shareThunk", () => {
+  it("dispatches a message when encodeShareCode throws (issue #358)", () => {
     const store = makeStore();
     const realBtoa = globalThis.btoa;
     vi.stubGlobal("btoa", () => { throw new Error("encode failed"); });
