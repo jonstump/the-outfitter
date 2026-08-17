@@ -3,6 +3,7 @@ import { WEAPONS } from "../data/catalog.js";
 import { dualWieldFor } from "../data/itemStats.js";
 import { TRAIT_MAX, capMax, consAllowed, hasFreeCell, heldItems, weaponSize } from "../utils/calc.js";
 import { emptyLoadout } from "../utils/loadoutCodec.js";
+import { canPlaceRun, equipRuns } from "../utils/stacking.js";
 
 // Governing: ADR-0009 (index is the cell, `null` is empty), SPEC-0006
 // REQ "Equipment Occupies a Fixed Eight-Cell Grid", REQ "Cells Are Individually Blockable".
@@ -229,17 +230,67 @@ const loadoutSlice = createSlice({
     // cells (`moving` bound to `equip[to]`, then both assigned it). The guard is
     // stated once, here, so the reducer and the grab-ref lifetime cannot disagree
     // about whether a move is real.
+    //
+    // Governing: ADR-0009, SPEC-0006 REQ "Repeated Consumables Read as One Stack",
+    // issue #464. `length` (default 1) makes this a RUN-aware move: `from` is the
+    // grabbed run's ANCHOR cell (its lowest-numbered cell), and every cell
+    // `from..from+length-1` moves to `to..to+length-1` as a unit, preserving
+    // internal order. The single-cell path below (`length === 1`, every existing
+    // caller) is untouched byte-for-byte — the run-aware branch is a separate block
+    // entered only when a caller explicitly asks for more than one cell.
     moveEquip(state, action) {
-      const { from, to } = action.payload;
+      const { from, to, length = 1 } = action.payload;
       if (from === to) return;
       // Dragged off the grid unequips: the drop handler passes `to: -1` (or null)
-      // for a release outside any cell (SPEC-0006 "dragged off the grid").
+      // for a release outside any cell (SPEC-0006 "dragged off the grid"). A run
+      // (length > 1) unequips every cell it occupies as a unit — off-grid is one
+      // more destination, not an exception carved out for single items only.
       if (to === null || to === -1) {
         if (from < 0 || from >= 8 || state.equip[from] === null) return;
+        if (length > 1) {
+          const run = equipRuns(state.equip).find((r) => r.cells[0] === from);
+          if (!run || run.cells.length !== length) return;
+          run.cells.forEach((c) => {
+            state.equip[c] = null;
+          });
+          return;
+        }
         state.equip[from] = null;
         return;
       }
       if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= 8 || to < 0 || to >= 8) return;
+      if (length > 1) {
+        // The reducer is the LAST line of defense — re-derive the run at `from` from
+        // the current grid rather than trusting the caller's `length` blindly (the
+        // same reasoning issue #352 already applies to the source-must-be-occupied
+        // guard below). If `from` is not the anchor of a run of exactly `length`
+        // cells, the dispatch is stale or malformed and is a no-op.
+        const run = equipRuns(state.equip).find((r) => r.cells[0] === from);
+        if (!run || run.cells.length !== length) return;
+        const cells = run.cells; // contiguous, ascending — equipRuns' own invariant
+        // canPlaceRun refuses any destination cell occupied by a FOREIGN item, so a
+        // run move can never swap — "Stack drops SHALL NOT swap" (SPEC-0006). Any
+        // other invalid destination (out of bounds, blocked) is also refused here,
+        // matching "Any other drop SHALL be rejected as a no-op".
+        if (!canPlaceRun(state.equip, state.blocked, cells, to)) return;
+        // Snapshot every entry BEFORE writing any of them: a partial-overlap drop —
+        // the destination region shares cells with the run's own origin, e.g. a ×3
+        // stack at cells 0,1,2 dropped at target 1 (destination 1,2,3) — would
+        // otherwise read a cell this same write already overwrote.
+        const items = cells.map((c) => state.equip[c]);
+        const destCells = items.map((_, k) => to + k);
+        const destSet = new Set(destCells);
+        // Null out only the origin cells that are NOT also part of the destination —
+        // an origin cell inside the destination region keeps an item (overwritten by
+        // the correct entry in the same pass below) rather than losing one.
+        cells.forEach((c) => {
+          if (!destSet.has(c)) state.equip[c] = null;
+        });
+        destCells.forEach((d, k) => {
+          state.equip[d] = items[k];
+        });
+        return;
+      }
       if (state.blocked.includes(from) || state.blocked.includes(to)) return;
       // The source must be occupied — a move from an empty cell is not a permutation.
       // This guard replaces the dead `moving === null` check below, which could never
