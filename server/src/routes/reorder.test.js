@@ -81,13 +81,14 @@ describe("reordering loadouts within a list", () => {
     const app = makeApp();
     const a = await save(app, TOKEN_A, { name: "__test__p-a", data: validData });
     const b = await save(app, TOKEN_A, { name: "__test__p-b", data: validData });
+    const bOrderBefore = b.body.order;
 
     const res = await reorder(app, TOKEN_A, null, [a.body.id]);
     expect(res.status).toBe(400);
 
-    // Nothing was written — b keeps whatever order it had (none, i.e. still absent).
+    // Nothing was written — b keeps exactly the order creation gave it.
     await db.read();
-    expect(db.data.loadouts.find((l) => l.id === b.body.id)).not.toHaveProperty("order");
+    expect(db.data.loadouts.find((l) => l.id === b.body.id).order).toBe(bOrderBefore);
   });
 
   it("rejects an order naming a loadout filed elsewhere", async () => {
@@ -120,13 +121,18 @@ describe("reordering loadouts within a list", () => {
     const app = makeApp();
     const mine = await save(app, TOKEN_A, { name: "__test__mine", data: validData });
     const theirs = await save(app, TOKEN_B, { name: "__test__theirs", data: validData });
+    // Creation itself now assigns an order (SPEC-0003 "A Loadout Moved Between Lists Lands
+    // at the End" applies the same computation to creation as to a move) — the assertion
+    // below is that the REJECTED reorder left it exactly as creation set it, not that it
+    // has no order at all.
+    const orderBefore = theirs.body.order;
 
     const res = await reorder(app, TOKEN_A, null, [mine.body.id, theirs.body.id]);
     expect(res.status).toBe(400);
 
     // Confirm the other token's record is untouched.
     await db.read();
-    expect(db.data.loadouts.find((l) => l.id === theirs.body.id)).not.toHaveProperty("order");
+    expect(db.data.loadouts.find((l) => l.id === theirs.body.id).order).toBe(orderBefore);
   });
 
   it("rejects a listId the caller does not own", async () => {
@@ -238,5 +244,61 @@ describe("reordering loadouts within a list", () => {
     const byId = Object.fromEntries(listed.body.map((l) => [l.id, l.order]));
     // b was ordered first, a second — unchanged by a's description write.
     expect(byId[b.body.id]).toBeLessThan(byId[a.body.id]);
+  });
+
+  // --- Regression: a brand-new record must not out-rank older, explicitly-ordered
+  // survivors of a scope that was reordered and then shrunk -----------------------
+
+  // Both regression tests below use their OWN dedicated tokens rather than the shared
+  // TOKEN_A every other test in this file reuses — each pushes ~10 writes through one
+  // token, and TOKEN_A already carries the accumulated write count of every test above it
+  // (`WRITE_PER_TOKEN` in lib/ownership.js is a real per-minute ceiling, and this file's
+  // TOKEN_A traffic sits close enough to it that adding these two tipped it over — caught
+  // by these very tests intermittently failing with an empty body rather than a real
+  // assertion failure, before they were given their own tokens).
+  const SHRINK_TOKEN = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const FRESH_TOKEN = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+  it("a loadout created after a reorder lands AFTER older survivors, even once the scope has shrunk", async () => {
+    const app = makeApp();
+    const a = await save(app, SHRINK_TOKEN, { name: "__test__shrink-a", data: validData });
+    const b = await save(app, SHRINK_TOKEN, { name: "__test__shrink-b", data: validData });
+    const c = await save(app, SHRINK_TOKEN, { name: "__test__shrink-c", data: validData });
+    const d = await save(app, SHRINK_TOKEN, { name: "__test__shrink-d", data: validData });
+    const e = await save(app, SHRINK_TOKEN, { name: "__test__shrink-e", data: validData });
+    // A full reorder assigns explicit, contiguous orders 0..4 to all five.
+    await reorder(app, SHRINK_TOKEN, null, [a.body.id, b.body.id, c.body.id, d.body.id, e.body.id]);
+
+    // Delete the three EARLIEST-ordered members. D (order 3) and E (order 4) survive,
+    // now the only two loadouts in the scope — their stored orders are larger than the
+    // shrunk scope's new size.
+    await Promise.all(
+      [a, b, c].map((rec) =>
+        request(app).delete(`/api/loadouts/${rec.body.id}`).set("x-loadout-token", SHRINK_TOKEN)
+      )
+    );
+
+    // A brand-new loadout, saved the ordinary way (no reorder call), must not fall back
+    // to a raw array-position index (which would be 0, 1, or 2 among the two survivors —
+    // LESS than D's and E's real stored values of 3 and 4) — it must land after both.
+    const f = await save(app, SHRINK_TOKEN, { name: "__test__shrink-f", data: validData });
+    expect(f.body).toHaveProperty("order");
+
+    const listed = await request(app).get("/api/loadouts").set("x-loadout-token", SHRINK_TOKEN);
+    const byId = Object.fromEntries(listed.body.map((l) => [l.id, l.order]));
+    expect(byId[f.body.id]).toBeGreaterThan(byId[d.body.id]);
+    expect(byId[f.body.id]).toBeGreaterThan(byId[e.body.id]);
+  });
+
+  it("creating into an untouched (never-reordered) list still costs no write — order is assigned, not left to drift", async () => {
+    // Companion to the regression above: confirm the fix didn't just move the bug rather
+    // than close it. A creation into a scope that has NEVER been reordered gets an
+    // explicit order of 0 for the first member, ascending from there — never negative,
+    // never colliding with a sibling created moments before.
+    const app = makeApp();
+    const a = await save(app, FRESH_TOKEN, { name: "__test__fresh-a", data: validData });
+    const b = await save(app, FRESH_TOKEN, { name: "__test__fresh-b", data: validData });
+    expect(a.body.order).toBe(0);
+    expect(b.body.order).toBe(1);
   });
 });

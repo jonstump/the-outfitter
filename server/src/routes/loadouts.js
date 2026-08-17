@@ -239,8 +239,18 @@ export { DESCRIPTION_MAX_CHARS };
 // changes for a record that has never been touched by a reorder.
 //
 // This is a READ-time projection, not a write: `rec.order` on disk is untouched by a GET,
-// so no migration is triggered merely by serving a request. Two writers set it for real —
-// the reorder endpoint and the list-move append below — and both are internal to this file.
+// so no migration is triggered merely by serving a request. Three writers set it for real,
+// and all three are internal to this file: the reorder endpoint, the list-move append, and
+// (as of the fix below) record creation via `nextOrderInScope` — never this fallback. A
+// record can only ever reach this fallback by predating the requirement entirely, which is
+// exactly the "nothing in this scope has been reordered yet" case the fallback is FOR. A
+// record that reaches it any other way is a bug: earlier this fallback was ALSO how a
+// brand-new record's order was decided, which meant a fresh save into a list that had been
+// reordered and then partly emptied could land the new record ahead of older, deliberately
+// ordered survivors — the survivors kept real (and, after the scope shrank, comparatively
+// large) stored values while the newcomer got a small raw array-position index with no idea
+// those values existed. Routing creation through the same max-based writer the move path
+// already used closes that gap; see `server/src/routes/reorder.test.js` for the regression.
 function scopedOrderIndex(rec, records) {
   const scoped = liveRecords(records).filter(
     (l) => l.owner === rec.owner && (l.listId ?? null) === (rec.listId ?? null)
@@ -483,7 +493,29 @@ loadoutsRouter.post("/", ipLimiter, tokenLimiter, async (req, res) => {
       if (describes) existing.description = desc.value;
       record = existing;
     } else {
-      record = { id: randomUUID(), owner: token, name: trimmedName, data, listId: ref.value, updatedAt: now };
+      const newId = randomUUID();
+      record = {
+        id: newId,
+        owner: token,
+        name: trimmedName,
+        data,
+        listId: ref.value,
+        // Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order".
+        //
+        // Assigned explicitly here rather than left for `publicLoadout`'s array-position
+        // fallback to cover — `scopedOrderIndex` bases that fallback on the record's plain
+        // position among its live scope-mates in STORAGE order, which is only correct while
+        // nothing in the scope has ever been reordered. Once a scope HAS been reordered and
+        // then shrunk (an older member deleted or moved out), its survivors keep whatever
+        // explicit `order` the reorder gave them, which can be arbitrarily larger than a new
+        // arrival's storage-position fallback of 0/1/2 — the new loadout would render AHEAD
+        // of older, deliberately-arranged ones. `nextOrderInScope` is the same "one past the
+        // max real value in scope" computation the list-move path already uses for the
+        // identical reason, so every entry point into a list scope — create, and move — goes
+        // through one writer instead of two different answers to "where does this land".
+        order: nextOrderInScope(db.data.loadouts, token, ref.value, newId),
+        updatedAt: now,
+      };
       // The key is written only when the caller supplied one. A record nobody has written a
       // note about carries NO `description` field at all, and the API surfaces that as null
       // through publicLoadout without the store having to hold a placeholder for it.
