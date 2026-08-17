@@ -43,28 +43,24 @@
 
 // WIRE-FORMAT GATE — read before editing any pool below.
 //
-// issue #340 gave every row below a stable, slug-style `id` — the same property every other
-// category in this file already has (see the header comment). #343 has since landed and wired
-// id-based resolution into the decoder for legacy (pre-v4) records: a bare index is resolved
-// against the FROZEN `LEGACY_AMMO_IDS` snapshot in `ammoIds.js`, not against this live pool's
-// current order, via `legacyAmmoId` (confirmed via `/sdd:audit` 2026-08-17). Current (v4+) records
-// reference rounds by stable id directly and never read this pool's order at all.
+// A saved ammo selection used to persist as a BARE INDEX into AMMO[ammoClass], resolved against
+// this pool's live order at decode time. #343 (SPEC-0010) retired that for legacy (pre-v4)
+// records — a bare index now resolves against the FROZEN `LEGACY_AMMO_IDS` snapshot in
+// `ammoIds.js` via `legacyAmmoId`, never against this pool's live order (confirmed via
+// `/sdd:audit` 2026-08-17). Current (v4+) records reference rounds by stable id directly and
+// never read this pool's order at all.
 //
-// This comment previously described a decoder that had no id-based resolution and read a saved
-// selection as a BARE INDEX into the live AMMO[ammoClass] at decode time — that decoder no longer
-// exists. What has NOT been re-verified here is whether every remaining edit to this pool (removing
-// a row, which shrinks `boundedAmmo`'s live-length clamp independently of the frozen snapshot) is
-// safe — that analysis is still owed. Treat this pool as append-only and re-price-in-place-only
-// until that verification happens; do not treat the above as license to freely reorder or remove.
+// What has NOT been re-verified: whether removing a row is safe, since it shrinks
+// `boundedAmmo`'s live-length clamp independently of the frozen snapshot. Treat this pool as
+// append-only and re-price-in-place-only until that analysis happens.
 //
-// Any such edit therefore needs a FORMAT_VERSION bump and a saved-selection migration, on the same
-// terms already required for changing a weapon's `ammoClass`. Appending to the END of a pool, or
+// An edit that would still shift a legacy bare index's meaning (removing or reordering a row)
+// therefore needs a FORMAT_VERSION bump and a saved-selection migration, on the same terms
+// already required for changing a weapon's `ammoClass`. Appending to the END of a pool, or
 // populating a pool that was previously empty (ADR-0014 — there is no existing index to move), is
 // the one safe structural edit; repricing a row IN PLACE is also safe, because it moves no index.
 //
-// This table is also NEVER written by a scrape (SPEC-0007 REQ "Fields the Scraper Must Not Derive"):
-// the wiki has no per-pool source page — /wiki/Ammo is prose, and prices are stated per weapon
-// inside each weapon's own progression table, not per class.
+// This table is also NEVER written by a scrape (SPEC-0007 REQ "Fields the Scraper Must Not Derive").
 //
 // Governing: ADR-0013 (Scarce items cost nothing), ADR-0014, SPEC-0010 REQ "Ammo Rows Are Addressed
 // by Stable Id", REQ "A Scarce Round Costs Nothing and Is Still Selectable", issue #340
