@@ -11,6 +11,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { TOKEN_SHAPED_OWNER } from "./tokenShape.js";
 
 // Per-user ownership boundary (issue #17): every record is scoped to the client-issued
 // token that created it. Requests that carry no token (e.g. curl) never touch another
@@ -20,9 +21,23 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 // every legacy no-owner record to any request that simply omits the header.
 const ANON = "request-scoped";
 
+// Governing: SPEC-0003 § "Authentication and Authorization" — "SHALL NOT accept
+// tokens that are not token-shaped, per the existing normalization rules."
+// Corrected 2026-08-17 per `/sdd:audit`: this used to accept ANY non-empty
+// string, so a caller sending e.g. `x-loadout-token: a` got real 201s and reads
+// for the life of the process — db.js's boot-time quarantine only catches it on
+// the NEXT restart, by which point every record that caller wrote is `legacy:
+// true` and permanently unreachable through the API by any token, including the
+// one that created it. A shape-invalid header is now treated exactly like a
+// missing one: minted a fresh per-request anonymous identity, the same
+// unreachable-by-construction scope a no-token request already gets, which the
+// existing request-scoped TTL sweep in db.js already reclaims. This is not a
+// new rejection path (no new 400s) — it is the ALREADY-EXISTING no-token
+// fallback, now also reached by a malformed token instead of only an absent one.
 export function callerToken(req) {
   const token = req.get("x-loadout-token") || "";
-  if (typeof token === "string" && token.trim()) return token.trim().slice(0, 200);
+  const trimmed = typeof token === "string" ? token.trim().slice(0, 200) : "";
+  if (trimmed && TOKEN_SHAPED_OWNER.test(trimmed)) return trimmed;
   return `${ANON}:${randomUUID()}`;
 }
 

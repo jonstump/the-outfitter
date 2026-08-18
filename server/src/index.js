@@ -13,6 +13,46 @@ const PORT = process.env.PORT || 4100;
 
 const app = express();
 
+// Governing: SPEC-0003 § "Security Headers" (found via `/sdd:audit` 2026-08-17): "Responses
+// SHALL set X-Content-Type-Options: nosniff. The application SHALL set a Content-Security-
+// Policy appropriate to a self-hosted static client; because portraits are served from the
+// application's own origin, the policy MUST NOT require relaxing img-src to permit the
+// wiki." Registered first and unconditionally — "Responses" is unqualified, so this covers
+// the API, the static client build, /healthz, and the SPA fallback alike, not just /api
+// (unlike corsPolicy below, which is deliberately API-scoped for a different reason).
+//
+// script-src carries no `unsafe-inline` — main.jsx (not an inline handler) now does the
+// deferred-fonts media swap that index.html's `onload="..."` attribute used to, specifically
+// so this directive could be strict. style-src carries no `unsafe-inline` either, and
+// deliberately so despite this being a React app using inline `style={{...}}` props
+// throughout (ActionsPanel, PickerRow, TraitsPanel, EquipmentSlot, and others): React sets
+// those via CSSOM property assignment (`element.style.color = ...`), which CSP's style-src
+// does not gate — only `element.setAttribute("style", ...)` and literal `style="..."`
+// attributes are. Confirmed empirically (2026-08-18 review): built the production client,
+// served it with this exact policy minus `unsafe-inline`, and every inline-styled element
+// rendered correctly with zero CSP console violations. Nothing in this codebase uses
+// `dangerouslySetInnerHTML` or a CSS-in-JS library that would need it. Google Fonts is the
+// one external origin the app actually loads from (index.html's deferred stylesheet + the
+// font files themselves); img-src stays self-only per the spec text above.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self'",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'self'",
+    ].join("; ")
+  );
+  next();
+});
+
 // Governing: issue #199, SPEC-0003 REQ "Rate Limiting" (this setting decides what `req.ip`
 // resolves to, and `req.ip` is the key the spec'd budgets are counted against).
 //

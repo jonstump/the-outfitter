@@ -46,60 +46,66 @@ describe("loadouts API", () => {
 
   it("scopes saved loadouts per client token", async () => {
     const app = makeApp();
+    const alpha = randomUUID();
+    const beta = randomUUID();
     const name = `__test__${Date.now()}`;
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "alpha")
+      .set("x-loadout-token", alpha)
       .send({ name, data: validData });
     expect(res.status).toBe(201);
 
     // A different token doesn't see it.
-    const other = await request(app).get("/api/loadouts").set("x-loadout-token", "beta");
+    const other = await request(app).get("/api/loadouts").set("x-loadout-token", beta);
     expect(other.body.some((l) => l.name === name)).toBe(false);
 
     // The owning token does.
-    const owner = await request(app).get("/api/loadouts").set("x-loadout-token", "alpha");
+    const owner = await request(app).get("/api/loadouts").set("x-loadout-token", alpha);
     expect(owner.body.some((l) => l.name === name)).toBe(true);
   });
 
   it("rejects second ownership of a name with 404 delete isolation", async () => {
     const app = makeApp();
+    const alpha = randomUUID();
+    const beta = randomUUID();
     const name = `__test__dup${Date.now()}`;
     const created = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "alpha")
+      .set("x-loadout-token", alpha)
       .send({ name, data: validData });
 
     // Another token deleting it gets 404 and cannot remove it.
     const del = await request(app)
       .delete(`/api/loadouts/${created.body.id}`)
-      .set("x-loadout-token", "beta");
+      .set("x-loadout-token", beta);
     expect(del.status).toBe(404);
 
-    const ownerList = await request(app).get("/api/loadouts").set("x-loadout-token", "alpha");
+    const ownerList = await request(app).get("/api/loadouts").set("x-loadout-token", alpha);
     expect(ownerList.body.some((l) => l.id === created.body.id)).toBe(true);
   });
 
   it("rejects a malformed data payload with 400", async () => {
     const app = makeApp();
+    const alpha = randomUUID();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "alpha")
+      .set("x-loadout-token", alpha)
       .send({ name: "bad", data: { nope: true } });
     expect(res.status).toBe(400);
 
     const empty = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "alpha")
+      .set("x-loadout-token", alpha)
       .send({ name: "bad2", data: {} });
     expect(empty.status).toBe(400);
   });
 
   it("rejects oversized trait lists", async () => {
     const app = makeApp();
+    const alpha = randomUUID();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "alpha")
+      .set("x-loadout-token", alpha)
       .send({ name: "big", data: { ...validData, tr: new Array(50).fill("x") } });
     expect(res.status).toBe(400);
   });
@@ -119,7 +125,7 @@ describe("loadouts API", () => {
 
   it("refuses a sixteenth trait and accepts exactly fifteen", async () => {
     const app = makeApp();
-    const token = `traitcap-${Date.now()}`;
+    const token = randomUUID();
 
     const over = await request(app)
       .post("/api/loadouts")
@@ -152,7 +158,7 @@ describe("loadouts API", () => {
     // Seeded straight into the store rather than through the API, because the API is exactly
     // what now refuses it. That is the point of the test.
     const app = makeApp();
-    const token = `legacy-traits-${Date.now()}`;
+    const token = randomUUID();
     const name = `__test__tr20-${Date.now()}`;
 
     await db.read();
@@ -181,7 +187,7 @@ describe("loadouts API", () => {
   // blocked-cell array (line 154 of loadouts.js) applies to `tr`: fifteen DISTINCT traits.
   it("rejects a trait list carrying duplicate ids", async () => {
     const app = makeApp();
-    const token = `duptr-${Date.now()}`;
+    const token = randomUUID();
     const res = await request(app)
       .post("/api/loadouts")
       .set("x-loadout-token", token)
@@ -317,12 +323,13 @@ describe("loadouts API", () => {
 
   it("rate limits the write endpoint", async () => {
     const app = makeApp();
+    const alpha = randomUUID();
     // Burst past the limit (60/min) — 70 quick writes should trip it.
     let limited = false;
     for (let i = 0; i < 70; i++) {
       const res = await request(app)
         .post("/api/loadouts")
-        .set("x-loadout-token", "alpha")
+        .set("x-loadout-token", alpha)
         .send({ name: `__test__rl${i}`, data: validData });
       if (res.status === 429) {
         limited = true;
@@ -336,7 +343,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "numeric")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__num${Date.now()}`, data: validData });
     expect(res.status).toBe(201);
   });
@@ -345,7 +352,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "ids")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__ids${Date.now()}`,
         data: { w: [["nagant-m1895", -1], null], e: [["T", "first-aid-kit"]], tr: ["quartermaster"], n: "x", b: 0 },
@@ -357,13 +364,13 @@ describe("loadouts API", () => {
     const app = makeApp();
     const bad = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "validation-a")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__oor", data: { w: [[9999, -1], null], e: [], tr: [], n: "x", b: 0 } });
     expect(bad.status).toBe(400);
 
     const badAmmo = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "validation-b")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__ammo", data: { w: [[0, "not-a-number"], null], e: [], tr: [], n: "x", b: 0 } });
     expect(badAmmo.status).toBe(400);
   });
@@ -391,7 +398,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-accept")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v2${Date.now()}`, data: v2Data() });
     expect(res.status).toBe(201);
   });
@@ -400,7 +407,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v1-alongside")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v1${Date.now()}`, data: validData });
     expect(res.status).toBe(201);
   });
@@ -413,7 +420,7 @@ describe("loadouts API", () => {
     // here is the out-of-range numeric index, mirroring the v1 test above.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-unresolvable")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2oor${Date.now()}`,
         data: v2Data({ e: [["T", 9999], null, null, null, null, null, null, null] }),
@@ -426,14 +433,14 @@ describe("loadouts API", () => {
     const app = makeApp();
     const short = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-short")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v2short${Date.now()}`, data: v2Data({ e: [["T", "first-aid-kit"], null] }) });
     expect(short.status).toBe(400);
     expect(short.body.error).toMatch(/data\.e/);
 
     const long = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-long")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2long${Date.now()}`,
         data: v2Data({ e: Array(9).fill(null) }),
@@ -446,7 +453,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-blocked-oor")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2boor${Date.now()}`,
         data: v2Data({ b: [8] }),
@@ -464,7 +471,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-holes")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2holes${Date.now()}`,
         data: v2Data({ b: [2, 3] }),
@@ -476,7 +483,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-fieldname")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v2field${Date.now()}`, data: v2Data({ tr: ["x".repeat(101)] }) });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.tr/);
@@ -493,7 +500,7 @@ describe("loadouts API", () => {
     expect(list.body.some((l) => l.name === name)).toBe(false);
 
     // And a token-backed request can't see it either.
-    const tokenList = await request(app).get("/api/loadouts").set("x-loadout-token", "some-token");
+    const tokenList = await request(app).get("/api/loadouts").set("x-loadout-token", randomUUID());
     expect(tokenList.body.some((l) => l.name === name)).toBe(false);
   });
 
@@ -520,6 +527,41 @@ describe("loadouts API", () => {
     expect(del.status).toBe(404);
     await db.read();
     expect(db.data.loadouts.some((l) => l.id === "legacy-1")).toBe(true);
+  });
+
+  // Governing: SPEC-0003 § "Authentication and Authorization", found via `/sdd:audit`
+  // 2026-08-17. Before this fix, a non-token-shaped header WAS accepted as a stable
+  // identity — a write under "whoever" and a later read under "whoever" would have
+  // found each other within the same process lifetime, and only broken on the NEXT
+  // restart when db.js's boot-time quarantine reclassified the record as legacy. This
+  // test asserts the fix end-to-end: the write succeeds (the endpoint still accepts
+  // the request), but the SAME malformed header can never read it back, because each
+  // request that carries it now gets its own fresh anonymous identity instead of a
+  // shared one — closing the gap without introducing a new rejection (still 201, not
+  // 400) and without waiting for a restart to take effect.
+  it("never lets a non-token-shaped header establish a stable, reusable identity", async () => {
+    const app = makeApp();
+    const name = `__test__shapeless-${Date.now()}`;
+    const malformed = "whoever";
+
+    const created = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", malformed)
+      .send({ name, data: validData });
+    expect(created.status).toBe(201);
+
+    // The exact same header value, on a later request, must NOT see it — each
+    // malformed-token request is anonymized independently.
+    const readBack = await request(app).get("/api/loadouts").set("x-loadout-token", malformed);
+    expect(readBack.body.some((l) => l.name === name)).toBe(false);
+
+    // And the record is not simply invisible — it is reachable by NO token at all,
+    // confirming it landed in the same unreachable-by-construction scope a no-token
+    // write already gets (not a new, differently-broken state).
+    await db.read();
+    const stored = db.data.loadouts.find((l) => l.name === name);
+    expect(stored).toBeTruthy();
+    expect(stored.owner.startsWith("request-scoped:")).toBe(true);
   });
 
   it("migrates records carrying the historical anon/unowned sentinels to legacy at boot", async () => {
@@ -549,7 +591,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "namecheck")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "x".repeat(201), data: validData });
     expect(res.status).toBe(400);
   });
@@ -565,7 +607,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "unknown-keys")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__unknown", data: { ...validData, padding: "x".repeat(10_000) } });
     expect(res.status).toBe(400);
 
@@ -577,16 +619,17 @@ describe("loadouts API", () => {
 
   it("rejects the version key when it is the wrong type, and accepts the format's own envelope", async () => {
     const app = makeApp();
+    const token = randomUUID();
     // `v` is in the allowlist, so the key check must not be the only thing guarding it.
     const bad = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "version-check")
+      .set("x-loadout-token", token)
       .send({ name: "__test__ver", data: { ...validData, v: "1" } });
     expect(bad.status).toBe(400);
 
     const good = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "version-check")
+      .set("x-loadout-token", token)
       .send({ name: `__test__ver${Date.now()}`, data: { ...validData, v: 1 } });
     expect(good.status).toBe(201);
   });
@@ -597,13 +640,13 @@ describe("loadouts API", () => {
     // and the ammo index validated, and everything after them was stored unexamined.
     const weapon = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "tuple-w")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__wtuple", data: { ...validData, w: [[0, -1, "x".repeat(1000)], null] } });
     expect(weapon.status).toBe(400);
 
     const equip = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "tuple-e")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__etuple", data: { ...validData, e: [["T", 0, "x".repeat(1000)]] } });
     expect(equip.status).toBe(400);
   });
@@ -640,7 +683,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-accept")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v3accept${Date.now()}`, data: v3Data({ w: [["nagant-m1895", -1, true], null] }) });
     expect(res.status).toBe(201);
   });
@@ -663,7 +706,7 @@ describe("loadouts API", () => {
       e: [["T", 0], null, null, ["C", 3], null, null, null, null],
       b: [1, 2],
     });
-    const res = await request(app).post("/api/loadouts").set("x-loadout-token", "v3-grid").send({ name, data });
+    const res = await request(app).post("/api/loadouts").set("x-loadout-token", randomUUID()).send({ name, data });
     expect(res.status).toBe(201);
 
     // Stored unchanged — the grid keeps its holes and its cell positions, and `b` is still
@@ -681,7 +724,7 @@ describe("loadouts API", () => {
     // symptom of the gate having been narrowed back to `data.v === 2`.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-packed-e")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__v3packede", data: v3Data({ e: [["T", 0]] }) });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.e/);
@@ -693,7 +736,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-packed-b")
+      .set("x-loadout-token", randomUUID())
       .send({ name: "__test__v3packedb", data: v3Data({ b: 3 }) });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/data\.b/);
@@ -708,7 +751,7 @@ describe("loadouts API", () => {
     // test that fails if someone relaxed the equality to `>= 2`.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-four")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v3four",
         data: v3Data({ w: [["nagant-m1895", -1, true, "trailing"], null] }),
@@ -732,7 +775,7 @@ describe("loadouts API", () => {
       const name = `__test__v3flag${badFlag}-${String(bad).length}`;
       const res = await request(app)
         .post("/api/loadouts")
-        .set("x-loadout-token", "v3-flag")
+        .set("x-loadout-token", randomUUID())
         .send({ name, data: v3Data({ w: [["nagant-m1895", -1, bad], null] }) });
       expect(res.status, `${JSON.stringify(bad)} must be rejected`).toBe(400);
       expect(res.body.error).toMatch(/data\.w/);
@@ -743,7 +786,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const v2 = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-elements")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2elements${Date.now()}`,
         data: {
@@ -759,7 +802,7 @@ describe("loadouts API", () => {
 
     const v1 = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v1-elements")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v1elements${Date.now()}`,
         data: { w: [[0, -1], null], e: [["T", 0]], tr: [0], n: "x", b: 0 },
@@ -773,7 +816,7 @@ describe("loadouts API", () => {
     // recognized first: a v3 payload whose entry omits the pair flag is malformed for v3.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-short")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v3short",
         data: v3Data({ w: [["nagant-m1895", -1], null] }),
@@ -796,7 +839,7 @@ describe("loadouts API", () => {
     // carries.
     const ok = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-limits")
+      .set("x-loadout-token", randomUUID())
       .send({ name, data: v3Data() });
     expect(ok.status).toBe(201);
 
@@ -840,7 +883,7 @@ describe("loadouts API", () => {
     const app = makeApp();
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-accept")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v4accept${Date.now()}`,
         data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null], true], null] }),
@@ -854,7 +897,7 @@ describe("loadouts API", () => {
     // Independently Chosen Rounds") — both slots carry a real id at once.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-both-slots")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v4bothslots${Date.now()}`,
         data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", "ammo-medium-dumdum"], false], null] }),
@@ -870,7 +913,7 @@ describe("loadouts API", () => {
     const before = db.data.loadouts.length;
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-four")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v4four",
         data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null], true, "trailing"], null] }),
@@ -895,7 +938,7 @@ describe("loadouts API", () => {
     const before = db.data.loadouts.length;
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-int-ammo")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v4intammo",
         data: v4Data({ w: [["nagant-m1895", [-1, null], true], null] }),
@@ -915,7 +958,7 @@ describe("loadouts API", () => {
       const name = `__test__v4ammobound${badAmmo.length}`;
       const res = await request(app)
         .post("/api/loadouts")
-        .set("x-loadout-token", "v4-ammo-bound")
+        .set("x-loadout-token", randomUUID())
         .send({ name, data: v4Data({ w: [["nagant-m1895", [badAmmo, null], true], null] }) });
       expect(res.status, `ammo id of length ${badAmmo.length} must be rejected`).toBe(400);
       expect(res.body.error).toMatch(/data\.w/);
@@ -933,7 +976,7 @@ describe("loadouts API", () => {
       const name = `__test__v4ammocount${badAmmo.length}`;
       const res = await request(app)
         .post("/api/loadouts")
-        .set("x-loadout-token", "v4-ammo-count")
+        .set("x-loadout-token", randomUUID())
         .send({ name, data: v4Data({ w: [["nagant-m1895", badAmmo, true], null] }) });
       expect(res.status, `an ammo array of length ${badAmmo.length} must be rejected`).toBe(400);
       expect(res.body.error).toMatch(/data\.w/);
@@ -947,7 +990,7 @@ describe("loadouts API", () => {
     // what a two-slot weapon can save.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-bare-string-ammo")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v4barestringammo",
         data: v4Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }),
@@ -962,7 +1005,7 @@ describe("loadouts API", () => {
     // flag (the v1/v2 two-element shape) is malformed for v4.
     const res = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v4-short")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v4short",
         data: v4Data({ w: [["nagant-m1895", ["ammo-medium-fmj", null]], null] }),
@@ -977,13 +1020,13 @@ describe("loadouts API", () => {
     // still two elements — accepting v4's string-ammo shape must not disturb either.
     const v3 = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-still-valid")
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__v3stillvalid${Date.now()}`, data: v3Data() });
     expect(v3.status).toBe(201);
 
     const v2 = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v2-still-valid")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: `__test__v2stillvalid${Date.now()}`,
         data: {
@@ -1002,7 +1045,7 @@ describe("loadouts API", () => {
     // slot happens to match.
     const v3WithStringAmmo = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", "v3-string-ammo")
+      .set("x-loadout-token", randomUUID())
       .send({
         name: "__test__v3stringammo",
         data: v3Data({ w: [["nagant-m1895", "ammo-medium-fmj", true], null] }),
@@ -1013,7 +1056,7 @@ describe("loadouts API", () => {
 
   it("caps how many loadouts one owner can accumulate, without blocking updates", async () => {
     const app = makeApp();
-    const token = `cap-${Date.now()}`;
+    const token = randomUUID();
 
     // Seeded directly rather than through 200 requests: the write limiters are module-level
     // singletons this suite shares, and spending 200 of the IP floor here would make the
@@ -1049,7 +1092,7 @@ describe("loadouts API", () => {
     // And it is per owner, not global — a different token is unaffected.
     const other = await request(app)
       .post("/api/loadouts")
-      .set("x-loadout-token", `${token}-other`)
+      .set("x-loadout-token", randomUUID())
       .send({ name: `__test__cap-other${Date.now()}`, data: validData });
     expect(other.status).toBe(201);
   });
@@ -1129,7 +1172,7 @@ describe("loadouts API", () => {
     for (let i = 0; i < 250; i++) {
       const res = await request(app)
         .post("/api/loadouts")
-        .set("x-loadout-token", `rotate-${i}`)
+        .set("x-loadout-token", randomUUID())
         .send({ name: `__test__rot${i}`, data: validData });
       if (res.status === 429) {
         limited = true;

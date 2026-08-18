@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
+import { TOKEN_SHAPED_OWNER } from "./lib/tokenShape.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,13 +47,12 @@ try {
   // they remain on disk for archival purposes but can never be read, overwritten,
   // or deleted through the API, by any token.
   //
-  // Anything without a token-shaped owner is treated as legacy. Client tokens
-  // are either a UUID (crypto.randomUUID) or "t-" + rng (the client fallback);
-  // per-request anonymous identities are "request-scoped:<uuid>". Hardcoded
+  // Anything without a token-shaped owner is treated as legacy. Hardcoded
   // sentinels from any past version ("anon", "unowned") intentionally do NOT
   // count as token-shaped — enumerating known-bad values one at a time is how
-  // this check drifted in the first place.
-  const TOKEN_SHAPED_OWNER = /^(?=[a-f0-9-]{36}$|[tT]-[A-Za-z0-9]{10,}|request-scoped:[a-f0-9-]{36}$)/;
+  // this check drifted in the first place. `TOKEN_SHAPED_OWNER` is shared with
+  // lib/ownership.js's `callerToken` (lib/tokenShape.js) so the two enforcement
+  // points cannot disagree the way they used to (`/sdd:audit` 2026-08-17).
   // The same quarantine applies to every owned collection. A list whose owner is not
   // token-shaped can never be reached by any header value, exactly as for loadouts.
   for (const record of [...db.data.loadouts, ...db.data.loadoutLists, ...db.data.hunterFavorites]) {
