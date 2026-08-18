@@ -271,6 +271,19 @@ describe("security headers (SPEC-0003)", () => {
     expect(scriptSrc).not.toMatch(/unsafe-eval/);
   });
 
+  it("carries no unsafe-inline for styles either", async () => {
+    // Confirmed by 2026-08-18 review (empirically, against a real production build): React's
+    // inline `style={{...}}` props are set via CSSOM property assignment, which style-src does
+    // not gate — only setAttribute("style", ...) and literal style="..." attributes are. This
+    // codebase has no dangerouslySetInnerHTML and no CSS-in-JS library, so nothing needs the
+    // relaxation. See index.js's CSP comment for the full reasoning.
+    const res = await req("GET", "/healthz", { Host: SITE });
+    const csp = res.headers["content-security-policy"];
+    const styleSrc = csp.split(";").find((d) => d.trim().startsWith("style-src"));
+    expect(styleSrc).toBeTruthy();
+    expect(styleSrc).not.toMatch(/unsafe-inline/);
+  });
+
   it.skipIf(assets.length === 0)("serves the client bundle with both security headers", async () => {
     // The header is set before express.static, so the static path is covered too — not just
     // the API and /healthz.

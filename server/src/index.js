@@ -23,12 +23,17 @@ const app = express();
 //
 // script-src carries no `unsafe-inline` — main.jsx (not an inline handler) now does the
 // deferred-fonts media swap that index.html's `onload="..."` attribute used to, specifically
-// so this directive could be strict. style-src DOES need `unsafe-inline`: this is a React
-// app using inline `style={{...}}` props throughout (ActionsPanel, PickerRow, TraitsPanel,
-// EquipmentSlot, and others) with no build-time nonce/hash pipeline for them — the standard,
-// accepted tradeoff for CSP on a React codebase without CSS-in-JS nonce tooling. Google
-// Fonts is the one external origin the app actually loads from (index.html's deferred
-// stylesheet + the font files themselves); img-src stays self-only per the spec text above.
+// so this directive could be strict. style-src carries no `unsafe-inline` either, and
+// deliberately so despite this being a React app using inline `style={{...}}` props
+// throughout (ActionsPanel, PickerRow, TraitsPanel, EquipmentSlot, and others): React sets
+// those via CSSOM property assignment (`element.style.color = ...`), which CSP's style-src
+// does not gate — only `element.setAttribute("style", ...)` and literal `style="..."`
+// attributes are. Confirmed empirically (2026-08-18 review): built the production client,
+// served it with this exact policy minus `unsafe-inline`, and every inline-styled element
+// rendered correctly with zero CSP console violations. Nothing in this codebase uses
+// `dangerouslySetInnerHTML` or a CSS-in-JS library that would need it. Google Fonts is the
+// one external origin the app actually loads from (index.html's deferred stylesheet + the
+// font files themselves); img-src stays self-only per the spec text above.
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader(
@@ -36,7 +41,7 @@ app.use((_req, res, next) => {
     [
       "default-src 'self'",
       "script-src 'self'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "style-src 'self' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self'",
       "connect-src 'self'",
