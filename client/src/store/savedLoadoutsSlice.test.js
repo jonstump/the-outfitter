@@ -9,9 +9,10 @@ import savedLoadoutsReducer, {
   saveCurrentAsNew,
   deleteSaved,
   describeSaved,
+  reorderSaved,
 } from "./savedLoadoutsSlice.js";
 import { describeLoadout, moveLoadout } from "../api/loadouts.js";
-import { encodeShareUrl, emptyLoadout, toData } from "../utils/loadoutCodec.js";
+import { encodeShareCode, emptyLoadout, toData } from "../utils/loadoutCodec.js";
 
 // Governing: issue #20 (failed save/delete/fetch attempts must surface in the UI)
 //
@@ -412,9 +413,9 @@ describe("saveCurrentAsNew (issue #136 follow-up)", () => {
 });
 
 // Governing: SPEC-0003 REQ "The Saved-Loadout Wire Format Is Unchanged" — `savedId`
-// MUST NOT appear in `data`, in a share URL, or in a local draft. `toData()` never reads
-// it, and `encodeShareUrl` routes through `toData`, so both are clean by construction.
-// These tests pin that invariant: they fail if `toData` or `encodeShareUrl` ever reads
+// MUST NOT appear in `data`, in a share code, or in a local draft. `toData()` never reads
+// it, and `encodeShareCode` routes through `toData`, so both are clean by construction.
+// These tests pin that invariant: they fail if `toData` or `encodeShareCode` ever reads
 // `savedId`.
 describe("savedId never enters the wire format", () => {
   it("toData output contains no savedId key", () => {
@@ -425,11 +426,11 @@ describe("savedId never enters the wire format", () => {
     expect(Object.keys(enc).sort()).toEqual(["b", "e", "n", "tr", "v", "w"]);
   });
 
-  it("an encoded share URL does not contain the savedId", () => {
+  it("an encoded share code does not contain the savedId", () => {
     const lo = { ...emptyLoadout(), savedId: "leaked-id", name: "Test" };
-    const url = encodeShareUrl(lo);
-    expect(url).not.toContain("leaked-id");
-    expect(url).not.toContain("savedId");
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("leaked-id");
+    expect(code).not.toContain("savedId");
   });
 });
 
@@ -495,5 +496,95 @@ describe("savedId is cleared when its record is deleted", () => {
     const body = JSON.parse(global.fetch.mock.calls.at(-1)[1].body);
     expect(body).not.toHaveProperty("id");
     expect(store.getState().ui.message.startsWith("!")).toBe(false);
+  });
+});
+
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order".
+describe("reorderSaved", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the full listId and order in one PATCH to /reorder", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond([
+        { id: "b", name: "B", data: {}, listId: null, order: 0 },
+        { id: "a", name: "A", data: {}, listId: null, order: 1 },
+      ])
+    );
+    const store = makeStore();
+
+    await store.dispatch(reorderSaved({ listId: null, order: ["b", "a"] }));
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts\/reorder$/);
+    expect(opts.method).toBe("PATCH");
+    expect(JSON.parse(opts.body)).toEqual({ listId: null, order: ["b", "a"] });
+  });
+
+  it("replaces every returned record in savedLoadouts.items by id", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond([
+        { id: "a", name: "A", data: {}, listId: null, order: 1 },
+        { id: "b", name: "B", data: {}, listId: null, order: 0 },
+      ])
+    );
+    const store = makeStore();
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [
+        { id: "a", name: "A", data: {}, listId: null, order: 0 },
+        { id: "b", name: "B", data: {}, listId: null, order: 1 },
+      ],
+    });
+
+    await store.dispatch(reorderSaved({ listId: null, order: ["b", "a"] }));
+
+    const byId = Object.fromEntries(store.getState().savedLoadouts.items.map((l) => [l.id, l.order]));
+    expect(byId.a).toBe(1);
+    expect(byId.b).toBe(0);
+  });
+
+  it("does not touch a record outside the reordered scope", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond([{ id: "a", name: "A", data: {}, listId: null, order: 0 }])
+    );
+    const store = makeStore();
+    store.dispatch({
+      type: "savedLoadouts/fetch/fulfilled",
+      payload: [
+        { id: "a", name: "A", data: {}, listId: null, order: 0 },
+        { id: "elsewhere", name: "Elsewhere", data: {}, listId: "some-list", order: 0 },
+      ],
+    });
+
+    await store.dispatch(reorderSaved({ listId: null, order: ["a"] }));
+
+    const elsewhere = store.getState().savedLoadouts.items.find((l) => l.id === "elsewhere");
+    expect(elsewhere).toEqual({ id: "elsewhere", name: "Elsewhere", data: {}, listId: "some-list", order: 0 });
+  });
+
+  it("surfaces a failure with the error prefix and posts no success message on success", async () => {
+    global.fetch.mockResolvedValueOnce(respond({ error: "bad scope" }, 400));
+    const store = makeStore();
+
+    await store.dispatch(reorderSaved({ listId: null, order: ["a", "b"] }));
+
+    expect(store.getState().ui.message.startsWith("!")).toBe(true);
+    expect(store.getState().ui.message).toContain("Couldn't reorder loadouts");
+  });
+
+  it("leaves ui.message untouched on a successful reorder", async () => {
+    global.fetch.mockResolvedValueOnce(
+      respond([{ id: "a", name: "A", data: {}, listId: null, order: 0 }])
+    );
+    const store = makeStore();
+
+    await store.dispatch(reorderSaved({ listId: null, order: ["a"] }));
+
+    expect(store.getState().ui.message).toBe("");
   });
 });

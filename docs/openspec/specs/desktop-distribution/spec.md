@@ -91,20 +91,23 @@ is by some distance the largest gate on this list.
       cell) took the reducer guard in #415 and the grab-ref lifetime, Escape-origin guard and
       pointer-identity check in #420; **#353** (no decoder enforced any equipment rule) took the
       equipment panel's over-capacity surface in #416 and the `boundedEquip` decode clamp in #421, in
-      that order — the spec's own "warn before clamping" sequence.
+      that order — the spec's own "warn before clamping" sequence. **#419** closed the same day — the
+      grid's rejected-drop announcement was silent on the first rejection because the live region was
+      created and filled in one synchronous block; PR #430 mounted it permanently.
 
-      **#419 has since closed too** — the grid's rejected-drop announcement was silent on the first
-      rejection because the live region was created and filled in one synchronous block; PR #430
-      mounted it permanently. It was filed 2026-08-15 out of the #416 review and is the same defect
-      class #400 fixed on the weapon slot.
+      **The three that kept this gate open past 2026-08-15 have since closed too.** **#382** (the
+      loadout shape guard accepted an equipment array shorter than eight cells) closed via PR #440.
+      **#363** (grid capacity derived in three places, two of them dead) closed via PR #452 — its
+      actual fix corrected a stale premise in the issue itself: #353 had already wired `slotMax` into
+      the live `equipOverCapacity` path, so the real fix was deduping `slotMax`'s blocked-cell count to
+      match `hasFreeCell`, not deleting code that was no longer dead. **#241** (click-to-remove
+      preserved by reference and colliding with other gestures) closed via PR #454 — also a
+      stale-premise correction: the shipped implementation had already resolved the three named gesture
+      collisions differently (a dedicated remove button, separated Enter/Space semantics, pointer-capture
+      retargeting) than the fix #241 originally proposed.
 
-      **The three tickets this bullet used to call "what remains" have all closed** — #241
-      (click-to-remove preserved by reference and colliding) via PR #454, #363 (grid capacity derived in
-      three places, two of them dead) via PR #452, and #382 (the loadout shape guard accepts an
-      equipment array shorter than eight cells) via PR #440. Two were stale premises rather than
-      defects: #363 assumed `slotMax` was dead code when #353 had already wired it into the live
-      over-capacity path, and #241 proposed a movement threshold and a Delete key for gesture collisions
-      the shipped implementation had already resolved another way.
+      Independently verified 2026-08-17 via `/sdd:audit`: PRs #440, #452 and #454 are confirmed merged
+      on GitHub, with titles matching the claims above.
 
       **What keeps this unchecked now is #464, and that is a decision, not a backlog.** `/sdd:audit`
       found on 2026-08-16 that SPEC-0006's REQ "Repeated Consumables Read as One Stack"
@@ -131,6 +134,9 @@ is by some distance the largest gate on this list.
       re-reading the bar until the behaviour that had already shipped qualified. It took eight hours.
       Unlike the granularity question in the gate above, which was overtaken rather than answered, this
       one was decided deliberately and then satisfied.
+
+      Independently verified 2026-08-17 via `/sdd:audit`: PRs #440, #452 and #454 are confirmed merged
+      on GitHub, with titles matching the claims above.
 
 - [x] **The rebrand to "Backwater Outfitters" — clear, 2026-08-16 (PR #463).** #424. The app was
       branded "The Outfitter" in-app and across the docs; it was renamed. This gate existed by
@@ -186,34 +192,26 @@ is by some distance the largest gate on this list.
       the app cannot express**, and **137 of 140 weapons wrong in at least one direction**. A player
       pricing a build against this is pricing a build the game will not sell them.
 
-      **Scope is unsettled in the same way the data-audit gate's is, but the room to narrow it is much
-      smaller than it first appears.** The stories' own dependency chain, read from their bodies rather
-      than from their numbering, is `#339 → #340 → #341 → #342 → #343 → #344`. #339 freezes the
-      index-to-id table and #340 makes ammo catalog rows; #341 scrapes per-weapon compatibility, price
-      and slot count; #342 accepts version 4 at the payload boundary and #343 is the version-4 decoder,
-      which is where #339's resolver is finally wired in; #344 then switches every reader, and its body
-      declares itself blocked by **both** #341 and #343. So "the app stops showing wrong ammo" cannot
-      skip the wire-format bump — #345 almost certainly joins it too, since reading version 4 while
-      writing version 3 is incoherent.
+      **The dependency chain `#339 → #340 → #341 → #342 → #343 → #344 → #345` closed in full**, plus
+      **#431** (a spec defect around the seven dual-family weapons, settled before #341 scraped
+      anything, exactly as this section anticipated) and **#346–#348** (the second ammo control and its
+      cross-spec amendments). #344 switched every reader — UI dropdown, pricer, randomizer, save
+      encoder — off the shared `AMMO` pool onto each weapon's own scraped accepted list; #345 raised
+      `FORMAT_VERSION` to 4 so rounds are referenced by stable id rather than a positional index into
+      that pool. Two non-blocking follow-ups from #344's review, #461 and #462, both closed clean —
+      #461 on inspection (the code path it described no longer existed by the time it was picked up)
+      and #462 with added test coverage.
 
-      That leaves **#346–#347** (the second ammo control) and **#348** (the cross-spec amendments) as
-      the only genuinely separable work: seven of ten stories are the narrow reading, not four. The
-      second control is separable on its own merits — a single control offering the right rounds is
-      *accurate* for every weapon and merely *incomplete* for the 32 that hold two — so it is the one
-      piece that could follow the desktop ship without the app displaying anything false.
+      **The severity-vs-strict granularity question this section flagged as needing to be settled
+      first was never formally decided — it became moot instead.** The overlapping #351–#394 sweep's
+      severity-reading subset (13 issues, including #356/#359/#361/#365/#367/#373/#384 named here as
+      overlap) and its strict reading (42 issues) both reached full closure within the same 48-hour
+      window, so no build was ever scheduled against one reading and found wanting under the other.
+      Recorded as an overtaken risk, not a validated shortcut — the next slower-moving gate with this
+      shape should still settle it deliberately.
 
-      **#431 is a spec defect and should be settled before #341 scrapes anything.** SPEC-0010 models
-      slot count and family membership as independent properties, but for the seven dual-family
-      weapons they are the same fact — a Drilling's two selections are one per barrel, rifle and
-      shotgun, not a split of one family's reserve. As written, the accepted-round list is the union of
-      both families and the slots draw from it independently, so the model permits a Drilling holding
-      two Medium rounds and no Shell. That is the ammo version of #353: a state the app can represent,
-      price, encode and persist, and the game refuses. Cheap now; expensive once the scrape has
-      committed to a shape that cannot express the distinction.
-
-      **Several open findings from the #351–#394 sweep are this same subject from the other end** —
-      #356, #359, #361, #365, #367, #373 and #384 — and would most likely close with this work rather
-      than separately. That overlap is worth counting once when sizing either gate.
+      Independently verified 2026-08-17 via `/sdd:audit`: epic #338 confirmed `CLOSED` on GitHub, and
+      `per-weapon-ammo/spec.md`'s own frontmatter reads `status: implemented`.
 
 **Sequencing.** Two of the seven constrain everything downstream: **#424 (rebrand) → #428 (icon) →
 SPEC-0005's own packaging work.** A mark designed around "The Outfitter" would be redrawn for "Backwater

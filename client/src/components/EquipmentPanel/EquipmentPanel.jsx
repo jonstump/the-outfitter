@@ -161,6 +161,11 @@ export default function EquipmentPanel() {
         return;
       }
       grabRef.current = { ...grab, from: step };
+      // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture" —
+      // "the grid SHALL communicate... the current target through an aria-live
+      // region" (corrected 2026-08-17 per `/sdd:audit` — previously only the
+      // rejection case was announced).
+      setGridAnnounceMessage(`Target cell ${step + 1} of 8`);
       e.preventDefault();
     } else if (k === "Enter" || (e.ctrlKey && (e.key === "m" || e.key === "M"))) {
       const grab = grabRef.current;
@@ -191,8 +196,38 @@ export default function EquipmentPanel() {
             return;
           }
         }
-        dispatch(loadoutActions.moveEquip({ from: grab.origin, to: grab.from, length }));
-        grabRef.current = null;
+        // Governing: SPEC-0006 REQ "Keyboard Equivalence for Every Pointer Gesture"
+        // — "SHALL announce the outcome — moved, swapped, or rejected — on commit"
+        // and "focus SHALL rest on the destination cell... MUST NOT be lost to the
+        // document body" (corrected 2026-08-17 per `/sdd:audit`; the swap-detection
+        // itself corrected 2026-08-17 in response to review). Read occupancy BEFORE
+        // dispatching: `moveEquip` overwrites `grab.from`'s entry either way, so this
+        // is the only point a swap can still be distinguished from a move into an
+        // empty cell. A drop back onto the origin (`grab.from === grab.origin`)
+        // changes nothing and is left silent, matching Escape-cancel.
+        //
+        // Gated on `length === 1`: SPEC-0006 "Stack drops SHALL NOT swap" makes a
+        // run/stack swap structurally impossible — `canPlaceRun` above already
+        // refused any target region containing a FOREIGN occupied cell, so an
+        // occupied `grab.from` for a run move can only be one of the run's own
+        // cells at its pre-move position (the ordinary case of shifting a stack by
+        // less than its own length). Reading raw occupancy without this gate
+        // announced "Swapped" for a plain shift into a previously-empty cell.
+        const destinationHadItem = length === 1 && loadout.equip[grab.from] !== null;
+        const destination = grab.from;
+        dispatch(loadoutActions.moveEquip({ from: grab.origin, to: destination, length }));
+        if (destination !== grab.origin) {
+          setGridAnnounceMessage(
+            destinationHadItem ? `Swapped with cell ${destination + 1}` : `Moved to cell ${destination + 1}`
+          );
+          // One-shot marker, not an outright null: the ORIGIN cell's focused button
+          // may unmount on this render (if the move emptied it), so focus has to be
+          // re-acquired on whichever cell now renders at `destination`, after that
+          // render commits — see EquipmentSlot's `focusingDestination` effect.
+          grabRef.current = { focusIndex: destination };
+        } else {
+          grabRef.current = null;
+        }
       }
     }
   };
@@ -221,6 +256,7 @@ export default function EquipmentPanel() {
             index={k}
             run={runs.find((r) => r.cells.includes(k))}
             grabRef={grabRef}
+            onAnnounce={setGridAnnounceMessage}
           />
         ))}
       </div>

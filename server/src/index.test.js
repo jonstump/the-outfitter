@@ -58,7 +58,7 @@ function req(method, pathname, headers = {}, body, port = PORT) {
       (res) => {
         let text = "";
         res.on("data", (c) => (text += c));
-        res.on("end", () => resolve({ status: res.statusCode, text }));
+        res.on("end", () => resolve({ status: res.statusCode, text, headers: res.headers }));
       }
     );
     r.on("error", reject);
@@ -132,12 +132,15 @@ afterAll(() => {
   directChild?.kill();
 });
 
+// Shared by the CORS suite below and the security-headers suite further down — both need a
+// real built asset to request, and both skip cleanly when `client/dist` has not been built.
+const assets = existsSync(CLIENT_DIST)
+  ? readdirSync(path.join(CLIENT_DIST, "assets")).filter((f) => /\.(js|css)$/.test(f))
+  : [];
+
 describe("same-origin requests are never refused by the CORS policy", () => {
   // The regression, stated as the single request that took the site down: a browser fetching
   // the app's own bundle in CORS mode, on a host nobody configured into CORS_ORIGIN.
-  const assets = existsSync(CLIENT_DIST)
-    ? readdirSync(path.join(CLIENT_DIST, "assets")).filter((f) => /\.(js|css)$/.test(f))
-    : [];
 
   it.skipIf(assets.length === 0)(
     "serves the client bundle to a same-origin request that carries an Origin header",
@@ -220,6 +223,75 @@ describe("same-origin requests are never refused by the CORS policy", () => {
     // reached the validator at all. Asserting "not 403" rather than a success code keeps
     // this test about the origin policy instead of about the loadout schema.
     expect(res.status).not.toBe(403);
+  });
+});
+
+// Governing: SPEC-0003 § "Security Headers" (found via `/sdd:audit` 2026-08-17): "Responses
+// SHALL set X-Content-Type-Options: nosniff. The application SHALL set a Content-Security-
+// Policy appropriate to a self-hosted static client... the policy MUST NOT require relaxing
+// img-src to permit the wiki." "Responses" is unqualified — this suite boots the REAL entry
+// point for the same reason the CORS suite above does: the header is registered once, in
+// index.js, ahead of both the API-scoped CORS policy and static delivery, and a router-level
+// test harness (every other server suite) never loads index.js at all and would not catch a
+// regression here.
+describe("security headers (SPEC-0003)", () => {
+  it("sets X-Content-Type-Options: nosniff on an API response", async () => {
+    const res = await req("GET", "/api/hunter-favorites", asBrowserOn(SITE));
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+  });
+
+  it("sets X-Content-Type-Options: nosniff outside /api too", async () => {
+    // /healthz stands in for every non-API route, the same way it does in the CORS suite
+    // above — the header is not scoped to /api the way CORS is.
+    const res = await req("GET", "/healthz", { Host: SITE });
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+  });
+
+  it("sets a Content-Security-Policy that does not relax img-src for the wiki", async () => {
+    const res = await req("GET", "/api/hunter-favorites", asBrowserOn(SITE));
+    const csp = res.headers["content-security-policy"];
+    expect(csp).toBeTruthy();
+    expect(csp).toMatch(/img-src 'self'/);
+    expect(csp).not.toMatch(/wiki/i);
+  });
+
+  it("sets the same Content-Security-Policy outside /api too", async () => {
+    const res = await req("GET", "/healthz", { Host: SITE });
+    expect(res.headers["content-security-policy"]).toBeTruthy();
+  });
+
+  it("carries no unsafe-inline or unsafe-eval for scripts", async () => {
+    // The property the index.html/main.jsx refactor exists to make possible — see main.jsx's
+    // "deferredFonts" comment for what used to be an inline `onload="..."` attribute here.
+    const res = await req("GET", "/healthz", { Host: SITE });
+    const csp = res.headers["content-security-policy"];
+    const scriptSrc = csp.split(";").find((d) => d.trim().startsWith("script-src"));
+    expect(scriptSrc).toBeTruthy();
+    expect(scriptSrc).not.toMatch(/unsafe-inline/);
+    expect(scriptSrc).not.toMatch(/unsafe-eval/);
+  });
+
+  it("carries no unsafe-inline for styles either", async () => {
+    // Confirmed by 2026-08-18 review (empirically, against a real production build): React's
+    // inline `style={{...}}` props are set via CSSOM property assignment, which style-src does
+    // not gate — only setAttribute("style", ...) and literal style="..." attributes are. This
+    // codebase has no dangerouslySetInnerHTML and no CSS-in-JS library, so nothing needs the
+    // relaxation. See index.js's CSP comment for the full reasoning.
+    const res = await req("GET", "/healthz", { Host: SITE });
+    const csp = res.headers["content-security-policy"];
+    const styleSrc = csp.split(";").find((d) => d.trim().startsWith("style-src"));
+    expect(styleSrc).toBeTruthy();
+    expect(styleSrc).not.toMatch(/unsafe-inline/);
+  });
+
+  it.skipIf(assets.length === 0)("serves the client bundle with both security headers", async () => {
+    // The header is set before express.static, so the static path is covered too — not just
+    // the API and /healthz.
+    for (const asset of assets) {
+      const res = await req("GET", `/assets/${asset}`, asBrowserOn(SITE));
+      expect([asset, res.headers["x-content-type-options"]]).toEqual([asset, "nosniff"]);
+      expect([asset, Boolean(res.headers["content-security-policy"])]).toEqual([asset, true]);
+    }
   });
 });
 

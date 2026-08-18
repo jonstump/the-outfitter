@@ -72,6 +72,13 @@ Chosen option: **ammo becomes ordinary catalog rows with stable ids; compatibili
 scraped per weapon into `itemStats.json` as `availableAmmo`; and a loadout holds two ammo selections
 per weapon.** This is one `FORMAT_VERSION` bump and one migration.
 
+**Naming note added 2026-08-17, per `/sdd:audit`.** `availableAmmo` throughout this ADR names the
+*concept* this decision introduced, not the field name that shipped. `itemStats.json` scrapes it as
+`ammo.accepted` (the per-round list) and `ammo.reserve` (slot count and per-slot reserve metadata) —
+see `client/src/data/itemStats.js`'s `ammoSlotsFor`. SPEC-0010's Open Question 3 records the rename;
+this ADR's own text was never annotated with it until now. `availableAmmo` is left as-is everywhere
+else below as the decision's own vocabulary — read it as naming the concept, not a live identifier.
+
 Four things follow, and together they are the argument:
 
 * **Stable ids retire the bare-index hazard permanently.** A saved selection becomes

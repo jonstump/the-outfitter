@@ -10,10 +10,11 @@ import {
   LS_CUR,
   PROMOTED_TO_WEAPON,
   RETIRED_WEAPON_ALIASES,
+  decodeShareCode,
   emptyLoadout,
-  encodeShareUrl,
+  encodeShareCode,
+  extractShareCode,
   fromData,
-  readHashLoadout,
   readStoredLoadout,
   toData,
 } from "./loadoutCodec.js";
@@ -794,12 +795,12 @@ describe("wire format stays clean with both savedId and nameIsDerived active", (
     expect(enc.v).toBe(FORMAT_VERSION);
   });
 
-  it("an encoded share URL contains neither the savedId nor the nameIsDerived flag", () => {
+  it("an encoded share code contains neither the savedId nor the nameIsDerived flag", () => {
     const lo = loadoutWithBoth();
-    const url = encodeShareUrl(lo);
-    expect(url).not.toContain("rec-from-server");
-    expect(url).not.toContain("savedId");
-    expect(url).not.toContain("nameIsDerived");
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("rec-from-server");
+    expect(code).not.toContain("savedId");
+    expect(code).not.toContain("nameIsDerived");
   });
 
   it("a round trip through toData/fromData yields a payload with neither savedId nor nameIsDerived", () => {
@@ -1021,10 +1022,9 @@ describe("version-3 encoding (issue #332)", () => {
     expect(capUsed(dec)).toBe(5);
   });
 
-  it("round-trips a pair through a share URL", () => {
-    const url = encodeShareUrl(pairLoadout());
-    // readHashLoadout reads location.hash; encodeShareUrl set it via history.replaceState.
-    const via = fromData(JSON.parse(atob(url.split("#L=")[1])));
+  it("round-trips a pair through a share code", () => {
+    const code = encodeShareCode(pairLoadout());
+    const via = decodeShareCode(code);
     expect(via.weapons[0]).toEqual({ i: PISTOL, ammo: [AMMO_ID, null], d: true });
     expect(via.weapons[1]).toEqual({ i: RIFLE, ammo: [null, null], d: false });
   });
@@ -1392,12 +1392,11 @@ describe("issue #360 — unknown versions do not route through the legacy decode
     expect(dec.traits).toEqual(["quartermaster"]);
   });
 
-  it("readHashLoadout returns null for an undecodable share link", () => {
-    // A share link carrying v:99 must not be fed to setLoadout. readHashLoadout
-    // returns null so the caller starts fresh rather than crashing or persisting.
+  it("decodeShareCode returns null for an undecodable code", () => {
+    // A code carrying v:99 must not be fed to setLoadout. decodeShareCode returns null
+    // so the caller starts fresh rather than crashing or persisting.
     const code = btoa(JSON.stringify({ v: 99, w: [null, null], e: [], tr: [], n: "x", b: [] }));
-    history.replaceState(null, "", "#L=" + code);
-    expect(readHashLoadout()).toBeNull();
+    expect(decodeShareCode(code)).toBeNull();
   });
 
   it("readStoredLoadout returns null for an undecodable stored record", () => {
@@ -1480,12 +1479,16 @@ describe("issue #359 — ammo-drop notice when decode drops a saved selection", 
   });
 });
 
-// Governing: issue #358. `encodeShareUrl` used `btoa(JSON.stringify(toData(loadout)))`, and
-// `btoa` throws `InvalidCharacterError` on any code point above U+00FF — so a loadout named
-// with an emoji or CJK/Cyrillic/Greek characters made the Share button do nothing (the throw
-// escaped uncaught; the `try` wrapped `history.replaceState`, not `btoa`). The fix encodes the
-// JSON as UTF-8 before base64, with a symmetric decode that falls back to the legacy raw path.
-describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
+// Governing: issue #358. The original encoder used `btoa(JSON.stringify(toData(loadout)))`,
+// and `btoa` throws `InvalidCharacterError` on any code point above U+00FF — so a loadout
+// named with an emoji or CJK/Cyrillic/Greek characters made the Share button do nothing (the
+// throw escaped uncaught). The fix encodes the JSON as UTF-8 before base64, with a symmetric
+// decode that falls back to the legacy raw path. Originally pinned via `encodeShareUrl`/
+// `readHashLoadout` (the share-link feature); rewritten against `encodeShareCode`/
+// `decodeShareCode` when that feature was removed (item 4 of the 2026-08-16 feedback batch)
+// — the underlying encode/decode logic these tests actually guard is unchanged, only the
+// entry point is.
+describe("issue #358 — share code encoding for non-Latin-1 names", () => {
   function loadoutNamed(name) {
     const lo = emptyLoadout();
     lo.name = name;
@@ -1494,29 +1497,28 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
 
   it("encodes a loadout named with an emoji without throwing", () => {
     const lo = loadoutNamed("Loadout 🔥");
-    const url = encodeShareUrl(lo);
-    expect(url).toMatch(/#L=[A-Za-z0-9+/=]+$/);
+    const code = encodeShareCode(lo);
+    expect(code).toMatch(/^[A-Za-z0-9+/=]+$/);
   });
 
   it("encodes a loadout named with CJK characters without throwing", () => {
     const lo = loadoutNamed("日本");
-    const url = encodeShareUrl(lo);
-    expect(url).toMatch(/#L=[A-Za-z0-9+/=]+$/);
+    const code = encodeShareCode(lo);
+    expect(code).toMatch(/^[A-Za-z0-9+/=]+$/);
   });
 
-  it("round-trips a non-Latin-1 name through encodeShareUrl and readHashLoadout", () => {
+  it("round-trips a non-Latin-1 name through encodeShareCode and decodeShareCode", () => {
     const lo = loadoutNamed("Loadout 🔥");
-    const url = encodeShareUrl(lo);
-    // readHashLoadout reads location.hash, which encodeShareUrl set via history.replaceState.
-    const dec = readHashLoadout();
+    const code = encodeShareCode(lo);
+    const dec = decodeShareCode(code);
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Loadout 🔥");
   });
 
-  it("round-trips a CJK name through encodeShareUrl and readHashLoadout", () => {
+  it("round-trips a CJK name through encodeShareCode and decodeShareCode", () => {
     const lo = loadoutNamed("日本");
-    encodeShareUrl(lo);
-    const dec = readHashLoadout();
+    const code = encodeShareCode(lo);
+    const dec = decodeShareCode(code);
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("日本");
   });
@@ -1526,9 +1528,7 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
     // plain-ASCII name. This is the code the OLD encoder produced.
     const lo = loadoutNamed("Plain ASCII build");
     const legacyCode = btoa(JSON.stringify(toData(lo)));
-    // Set the hash so readHashLoadout can read it.
-    history.replaceState(null, "", "#L=" + legacyCode);
-    const dec = readHashLoadout();
+    const dec = decodeShareCode(legacyCode);
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Plain ASCII build");
   });
@@ -1539,23 +1539,94 @@ describe("issue #358 — share URL encoding for non-Latin-1 names", () => {
     // these, it only throws above U+00FF. Read as raw bytes, "é" is the single byte 0xE9,
     // which is NOT valid standalone UTF-8 (0xE9 starts a 3-byte sequence with no
     // continuation bytes following). `decodeBase64Utf8` must throw on this so
-    // readHashLoadout's catch falls through to the legacy `atob` path — if it instead
+    // decodeShareCode's catch falls through to the legacy `atob` path — if it instead
     // silently substitutes U+FFFD (TextDecoder's default, non-fatal behavior), the name
     // decodes as mangled text instead of falling back.
     const lo = loadoutNamed("Café");
     const legacyCode = btoa(JSON.stringify(toData(lo)));
-    history.replaceState(null, "", "#L=" + legacyCode);
-    const dec = readHashLoadout();
+    const dec = decodeShareCode(legacyCode);
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Café");
   });
 
   it("a plain-ASCII name round-trips through the new encoder too", () => {
     const lo = loadoutNamed("Café");
-    encodeShareUrl(lo);
-    const dec = readHashLoadout();
+    const code = encodeShareCode(lo);
+    const dec = decodeShareCode(code);
     expect(dec).not.toBeNull();
     expect(dec.name).toBe("Café");
+  });
+});
+
+// Governing: item 4 of the 2026-08-16 feedback batch ("I want to use share codes"). The
+// share-LINK feature (`encodeShareUrl`/`readHashLoadout`, a URL wrapping this same code in
+// its "#L=" hash) was removed outright once this became the primary import/export path —
+// the app has no live users yet, so there was nothing an old shared link needed to keep
+// working for. `encodeShareCode`/`decodeShareCode` are now the only encode/decode pair,
+// pinned directly here, and `extractShareCode` pins the "paste whatever you actually
+// copied" input handling the import UI depends on.
+describe("share codes (item 4 — copy/paste)", () => {
+  it("round-trips a loadout through encodeShareCode/decodeShareCode with no URL involved", () => {
+    const lo = emptyLoadout();
+    lo.name = "Bare code build";
+    const code = encodeShareCode(lo);
+    expect(code).not.toContain("#");
+    expect(code).not.toContain("http");
+    const dec = decodeShareCode(code);
+    expect(dec).not.toBeNull();
+    expect(dec.name).toBe("Bare code build");
+  });
+
+  it("decodeShareCode returns null for empty, garbage, or undecodable input", () => {
+    expect(decodeShareCode("")).toBeNull();
+    expect(decodeShareCode(null)).toBeNull();
+    expect(decodeShareCode("not valid base64 json!!")).toBeNull();
+  });
+
+  describe("extractShareCode", () => {
+    it("extracts the code from a bare code with no surrounding text", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(code)).toBe(code);
+    });
+
+    it("extracts the code from a full share URL", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      const url = `https://example.com/some/path#L=${code}`;
+      expect(extractShareCode(url)).toBe(code);
+    });
+
+    it("extracts the code from a bare hash fragment", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(`#L=${code}`)).toBe(code);
+    });
+
+    it("trims surrounding whitespace a paste commonly carries", () => {
+      const lo = emptyLoadout();
+      const code = encodeShareCode(lo);
+      expect(extractShareCode(`  ${code}  \n`)).toBe(code);
+    });
+
+    it("returns null for empty input, non-string input, and text that isn't a code attempt", () => {
+      expect(extractShareCode("")).toBeNull();
+      expect(extractShareCode("   ")).toBeNull();
+      expect(extractShareCode(undefined)).toBeNull();
+      expect(extractShareCode(null)).toBeNull();
+      expect(extractShareCode(42)).toBeNull();
+      expect(extractShareCode("My Loadout Name")).toBeNull();
+    });
+
+    it("a full round trip: encode, wrap in a URL, extract, decode", () => {
+      const lo = emptyLoadout();
+      lo.name = "Round trip via pasted URL";
+      const url = `https://example.com/#L=${encodeShareCode(lo)}`;
+      const extracted = extractShareCode(url);
+      const dec = decodeShareCode(extracted);
+      expect(dec).not.toBeNull();
+      expect(dec.name).toBe("Round trip via pasted URL");
+    });
   });
 });
 

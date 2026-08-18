@@ -35,12 +35,21 @@ import {
 } from "../../data/catalog.js";
 import { estimatedMinimumLevel, totalCost, upTotal } from "../../utils/calc.js";
 import { fromData } from "../../utils/loadoutCodec.js";
-import { groupByList, sortLists, availableSortKeys, SORT_LABELS, UNASSIGNED } from "../../utils/listOrdering.js";
+import {
+  groupByList,
+  sortLists,
+  sortByOrder,
+  moveToIndex,
+  moveBesideTarget,
+  availableSortKeys,
+  SORT_LABELS,
+  UNASSIGNED,
+} from "../../utils/listOrdering.js";
 import { HUNTERS, hunterFor, hunterNameFor } from "../../data/hunters.js";
 import { LIST_ACCENTS, accentVar, previewNextAccent } from "../../utils/listAccent.js";
 import { useFocusTrap } from "../../utils/focusTrap.js";
 import { loadSavedThunk } from "../../store/thunks.js";
-import { deleteSaved, describeSaved, moveSaved } from "../../store/savedLoadoutsSlice.js";
+import { deleteSaved, describeSaved, moveSaved, reorderSaved } from "../../store/savedLoadoutsSlice.js";
 import {
   createListThunk,
   describeListThunk,
@@ -431,6 +440,131 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
   const inputRef = useRef(null);
   const rootRef = useRef(null);
 
+  // Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order".
+  //
+  // `orderedLoadouts` is the SERVER's order — every loadout `publicLoadout` returns carries
+  // a materialised `order` (see server/src/routes/loadouts.js), so this is a plain sort with
+  // nothing left to fall back to client-side.
+  //
+  // `grab` is `useState`, not a ref like the equipment grid's `grabRef`. That codebase's
+  // choice is a performance one (a ref survives the equipment grid's high-frequency
+  // pointermove without a re-render per pixel); this feature needs the opposite — every
+  // keyboard arrow press has to visibly move the card NOW, in the same render, or the
+  // keyboard user gets no feedback about where the drop would land until they commit it.
+  // A card list this size re-rendering on every arrow press costs nothing worth avoiding.
+  //
+  //   pointer:  { mode: "pointer", id, pointerId }
+  //   keyboard: { mode: "keyboard", id, position }  — `position` is the CURRENT proposed
+  //             index; `displayOrder` below previews the move live so the visible order and
+  //             the order a drop would commit are always the same computation.
+  const [grab, setGrab] = useState(null);
+  const [reorderAnnounce, setReorderAnnounce] = useState("");
+  const cardsRef = useRef(null);
+
+  const orderedLoadouts = useMemo(() => sortByOrder(loadouts), [loadouts]);
+
+  // A grab that outlives the loadouts it was taken from — a card deleted or moved away by
+  // another tab, or the whole list switched — no longer refers to anything real. Mirrors the
+  // equipment grid's own grabRef-clearing effect (issue #417) for the same reason: state that
+  // silently outlives the thing it pointed at is how a stale gesture moves the wrong item.
+  useEffect(() => {
+    setGrab(null);
+  }, [loadouts, list?.id, unassigned]);
+
+  // The keyboard preview: while a keyboard grab is in progress, render the loadout at its
+  // PROPOSED position rather than its stored one, so arrow-stepping is visibly WYSIWYG. A
+  // pointer grab previews nothing — mirroring the equipment grid, which also does not
+  // reflow other cells during a pointer drag, only resolving the drop on release.
+  const displayOrder = useMemo(() => {
+    if (!grab || grab.mode !== "keyboard") return orderedLoadouts;
+    return moveToIndex(orderedLoadouts, grab.id, grab.position);
+  }, [orderedLoadouts, grab]);
+
+  const scopeListId = unassigned ? null : list?.id ?? null;
+
+  const onHandlePointerDown = (item, e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setGrab({ mode: "pointer", id: item.id, pointerId: e.pointerId });
+  };
+
+  const onCardsPointerUp = (e) => {
+    if (!grab || grab.mode !== "pointer" || grab.pointerId !== e.pointerId) return;
+    const overEl = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-loadout-id]");
+    const grabbed = orderedLoadouts.find((l) => l.id === grab.id);
+    setGrab(null);
+    if (!overEl || !grabbed) return; // released outside every card — cancel, nothing sent
+    const targetId = overEl.dataset.loadoutId;
+    if (targetId === grab.id) return;
+    const rect = overEl.getBoundingClientRect();
+    const placeBefore = e.clientY < rect.top + rect.height / 2;
+    const next = moveBesideTarget(orderedLoadouts, grab.id, targetId, placeBefore);
+    const ids = next.map((l) => l.id);
+    const currentIds = orderedLoadouts.map((l) => l.id);
+    if (ids.join(" ") === currentIds.join(" ")) return; // resulting order is unchanged
+    setReorderAnnounce(`Moved “${grabbed.name}” to position ${ids.indexOf(grab.id) + 1} of ${ids.length}.`);
+    dispatch(reorderSaved({ listId: scopeListId, order: ids }));
+  };
+  const onCardsPointerCancel = (e) => {
+    if (grab && grab.mode === "pointer" && grab.pointerId === e.pointerId) setGrab(null);
+  };
+  const onCardsLostPointerCapture = (e) => {
+    if (grab && grab.mode === "pointer" && grab.pointerId === e.pointerId) setGrab(null);
+  };
+
+  // Arrow/Enter are handled at the CARDS ROOT, reading the shared `grab` state — the same
+  // split the equipment grid uses (Space/Escape live on the individual cell, Arrow/Enter on
+  // the grid root) so the gesture is one state machine rather than one per card.
+  const onCardsKeyDown = (e) => {
+    if (!grab || grab.mode !== "keyboard") return;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const delta = e.key === "ArrowUp" ? -1 : 1;
+      const clampedPosition = Math.max(0, Math.min(grab.position + delta, orderedLoadouts.length - 1));
+      if (clampedPosition === grab.position) {
+        setReorderAnnounce("At the edge of the list");
+        return;
+      }
+      setGrab({ ...grab, position: clampedPosition });
+      const movedName = orderedLoadouts.find((l) => l.id === grab.id)?.name;
+      setReorderAnnounce(`“${movedName}” at position ${clampedPosition + 1} of ${orderedLoadouts.length}.`);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const movedName = orderedLoadouts.find((l) => l.id === grab.id)?.name;
+      const ids = displayOrder.map((l) => l.id);
+      const currentIds = orderedLoadouts.map((l) => l.id);
+      setGrab(null);
+      if (ids.join(" ") === currentIds.join(" ")) return; // dropped back where it started
+      setReorderAnnounce(`Moved “${movedName}” to position ${grab.position + 1} of ${orderedLoadouts.length}.`);
+      dispatch(reorderSaved({ listId: scopeListId, order: ids }));
+    }
+  };
+
+  const onHandleKeyDown = (item, e) => {
+    if (e.key === "Escape" || e.key === "Esc") {
+      if (grab && grab.id === item.id) {
+        setGrab(null);
+        setReorderAnnounce(`Cancelled — “${item.name}” stays at its original position.`);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (e.key === " " || e.key === "Spacebar") {
+      if (!grab) {
+        const position = orderedLoadouts.findIndex((l) => l.id === item.id);
+        setGrab({ mode: "keyboard", id: item.id, position });
+        setReorderAnnounce(`Grabbed “${item.name}”. Use Up and Down to move it, Enter to drop, Escape to cancel.`);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (e.key.startsWith("Arrow") || e.key === "Enter") {
+      // The grid-root handler above owns these once a grab is live; prevent the page from
+      // scrolling on the arrow presses regardless.
+      if (grab && grab.id === item.id) e.preventDefault();
+    }
+  };
+
   // The expanded panel renders below the whole grid; on a phone with several lists a tap
   // otherwise looks like it did nothing.
   useEffect(() => {
@@ -593,12 +727,41 @@ function ExpandedList({ list, unassigned, loadouts, lists, renaming }) {
           className="ll-cards"
           style={{ "--ll-card-min": `${CARD_MIN_PX}px` }}
           data-testid="loadout-card-grid"
+          ref={cardsRef}
+          onPointerUp={onCardsPointerUp}
+          onPointerCancel={onCardsPointerCancel}
+          onLostPointerCapture={onCardsLostPointerCapture}
+          onKeyDown={onCardsKeyDown}
         >
-          {loadouts.map((item) => (
-            <LoadoutCard key={item.id} item={item} lists={lists} />
+          {displayOrder.map((item) => (
+            <LoadoutCard
+              key={item.id}
+              item={item}
+              lists={lists}
+              grabbed={grab?.id === item.id}
+              onHandlePointerDown={(e) => onHandlePointerDown(item, e)}
+              onHandleKeyDown={(e) => onHandleKeyDown(item, e)}
+            />
           ))}
         </div>
       )}
+      {/* Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order",
+          Accessibility Requirements § Keyboard Navigation. A dedicated live region, separate
+          from ActionsPanel's save/delete/move banner — the equipment grid draws the same
+          distinction (`equip-announcer` beside the shared save/share messaging) because a
+          reorder announcement and an unrelated CRUD confirmation racing on one region would
+          have one clobber the other. Mounted unconditionally with empty text for the same
+          reason every other live region in this app is: a region inserted together with its
+          first real content is silent to a screen reader (issue #400's defect class). */}
+      <div
+        data-testid="loadout-reorder-announcer"
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {reorderAnnounce}
+      </div>
     </div>
   );
 }
@@ -1304,7 +1467,7 @@ function LoadoutNote({ item }) {
  * still an explicit `<select>` in the tab order rather than a drag target (SPEC-0003
  * "Keyboard Navigation": filing MUST be achievable without a pointer).
  */
-function LoadoutCard({ item, lists }) {
+function LoadoutCard({ item, lists, grabbed = false, onHandlePointerDown, onHandleKeyDown }) {
   const dispatch = useDispatch();
   // One decode serves both the cost and the preview — the contents were already in hand,
   // which is the whole reason the preview costs nothing (design.md).
@@ -1319,8 +1482,32 @@ function LoadoutCard({ item, lists }) {
     // card; without a label an `<article>` is announced as an unnamed region boundary, and a
     // grid of them is a run of identical "article" stops. The name is the label rather than
     // merely the first focusable thing inside it.
-    <article className="ll-lcard" aria-label={item.name} data-testid={`loadout-card-${item.id}`}>
+    //
+    // `data-loadout-id` is the drop-target hit test for the pointer path (ExpandedList's
+    // onCardsPointerUp resolves `elementFromPoint(...).closest("[data-loadout-id]")`), the
+    // same role `data-slot-index` plays for the equipment grid.
+    <article
+      className={`ll-lcard${grabbed ? " grabbing" : ""}`}
+      aria-label={item.name}
+      data-testid={`loadout-card-${item.id}`}
+      data-loadout-id={item.id}
+    >
       <div className="ll-lcard-head">
+        {/* Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order",
+            Accessibility Requirements § Icon-Only Controls. A real <button>, unlike the
+            equipment grid's pointer-only `.equip-drag-handle` span — this card has no OTHER
+            element free to carry the keyboard grab (the equipment tile's inert
+            `.equip-tile-main` has no competing click action; every other control on this
+            card already means something on Enter/Space — load, move, delete — so the grab
+            needs its own dedicated, focusable control rather than borrowing one of theirs). */}
+        <button
+          className="ll-lcard-handle"
+          aria-label={`Reorder ${item.name}`}
+          onPointerDown={onHandlePointerDown}
+          onKeyDown={onHandleKeyDown}
+        >
+          ⠿
+        </button>
         <button className="ll-lcard-name" onClick={() => dispatch(loadSavedThunk(item))}>
           {item.name}
         </button>

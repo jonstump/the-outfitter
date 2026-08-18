@@ -32,7 +32,7 @@ import {
 } from "../../test/cssRules.js";
 import { LS_SELECTED_LIST } from "../../store/uiSlice.js";
 import { slugify } from "../../utils/slugify.js";
-import { FORMAT_VERSION, emptyLoadout, encodeShareUrl, fromData, toData } from "../../utils/loadoutCodec.js";
+import { FORMAT_VERSION, emptyLoadout, encodeShareCode, fromData, toData } from "../../utils/loadoutCodec.js";
 import { saveCurrent } from "../../store/savedLoadoutsSlice.js";
 import { UNASSIGNED } from "../../utils/listOrdering.js";
 import { createList } from "../../api/loadouts.js";
@@ -1778,6 +1778,245 @@ const withParagraphHeights = (clientHeight, scrollHeight, fn) => {
   }
 };
 
+// ---------------------------------------------------------------------------------------
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order" (feedback item
+// 3, "loadouts under lists could be dragged and dropped to change the order of them").
+//
+// The reorder handle is a real <button> (not the equipment grid's pointer-only span) — see
+// LoadoutListsPanel.jsx's governing comment on `.ll-lcard-handle` for why this card has no
+// OTHER inert element to carry the keyboard grab the way `.equip-tile-main` does.
+// ---------------------------------------------------------------------------------------
+
+const handleFor = (name) => screen.getByRole("button", { name: `Reorder ${name}` });
+const cardOrder = () =>
+  [...screen.getByTestId("loadout-card-grid").querySelectorAll("[data-loadout-id]")].map(
+    (el) => el.dataset.loadoutId
+  );
+const announcer = () => screen.getByTestId("loadout-reorder-announcer");
+
+describe("reordering loadouts within a list", () => {
+  it("renders cards sorted by their order field, not by array position", () => {
+    renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "first-in-array", LOADED, "a"), order: 2 },
+          { ...filed("2", "second-in-array", LOADED, "a"), order: 0 },
+          { ...filed("3", "third-in-array", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+    expect(cardOrder()).toEqual(["2", "3", "1"]);
+  });
+
+  it("grabs, moves and drops a card via the keyboard, dispatching the full new order", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { ...filed("1", "A", LOADED, "a"), order: 1 },
+        { ...filed("2", "B", LOADED, "a"), order: 0 },
+      ],
+    }));
+    const store = renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+    expect(cardOrder()).toEqual(["1", "2"]);
+
+    const handle = handleFor("A");
+    handle.focus();
+    fireEvent.keyDown(handle, { key: " " });
+    expect(announcer()).toHaveTextContent(/Grabbed “A”/);
+
+    // ArrowDown previews the move immediately, before any request is sent.
+    fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "ArrowDown" });
+    expect(cardOrder()).toEqual(["2", "1"]);
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "Enter" });
+    });
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts\/reorder$/);
+    expect(JSON.parse(opts.body)).toEqual({ listId: "a", order: ["2", "1"] });
+    expect(store.getState().savedLoadouts.items.find((l) => l.id === "1").order).toBe(1);
+  });
+
+  it("Escape cancels an in-progress keyboard grab, restoring the original order and sending nothing", () => {
+    global.fetch = vi.fn();
+    renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+
+    const handle = handleFor("A");
+    fireEvent.keyDown(handle, { key: " " });
+    fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "ArrowDown" });
+    expect(cardOrder()).toEqual(["2", "1"]);
+
+    fireEvent.keyDown(handle, { key: "Escape" });
+
+    expect(cardOrder()).toEqual(["1", "2"]);
+    expect(announcer()).toHaveTextContent(/Cancelled/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not move past either end of the list, announcing the edge instead", () => {
+    renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+
+    const handle = handleFor("A");
+    fireEvent.keyDown(handle, { key: " " });
+    // "A" is already first — ArrowUp cannot move it further.
+    fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "ArrowUp" });
+    expect(cardOrder()).toEqual(["1", "2"]);
+    expect(announcer()).toHaveTextContent(/edge/);
+  });
+
+  it("resolves a pointer drop against the card under the release point", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { ...filed("1", "A", LOADED, "a"), order: 1 },
+        { ...filed("2", "B", LOADED, "a"), order: 0 },
+      ],
+    }));
+    renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+
+    const handleA = handleFor("A");
+    const cardB = cardOf("2");
+    // Dropped in the LOWER half of B's card — resolves to "after B".
+    cardB.getBoundingClientRect = () => ({ top: 100, bottom: 150, height: 50, left: 0, right: 0, width: 0 });
+
+    fireEvent.pointerDown(handleA, { button: 0, pointerId: 1 });
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => cardB;
+    try {
+      await act(async () => {
+        fireEvent.pointerUp(screen.getByTestId("loadout-card-grid"), { pointerId: 1, clientY: 140 });
+      });
+    } finally {
+      document.elementFromPoint = orig;
+    }
+
+    const [url, opts] = global.fetch.mock.calls.at(-1);
+    expect(String(url)).toMatch(/\/api\/loadouts\/reorder$/);
+    expect(JSON.parse(opts.body)).toEqual({ listId: "a", order: ["2", "1"] });
+  });
+
+  it("dropping outside every card cancels the pointer drag, sending nothing", () => {
+    global.fetch = vi.fn();
+    renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+
+    fireEvent.pointerDown(handleFor("A"), { button: 0, pointerId: 1 });
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => null;
+    try {
+      fireEvent.pointerUp(screen.getByTestId("loadout-card-grid"), { pointerId: 1, clientY: 9999 });
+    } finally {
+      document.elementFromPoint = orig;
+    }
+
+    expect(cardOrder()).toEqual(["1", "2"]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("scopes the reorder request to Unassigned (listId null) when Unassigned is open", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { ...filed("1", "A", LOADED, null), order: 1 },
+        { ...filed("2", "B", LOADED, null), order: 0 },
+      ],
+    }));
+    renderPanel(
+      base(
+        [],
+        [
+          { ...filed("1", "A", LOADED, null), order: 0 },
+          { ...filed("2", "B", LOADED, null), order: 1 },
+        ],
+        { unassignedOpen: true }
+      )
+    );
+
+    fireEvent.keyDown(handleFor("A"), { key: " " });
+    fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "ArrowDown" });
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "Enter" });
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls.at(-1)[1].body);
+    expect(body.listId).toBeNull();
+  });
+
+  it("a failed reorder surfaces on the shared ui.message banner, not the dedicated announcer", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: "bad scope" }) }));
+    const store = renderPanel(
+      base(
+        [list("a", "Alpha")],
+        [
+          { ...filed("1", "A", LOADED, "a"), order: 0 },
+          { ...filed("2", "B", LOADED, "a"), order: 1 },
+        ],
+        { selectedListId: "a" }
+      )
+    );
+
+    fireEvent.keyDown(handleFor("A"), { key: " " });
+    fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "ArrowDown" });
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId("loadout-card-grid"), { key: "Enter" });
+    });
+
+    expect(store.getState().ui.message.startsWith("!")).toBe(true);
+    expect(store.getState().ui.message).toContain("Couldn't reorder loadouts");
+  });
+});
+
 describe("list descriptions", () => {
   beforeEach(() => {
     global.fetch = vi.fn(async () => {
@@ -2884,25 +3123,25 @@ describe("loadout notes", () => {
 
   // --- The wire format is unchanged ------------------------------------------------------
 
-  it("keeps the description out of the share URL and the local draft", () => {
+  it("keeps the description out of the share code and the local draft", () => {
     // REQ "The Saved-Loadout Wire Format Is Unchanged": `description` is a property of the
-    // user's filing, not of the loadout. A recipient opening a share URL receives the build,
-    // not the sender's notes about it.
+    // user's filing, not of the loadout. A recipient loading a share code receives the
+    // build, not the sender's notes about it.
     const plain = filed("1", "long ammo", LOADED, "a");
     const annotated = describedAs({ ...plain, listId: "b" }, "a note that must not travel");
 
-    const urlPlain = encodeShareUrl(fromData(plain.data));
-    const urlAnnotated = encodeShareUrl(fromData(annotated.data));
+    const codePlain = encodeShareCode(fromData(plain.data));
+    const codeAnnotated = encodeShareCode(fromData(annotated.data));
 
-    expect(urlAnnotated).toBe(urlPlain); // byte-identical
-    expect(urlAnnotated).not.toContain("note");
-    expect(atob(urlAnnotated.split("#L=")[1])).not.toMatch(/description|listId/);
+    expect(codeAnnotated).toBe(codePlain); // byte-identical
+    expect(codeAnnotated).not.toContain("note");
+    expect(atob(codeAnnotated)).not.toMatch(/description|listId/);
 
     // And the encoder drops both fields even when they are handed to it ON the loadout
     // model, which is the shape a future "share what I'm looking at" path would produce.
     // Without this the assertion above only proves that `fromData` never invented them.
     const carrying = { ...fromData(annotated.data), description: annotated.description, listId: "b" };
-    expect(encodeShareUrl(carrying)).toBe(urlPlain);
+    expect(encodeShareCode(carrying)).toBe(codePlain);
     expect(JSON.stringify(toData(carrying))).not.toContain("note");
 
     // The same for the encoder every local draft goes through.
@@ -2912,9 +3151,9 @@ describe("loadout notes", () => {
     expect(JSON.stringify(encoded)).not.toContain("note");
   });
 
-  it("keeps the LIST's description out of the share URL too", () => {
+  it("keeps the LIST's description out of the share code too", () => {
     // REQ "The Saved-Loadout Wire Format Is Unchanged", scenario "Neither description reaches a
-    // share URL". Since #181 split the requirement there are two descriptions, and the case the
+    // share code". Since #181 split the requirement there are two descriptions, and the case the
     // split newly creates is a loadout filed into a DESCRIBED list: the list's text is filing
     // state one level further out, so it must not travel either — including the inherited case,
     // where the text the user sees was never written to any record they own.
@@ -2922,7 +3161,7 @@ describe("loadout notes", () => {
     const bare = filed("1", "long ammo", LOADED, null);
 
     // Byte-identical to the same build with no description anywhere, list or loadout.
-    expect(encodeShareUrl(fromData(inDescribedList.data))).toBe(encodeShareUrl(fromData(bare.data)));
+    expect(encodeShareCode(fromData(inDescribedList.data))).toBe(encodeShareCode(fromData(bare.data)));
 
     // And the list record's own text cannot reach the encoder: it is not on the loadout model at
     // all, so even handing the encoder a loadout carrying every filing field drops all of them.
@@ -2932,9 +3171,9 @@ describe("loadout notes", () => {
       description: "the loadout's note",
       listDescription: "the shelf's own words",
     };
-    const url = encodeShareUrl(carrying);
-    expect(url).toBe(encodeShareUrl(fromData(bare.data)));
-    expect(atob(url.split("#L=")[1])).not.toMatch(/description|listId|shelf/);
+    const code = encodeShareCode(carrying);
+    expect(code).toBe(encodeShareCode(fromData(bare.data)));
+    expect(atob(code)).not.toMatch(/description|listId|shelf/);
     expect(JSON.stringify(toData(carrying))).not.toMatch(/shelf|note|described-list/);
   });
 

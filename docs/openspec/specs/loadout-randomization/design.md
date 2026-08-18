@@ -2,6 +2,18 @@
 
 ## Context
 
+> **Staleness note, added 2026-08-17 per `/sdd:audit`.** This section's numbers and line citations
+> were accurate when written and have drifted since, in some cases for the third time — `spec.md`'s
+> own copies of these same citations were corrected twice (2026-08-13 and again after #344) and this
+> design doc's were never touched either time. The paragraphs below are left as written, historically,
+> rather than silently updated: `TRAITS` now holds 58 entries, not 32; the trait draw is at
+> `randomize.js:36-58` and the weapon draw at `randomize.js:60-72`, not `:18-27`/`:30-37`;
+> `itemStats.json` now holds 270 records, not 122, and ammo compatibility for weapons is a per-weapon
+> scraped `ammo.accepted` list (SPEC-0010), not `AmmoType` alone. The underlying argument this section
+> makes — sampling order prevents any pairing rule from having a weapon to consult — is unaffected by
+> any of these numbers changing, which is presumably why nobody noticed. Re-run `/sdd:spec --update`
+> for a proper refresh rather than trusting the specific figures below.
+
 The "Random loadout" button in `ActionsPanel.jsx` dispatches `randomizeThunk`, which calls `randomizeLoadout` in `client/src/utils/randomize.js`. That function samples each part of a build independently: three traits drawn uniformly from all 32 entries in `TRAITS`, then two weapons drawn uniformly from whatever fits the size cap, then equipment from a 50/50 tool-vs-consumable coin flip bounded by a 60-iteration guard.
 
 The ordering is the defect. Traits are chosen at `randomize.js:18-27`, weapons at `randomize.js:30-37`. A trait cannot consult a weapon that does not exist yet, so there is no point in the current pipeline where a pairing rule could be evaluated even if one were written. This is why ADR-0010 treats the fix as a restructure rather than an added rule set.
@@ -100,7 +112,7 @@ graph TD
         SEL["pickArchetype(rng)"]
         UPCK["required traits fit upBudget?"]
         W["draw weapons from pools<br/>filtered by size cap"]
-        AM["draw ammo variant<br/>from the weapon's AMMO class"]
+        AM["draw ammo variant per slot<br/>from the weapon's own accepted list<br/>(ammoSlotsFor, per SPEC-0010)"]
         TR["draw traits: required, then flavor"]
         EQ["fill cells from tool/consumable pools<br/>up to slotMax"]
         BUD["totalCost <= budget?"]

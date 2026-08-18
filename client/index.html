@@ -34,12 +34,18 @@
 
       The <noscript> copy keeps the fonts for scripted-off readers, who have no onload to
       run and nothing to block either way.
+
+      The swap itself moved to main.jsx (issue found via `/sdd:audit` 2026-08-17, SPEC-0003
+      "Security Headers") — an inline `onload="..."` attribute is a script-src concern under
+      a Content-Security-Policy, and this app's CSP does not carry `unsafe-inline` for
+      scripts. `id="deferred-fonts"` is what main.jsx looks the link up by; the swap there
+      still runs with no dependency on this attribute.
     -->
     <link
+      id="deferred-fonts"
       href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&display=swap"
       rel="stylesheet"
       media="print"
-      onload="this.media='all'"
     />
     <noscript>
       <link

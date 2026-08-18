@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { groupByList, sortLists, availableSortKeys, SORT_KEYS, SORT_LABELS, UNASSIGNED } from "./listOrdering.js";
+import {
+  groupByList,
+  sortByOrder,
+  moveToIndex,
+  moveBesideTarget,
+  sortLists,
+  availableSortKeys,
+  SORT_KEYS,
+  SORT_LABELS,
+  UNASSIGNED,
+} from "./listOrdering.js";
 import { HUNTERS, hunterNameFor } from "../data/hunters.js";
 
 // Governing: ADR-0006, SPEC-0003 REQ "List Ordering and Sorting"
@@ -104,6 +114,102 @@ describe("groupByList", () => {
     const g = groupByList([], lists);
     expect(g.has("a")).toBe(true);
     expect(g.get("a")).toEqual([]);
+  });
+});
+
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order".
+describe("sortByOrder", () => {
+  it("orders ascending by the order field", () => {
+    const loadouts = [
+      { id: "z", order: 2 },
+      { id: "x", order: 0 },
+      { id: "y", order: 1 },
+    ];
+    expect(sortByOrder(loadouts).map((l) => l.id)).toEqual(["x", "y", "z"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const loadouts = [{ id: "b", order: 1 }, { id: "a", order: 0 }];
+    const copy = [...loadouts];
+    sortByOrder(loadouts);
+    expect(loadouts).toEqual(copy);
+  });
+
+  it("treats a missing order as 0 rather than throwing or sorting to NaN-land", () => {
+    const loadouts = [{ id: "has-order", order: 1 }, { id: "no-order" }];
+    expect(sortByOrder(loadouts).map((l) => l.id)).toEqual(["no-order", "has-order"]);
+  });
+
+  it("is a no-op on an already-sorted or empty array", () => {
+    expect(sortByOrder([])).toEqual([]);
+    const loadouts = [{ id: "a", order: 0 }, { id: "b", order: 1 }];
+    expect(sortByOrder(loadouts).map((l) => l.id)).toEqual(["a", "b"]);
+  });
+});
+
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order" — the keyboard
+// reorder's move-to-index step.
+describe("moveToIndex", () => {
+  const items = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+
+  it("moves an item forward", () => {
+    expect(moveToIndex(items, "a", 2).map((i) => i.id)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("moves an item backward", () => {
+    expect(moveToIndex(items, "d", 0).map((i) => i.id)).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("clamps an out-of-range index to the last valid position", () => {
+    expect(moveToIndex(items, "a", 99).map((i) => i.id)).toEqual(["b", "c", "d", "a"]);
+  });
+
+  it("clamps a negative index to the first position", () => {
+    expect(moveToIndex(items, "d", -5).map((i) => i.id)).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("is a no-op for an unknown id, returning the same array reference", () => {
+    expect(moveToIndex(items, "missing", 0)).toBe(items);
+  });
+
+  it("moving to its own current index still returns a new array (not the same reference)", () => {
+    const result = moveToIndex(items, "b", 1);
+    expect(result).not.toBe(items);
+    expect(result.map((i) => i.id)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+// Governing: SPEC-0003 REQ "Loadouts Within a List Have a User-Chosen Order" — the
+// pointer-drop reorder's move-beside-target step.
+describe("moveBesideTarget", () => {
+  const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("places the moved item immediately before the target", () => {
+    expect(moveBesideTarget(items, "a", "c", true).map((i) => i.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("places the moved item immediately after the target", () => {
+    expect(moveBesideTarget(items, "c", "a", false).map((i) => i.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("dropping onto itself is a no-op", () => {
+    expect(moveBesideTarget(items, "a", "a", true)).toBe(items);
+  });
+
+  it("an unknown moved id is a no-op", () => {
+    expect(moveBesideTarget(items, "missing", "a", true)).toBe(items);
+  });
+
+  it("an unknown target id is a no-op", () => {
+    expect(moveBesideTarget(items, "a", "missing", true)).toBe(items);
+  });
+
+  it("moving beside an adjacent neighbour on the correct side is a true no-op in ORDER, but still a new array", () => {
+    // "a" placed after "a"'s own left neighbour is nonsensical (no left neighbour), so
+    // exercise the adjacent case that IS well-formed: "b" placed immediately after "a",
+    // which is already where it sits.
+    const result = moveBesideTarget(items, "b", "a", false);
+    expect(result.map((i) => i.id)).toEqual(["a", "b", "c"]);
   });
 });
 

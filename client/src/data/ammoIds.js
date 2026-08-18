@@ -26,9 +26,10 @@
 // is allowed, but the commit message must say so explicitly, the same discipline
 // loadoutCodec.js's "CHANGING THIS PIN MEANS CHANGING HISTORY" note requires for the trait table.
 //
-// NOTE ON SCOPE: this file is intentionally not imported anywhere in production code yet. Wiring the
-// resolver below into the decoder (`fromData`, `fromLegacy`, `boundedAmmo`, etc. in
-// loadoutCodec.js) is issue #343's job, not this one's — see issue #339.
+// NOTE ON SCOPE: #343 wired the resolver below into the decoder — `legacyAmmoId` is imported and
+// called from `loadoutCodec.js` (confirmed via `/sdd:audit` 2026-08-17). This note previously said
+// the file was "intentionally not imported anywhere in production code yet"; that stopped being true
+// once #343 landed.
 export const LEGACY_AMMO_IDS = {
   compact: [
     "ammo-compact-fmj",
@@ -77,9 +78,13 @@ export const LEGACY_AMMO_IDS = {
     "ammo-bow-concertina-arrow",
     "ammo-bow-poison-arrow",
   ],
-  // Empty by fact, same as AMMO.special in catalog.js — a stored index against this class still
-  // needs to resolve to null rather than hitting undefined behaviour (e.g. array-out-of-bounds on a
-  // table that was never given a slot for this class at all).
+  // Empty by design, and MUST stay that way even though AMMO.special in catalog.js is no longer
+  // empty (it gained nine rows in #340). This snapshot freezes what a legacy index into `special`
+  // meant BEFORE #340 — nothing — so a stored legacy index against this class still resolves to null
+  // rather than aliasing onto a round #340 added that no old index ever meant. Do not "fix" this to
+  // match the live pool; see the file header's snapshot discipline. (Confirmed still correct and
+  // still empty via /sdd:audit 2026-08-17 — flagged there only because this comment previously
+  // invited the opposite conclusion.)
   special: [],
   none: [],
 };

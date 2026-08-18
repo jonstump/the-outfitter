@@ -130,11 +130,14 @@ any combination" is the eight-cell freely-mixed grid ADR-0009 chose, stated by t
 `/wiki/Consumables` sentence describing a separate "4-slot inventory" for consumables is pre-2.8 text,
 corroborated as stale by Update 2.6 bug reports still referring to "Consumable slots 1 and 4".
 
-What changes is narrower: **SPEC-0006 is not implemented** ("`state.equip` is still packed, `blocked`
-is still a count, `FORMAT_VERSION` is still 1"), so inverting its two cap scenarios costs a spec edit
-rather than a behaviour change. Its stacking model does interact — a `×3` stack counts 3 toward its
-**type's** budget rather than its item's — and that is a clarification to write once, before the
-capability is built, not a rework after.
+What changed is narrower: SPEC-0006 has since shipped (`equipment-slot-arrangement/spec.md` corrected
+its own "not implemented" claim on 2026-08-13, and this ADR's identical claim was never propagated
+with it — corrected here 2026-08-17 per `/sdd:audit`). `state.equip` is a sparse eight-element array,
+`blocked` is a set of cell indices, and `FORMAT_VERSION` has since moved past even SPEC-0006's own
+v2. Inverting its two cap scenarios is accordingly a behaviour change against live code, not a spec
+edit against unbuilt work. Its stacking model does interact — a `×3` stack counts 3 toward its
+**type's** budget rather than its item's — and that clarification was written into SPEC-0006 as part
+of its own implementation rather than remaining owed.
 
 ### Consequence for ADR-0013
 
