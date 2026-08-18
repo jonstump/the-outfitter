@@ -508,7 +508,9 @@ Rearrangement is a client-side operation persisted to `localStorage`; it SHALL N
 
 ### Security Headers
 
-The app serves no security headers today — there is no `helmet` middleware and no `Content-Security-Policy`. That gap predates this capability and closing it is not in scope here. This capability SHALL NOT introduce anything that would make the gap harder to close: specifically, the drag implementation MUST NOT require inline event-handler attributes, `eval`, or dynamically constructed script, so that a future strict CSP does not have to carve out an exception for the equipment grid.
+**Closed 2026-08-17 per `/sdd:audit` and SPEC-0003 § "Security Headers"** — `server/src/index.js` now sets `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` on every response, registered ahead of both the API routers and static delivery. This paragraph previously recorded the gap as pre-dating this capability and out of scope; it is retained below as evidence the constraint held, not as an open item.
+
+The constraint this capability was written to satisfy in advance — "the drag implementation MUST NOT require inline event-handler attributes, `eval`, or dynamically constructed script, so that a future strict CSP does not have to carve out an exception for the equipment grid" — is confirmed true against the shipped CSP's `script-src 'self'` (no `unsafe-inline`, no `unsafe-eval`): the equipment grid's pointer/keyboard grab-and-place model (`EquipmentPanel.jsx`, `EquipmentSlot.jsx`) uses React event props exclusively, never an inline `on*` HTML attribute, and needed no exception. The one inline handler the CSP did have to displace was unrelated to this capability — `client/index.html`'s deferred Google Fonts `onload`, moved to `client/src/main.jsx`.
 
 ### Request Body Size Limits
 
