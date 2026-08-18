@@ -297,7 +297,7 @@ export default function EquipmentSlot({ index, run, grabRef, onAnnounce = noopAn
           not reach naming — the two are independent, and § Icon-Only Controls names this
           element first and in those words:
 
-            "The drag handle, the remove target, and any control that renders as an icon
+            "The drag handle, the remove control, and any control that renders as an icon
              or a bare glyph SHALL carry an `aria-label` naming its purpose and the item
              it acts on."
 

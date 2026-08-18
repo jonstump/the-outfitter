@@ -83,15 +83,17 @@ is by some distance the largest gate on this list.
       does not retroactively validate skipping the decision; it recorded a real risk this run of the
       burn-down happened not to hit. Whoever next opens this gate on a slower-moving item should still
       settle its granularity before picking either.
-- [x] **Equipment slot drag and drop is sound — clear, 2026-08-15/16.** SPEC-0006 direct manipulation
-      landed, and as of 2026-08-15 the two tickets this bullet originally called blockers were closed:
-      **#352** (`moveEquip` duplicated an item from an empty source cell) took the reducer guard in
-      #415 and the grab-ref lifetime, Escape-origin guard and pointer-identity check in #420; **#353**
-      (no decoder enforced any equipment rule) took the equipment panel's over-capacity surface in #416
-      and the `boundedEquip` decode clamp in #421, in that order — the spec's own "warn before
-      clamping" sequence. **#419** closed the same day — the grid's rejected-drop announcement was
-      silent on the first rejection because the live region was created and filled in one synchronous
-      block; PR #430 mounted it permanently.
+- [x] **Equipment slot drag and drop is sound — clear, 2026-08-17 (PR #491).** This gate was the last
+      of the seven to fall, and the only one that was ever held open on a requirement rather than a
+      ticket count; the history below is kept because that distinction is the reusable part.
+      SPEC-0006 direct manipulation landed, and as of 2026-08-15 both tickets this
+      bullet called blockers are closed: **#352** (`moveEquip` duplicated an item from an empty source
+      cell) took the reducer guard in #415 and the grab-ref lifetime, Escape-origin guard and
+      pointer-identity check in #420; **#353** (no decoder enforced any equipment rule) took the
+      equipment panel's over-capacity surface in #416 and the `boundedEquip` decode clamp in #421, in
+      that order — the spec's own "warn before clamping" sequence. **#419** closed the same day — the
+      grid's rejected-drop announcement was silent on the first rejection because the live region was
+      created and filled in one synchronous block; PR #430 mounted it permanently.
 
       **The three that kept this gate open past 2026-08-15 have since closed too.** **#382** (the
       loadout shape guard accepted an equipment array shorter than eight cells) closed via PR #440.
@@ -103,6 +105,35 @@ is by some distance the largest gate on this list.
       stale-premise correction: the shipped implementation had already resolved the three named gesture
       collisions differently (a dedicated remove button, separated Enter/Space semantics, pointer-capture
       retargeting) than the fix #241 originally proposed.
+
+      Independently verified 2026-08-17 via `/sdd:audit`: PRs #440, #452 and #454 are confirmed merged
+      on GitHub, with titles matching the claims above.
+
+      **What keeps this unchecked now is #464, and that is a decision, not a backlog.** `/sdd:audit`
+      found on 2026-08-16 that SPEC-0006's REQ "Repeated Consumables Read as One Stack"
+      (`equipment-slot-arrangement/spec.md:213`, SHALL, with its scenario at `:242-245`) requires
+      dragging any cell of a stack to move the entire run as a unit, and the shipped code does not do
+      it: `moveEquip` (`client/src/store/loadoutSlice.js:232-255`) takes a single cell index with no
+      run-length parameter, `startGrab` (`EquipmentSlot.jsx:87-92`) records only the pressed cell with
+      no reference to the stack's run, and `onGridPointerUp` (`EquipmentPanel.jsx:70-94`) dispatches
+      with no run-awareness — so dragging the anchor of a ×2 consumable stack empties that cell and
+      leaves the second copy behind as an orphaned tile. SPEC-0006's own Implementation-status line
+      (`:41`) claims this is built and carries tests that name it; it is not, and no test in
+      `EquipmentPanel.test.jsx` or `EquipmentSlot.test.jsx` exercises stack dragging or the
+      insufficient-room rejection at all.
+
+      **The owner decided on 2026-08-16 that this gate stays unchecked until #464 closes, and PR #491
+      closed it on 2026-08-17.** "Sound" is the bar this gate sets, and an unimplemented SHALL that
+      visibly breaks a stack apart on an ordinary drag did not meet it — the gate follows the
+      requirement, not the issue count, and five blockers closing did not settle drag and drop while a
+      required behaviour was missing. `moveEquip` now carries the run's length, so a stack moves as one
+      unit.
+
+      **This is the precedent worth reusing, and it is why the history above is kept rather than
+      collapsed to a checkmark.** The gate was held on a requirement and released by a fix — not by
+      re-reading the bar until the behaviour that had already shipped qualified. It took eight hours.
+      Unlike the granularity question in the gate above, which was overtaken rather than answered, this
+      one was decided deliberately and then satisfied.
 
       Independently verified 2026-08-17 via `/sdd:audit`: PRs #440, #452 and #454 are confirmed merged
       on GitHub, with titles matching the claims above.
@@ -147,12 +178,19 @@ is by some distance the largest gate on this list.
       `client/public/images/`, which is shipped, generated by the image scrape, and unrelated to this
       gate.
 
-- [x] **The ammo data is corrected — clear, 2026-08-16 (epic #338 closed).** SPEC-0010
-      (`status: implemented`), all ten stories done. The case was this section's own bar almost
-      verbatim: the app carried data known to be wrong. SPEC-0010's measurement was a diff of all 140
-      non-melee catalog rows against their own wiki pages — the app offered **587 (weapon, round)
-      pairs where the wiki listed 491**, so **243 rounds a weapon couldn't take**, **147 it could take
-      that the app couldn't express**, and **137 of 140 weapons wrong in at least one direction**.
+- [x] **The ammo data is corrected — clear, 2026-08-16, and it was by far the largest gate here.**
+      SPEC-0010 is `implemented` and epic #338 closed on 2026-08-16 with every one of its fourteen
+      issues, the dependency chain `#339 → #340 → #341 → #342 → #343 → #344 → #345` landing in order —
+      which was the whole risk. The per-issue record is in `CLAUDE.md`'s gate 7.
+
+      **Everything below this paragraph is the original 2026-08-15 planning note, kept as the record of
+      how this gate was scoped and measured.** It is written in the present tense of a gate that had not
+      started, and should be read that way. The case it made was this section's own bar almost verbatim:
+      the app carried data known to be wrong. SPEC-0010's measurement was a diff of all
+      140 non-melee catalog rows against their own wiki pages — the app offers **587 (weapon, round)
+      pairs where the wiki lists 491**, so **243 rounds a weapon cannot take**, **147 it can take that
+      the app cannot express**, and **137 of 140 weapons wrong in at least one direction**. A player
+      pricing a build against this is pricing a build the game will not sell them.
 
       **The dependency chain `#339 → #340 → #341 → #342 → #343 → #344 → #345` closed in full**, plus
       **#431** (a spec defect around the seven dual-family weapons, settled before #341 scraped
