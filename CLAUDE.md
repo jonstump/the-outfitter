@@ -105,11 +105,11 @@ Cached project IDs (reused by `/sdd:plan` and `/sdd:organize` instead of creatin
 | SPEC-0002 | SPEC-0002: Developer Environment Consistency | 1 | `PVT_kwHOA4k1ys4Bf4Mk` | open |
 | SPEC-0003 | SPEC-0003: Hunter Loadout Lists | 2 | `PVT_kwHOA4k1ys4Bf478` | open |
 | SPEC-0004 | SPEC-0004: Hunter Roster Dataset | 3 | `PVT_kwHOA4k1ys4Bf5nO` | **closed** |
-| SPEC-0006 | SPEC-0006: Equipment Slot Arrangement | 6 | `PVT_kwHOA4k1ys4BgOAX` | open |
+| SPEC-0006 | SPEC-0006: Equipment Slot Arrangement | 6 | `PVT_kwHOA4k1ys4BgOAX` | **closed** |
 | SPEC-0007 | SPEC-0007: Equipment Catalog Dataset | 4 | `PVT_kwHOA4k1ys4Bf_8Z` | open |
 | SPEC-0008 | SPEC-0008: Loadout Randomization | 5 | `PVT_kwHOA4k1ys4BgEvL` | open |
-| SPEC-0009 | SPEC-0009: Weapon Slots and Dual-Wielded Pairs | 10 | `PVT_kwHOA4k1ys4BgUlt` | open |
-| SPEC-0010 | SPEC-0010: Per-Weapon Ammo | 11 | `PVT_kwHOA4k1ys4BgUy6` | open |
+| SPEC-0009 | SPEC-0009: Weapon Slots and Dual-Wielded Pairs | 10 | `PVT_kwHOA4k1ys4BgUlt` | **closed** |
+| SPEC-0010 | SPEC-0010: Per-Weapon Ammo | 11 | `PVT_kwHOA4k1ys4BgUy6` | **closed** |
 | — | a11y: WCAG 2.1 AA Baseline | 8 | `PVT_kwHOA4k1ys4BgTKK` | open |
 | — | About and Help | 9 | `PVT_kwHOA4k1ys4BgTKM` | open |
 
@@ -130,6 +130,8 @@ The authoritative list lives in the spec's own "Blocked" section; read it there 
 **A closed project is still a cache hit.** SPEC-0004's board is closed because every one of its twelve items is done, not because it was abandoned. `/sdd:plan` and `/sdd:organize` MUST reuse the recorded ID rather than creating a second SPEC-0004 board; reopen it if that capability gains new work.
 
 **Correction (2026-08-17, `/sdd:review`-adjacent staleness sweep):** the board had silently drifted open. Five gate-3 data-audit tickets (#354, #386, #387, #388, #390) got added to this project as it was scoped alongside the hunter-roster dataset, but four of the five landed with no Status field set on the board even after their issues closed — so the project's own `closed` flag stayed `false` on GitHub while this table kept claiming `closed`. Fixed by setting all five to Done and closing the project directly; the row above was already correct, only GitHub's actual state and the item count (seven, not twelve) were stale. Worth remembering: a project's `closed` boolean does not follow its items automatically — a ticket landing in an existing board via a *different* piece of work (here, the gate-3 sweep) can silently reopen a board this table still calls closed, and nothing flags that drift except actually querying the board.
+
+**The same drift recurred on two more boards, checked in the same sweep.** SPEC-0009 (project 10, epic #327 closed 2026-08-15) and SPEC-0010 (project 11, epic #338 closed 2026-08-16) were both 100% Done on their boards — matching gates 1 and 7 above — but neither had ever been closed on GitHub, and this table listed both as `open`. Closed both directly; no items needed a Status fix (unlike SPEC-0004's board, every item on these two already carried the right status — only the project-level `closed` flag was never flipped). Separately, two individual items were found with a *stale* status rather than a missing one: #165 (project 4, SPEC-0007) and #353 (project 6, SPEC-0006) were still marked "In Progress" on their boards despite their issues having closed weeks earlier. Fixed both to Done — and with #353 fixed, SPEC-0006 (project 6) also reached 100% Done with no other open issue referencing it, so it was closed too. None of the other seven open boards showed either symptom (blank status, stale status, or fully-Done-but-open) as of 2026-08-18.
 
 **Two projects have no spec, and that is deliberate.** Under `per-epic` mode a project tracks an epic, and both `a11y` (epic #81) and `About and Help` (epic #72) are epics with no spec of their own — the a11y epic is explicitly scoped as "the WCAG 2.1 AA baseline SPEC-0001 already claims", so its requirements live in SPEC-0001 rather than in a spec of its own. Do not synthesise a spec to fill the `Spec` column.
 
