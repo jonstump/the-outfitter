@@ -95,17 +95,28 @@ describe("secret-check middleware against the server app (SPEC-0005, #503)", () 
 // `/api` request was fully handled by its router before ever reaching the
 // check. `GET /api/loadouts` with no secret returned 200, not 403.
 //
-// This test exercises the fix: wrap the real imported `app` (not a synthetic
-// one) as a sub-app of a fresh express() instance whose own middleware runs
-// first — the exact pattern desktop/main.js now uses. It hits a REAL router
-// path (`/api/loadouts`, not a test-only route), so a regression back to the
-// mount-after-import pattern would fail this test.
+// This test exercises the fix, updated 2026-08-19 (first real tagged release
+// attempt) when desktop/main.js's composition changed again: it originally
+// wrapped `app` in a fresh `express()` instance, then that wrapper was
+// replaced with a plain `http.createServer` callback once giving the
+// `desktop/` workspace a real npm "dependency" (express) turned out to be
+// what triggered electron-builder's packaging failure (see main.js's own
+// 2026-08-19 fix note for the full story). This test now mirrors THAT
+// composition exactly — a plain request-handler function, no Express
+// wrapper — so it keeps testing what actually ships, not a stale
+// reconstruction. It still hits a REAL router path (`/api/loadouts`, not a
+// test-only route), so a regression back to either broken pattern would
+// fail this test.
 describe("secret-check middleware wraps the REAL imported app (regression, PR #508)", () => {
   function buildWrappedRealApp(secret) {
-    const wrapper = express();
-    wrapper.use("/api", createSecretCheck(secret));
-    wrapper.use(app);
-    return wrapper;
+    const secretCheck = createSecretCheck(secret);
+    return (req, res) => {
+      if (req.url === "/api" || req.url.startsWith("/api/") || req.url.startsWith("/api?")) {
+        secretCheck(req, res, () => app(req, res));
+      } else {
+        app(req, res);
+      }
+    };
   }
 
   it("rejects a real /api route without the secret header", async () => {

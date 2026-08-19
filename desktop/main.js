@@ -1,6 +1,6 @@
 const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("node:path");
-const express = require("express");
+const http = require("node:http");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
 const { loadPreferences, registerPreferencesIpc, buildMenu, createPreferencesWindow } = require("./preferences");
 
@@ -62,21 +62,47 @@ async function startServer() {
   process.env.__DESKTOP_SECRET__ = secret;
 
   // Mount the secret-check middleware before every `/api` router. Registered
-  // on a wrapper app that delegates to `serverApp`, not inside
-  // server/src/index.js — the self-hosted target is unaffected, and the spec
-  // explicitly permits the auth plumbing to live in desktop/, but nothing
-  // else request-path-related.
+  // in front of `serverApp`, not inside server/src/index.js — the
+  // self-hosted target is unaffected, and the spec explicitly permits the
+  // auth plumbing to live in desktop/, but nothing else request-path-related.
+  //
+  // Fixed 2026-08-19 (the first real tagged release attempt): this used to
+  // wrap `serverApp` in a fresh `express()` instance so the secret check
+  // could run before Express's own routing. That wrapper was the ONLY thing
+  // in this workspace that needed `express` as a real runtime dependency
+  // (desktop/package.json's "dependencies", not "devDependencies") — and
+  // giving electron-builder something real to auto-bundle for the app is
+  // what appears to have triggered its "installing production dependencies"
+  // step, which then corrupted its OWN hoisted tool dependency
+  // (app-builder-bin) partway through packaging on Linux and macOS CI
+  // runners: `spawn .../node_modules/app-builder-bin/linux/x64/app-builder
+  // ENOENT`, despite the diagnosed CI run confirming that exact file
+  // existed, full-sized, moments before the crash. A plain `http.Server`
+  // does the identical job — `secretCheck` already reads `req.headers`
+  // directly and writes via `res.writeHead`/`res.end` (see its own 2026-08-19
+  // fix note), which work the same whether `req`/`res` are plain Node
+  // objects or Express's (Express extends the same base classes) — and an
+  // Express `app` instance (`serverApp` here) is itself just a callable
+  // `(req, res) => {...}`, the same signature `http.createServer` expects,
+  // so no adapter is needed to delegate into it. With this, desktop/ has no
+  // real "dependencies" left at all — matching its state before this
+  // problem existed — so electron-builder should have nothing to
+  // auto-collect for the app bundle.
   const secretCheck = createSecretCheck(secret);
-  const wrapper = express();
-  wrapper.use("/api", secretCheck);
-  wrapper.use(serverApp);
+  const server = http.createServer((req, res) => {
+    if (req.url === "/api" || req.url.startsWith("/api/") || req.url.startsWith("/api?")) {
+      secretCheck(req, res, () => serverApp(req, res));
+    } else {
+      serverApp(req, res);
+    }
+  });
 
   // Bind 127.0.0.1 explicitly (MUST NOT bind 0.0.0.0 or any routable address)
   // and request an ephemeral port (pass 0, read back via server.address().port).
   return new Promise((resolve, reject) => {
-    const server = wrapper.listen(0, "127.0.0.1", () => {
+    server.listen(0, "127.0.0.1", () => {
       const port = server.address().port;
-      resolve({ serverApp: wrapper, port, secret });
+      resolve({ serverApp, port, secret });
     });
     server.on("error", reject);
   });
