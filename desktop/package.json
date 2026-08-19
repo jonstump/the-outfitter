@@ -3,10 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "description": "Electron desktop wrapper for Backwater Outfitters",
+  "author": "Jon Stump",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
+    "build": "node scripts/build.js",
     "test": "vitest run"
   },
   "dependencies": {

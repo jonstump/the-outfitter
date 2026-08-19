@@ -30,6 +30,16 @@ async function startServer() {
   fs.mkdirSync(dataDir, { recursive: true });
   process.env.OUTFITTER_DB_FILE = path.join(dataDir, "db.json");
 
+  // Fixed 2026-08-19 (manual verification of a locally packaged build ahead
+  // of the first tagged release): server/src/index.js only registers static
+  // serving of client/dist and the SPA fallback when NODE_ENV === "production"
+  // — that's the same gate npm start relies on. Nothing here was ever setting
+  // it, so every non-/api, non-/healthz request (including the renderer's
+  // initial GET /) fell through to Express's default handler: "Cannot GET /".
+  // Must be set before the import below, since the check runs at module
+  // evaluation time.
+  process.env.NODE_ENV = "production";
+
   // Import the server app now that OUTFITTER_DB_FILE is set. The import does
   // not bind a port (Part 1's guard) — we call `app.listen` ourselves on a
   // loopback ephemeral port below.
