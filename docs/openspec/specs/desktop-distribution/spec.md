@@ -1,8 +1,6 @@
 ---
-status: blocked
+status: approved
 date: 2026-08-10
-blocked-since: 2026-08-14
-blocked-by: [dual-wield-pairs, tarot-cards, data-audit-remediation, equipment-drag-and-drop, rebrand, app-icon, ammo-data]
 implements: [ADR-0008]
 ---
 
@@ -22,22 +20,25 @@ The decision rests on the desktop backend *being* `server/src/`, not resembling 
 
 Two factual corrections accompany the amendment. **Windows signing does not reliably remove the SmartScreen warning**: SmartScreen keys on reputation, and a new OV certificate has none, so signed builds keep warning until downloads accumulate — only EV certificates carry instant reputation. **Signing credentials can no longer be a file in CI secrets**: publicly-trusted code-signing certificates, OV included, must keep private keys on a hardware token or cloud HSM, so CI signing means a cloud signing service (Azure Trusted Signing, SSL.com eSigner, DigiCert KeyLocker) rather than a committed or uploaded certificate.
 
-## Blocked — do not plan, do not audit as a gap
+**Amended 2026-08-19 — a native menu and a Preferences surface are now required, and the data directory may be overridden.** Clicking through an early, unpackaged build surfaced that a macOS app with no menu bar and no settings surface feels unfinished, and that the previously automatic-only data directory (see "Per-User Data Directory" below) is exactly the kind of thing a user will want to relocate themselves. Two changes below capture this: a new "Native Application Menu and Preferences Surface" requirement establishes the menu and a generic Preferences host that other specs' requirements may register settings into without SPEC-0005 owning their behavior, and "Per-User Data Directory" gained a user override with a non-destructive default — decline the offered move, and the old data is left in place rather than deleted.
 
-**This spec is deliberately unplanned. Its absence from the issue tracker is the intended state, not an
-oversight.** It has no epic, no stories and no project board *by decision*, and it MUST NOT be flagged as
-missing work by `/sdd:audit`, `/sdd:check`, a drift review, or any planning pass. Do not run `/sdd:plan
-SPEC-0005` until every item below has shipped. This note exists because the blocked status has been stated
-in conversation more than once and kept evaporating — it is recorded here, in `CLAUDE.md`, and in the
-session memory so that it survives.
+## History: The Product-Completeness Gate (resolved 2026-08-18)
 
-**The bar is product completeness, not technical readiness.** Every requirement in this spec is about
-*packaging* — the loopback boundary, the per-user data directory, the release artifacts. None of them is
-what actually gates shipping. What gates shipping is whether the app is worth installing: an installed
-desktop build that is missing catalog items, carries data still known to be wrong, and cannot express
-loadouts the game itself allows is half-baked, and a desktop user cannot be redeployed out of it the way
-a web user can. Do not re-derive this list from the requirements below — the requirements are the *work*,
-these seven are the *gate*.
+**This spec was deliberately held out of planning from 2026-08-14 through 2026-08-17, and the hold has
+since been lifted.** It carried no epic, no stories and no project board *by decision*, and during that
+window it was not to be flagged as missing work by `/sdd:audit`, `/sdd:check`, a drift review, or any
+planning pass. All seven gates below cleared by 2026-08-17, and the owner made the deliberate call on
+2026-08-18 that the app is worth installing — `status:` moved from `blocked` to `approved` via
+`/sdd:status`, and `/sdd:plan SPEC-0005` may now be run. This section is kept as the historical record of
+what the gate required and how each item closed; it is no longer an active instruction.
+
+**The bar was product completeness, not technical readiness.** Every requirement in this spec is about
+*packaging* — the loopback boundary, the per-user data directory, the release artifacts. None of them was
+what actually gated shipping. What gated shipping was whether the app was worth installing: an installed
+desktop build that was missing catalog items, carried data known to be wrong, or could not express
+loadouts the game itself allows would have been half-baked, and a desktop user cannot be redeployed out of
+it the way a web user can. The requirements below are the spec's own *work*; these seven were the *gate*
+that stood in front of planning that work.
 
 **Amended 2026-08-15 — three gates added, and the count is now seven.** The rebrand and the application
 icon were part of the intent from the start and were simply not written down on 2026-08-14. The ammo data
@@ -213,36 +214,28 @@ is by some distance the largest gate on this list.
       Independently verified 2026-08-17 via `/sdd:audit`: epic #338 confirmed `CLOSED` on GitHub, and
       `per-weapon-ammo/spec.md`'s own frontmatter reads `status: implemented`.
 
-**Sequencing.** Two of the seven constrain everything downstream: **#424 (rebrand) → #428 (icon) →
-SPEC-0005's own packaging work.** A mark designed around "The Outfitter" would be redrawn for "Backwater
-Outfitters", and the release pipeline references both the name and the icon paths, so retrofitting either
-into that config costs more than doing them first. The ammo data does not sit in that chain — it can run
-in parallel — but it is the long pole, so it is the one most likely to set the ship date. The remaining
-gates are independent of the chain and of each other.
+**Sequencing.** Two of the seven constrained everything downstream: **#424 (rebrand) → #428 (icon) →
+SPEC-0005's own packaging work.** A mark designed around "The Outfitter" would have needed redrawing for
+"Backwater Outfitters", and the release pipeline references both the name and the icon paths, so
+retrofitting either into that config would have cost more than doing them first. The ammo data did not sit
+in that chain — it ran in parallel — but it was the long pole, and it was in fact the gate that took
+longest to clear. The remaining gates were independent of the chain and of each other.
 
-**ADR-0020 depends on this gate and is correctly sequenced behind it.** Ammo iconography is accepted and
-deliberately unspecced, recorded as wanted "shortly after shipping the desktop app once the ammo data is
-fixed". Admitting the ammo data as a gate here does not pull those icons forward; the order remains ammo
-data → desktop ships → ammo icons. ADR-0020's disposition note still says this spec is blocked behind
-*four* gates, which was true when written on 2026-08-14 and is not now — the count is corrected there in
-the same change that added this bullet.
+**ADR-0020 depends on this gate and remains correctly sequenced behind it.** Ammo iconography is accepted
+and deliberately unspecced, recorded as wanted "shortly after shipping the desktop app once the ammo data
+is fixed". This gate clearing does not pull those icons forward; the order remains ammo data → desktop
+ships → ammo icons, and desktop shipping is now the open step.
 
-**This list is Jon's, stated 2026-08-14 and extended 2026-08-15, and supersedes an earlier reconstruction.** A previous revision
-of this section guessed at SPEC-0002, server embeddability and the wire format. Those are parts of this
-spec's own work, not gates on starting it, and that guess is exactly what this file now exists to
-prevent. If the gate changes, edit it here.
-
-**Implementation status.** Nothing in this capability is implemented. No `desktop/` workspace exists;
-`server/src/index.js` still calls `app.listen()` at module scope.
-
-`status: blocked` is a deliberate local extension to the SDD vocabulary (`draft`, `review`, `approved`,
-`implemented`, `deprecated`), chosen because none of those five can express "approved and correct, but
-not to be worked or planned yet". Nothing in the plugin rejects an unrecognised status, and `/sdd:prime`
-treats every status except `superseded`, `deprecated` and `rejected` as authoritative — which is right,
-since the decision here still governs. The approval this spec received on 2026-08-10 stands; only its
-readiness to be planned has changed.
+**This list was Jon's, stated 2026-08-14 and extended 2026-08-15, and it superseded an earlier
+reconstruction.** A previous revision of this section had guessed at SPEC-0002, server embeddability and
+the wire format. Those were parts of this spec's own work, not gates on starting it, and that guess is
+exactly what this section existed to prevent.
 
 ## Requirements
+
+**Implementation status (as of 2026-08-18).** Nothing in this capability is implemented yet. No
+`desktop/` workspace exists; `server/src/index.js` still calls `app.listen()` at module scope. The
+requirements below are the work `/sdd:plan SPEC-0005` has yet to break down.
 
 ### Requirement: Authenticated Loopback Boundary
 
@@ -328,6 +321,8 @@ The desktop host SHALL ensure the directory exists before the server reads it. A
 
 The desktop app MUST NOT read or write `server/data/db.json` inside the installed application bundle — that location is read-only on macOS and shared between users elsewhere.
 
+**Amended 2026-08-19 — the directory MAY be overridden by the user.** Electron's `userData` path remains the default on first launch, but the Preferences surface (see "Native Application Menu and Preferences Surface" below) SHALL let the user choose a different directory. On change, the desktop host SHALL offer to move the existing lowdb file into the new location; if the user declines, the new location SHALL start from the store's default empty collections exactly as a first launch does, and the file at the previous location MUST NOT be deleted. The chosen path SHALL persist across relaunches, resolved before `OUTFITTER_DB_FILE` is set.
+
 #### Scenario: Data lands in the per-user directory
 
 - **WHEN** a loadout is saved in the desktop app
@@ -347,6 +342,56 @@ The desktop app MUST NOT read or write `server/data/db.json` inside the installe
 
 - **WHEN** two different OS user accounts run the installed app on one machine
 - **THEN** each SHALL read and write its own data file
+
+#### Scenario: The user changes the data directory
+
+- **WHEN** a user selects a new data directory in Preferences and confirms
+- **THEN** the desktop host SHALL offer to move the existing lowdb file into the new directory, and on the next launch SHALL read from the new directory
+
+#### Scenario: A declined directory change does not delete old data
+
+- **WHEN** a user changes the data directory and declines the offered move
+- **THEN** the new directory SHALL start from empty collections, and the file at the previous directory SHALL remain unmodified on disk
+
+#### Scenario: The chosen directory persists across relaunches
+
+- **WHEN** the app is relaunched after a directory change
+- **THEN** it SHALL resolve `OUTFITTER_DB_FILE` from the persisted preference rather than falling back to Electron's default `userData` path
+
+### Requirement: Native Application Menu and Preferences Surface
+
+The desktop host SHALL install a native application menu appropriate to the platform, and SHALL expose two distinct entry points from it: an **About** surface and a **Preferences** surface. These MUST NOT be merged into one window — About is informational and does not change per session; Preferences holds persisted, user-editable state, and conflating the two is what this requirement exists to prevent.
+
+**About** SHALL show the installed version, and MAY link out to documentation or support. It owns no persisted state and SHALL NOT contain editable controls. This is the desktop surface for the "About and Help" epic (#72); it does not require a spec of its own, per that epic's existing scope.
+
+**Preferences** SHALL be a generic settings host — a window, or a platform-native panel — that other specs' requirements MAY register a control into, without SPEC-0005 owning the behavior those controls configure. The desktop data directory (per "Per-User Data Directory" above) SHALL be the first control it hosts. A setting registered here SHALL persist across relaunches independent of the lowdb store, since the data-directory setting must survive even while the store itself is being relocated.
+
+This requirement governs the menu's and the Preferences window's existence and extensibility contract only. It does not define what any individual setting other than the data directory does — a setting whose behavior is owned by another spec (for example, a hunter-list display threshold governed by SPEC-0003) is specified there, not here, and registers only its control into this surface.
+
+#### Scenario: The application menu exists and is platform-appropriate
+
+- **WHEN** the desktop app is running on macOS
+- **THEN** a native menu bar SHALL be present with the application name as the first menu, containing at minimum an About item and a Preferences item (Cmd+,)
+
+#### Scenario: About and Preferences are separate surfaces
+
+- **WHEN** a user opens About and, separately, Preferences
+- **THEN** they SHALL be distinct windows or panels, and neither SHALL contain the other's content
+
+#### Scenario: About contains no editable state
+
+- **WHEN** the About surface is inspected
+- **THEN** it SHALL contain no control that writes a persisted setting
+
+#### Scenario: Preferences hosts the data directory control
+
+- **WHEN** Preferences is opened
+- **THEN** it SHALL contain the data directory control described in "Per-User Data Directory"
+
+#### Scenario: A foreign spec's setting can register without SPEC-0005 defining its behavior
+
+- **WHEN** another spec adds a user-editable setting intended for this surface
+- **THEN** SPEC-0005 SHALL require only that its control appear in Preferences, and SHALL NOT be amended to define that setting's behavior
 
 ### Requirement: Runtime Version Parity with the Canonical Pin
 

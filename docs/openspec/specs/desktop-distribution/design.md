@@ -31,6 +31,7 @@ The one thing the packaging choice costs is a trust boundary. That is what most 
 - Importing loadouts from a hosted instance into the desktop app
 - Multi-user support on one desktop install — OS user accounts are the boundary
 - Mobile or app-store distribution
+- Defining the behavior of any Preferences setting other than the data directory (e.g. a hunter-list favorites-cutoff toggle) — those are specified, if at all, by whichever spec owns that behavior; this spec only guarantees the setting a place to register its control
 
 ## Decisions
 
@@ -83,7 +84,21 @@ Writing inside the application bundle is not an option: macOS app bundles are re
 
 **Alternatives considered**:
 
-- *A user-configurable data directory in app settings*: deferred, not rejected. It is additive once the default works, and it is not needed for a first release.
+- *A user-configurable data directory in app settings, deferred past first release*: superseded 2026-08-19. Clicking through an early build made the case that the default-only behavior would feel wrong on first contact, not after a later release — see the Preferences decision below.
+
+### A native menu with a Preferences window, hosting the data directory as its first setting
+
+*(added 2026-08-19)*
+
+**Choice**: The desktop host installs a platform-native application menu with separate **About** and **Preferences** entries. Preferences is a generic settings host — other specs' requirements may register a control into it without this spec owning what that control does — and the data directory override is the first control it hosts. Preferences state persists to a small `preferences.json` in Electron's `userData` directory, written by the main process, independent of the lowdb store (so the setting that relocates the store survives even while the store itself is being moved).
+
+**Rationale**: A macOS app with no menu bar and no settings surface reads as unfinished, and the data-directory override needs somewhere to live that isn't a config file the user has to find by hand. Making Preferences a generic host — rather than a single-purpose "change data directory" dialog — means the favorites-list-cutoff idea raised in the same testing pass (and whatever else surfaces before `/sdd:plan` runs) has a place to register without reopening this spec each time. Persisting to a flat file instead of lowdb keeps the setting readable before the store's location is even known — the main process needs the data directory *before* it can set `OUTFITTER_DB_FILE` and import the server.
+
+**Alternatives considered**:
+
+- *An in-app React settings panel instead of a native Preferences window*: rejected as the sole surface. It's needed regardless for the web target's own settings (if any emerge), but a macOS user expects Cmd+, to open something, and an in-renderer panel disappears if the renderer reloads before the main process has read the setting it needs.
+- *Store the data-directory setting in the lowdb file itself*: rejected — circular. The setting has to be readable before `OUTFITTER_DB_FILE` is resolved, since it's what determines where that file is.
+- *A single "Change data directory" menu item with no general Preferences window*: rejected as short-sighted given the second setting already on the table (favorites cutoff) before this spec even reaches planning.
 
 ### Parity between Electron's Node and `.nvmrc` is asserted, not assumed
 
@@ -154,6 +169,7 @@ Where each requirement binds:
 | Window lifecycle, bind, secret | `desktop/` | Authenticated Loopback Boundary |
 | Routing, ownership, persistence | `server/src/` (shared) | One Server Implementation |
 | Data location | `desktop/` sets env; `db.js` unchanged | Per-User Data Directory |
+| Menu, Preferences window, `preferences.json` | `desktop/` | Native Application Menu and Preferences Surface |
 | Client assets | `client/dist` (shared) | Reproducible Release Artifacts |
 | Runtime version | CI check | Runtime Version Parity |
 
@@ -174,7 +190,7 @@ The `desktop/` workspace contains no request-path code other than the secret plu
 Nothing to migrate — this is purely additive. Sequencing that keeps each step independently verifiable:
 
 1. Refactor `server/src/index.js` to export `app` behind a guarded listen. Ship alone; the existing server suite and container smoke job are the proof it changed nothing.
-2. Add the `desktop/` workspace: bind, secret generation, preload bridge, `userData` resolution. Land the loopback authentication tests with this step, not after it.
+2. Add the `desktop/` workspace: bind, secret generation, preload bridge, `userData` resolution, native menu, and the Preferences window (data directory control first). Land the loopback authentication tests with this step, not after it.
 3. Add the Node-major parity check to CI.
 4. Add the release matrix. Linux first — no signing, no instructions needed. Then Windows and macOS as `unsigned` releases, landing the download page's bypass instructions in the same step that first publishes them.
 5. Switch to `signed` releases before broad promotion: Apple Developer ID and notarization first (the higher-value spend by a wide margin), Windows cloud signing after.
@@ -185,5 +201,5 @@ Nothing to migrate — this is purely additive. Sequencing that keeps each step 
 - Auto-update: `electron-updater` against GitHub Releases is the obvious default, but the cadence commitment it implies has not been made.
 - Whether `/healthz` should be omitted entirely from the desktop host rather than left open — it has no meaning without an orchestrator.
 - Whether the desktop app should offer to import from a hosted instance, and if so whether that reuses the client token or asks for one.
-- Whether to expose a user-configurable data directory, or leave `userData` fixed.
 - Linux packaging beyond AppImage and deb (Flatpak, rpm) — deferred until there is demand.
+- What else belongs in Preferences beyond the data directory — the favorites-list cutoff was the first candidate raised, but its own behavior (and whether it's a toggle, a number, or something else) belongs to whichever spec governs hunter-list display, not this one.
