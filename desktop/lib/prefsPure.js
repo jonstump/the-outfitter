@@ -1,5 +1,5 @@
-import path from "node:path";
-import fs from "node:fs";
+const path = require("node:path");
+const fs = require("node:fs");
 
 // Governing: SPEC-0005 REQ "Per-User Data Directory" (2026-08-19 amendment:
 // user-override scenarios), REQ "Native Application Menu and Preferences
@@ -14,8 +14,21 @@ import fs from "node:fs";
 // the main process directly — NOT through the Express app or lowdb. This must
 // be readable BEFORE `OUTFITTER_DB_FILE` is set, since the `dataDir`
 // preference determines where that file points.
+//
+// Fixed 2026-08-19 (manual verification of a locally packaged build ahead of
+// the first tagged release): this file previously used ESM `import`/`export`
+// syntax while everything else under desktop/ (main.js, preferences.js,
+// preload.js, lib/secretCheck.js) is CommonJS, and desktop/package.json has
+// no "type": "module". Vitest's transform layer hid the mismatch — tests
+// import this file via ESM `import` and it works regardless of the file's
+// own syntax — but preferences.js's real `require("./lib/prefsPure")` hit
+// Node's native CJS parser, which cannot parse a top-level `import`
+// statement. Crashed on first real launch of a packaged build with
+// "SyntaxError: Cannot use import statement outside a module" — the tests
+// never caught it because they never exercised the real require() call.
+// Converted to CommonJS to match every other file in this workspace.
 
-export const DEFAULT_PREFERENCES = {
+const DEFAULT_PREFERENCES = {
   dataDir: null, // null means "use Electron's default userData path"
 };
 
@@ -23,7 +36,7 @@ export const DEFAULT_PREFERENCES = {
  * Read preferences from a given directory. Returns defaults if the file does
  * not exist (first launch) — MUST NOT surface an error.
  */
-export async function loadPreferencesFromDir(dir) {
+async function loadPreferencesFromDir(dir) {
   const prefsFile = path.join(dir, "preferences.json");
   try {
     const raw = await fs.promises.readFile(prefsFile, "utf8");
@@ -36,7 +49,7 @@ export async function loadPreferencesFromDir(dir) {
 /**
  * Write preferences to a given directory, creating it if needed.
  */
-export async function savePreferencesToDir(dir, prefs) {
+async function savePreferencesToDir(dir, prefs) {
   await fs.promises.mkdir(dir, { recursive: true });
   const prefsFile = path.join(dir, "preferences.json");
   await fs.promises.writeFile(prefsFile, JSON.stringify(prefs, null, 2), "utf8");
@@ -50,7 +63,7 @@ export async function savePreferencesToDir(dir, prefs) {
  * logic do not need to change. `render(value)` returns an HTML fragment for
  * the control.
  */
-export const PREFERENCE_CONTROLS = [
+const PREFERENCE_CONTROLS = [
   {
     key: "dataDir",
     label: "Data directory",
@@ -65,3 +78,10 @@ export const PREFERENCE_CONTROLS = [
   // toggle. Do NOT build the behavior of any setting other than the data
   // directory (SPEC-0005 non-goal).
 ];
+
+module.exports = {
+  DEFAULT_PREFERENCES,
+  loadPreferencesFromDir,
+  savePreferencesToDir,
+  PREFERENCE_CONTROLS,
+};

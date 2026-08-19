@@ -1,5 +1,6 @@
 node_modules/
 client/dist/
+desktop/dist-electron/
 server/data/db.json
 server/data/db.test.json
 # server/src/index.test.js boots the real entry point as a child process, which needs a
