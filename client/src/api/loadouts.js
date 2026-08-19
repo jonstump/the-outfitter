@@ -28,7 +28,19 @@ function clientToken() {
   }
 }
 
-const headers = () => ({ "Content-Type": "application/json", "x-loadout-token": clientToken() });
+// Governing: SPEC-0005 REQ "Authenticated Loopback Boundary", issue #513.
+//
+// The desktop host (desktop/preload.js) exposes the per-launch secret via
+// contextBridge as window.__DESKTOP_SECRET__. In the browser-hosted (non-desktop)
+// deployment this global is never set, so the header is simply omitted there —
+// the server's secret-check middleware only exists in the desktop composition.
+const headers = () => {
+  const h = { "Content-Type": "application/json", "x-loadout-token": clientToken() };
+  if (typeof window !== "undefined" && window.__DESKTOP_SECRET__) {
+    h["x-desktop-secret"] = window.__DESKTOP_SECRET__;
+  }
+  return h;
+};
 
 async function asJson(res) {
   if (!res.ok) {
