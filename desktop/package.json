@@ -55,10 +55,6 @@
       {
         "from": "../client/package.json",
         "to": "client/package.json"
-      },
-      {
-        "from": "../server/package.json",
-        "to": "server/package.json"
       }
     ],
     "win": {
