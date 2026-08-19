@@ -177,6 +177,14 @@ jobs:
         # supported pattern is to read secrets through `env:` (the one
         # channel GitHub Actions masks and scopes them for) in a `run:` step,
         # then expose the result as a step output for a later `if:` to read.
+        #
+        # Fixed 2026-08-19 (same v0.1.0 attempt, windows-latest leg): this
+        # step's `run:` block is bash syntax with no `shell:` declared, so on
+        # Windows it ran through the default `pwsh`, which doesn't understand
+        # `if [ ... ]; then` — `ParserError: Missing '(' after 'if' in if
+        # statement.` The diagnostic step above already specified
+        # `shell: bash` for exactly this reason; this step needed the same.
+        shell: bash
         run: |
           incomplete=false
           if [ "$RELEASE_SIGNING" = "signed" ]; then

@@ -23,10 +23,20 @@ const crypto = require("node:crypto");
 /**
  * Build the secret-check middleware for a given launch secret.
  *
+ * Framework-agnostic (2026-08-19, see fix note in main.js): reads
+ * `req.headers` directly and writes the response via the plain
+ * `http.ServerResponse` methods (`writeHead`/`end`) rather than Express's
+ * `req.get()`/`res.status()`/`res.json()` conveniences. Both work
+ * identically whether `req`/`res` are plain Node `http` objects or Express's
+ * (which extend the same base classes), so this same function now composes
+ * with either — desktop/main.js no longer needs Express at all just to use
+ * this middleware.
+ *
  * @param {string|null} secret — The launch secret, or null when running the
  *   self-hosted target (no secret check applies outside the desktop host).
- * @returns {import("express").RequestHandler} Express middleware that rejects
- *   `/api` requests without the correct `X-Desktop-Secret` header.
+ * @returns {(req: import("http").IncomingMessage, res: import("http").ServerResponse, next: () => void) => void}
+ *   Middleware that rejects `/api` requests without the correct
+ *   `X-Desktop-Secret` header.
  */
 function createSecretCheck(secret) {
   if (!secret) {
@@ -34,19 +44,24 @@ function createSecretCheck(secret) {
   }
   const secretBuffer = Buffer.from(secret, "utf8");
   return (req, res, next) => {
-    const presented = req.get("x-desktop-secret");
+    const presented = req.headers["x-desktop-secret"];
     if (!presented) {
-      return res.status(403).json({ error: "desktop secret required" });
+      return sendJsonError(res, 403, "desktop secret required");
     }
     const presentedBuffer = Buffer.from(presented, "utf8");
     if (
       presentedBuffer.length !== secretBuffer.length ||
       !crypto.timingSafeEqual(presentedBuffer, secretBuffer)
     ) {
-      return res.status(403).json({ error: "invalid desktop secret" });
+      return sendJsonError(res, 403, "invalid desktop secret");
     }
     next();
   };
+}
+
+function sendJsonError(res, status, error) {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error }));
 }
 
 /**
