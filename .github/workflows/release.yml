@@ -127,26 +127,45 @@ jobs:
         run: npm ci
       - name: Build the client
         run: npm run build -w client
-      - name: Fail loudly if signing was requested but credentials are incomplete
+      - name: Check signing credential completeness
+        id: signing-check
         # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release
         # Artifacts": "A release designated signed SHALL fail if its
         # credentials are unavailable. It MUST NOT fall back to emitting
         # unsigned artifacts."
         #
-        # Fixed 2026-08-19 (/sdd:review on PR #508): this check previously ran
-        # AFTER "Package the desktop app" (which actually invokes
-        # electron-builder) rather than before it — desktop/package.json has
-        # no `forceCodeSigning`, so electron-builder's default behavior with
-        # empty CSC_LINK/APPLE_ID env vars is to silently emit UNSIGNED
-        # artifacts, no error. The job only failed afterward, and only by
-        # accident of GitHub Actions skipping the later upload step once a
-        # step fails — not a real gate on packaging itself. It also checked
-        # only 2 of the 6 secrets this job actually uses (CSC_LINK,
-        # WINDOWS_CERT_FILE), so a release missing only, say, APPLE_ID (macOS
-        # notarization) would have passed the check while still shipping an
-        # improperly-signed artifact. This step now runs first and checks all
-        # six.
-        if: ${{ vars.RELEASE_SIGNING == 'signed' && (secrets.CSC_LINK == '' || secrets.CSC_KEY_PASSWORD == '' || secrets.APPLE_ID == '' || secrets.APPLE_APP_SPECIFIC_PASSWORD == '' || secrets.WINDOWS_CERT_FILE == '' || secrets.WINDOWS_CERT_PASSWORD == '') }}
+        # Fixed 2026-08-19 (/sdd:review on PR #508 found the incompleteness;
+        # the first real tag push then found THIS): the completeness check
+        # previously lived directly in the next step's `if:` as
+        # `secrets.CSC_LINK == '' || ...`. That passed a plain YAML parse
+        # (python's yaml.safe_load, which is all that was checked before
+        # this) but fails GitHub Actions' own workflow-schema validation —
+        # "Unrecognized named-value: 'secrets'" — because ci.yml is the only
+        # workflow that runs on every PR, and this file only triggers on a
+        # tag push, so nothing ever actually validated it as a runnable
+        # workflow until the first real release. `secrets` context is not a
+        # supported named-value inside a step `if:` expression here; the
+        # supported pattern is to read secrets through `env:` (the one
+        # channel GitHub Actions masks and scopes them for) in a `run:` step,
+        # then expose the result as a step output for a later `if:` to read.
+        run: |
+          incomplete=false
+          if [ "$RELEASE_SIGNING" = "signed" ]; then
+            if [ -z "$CSC_LINK" ] || [ -z "$CSC_KEY_PASSWORD" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ -z "$WINDOWS_CERT_FILE" ] || [ -z "$WINDOWS_CERT_PASSWORD" ]; then
+              incomplete=true
+            fi
+          fi
+          echo "incomplete=$incomplete" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_SIGNING: ${{ vars.RELEASE_SIGNING || 'unsigned' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          WINDOWS_CERT_FILE: ${{ secrets.WINDOWS_CERT_FILE }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      - name: Fail loudly if signing was requested but credentials are incomplete
+        if: steps.signing-check.outputs.incomplete == 'true'
         run: |
           echo "::error::This release was designated 'signed' but one or more signing credentials are not configured (checked: CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, WINDOWS_CERT_FILE, WINDOWS_CERT_PASSWORD). A signed release MUST NOT fall back to emitting unsigned artifacts."
           exit 1
