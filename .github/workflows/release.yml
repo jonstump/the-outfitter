@@ -73,44 +73,29 @@ jobs:
           echo ".nvmrc resolves to Node major: $NVMRC_MAJOR"
 
           # Read Electron's bundled Node major via process.versions.node.
-          # Electron's node major is the first component of process.versions.node.
-          ELECTRON_NODE_MAJOR=$(npx electron --no-sandbox --eval "
+          #
+          # Fixed 2026-08-19 (/sdd:review on PR #508): the original command ran
+          # Electron's normal GUI runtime with `--no-sandbox` and no display
+          # server (Xvfb) and no ELECTRON_RUN_AS_NODE — on ubuntu-latest that
+          # fails to initialize essentially every time, silently falling
+          # through (empty stdout on the primary command, its "fallback"
+          # branch only logged to stderr) to a SECOND fallback: a hardcoded
+          # `{ '33': 20, '34': 22 }` Electron-major -> Node-major map. That is
+          # exactly the hardcoded-literal comparison this requirement
+          # forbids, and it was the path actually taken, not a rare edge case.
+          #
+          # ELECTRON_RUN_AS_NODE=1 makes the Electron binary behave as a plain
+          # Node.js executable instead of launching its GUI shell — this is a
+          # documented Electron feature specifically for headless CI
+          # introspection like this, and needs no display server or sandbox
+          # flag. With it, the direct `process.versions.node` read actually
+          # runs, so no hardcoded fallback map is needed at all.
+          ELECTRON_NODE_MAJOR=$(ELECTRON_RUN_AS_NODE=1 npx electron -e "
             process.stdout.write(String(process.versions.node).split('.')[0])
-          " 2>/dev/null || node -e "
-            // Fallback: read the Electron version from the installed package and
-            // look up its bundled Node major from Electron's release data. This
-            // is less direct but works when the eval path is blocked.
-            const { execSync } = require('child_process');
-            const version = execSync('npx electron --version', { encoding: 'utf8' }).trim();
-            console.error('Electron version: ' + version);
-            // Electron 33.x bundles Node 20.x. The mapping is maintained at
-            // https://github.com/electron/electron/releases — but rather than
-            // hardcode it, we run electron directly above.
           ")
-          # If the eval path worked, ELECTRON_NODE_MAJOR is set. If not, try
-          # a second approach: spawn electron with a script that prints the major.
-          if [ -z "$ELECTRON_NODE_MAJOR" ] || [ "$ELECTRON_NODE_MAJOR" = "" ]; then
-            echo "Primary Electron Node introspection failed; trying script approach"
-            ELECTRON_NODE_MAJOR=$(node -e "
-              const { execSync } = require('child_process');
-              const electronVersion = require('./desktop/node_modules/electron/package.json').version;
-              // Electron's release data: the bundled Node major for a given
-              // Electron major. Electron 33 = Node 20, Electron 34 = Node 22.
-              // This mapping is the one place a literal is unavoidable, since
-              // we cannot always run Electron itself in CI (it may need a
-              // display). Document it here so a bump is a visible diff.
-              const electronToNode = {
-                '33': 20,
-                '34': 22,
-              };
-              const major = electronVersion.split('.')[0];
-              const nodeMajor = electronToNode[major];
-              if (!nodeMajor) {
-                console.error('Unknown Electron major: ' + major + '. Update the mapping in release.yml.');
-                process.exit(1);
-              }
-              process.stdout.write(String(nodeMajor));
-            ")
+          if [ -z "$ELECTRON_NODE_MAJOR" ]; then
+            echo "::error::Could not introspect Electron's bundled Node major via ELECTRON_RUN_AS_NODE=1. This must derive the value at build time — it MUST NOT fall back to a hardcoded Electron-major-to-Node-major table."
+            exit 1
           fi
           echo "Electron bundles Node major: $ELECTRON_NODE_MAJOR"
 
@@ -142,22 +127,43 @@ jobs:
         run: npm ci
       - name: Build the client
         run: npm run build -w client
+      - name: Fail loudly if signing was requested but credentials are incomplete
+        # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release
+        # Artifacts": "A release designated signed SHALL fail if its
+        # credentials are unavailable. It MUST NOT fall back to emitting
+        # unsigned artifacts."
+        #
+        # Fixed 2026-08-19 (/sdd:review on PR #508): this check previously ran
+        # AFTER "Package the desktop app" (which actually invokes
+        # electron-builder) rather than before it — desktop/package.json has
+        # no `forceCodeSigning`, so electron-builder's default behavior with
+        # empty CSC_LINK/APPLE_ID env vars is to silently emit UNSIGNED
+        # artifacts, no error. The job only failed afterward, and only by
+        # accident of GitHub Actions skipping the later upload step once a
+        # step fails — not a real gate on packaging itself. It also checked
+        # only 2 of the 6 secrets this job actually uses (CSC_LINK,
+        # WINDOWS_CERT_FILE), so a release missing only, say, APPLE_ID (macOS
+        # notarization) would have passed the check while still shipping an
+        # improperly-signed artifact. This step now runs first and checks all
+        # six.
+        if: ${{ vars.RELEASE_SIGNING == 'signed' && (secrets.CSC_LINK == '' || secrets.CSC_KEY_PASSWORD == '' || secrets.APPLE_ID == '' || secrets.APPLE_APP_SPECIFIC_PASSWORD == '' || secrets.WINDOWS_CERT_FILE == '' || secrets.WINDOWS_CERT_PASSWORD == '') }}
+        run: |
+          echo "::error::This release was designated 'signed' but one or more signing credentials are not configured (checked: CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, WINDOWS_CERT_FILE, WINDOWS_CERT_PASSWORD). A signed release MUST NOT fall back to emitting unsigned artifacts."
+          exit 1
       - name: Package the desktop app
         run: npm run build -w desktop
         env:
-          # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release
-          # Artifacts". Every release SHALL be designated either unsigned or
-          # signed, explicit in the release configuration — not inferred from
-          # whether credentials happened to be present. This workflow defaults
-          # to unsigned; a signed release is triggered by setting
-          # RELEASE_SIGNING=signed in the tag's workflow dispatch or a rel
-          # branch. A signed release SHALL fail if its credentials are
-          # unavailable — it MUST NOT fall back to emitting unsigned artifacts.
+          # Every release SHALL be designated either unsigned or signed,
+          # explicit in the release configuration — not inferred from whether
+          # credentials happened to be present. This workflow defaults to
+          # unsigned; a signed release is triggered by setting
+          # RELEASE_SIGNING=signed as a repository variable. The credential
+          # completeness check above already ran and would have failed the
+          # job before this step if signing was requested but incomplete.
           RELEASE_SIGNING: ${{ vars.RELEASE_SIGNING || 'unsigned' }}
           # macOS signing credentials (only used when RELEASE_SIGNING=signed).
           # Out of scope for this repo — the conditional pipeline logic is
-          # real, but no secrets are configured yet. A signed release will
-          # fail loudly here rather than silently fall back to unsigned.
+          # real, but no secrets are configured yet.
           CSC_LINK: ${{ secrets.CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID || '' }}
@@ -165,11 +171,6 @@ jobs:
           # Windows Authenticode signing (only used when RELEASE_SIGNING=signed).
           WINDOWS_CERT_FILE: ${{ secrets.WINDOWS_CERT_FILE || '' }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD || '' }}
-      - name: Fail loudly if signing was requested but credentials are absent
-        if: ${{ (vars.RELEASE_SIGNING == 'signed') && (secrets.CSC_LINK == '' || secrets.WINDOWS_CERT_FILE == '') }}
-        run: |
-          echo "::error::This release was designated 'signed' but signing credentials are not configured. A signed release MUST NOT fall back to emitting unsigned artifacts."
-          exit 1
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

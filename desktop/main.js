@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("node:path");
+const express = require("express");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
 const { loadPreferences, registerPreferencesIpc, buildMenu, createPreferencesWindow } = require("./preferences");
 
@@ -32,6 +33,17 @@ async function startServer() {
   // Import the server app now that OUTFITTER_DB_FILE is set. The import does
   // not bind a port (Part 1's guard) — we call `app.listen` ourselves on a
   // loopback ephemeral port below.
+  //
+  // Fixed 2026-08-19 (/sdd:review on PR #508): `server/src/index.js`'s router
+  // registrations (`app.use("/api/loadouts", ...)` etc.) run synchronously as
+  // a side effect of this import, at module-evaluation time. Calling
+  // `serverApp.use("/api", secretCheck)` AFTER awaiting the import — as the
+  // original code did — appends the check behind those routers in Express's
+  // middleware stack, so it never runs for any request a router actually
+  // matches. Reproduced directly: GET /api/loadouts with no secret header
+  // returned 200, not 403. Fix: mount the imported app as a sub-app of a
+  // fresh wrapper whose own middleware (the secret check) is registered
+  // first, so it runs before control is ever handed to `serverApp`.
   const { app: serverApp } = await import("../server/src/index.js");
 
   // Generate a fresh 256-bit launch secret on every launch. Held in memory
@@ -40,18 +52,21 @@ async function startServer() {
   process.env.__DESKTOP_SECRET__ = secret;
 
   // Mount the secret-check middleware before every `/api` router. Registered
-  // here (in the desktop host), not inside server/src/index.js, so the
-  // self-hosted target is unaffected — the spec explicitly permits the auth
-  // plumbing to live in desktop/, but nothing else request-path-related.
+  // on a wrapper app that delegates to `serverApp`, not inside
+  // server/src/index.js — the self-hosted target is unaffected, and the spec
+  // explicitly permits the auth plumbing to live in desktop/, but nothing
+  // else request-path-related.
   const secretCheck = createSecretCheck(secret);
-  serverApp.use("/api", secretCheck);
+  const wrapper = express();
+  wrapper.use("/api", secretCheck);
+  wrapper.use(serverApp);
 
   // Bind 127.0.0.1 explicitly (MUST NOT bind 0.0.0.0 or any routable address)
   // and request an ephemeral port (pass 0, read back via server.address().port).
   return new Promise((resolve, reject) => {
-    const server = serverApp.listen(0, "127.0.0.1", () => {
+    const server = wrapper.listen(0, "127.0.0.1", () => {
       const port = server.address().port;
-      resolve({ serverApp, port, secret });
+      resolve({ serverApp: wrapper, port, secret });
     });
     server.on("error", reject);
   });
@@ -103,21 +118,24 @@ function createMainWindow(port) {
 // About/Help panel (epic #72, not yet landed at time of writing — wired to
 // shell.openExternal on the README as a placeholder). Preferences opens a
 // separate window hosting the data-directory control and future settings.
+//
+// Fixed 2026-08-19 (/sdd:review on PR #508): the original code sent an IPC
+// message (`menu:about`) whenever `mainWindow` was truthy — which is every
+// realistic click, since this menu is only installed after the main window
+// is created. Nothing in `desktop/preload.js` bridges `ipcRenderer` (it
+// exposes only the launch secret), and issue #76 (the in-app About/Help
+// panel this was meant to eventually trigger) is still open, so the message
+// had no listener anywhere. The documented README fallback was unreachable
+// dead code. Until #76 lands, always open the README externally.
 function installMenu(prefs) {
   const menu = buildMenu({
     onAbout: () => {
-      // The in-app About/Help panel (Header.jsx, triggered by the `?` keyboard
-      // shortcut) is loaded inside the same BrowserWindow that loads
-      // client/dist, so it already works in the desktop window. This menu item
-      // should send an IPC message the renderer listens for and opens that
-      // panel. Until that panel exists (epic #72), open the README externally.
-      if (mainWindow) {
-        // TODO: once epic #72 lands, send an IPC message to open the in-app
-        // About/Help panel instead of opening the README externally.
-        mainWindow.webContents.send("menu:about");
-      } else {
-        shell.openExternal("https://github.com/jonstump/the-outfitter#readme");
-      }
+      // TODO(#76): once the in-app About/Help panel lands, wire this to send
+      // an IPC message the renderer listens for and opens that panel instead
+      // — but that requires a corresponding `ipcRenderer.on` bridge in
+      // desktop/preload.js and a listener in the client, neither of which
+      // exist yet. Don't reintroduce the send() call without both.
+      shell.openExternal("https://github.com/jonstump/the-outfitter#readme");
     },
     onPreferences: () => {
       createPreferencesWindow(prefs);
