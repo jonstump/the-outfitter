@@ -113,7 +113,15 @@ jobs:
   package:
     needs: parity-check
     strategy:
-      fail-fast: true
+      # Fixed 2026-08-19: was `true`. The first real v0.1.0 attempt's
+      # windows-latest leg logged "The operation was canceled" and
+      # "Terminate batch job (Y/N)?" — that's not a Windows-specific
+      # failure, it's fail-fast killing a still-running `npm ci` the moment
+      # ubuntu-latest failed a few seconds earlier, so Windows never got a
+      # real chance to prove anything about itself. `false` while diagnosing
+      # the real (Linux/macOS) failure below, so every platform's actual
+      # outcome is visible from one push instead of two.
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -125,6 +133,27 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Diagnose electron-builder's own tooling before packaging
+        # Fixed 2026-08-19: the first real v0.1.0 attempt failed on Linux and
+        # macOS with `spawn .../node_modules/app-builder-bin/<platform>/...
+        # ENOENT` inside "Package the desktop app" — electron-builder's own
+        # internal tool, not our code, missing after `npm ci` reported
+        # success. Never reproduced cleanly on a local machine (a separate
+        # `npm run dev` process running in another terminal on that machine
+        # turned out to be racing repeated manual `npm ci` attempts there,
+        # which is a local-environment artifact and not informative about
+        # this clean CI runner). This step exists to actually see what's on
+        # disk here before the failing step runs, instead of guessing again.
+        shell: bash
+        run: |
+          echo "--- node_modules/app-builder-bin ---"
+          find node_modules/app-builder-bin -maxdepth 3 2>&1 || echo "MISSING ENTIRELY"
+          echo "--- npm's own view of it ---"
+          npm ls app-builder-bin 2>&1 || true
+          echo "--- electron-builder itself ---"
+          ls -la node_modules/electron-builder/package.json 2>&1 || echo "MISSING"
+          echo "--- electron itself ---"
+          ls -la node_modules/electron/package.json 2>&1 || echo "MISSING"
       - name: Build the client
         run: npm run build -w client
       - name: Check signing credential completeness
