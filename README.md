@@ -11,7 +11,7 @@ A Hunt: Showdown loadout builder — pick weapons, equipment, and traits, then s
 
 - **Client**: React 18, Redux Toolkit, Vite
 - **Server**: Express, [lowdb](https://github.com/typicode/lowdb) (JSON file storage)
-- npm workspaces monorepo (`client/`, `server/`)
+- npm workspaces monorepo (`client/`, `server/`, `desktop/`)
 
 ## Requirements
 
@@ -128,6 +128,26 @@ loadout. One token may hold at most 200 saved loadouts; a 201st create returns
 carry their own, much looser per-IP limiter: a read mutates nothing, but it
 re-parses the whole `db.json`, so the rate of that parse is worth bounding
 whatever the store has grown to.
+
+## Two ways to run it
+
+The app is available in two deployment targets, each suited to a different
+use case:
+
+- **Desktop app** (Electron) — for a **single player on one machine**. The
+  desktop app wraps the existing server and client in an Electron shell, runs
+  the server on a loopback port with a per-launch secret, and stores its data
+  in the OS per-user application data directory. See
+  [DESKTOP.md](./DESKTOP.md) for download and installation instructions,
+  including how to handle unsigned-build warnings on Windows and macOS.
+- **Self-hosting** (Docker, PaaS, single VM) — for a **shared instance** you
+  run yourself. The server and built client are served from one origin, and
+  the data file lives on a persistent volume. See the Deployment section
+  below.
+
+Both targets share the **same server implementation** — the desktop host
+imports the server's `app` export and runs it unmodified, so every
+ownership/persistence/route handler is identical between the two.
 
 ## Deployment
 

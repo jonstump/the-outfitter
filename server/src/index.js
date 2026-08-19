@@ -205,6 +205,25 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "internal server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backwater Outfitters server listening on http://localhost:${PORT}`);
-});
+// Governing: SPEC-0005 REQ "One Server Implementation, Shared by Both Targets";
+// design.md decision "index.js exports the app; the listen call is guarded."
+//
+// The desktop host (desktop/main.js) imports this `app` to run the server on a
+// loopback port inside Electron's main process, rather than spawning a child
+// process. Importing this module MUST NOT bind a port as a side effect — the
+// guard below checks whether this file is the process entry point
+// (`node src/index.js`, what `npm start` and `npm run dev` both run) and only
+// calls `app.listen` when it is. A test or the desktop host that does
+// `import { app } from "./index.js"` gets the configured app with no listener.
+export { app };
+
+// Entry-point guard: only listen when run directly (`node src/index.js`), not
+// when imported by a test or the desktop host. `process.argv[1]` is the script
+// path Node was given; `import.meta.url` is this module's own URL. Comparing
+// the two (after normalizing to a filesystem path) distinguishes "this file
+// is the entry point" from "this file is being imported."
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  app.listen(PORT, () => {
+    console.log(`Backwater Outfitters server listening on http://localhost:${PORT}`);
+  });
+}

@@ -8,13 +8,14 @@
   },
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "desktop"
   ],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,yellow \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "test": "npm run test -w client && npm run test -w server && npm run test:scrape",
+    "test": "npm run test -w client && npm run test -w server && npm run test:scrape && npm run test -w desktop",
     "test:scrape": "node --test scripts/*.test.mjs"
   },
   "devDependencies": {

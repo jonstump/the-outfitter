@@ -1,0 +1,74 @@
+{
+  "name": "@the-outfitter/desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Electron desktop wrapper for Backwater Outfitters",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "express": "^4.21.1",
+    "supertest": "^7.2.2",
+    "vitest": "^2.1.5"
+  },
+  "build": {
+    "appId": "com.backwater-outfitters.desktop",
+    "productName": "Backwater Outfitters",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "preferences.js",
+      "preferences-preload.js",
+      "lib/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client/dist"
+      },
+      {
+        "from": "../server",
+        "to": "server",
+        "filter": ["**/*", "!data/**", "!**/*.test.js"]
+      },
+      {
+        "from": "../data",
+        "to": "data"
+      },
+      {
+        "from": "../package.json",
+        "to": "package.json"
+      },
+      {
+        "from": "../package-lock.json",
+        "to": "package-lock.json"
+      },
+      {
+        "from": "../client/package.json",
+        "to": "client/package.json"
+      },
+      {
+        "from": "../server/package.json",
+        "to": "server/package.json"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  }
+}

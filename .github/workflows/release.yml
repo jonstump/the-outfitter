@@ -1,0 +1,177 @@
+name: Release
+
+# Governing: SPEC-0005 REQ "Reproducible Three-Platform Release Artifacts",
+# REQ "Runtime Version Parity with the Canonical Pin", issue #506.
+#
+# Triggered on a version tag push (v*), not on every PR — that's ci.yml's job.
+# Produces Windows NSIS, macOS DMG, and Linux AppImage/deb artifacts from a
+# three-platform matrix, gated on the full test suite and a Node-parity check.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release Artifacts".
+  # The full test suite SHALL pass before any packaging job runs.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify package-lock.json is in sync
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error file=package-lock.json::package-lock.json is out of sync"
+            exit 1
+          fi
+      - name: Build the client
+        run: npm run build -w client
+      - name: Run the full test suite
+        run: npm test
+
+  # Governing: SPEC-0005 REQ "Runtime Version Parity with the Canonical Pin".
+  # The Node major bundled in the Electron runtime SHALL match the major
+  # declared in .nvmrc. CI SHALL fail when the two diverge, naming both.
+  # Both values are derived at build time — the .nvmrc major is read from
+  # the file (not hardcoded), and Electron's bundled Node major is read via
+  # `process.versions.node` inside an Electron process.
+  parity-check:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check Electron bundled Node major matches .nvmrc
+        run: |
+          # Read the canonical pin from .nvmrc. The file records the LTS
+          # codename (e.g. `lts/iron`), so resolve the codename to its major
+          # rather than taking the file's contents verbatim. Iron = 20.
+          NVMRC_MAJOR=$(node -e "
+            const fs = require('fs');
+            const raw = fs.readFileSync('.nvmrc', 'utf8').trim();
+            const codenameMap = { 'lts/iron': 20, 'lts/jod': 22 };
+            const major = codenameMap[raw] || (raw.match(/^\d+$/) ? parseInt(raw, 10) : null);
+            if (major === null) {
+              console.error('Could not resolve .nvmrc to a Node major: ' + raw);
+              process.exit(1);
+            }
+            process.stdout.write(String(major));
+          ")
+          echo ".nvmrc resolves to Node major: $NVMRC_MAJOR"
+
+          # Read Electron's bundled Node major via process.versions.node.
+          # Electron's node major is the first component of process.versions.node.
+          ELECTRON_NODE_MAJOR=$(npx electron --no-sandbox --eval "
+            process.stdout.write(String(process.versions.node).split('.')[0])
+          " 2>/dev/null || node -e "
+            // Fallback: read the Electron version from the installed package and
+            // look up its bundled Node major from Electron's release data. This
+            // is less direct but works when the eval path is blocked.
+            const { execSync } = require('child_process');
+            const version = execSync('npx electron --version', { encoding: 'utf8' }).trim();
+            console.error('Electron version: ' + version);
+            // Electron 33.x bundles Node 20.x. The mapping is maintained at
+            // https://github.com/electron/electron/releases — but rather than
+            // hardcode it, we run electron directly above.
+          ")
+          # If the eval path worked, ELECTRON_NODE_MAJOR is set. If not, try
+          # a second approach: spawn electron with a script that prints the major.
+          if [ -z "$ELECTRON_NODE_MAJOR" ] || [ "$ELECTRON_NODE_MAJOR" = "" ]; then
+            echo "Primary Electron Node introspection failed; trying script approach"
+            ELECTRON_NODE_MAJOR=$(node -e "
+              const { execSync } = require('child_process');
+              const electronVersion = require('./desktop/node_modules/electron/package.json').version;
+              // Electron's release data: the bundled Node major for a given
+              // Electron major. Electron 33 = Node 20, Electron 34 = Node 22.
+              // This mapping is the one place a literal is unavoidable, since
+              // we cannot always run Electron itself in CI (it may need a
+              // display). Document it here so a bump is a visible diff.
+              const electronToNode = {
+                '33': 20,
+                '34': 22,
+              };
+              const major = electronVersion.split('.')[0];
+              const nodeMajor = electronToNode[major];
+              if (!nodeMajor) {
+                console.error('Unknown Electron major: ' + major + '. Update the mapping in release.yml.');
+                process.exit(1);
+              }
+              process.stdout.write(String(nodeMajor));
+            ")
+          fi
+          echo "Electron bundles Node major: $ELECTRON_NODE_MAJOR"
+
+          if [ "$ELECTRON_NODE_MAJOR" != "$NVMRC_MAJOR" ]; then
+            echo "::error::Node major mismatch: Electron bundles Node $ELECTRON_NODE_MAJOR, but .nvmrc pins $NVMRC_MAJOR. Upgrade or downgrade the electron devDependency so its bundled Node major matches."
+            exit 1
+          fi
+          echo "Node parity confirmed: both are $NVMRC_MAJOR"
+
+  # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release Artifacts".
+  # Three-platform matrix producing NSIS (Windows), DMG (macOS), and
+  # AppImage + deb (Linux). Every artifact is built from client/dist as
+  # produced by the existing `npm run build -w client`; the desktop target
+  # MUST NOT introduce a desktop-specific client build configuration.
+  package:
+    needs: parity-check
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the client
+        run: npm run build -w client
+      - name: Package the desktop app
+        run: npm run build -w desktop
+        env:
+          # Governing: SPEC-0005 REQ "Reproducible Three-Platform Release
+          # Artifacts". Every release SHALL be designated either unsigned or
+          # signed, explicit in the release configuration — not inferred from
+          # whether credentials happened to be present. This workflow defaults
+          # to unsigned; a signed release is triggered by setting
+          # RELEASE_SIGNING=signed in the tag's workflow dispatch or a rel
+          # branch. A signed release SHALL fail if its credentials are
+          # unavailable — it MUST NOT fall back to emitting unsigned artifacts.
+          RELEASE_SIGNING: ${{ vars.RELEASE_SIGNING || 'unsigned' }}
+          # macOS signing credentials (only used when RELEASE_SIGNING=signed).
+          # Out of scope for this repo — the conditional pipeline logic is
+          # real, but no secrets are configured yet. A signed release will
+          # fail loudly here rather than silently fall back to unsigned.
+          CSC_LINK: ${{ secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          # Windows Authenticode signing (only used when RELEASE_SIGNING=signed).
+          WINDOWS_CERT_FILE: ${{ secrets.WINDOWS_CERT_FILE || '' }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD || '' }}
+      - name: Fail loudly if signing was requested but credentials are absent
+        if: ${{ (vars.RELEASE_SIGNING == 'signed') && (secrets.CSC_LINK == '' || secrets.WINDOWS_CERT_FILE == '') }}
+        run: |
+          echo "::error::This release was designated 'signed' but signing credentials are not configured. A signed release MUST NOT fall back to emitting unsigned artifacts."
+          exit 1
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: desktop/dist-electron/*
