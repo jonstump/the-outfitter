@@ -1,7 +1,7 @@
 {
   "name": "@the-outfitter/desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Electron desktop wrapper for Backwater Outfitters",
   "author": "Jon Stump",
   "main": "main.js",
