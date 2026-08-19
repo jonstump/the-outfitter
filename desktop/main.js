@@ -3,6 +3,7 @@ const path = require("node:path");
 const http = require("node:http");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
 const { loadPreferences, registerPreferencesIpc, buildMenu, createPreferencesWindow } = require("./preferences");
+const { isDirectoryWritable } = require("./lib/prefsPure");
 
 // Governing: SPEC-0005 REQ "One Server Implementation, Shared by Both Targets",
 // REQ "Authenticated Loopback Boundary", REQ "Per-User Data Directory",
@@ -22,12 +23,28 @@ async function startServer() {
   // preference (if set) determines where the lowdb file points, and it must
   // be resolved before the server's db.js module reads the env var.
   const prefs = await loadPreferences();
-  const dataDir = prefs.dataDir || app.getPath("userData");
-  // Ensure the data directory exists before the server reads it. Electron's
-  // `app.getPath("userData")` is created automatically, but a user-chosen
-  // override directory may not exist yet.
-  const fs = require("node:fs");
-  fs.mkdirSync(dataDir, { recursive: true });
+  const defaultDataDir = app.getPath("userData");
+  let dataDir = prefs.dataDir || defaultDataDir;
+
+  // Governing: SPEC-0005 REQ "Per-User Data Directory", issue #515. The
+  // Preferences UI (preferences.js) already rejects an unwritable directory
+  // at selection time, but a directory that WAS writable when chosen can stop
+  // being so later (an external/network volume unmounted, TCC permission
+  // revoked) — without this check, every request would 500 forever with no
+  // recovery path. Fall back to Electron's default userData path rather than
+  // let that happen; the user's chosen preference is left on disk untouched,
+  // so a remounted volume resumes working on the next launch with no action
+  // needed.
+  if (prefs.dataDir) {
+    const writability = await isDirectoryWritable(dataDir);
+    if (!writability.writable) {
+      console.warn(
+        `Configured data directory "${dataDir}" is not writable (${writability.error}); falling back to the default location for this launch.`
+      );
+      dataDir = defaultDataDir;
+    }
+  }
+
   process.env.OUTFITTER_DB_FILE = path.join(dataDir, "db.json");
 
   // Fixed 2026-08-19 (manual verification of a locally packaged build ahead

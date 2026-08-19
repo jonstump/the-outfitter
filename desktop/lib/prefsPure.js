@@ -56,6 +56,33 @@ async function savePreferencesToDir(dir, prefs) {
 }
 
 /**
+ * Governing: SPEC-0005 REQ "Per-User Data Directory", issue #515.
+ *
+ * Check whether a directory can actually be written to, by performing a real
+ * write-and-delete rather than an access() permission check. On macOS, TCC
+ * (Transparency, Consent, and Control) blocks unsigned/ad-hoc-signed apps from
+ * Documents, Desktop, Downloads, iCloud Drive, and removable/network volumes —
+ * often without ever presenting the consent prompt, so there is no System
+ * Settings entry for the user to grant access to after the fact. fs.access's
+ * W_OK check can report a directory as writable while the real open() syscall
+ * still throws EPERM under TCC, so only an actual write proves anything here.
+ */
+async function isDirectoryWritable(dir) {
+  try {
+    await fs.promises.mkdir(dir, { recursive: true });
+    const probeFile = path.join(
+      dir,
+      `.outfitter-write-test-${process.pid}-${Math.random().toString(36).slice(2)}`
+    );
+    await fs.promises.writeFile(probeFile, "");
+    await fs.promises.unlink(probeFile);
+    return { writable: true };
+  } catch (err) {
+    return { writable: false, error: err.message };
+  }
+}
+
+/**
  * The descriptor list for the Preferences surface.
  *
  * Each entry declares a control that the Preferences view renders. A future
@@ -83,5 +110,6 @@ module.exports = {
   DEFAULT_PREFERENCES,
   loadPreferencesFromDir,
   savePreferencesToDir,
+  isDirectoryWritable,
   PREFERENCE_CONTROLS,
 };

@@ -19,6 +19,7 @@ import os from "node:os";
 import {
   loadPreferencesFromDir,
   savePreferencesToDir,
+  isDirectoryWritable,
   PREFERENCE_CONTROLS,
   DEFAULT_PREFERENCES,
 } from "../lib/prefsPure.js";
@@ -125,6 +126,58 @@ describe("data-directory change flow (SPEC-0005, #504/#505)", () => {
 
     expect(fs.existsSync(oldFile)).toBe(true);
     expect(fs.existsSync(path.join(newDir, "db.json"))).toBe(false);
+  });
+});
+
+describe("isDirectoryWritable (SPEC-0005 REQ 'Per-User Data Directory', issue #515)", () => {
+  // Governing: issue #515. On macOS, an unsigned/ad-hoc-signed build can be
+  // denied write access to TCC-protected folders (Documents, Desktop,
+  // Downloads, iCloud Drive, removable/network volumes) with EPERM and no
+  // consent prompt ever shown — so there is no System Settings entry to grant
+  // access from afterward. Picking such a directory in Preferences previously
+  // got accepted with no validation, and every subsequent API request 500'd
+  // forever. This exercises a REAL unwritable directory (permission bits
+  // removed), not a mock — an fs.access()-based check would have passed here
+  // and missed the real bug: TCC's EPERM shows up on the actual write, not on
+  // an access() probe.
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+
+  it("reports a normal, writable directory as writable", async () => {
+    const result = await isDirectoryWritable(tempDir);
+    expect(result.writable).toBe(true);
+  });
+
+  it.skipIf(isRoot)(
+    "reports a directory with write permission removed as not writable (regression, #515)",
+    async () => {
+      const readOnlyDir = path.join(tempDir, "readonly");
+      fs.mkdirSync(readOnlyDir, { recursive: true });
+      fs.chmodSync(readOnlyDir, 0o555);
+      try {
+        const result = await isDirectoryWritable(readOnlyDir);
+        expect(result.writable).toBe(false);
+        expect(result.error).toBeTruthy();
+      } finally {
+        // Restore write access so the outer afterEach's rmSync can clean up.
+        fs.chmodSync(readOnlyDir, 0o755);
+      }
+    }
+  );
+
+  it("creates the directory first if it does not exist yet, then reports it writable", async () => {
+    const newDir = path.join(tempDir, "not-yet-created");
+    expect(fs.existsSync(newDir)).toBe(false);
+    const result = await isDirectoryWritable(newDir);
+    expect(result.writable).toBe(true);
+    expect(fs.existsSync(newDir)).toBe(true);
+  });
+
+  it("does not leave its probe file behind after a successful check", async () => {
+    await isDirectoryWritable(tempDir);
+    const leftover = fs
+      .readdirSync(tempDir)
+      .filter((f) => f.startsWith(".outfitter-write-test-"));
+    expect(leftover).toEqual([]);
   });
 });
 

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const {
   loadPreferencesFromDir,
   savePreferencesToDir,
+  isDirectoryWritable,
   PREFERENCE_CONTROLS,
 } = require("./lib/prefsPure");
 
@@ -164,6 +165,25 @@ function registerPreferencesIpc(prefs, onRelaunch) {
     if (result.canceled || !result.filePaths.length) return { changed: false };
 
     const newDir = result.filePaths[0];
+
+    // Governing: SPEC-0005 REQ "Per-User Data Directory", issue #515. Reject an
+    // unwritable directory here, before any move dialog or persisted state —
+    // a directory the app can't actually write to (most commonly a
+    // TCC-protected macOS folder like Documents/Desktop/Downloads on an
+    // unsigned build) would otherwise get accepted silently and turn into a
+    // permanent 500 on every subsequent API request, with no recovery path
+    // short of hand-editing preferences.json.
+    const writability = await isDirectoryWritable(newDir);
+    if (!writability.writable) {
+      await dialog.showMessageBox(preferencesWindow, {
+        type: "error",
+        title: "Directory not writable",
+        message: "This app can't write to the selected directory.",
+        detail: `${newDir}\n\n${writability.error || "Unknown error."}\n\nOn macOS, this often happens with Documents, Desktop, Downloads, iCloud Drive, or removable/network volumes when the app isn't signed. Choose a different folder.`,
+      });
+      return { changed: false, error: "not-writable" };
+    }
+
     const currentDbFile = process.env.OUTFITTER_DB_FILE;
     const newDbFile = path.join(newDir, "db.json");
 
