@@ -482,12 +482,20 @@ describe("frozen legacy catalog tables", () => {
   });
 });
 
-// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+// Governing: ADR-0024 ("loadable, not legal"), issue #472.
+//
+// The decoder no longer clamps a decoded trait list to TRAIT_MAX. The fifteen-trait cap
+// is a game rule, and per ADR-0024's contract the decoder MUST NOT enforce a game-rule
+// cap — that is the reducer and the UI's job, at the point of a live user action where
+// the player can see and choose to fix an over-cap record rather than have it silently
+// rewritten underneath them. The trait panel's over-capacity warning
+// (`traitOverCapacity` in `calc.js`, consumed by `TraitsPanel.jsx`) is what makes an
+// over-cap decode VISIBLE rather than silently wrong.
 //
 // Both decoders, deliberately. A bound carried by one decoder and not the other is exactly how
 // the ammo bound was lost (issue #201), and PR #203 had to fix it in both — so a case that
 // covers only the current format would leave the same hole open one migration later.
-describe("every decoder clamps a trait list to the cap", () => {
+describe("every decoder leaves an over-cap trait list intact (ADR-0024)", () => {
   const OVER_CAP = 20;
   const traitIds = TRAITS.map((t) => t[0]);
 
@@ -496,35 +504,34 @@ describe("every decoder clamps a trait list to the cap", () => {
     expect(LEGACY_TRAIT_IDS.length).toBeGreaterThanOrEqual(OVER_CAP);
   });
 
-  it("fromData (v1) keeps the first fifteen of twenty valid ids", () => {
+  it("fromData (v1) keeps all twenty valid ids rather than clamping to fifteen", () => {
     const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
-    expect(dec.traits).toHaveLength(TRAIT_MAX);
-    // The FIRST fifteen, in order — decoding the same record twice must give the same loadout.
-    expect(dec.traits).toEqual(traitIds.slice(0, TRAIT_MAX));
+    expect(dec.traits).toHaveLength(OVER_CAP);
+    // All twenty, in order — decoding the same record twice must give the same loadout.
+    expect(dec.traits).toEqual(traitIds.slice(0, OVER_CAP));
   });
 
-  it("fromLegacy keeps the first fifteen of twenty valid ids", () => {
+  it("fromLegacy keeps all twenty valid ids", () => {
     // No `v` field, so this routes to the legacy decoder; positions 0..19 are the legacy
-    // trait table's own indices, translated to stable ids before the clamp applies.
+    // trait table's own indices, translated to stable ids.
     const dec = fromData({ w: [null, null], e: [], tr: [...Array(OVER_CAP).keys()] });
-    expect(dec.traits).toHaveLength(TRAIT_MAX);
-    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, TRAIT_MAX));
+    expect(dec.traits).toHaveLength(OVER_CAP);
+    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, OVER_CAP));
   });
 
-  it("clamps the survivors, not the raw entries — v1", () => {
+  it("drops unknown ids but keeps all survivors — v1", () => {
     // Unknown ids are dropped first, so a payload padded with retired ids still yields a
-    // full fifteen rather than fifteen-minus-the-junk.
+    // full twenty rather than twenty-minus-the-junk.
     const padded = traitIds.slice(0, OVER_CAP).flatMap((id) => [id, "retired-trait-" + id]);
     const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: padded });
-    expect(dec.traits).toEqual(traitIds.slice(0, TRAIT_MAX));
+    expect(dec.traits).toEqual(traitIds.slice(0, OVER_CAP));
   });
 
-  it("clamps after the positional translation, not before — legacy", () => {
-    // Out-of-range positions resolve to nothing. If the legacy decoder clamped before
-    // translating, these would eat cells and the result would come back short.
+  it("drops out-of-range positions but keeps all survivors — legacy", () => {
+    // Out-of-range positions resolve to nothing; the survivors are all kept.
     const padded = [...Array(OVER_CAP).keys()].flatMap((i) => [i, 999]);
     const dec = fromData({ w: [null, null], e: [], tr: padded });
-    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, TRAIT_MAX));
+    expect(dec.traits).toEqual(LEGACY_TRAIT_IDS.slice(0, OVER_CAP));
   });
 
   it("leaves an at-or-under-cap list alone in both decoders", () => {
@@ -536,21 +543,25 @@ describe("every decoder clamps a trait list to the cap", () => {
     );
   });
 
-  it("re-encodes the clamped loadout, so an over-cap record self-heals on next save", () => {
-    // The record stays loadable and the next write puts fifteen back — the reason decode
-    // clamps rather than throwing (a decoded loadout is persisted before it is rendered).
+  it("re-encodes the over-cap loadout intact, so the record stays loadable", () => {
+    // The record stays loadable and the next write puts twenty back — the reason decode
+    // no longer clamps (ADR-0024: the decoder's job is to produce a loadable loadout,
+    // not a legal one; the UI surfaces the overage via `traitOverCapacity`).
     const dec = fromData({ v: FORMAT_VERSION, w: [null, null], e: [], tr: traitIds.slice(0, OVER_CAP) });
-    expect(toData(dec).tr).toHaveLength(TRAIT_MAX);
+    expect(toData(dec).tr).toHaveLength(OVER_CAP);
   });
 });
 
-// Governing: issue #357 (boundedTraits admits duplicate trait ids), ADR-0012 (fifteen-trait cap)
+// Governing: issue #357 (boundedTraits admits duplicate trait ids), ADR-0024 ("loadable, not legal")
 //
-// `boundedTraits` slices to TRAIT_MAX but never deduped, so a crafted v2/legacy payload of
-// fifteen copies of `quartermaster` decoded to fifteen copies, burned the whole trait budget,
-// and inflated `upTotal` (which charges per copy). The dedupe happens before the slice so the
-// cap counts fifteen DISTINCT traits. Asserted against both the current and legacy decoders.
-describe("boundedTraits dedupes trait ids before the fifteen-trait clamp (issue #357)", () => {
+// `boundedTraits` deduplicates but no longer slices to TRAIT_MAX (ADR-0024 removed the
+// clamp). A crafted v2/legacy payload of fifteen copies of `quartermaster` decoded to
+// fifteen copies, burned the whole trait budget, and inflated `upTotal` (which charges
+// per copy). The dedupe is still applied so the decoder does not hand the rest of the
+// system a list of copies, but the cap is no longer enforced at decode time — the
+// trait panel's over-capacity warning (`traitOverCapacity`) is what makes an over-cap
+// decode visible instead. Asserted against both the current and legacy decoders.
+describe("boundedTraits dedupes trait ids (issue #357)", () => {
   const QM = "quartermaster";
   const QM_UP = TRAITS.find((t) => t[0] === QM)[2];
 
@@ -1153,17 +1164,22 @@ describe("issue #351 — frontier-73c legacy ammo remap", () => {
   });
 });
 
-// Governing: issue #418 (PR 2 of #353), ADR-0009, ADR-0015, SPEC-0006
+// Governing: ADR-0024 ("loadable, not legal"), issue #472, ADR-0009, ADR-0015, SPEC-0006
 // REQ "Capacity Rules Are Stated Once and Preserved".
 //
-// `boundedEquip` clamps a decoded equipment grid to the shared capacity rules: at
-// most `slotMax` items (8 minus blocked cells) and at most four per consumable cap
-// category. Applied by ALL four decoders so no decode route can skip it — the same
-// all-write-paths discipline `boundedTraits` uses for the fifteen-trait cap.
-describe("boundedEquip — decode clamps the equipment grid (issue #418)", () => {
+// `boundedEquip` no longer clamps a decoded equipment grid to the shared capacity rules
+// (ADR-0024 removed the cap-driven eviction loop). The four-per-cap-category consumable
+// cap and the `slotMax` (8 minus blocked cells) rule are game rules, and per ADR-0024's
+// contract the decoder MUST NOT enforce a game-rule cap — that is the reducer and the UI's
+// job, at the point of a live user action where the player can see and choose to fix an
+// over-cap record rather than have it silently rewritten underneath them. The equipment
+// panel's over-capacity warning (`equipOverCapacity` in `calc.js`, consumed by
+// `EquipmentPanel.jsx` via `selectEquipOverCapacity`) already reads whatever the store
+// holds regardless of how it got there, so an over-cap decoded grid is already visible
+// rather than silently wrong. The clamp was redundant with that warning, not a
+// prerequisite for it.
+describe("boundedEquip — decode no longer clamps the equipment grid (ADR-0024)", () => {
   const STICK = CONS.findIndex((c) => c[0] === "dynamite-stick");
-  const BUNDLE = CONS.findIndex((c) => c[0] === "dynamite-bundle");
-  const SHOT = CONS.findIndex((c) => c[0] === "vitality-shot");
 
   // Helper: build an equip payload of N copies of one consumable, padded to 8.
   const equipPayload = (...items) => {
@@ -1180,7 +1196,10 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
   const legacyOverCategoryPadded = [...legacyOverCategory, ...Array(8 - legacyOverCategory.length).fill(null)];
 
   // The over-slot payload: 7 different tools (no per-category cap applies to tools),
-  // with 2 blocked cells → slotMax 6, 7 > 6.
+  // with 2 blocked cells → slotMax 6, 7 > 6. The blocked cells are 6 and 7, so none of
+  // the seven items overlap with a blocked cell — the overlap resolution (ADR-0024,
+  // item 4) is tested separately below, and the point here is the cap is no longer
+  // enforced at decode time.
   const toolPayload = () => {
     const ids = ["knife", "heavy-knife", "dusters", "throwing-knives", "flare-pistol", "fusees", "spyglass"];
     const e = ids.map((id) => ["T", id]);
@@ -1237,36 +1256,45 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     return [...e, ...Array(8 - e.length).fill(null)];
   };
 
+  // Governing: ADR-0024. An over-cap grid is preserved as-is on decode — the cap is
+  // enforced by the live UI (`equipOverCapacity`), not by the decoder. The grid still
+  // resolves items against the catalog (unknown ids leave holes), but no items are
+  // evicted to bring the grid back within capacity.
   it.each([
     ["v3", v3(overCategory)],
     ["v2", v2(overCategory)],
     ["v1", v1(overCategory)],
     ["legacy", legacy(legacyOverCategoryPadded)],
-  ])("clamps an over-category record (%s: 5 Throwables → 4)", (_label, payload) => {
+  ])("preserves an over-category record as-is (%s: 5 Throwables kept, not clamped to 4)", (_label, payload) => {
     const dec = fromData(payload);
     const held = dec.equip.filter(Boolean);
-    expect(held).toHaveLength(4);
-    // All four are Dynamite Sticks (the first four survive — the clamp drops from the end).
+    expect(held).toHaveLength(5);
+    // All five are Dynamite Sticks — no eviction, the grid is preserved as decoded.
     expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
-    // The 5th cell is now a hole.
-    expect(dec.equip[4]).toBeNull();
+    // The 5th cell is NOT a hole — the decoder kept the item the record declared.
+    expect(dec.equip[4]).not.toBeNull();
   });
 
   it.each([
     ["v3", v3(toolPayload(), { blocked: [6, 7] })],
     ["v2", v2(toolPayload(), { blocked: [6, 7] })],
     ["v1", v1(toolPayload(), { blockedCount: 2 })],
-  ])("clamps an over-slot record (%s: 7 items, slotMax 6 → 6)", (_label, payload) => {
+  ])("preserves an over-slot record as-is (%s: 7 items kept, slotMax 6 not enforced)", (_label, payload) => {
     const dec = fromData(payload);
     const held = dec.equip.filter(Boolean);
+    // Governing: ADR-0024, item 4. The blocked cells (6 and 7) overlap with the 7th item
+    // (at cell 6), so blocked-wins drops that one — 6 items survive. The point is the cap
+    // (slotMax 6) is no longer enforced at decode time; the one item lost is due to the
+    // overlap resolution, not the cap. The over-slot UI warning (`equipOverCapacity`) is
+    // what makes the overage visible rather than silently wrong.
     expect(held).toHaveLength(6);
-    expect(dec.equip[6]).toBeNull();
+    expect(dec.equip[6]).toBeNull(); // blocked-wins: cell 6 is blocked, item dropped
   });
 
   // Legacy is excluded from the row set above rather than early-returning inside it:
   // its `b` is a trailing COUNT, and these seven tools carry `b: 0`, so slotMax is 8
-  // and seven items are legal. Asserting "no clamp" under a title that says "clamps
-  // to 6" would describe the opposite of what it checks.
+  // and seven items are legal. Asserting "no clamp" under a title that says "preserves"
+  // is correct here too, but the legacy case is tested separately for the same reason.
   it("leaves a legacy record of 7 tools untouched — slotMax is 8 with no blocked count", () => {
     const dec = fromData(legacy(legacyToolPayload()));
     expect(dec.equip.filter(Boolean)).toHaveLength(7);
@@ -1284,7 +1312,7 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
     expect(held.every((e) => CONS[e.i][0] === "dynamite-stick")).toBe(true);
   });
 
-  it("the clamp is deterministic — the same record decodes to the same loadout", () => {
+  it("decode is deterministic — the same record decodes to the same loadout", () => {
     const payload = v2(overCategory);
     const dec1 = fromData(payload);
     const dec2 = fromData(payload);
@@ -1293,14 +1321,9 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
 
   // Governing: SPEC-0006 REQ "Version 1 Records Migrate Losslessly" — "Decoding SHALL
   // be total: ... no input SHALL produce a blocked list containing a duplicate or an
-  // out-of-range index."
-  //
-  // The out-of-range half was enforced; the duplicate half was not. Nine copies of `0`
-  // are nine individually valid indices, so `b` decoded to a nine-element list and the
-  // clamp's `8 - blocked.length` went NEGATIVE. A loop dropping items until the count
-  // fell below a negative bound could never finish — an infinite loop inside the
-  // decoder, reachable from a share link, which freezes the tab rather than blanking
-  // it the way issue #201 did. These pin the input, which is where the fix belongs.
+  // out-of-range index." The dedup of `blocked` is a syntactic repair, not a cap — it
+  // is kept (ADR-0024 allows syntactic repairs, only forbids rule caps). These pin the
+  // input, which is where the fix belongs.
   it.each([
     ["duplicates", [0, 0, 0, 0, 0, 0, 0, 0, 0], [0]],
     ["duplicates mixed with distinct", [3, 3, 5, 5, 5, 3], [3, 5]],
@@ -1315,8 +1338,12 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
       b,
     });
     expect(dec.blocked).toEqual(expected);
-    // And the grid still decodes — the item survives, because slotMax is now positive.
-    expect(dec.equip.filter(Boolean)).toHaveLength(1);
+    // Governing: ADR-0024, item 4. The item is at cell 0. If cell 0 is in the deduped
+    // blocked list, blocked-wins drops the item (overlap resolution); otherwise it
+    // survives. The point of this test is the dedup of the blocked list itself — the
+    // overlap resolution is just the consequence, and the assertion accounts for it.
+    const itemSurvives = !expected.includes(0);
+    expect(dec.equip.filter(Boolean)).toHaveLength(itemSurvives ? 1 : 0);
   });
 
   it("decodes a v3 record with a duplicate-laden blocked list the same way", () => {
@@ -1329,12 +1356,21 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
       b: [7, 7, 7, 7, 7, 7, 7, 7, 7],
     });
     expect(dec.blocked).toEqual([7]);
+    // The item is at cell 0, the blocked cell is 7 — no overlap, so the item survives.
     expect(dec.equip.filter(Boolean)).toHaveLength(1);
   });
 
-  it("clamps to an empty grid when every cell is blocked, without spinning", () => {
-    // slotMax 0: nothing may be held. The clamp drops every item and stops, rather
-    // than looping on a grid it can no longer make smaller.
+  // Governing: ADR-0024. With the cap-driven eviction loop removed, a grid where every
+  // cell is blocked is no longer clamped to an empty grid — the items the record
+  // declared are preserved as-is on decode, and the live UI's `equipOverCapacity`
+  // surfaces the overage. The blocked list is still deduplicated (a syntactic repair).
+  it("preserves items when every cell is blocked, without spinning", () => {
+    // Governing: ADR-0024, item 4. With the cap-driven eviction loop removed, a grid where
+    // every cell is blocked is no longer clamped to an empty grid by cap enforcement.
+    // But the overlap resolution (blocked-wins) DOES drop items at cells that are both
+    // occupied and blocked — so the two items at cells 0 and 1 are dropped, because those
+    // cells are also in the blocked list. The over-cap UI warning (`equipOverCapacity`)
+    // surfaces the overage if any items survive; here none do because of the overlap.
     const dec = fromData({
       v: 2,
       w: [null, null],
@@ -1344,7 +1380,65 @@ describe("boundedEquip — decode clamps the equipment grid (issue #418)", () =>
       b: [0, 1, 2, 3, 4, 5, 6, 7],
     });
     expect(dec.blocked).toHaveLength(8);
+    // Both items are at blocked cells (0 and 1), so blocked-wins drops them.
     expect(dec.equip.filter(Boolean)).toHaveLength(0);
+  });
+});
+
+// Governing: ADR-0024, issue #472, item 4. An occupied-and-blocked cell (an `e` entry
+// and a `b` index naming the same cell) is resolved to a hole (blocked wins). The
+// decoder resolves this in `boundedEquip` as defence in depth — the server's
+// `isValidData` resolves the same overlap before storing, but the decoder runs on
+// records from any source (share codes, localStorage, API payloads) and must not
+// assume the overlap was already resolved. Blocked-wins matches how blocking already
+// refuses to apply to an occupied cell elsewhere in the interactive UI.
+describe("boundedEquip resolves an occupied-and-blocked cell to a hole (ADR-0024, item 4)", () => {
+  it("drops an item at a blocked cell index on a v2 record", () => {
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], null, ["T", "dusters"], null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [0, 2],
+    });
+    // Blocked cells 0 and 2: the items at those cells are dropped (blocked wins).
+    expect(dec.equip[0]).toBeNull();
+    expect(dec.equip[2]).toBeNull();
+    expect(dec.equip.filter(Boolean)).toHaveLength(0);
+    // The blocked list is preserved — the cell is still blocked, just now empty.
+    expect(dec.blocked).toEqual([0, 2]);
+  });
+
+  it("drops an item at a blocked cell on a v3 record (same resolution)", () => {
+    const dec = fromData({
+      v: 3,
+      w: [null, null],
+      e: [["T", "knife"], null, null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [0],
+    });
+    expect(dec.equip[0]).toBeNull();
+    expect(dec.equip.filter(Boolean)).toHaveLength(0);
+    expect(dec.blocked).toEqual([0]);
+  });
+
+  it("does not affect cells that are only occupied, not blocked", () => {
+    const dec = fromData({
+      v: 2,
+      w: [null, null],
+      e: [["T", "knife"], ["T", "dusters"], null, null, null, null, null, null],
+      tr: [],
+      n: "",
+      b: [3],
+    });
+    // Cell 3 is blocked but empty — no item to drop. Cells 0 and 1 are occupied and
+    // NOT blocked, so they survive.
+    expect(dec.equip[0]).not.toBeNull();
+    expect(dec.equip[1]).not.toBeNull();
+    expect(dec.equip[3]).toBeNull();
+    expect(dec.equip.filter(Boolean)).toHaveLength(2);
   });
 });
 

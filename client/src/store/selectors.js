@@ -1,5 +1,5 @@
 import { createSelector } from "@reduxjs/toolkit";
-import { capMax, capUsed, equipOverCapacity, estimatedMinimumLevel, totalCost, upTotal } from "../utils/calc.js";
+import { capMax, capUsed, equipOverCapacity, estimatedMinimumLevel, totalCost, traitOverCapacity, upTotal } from "../utils/calc.js";
 import { encodeShareCode } from "../utils/loadoutCodec.js";
 import { resolveSaveListId } from "./savedLoadoutsSlice.js";
 
@@ -53,6 +53,14 @@ export const selectEquipCount = createSelector([selectLoadout], (l) => l.equip.f
 // panel renders — null when the grid is legal, otherwise a structured reason. Reads
 // through `equipOverCapacity` so the warning cannot disagree with the reducer's rules.
 export const selectEquipOverCapacity = createSelector([selectLoadout], equipOverCapacity);
+
+// Governing: ADR-0012 (fifteen-trait cap), ADR-0024 ("loadable, not legal"). The
+// trait-side mirror of `selectEquipOverCapacity` above — null when the trait list is
+// within the cap, otherwise a structured reason. The decoder no longer clamps a
+// decoded trait list to fifteen (ADR-0024), so a loadout can legitimately hold more
+// than fifteen traits after a decode, and this selector is what makes that overage
+// visible rather than silently wrong.
+export const selectTraitOverCapacity = createSelector([selectLoadout], traitOverCapacity);
 
 // A cell is effectively unavailable when it is either blocked or occupied; the
 // panel drives per-cell blocked styling from this alongside `selectEquipEntry`.

@@ -1,6 +1,10 @@
 import { AMMO, CONS, TOOLS, TRAITS, WEAPONS } from "../data/catalog.js";
 import { legacyAmmoId } from "../data/ammoIds.js";
-import { TRAIT_MAX, capCategory, equipOverCapacity } from "./calc.js";
+// Governing: ADR-0024 ("loadable, not legal"), issue #472. The decoder no longer
+// enforces game-rule caps (TRAIT_MAX, slotMax, the four-per-category consumable cap)
+// — see `boundedTraits` and `boundedEquip` below for the contract and the reasoning.
+// Those constants and predicates still live in `calc.js`, where the reducer and the
+// live UI (the only places rule enforcement belongs) consume them.
 
 export const LS_CUR = "hunt-outfitter-current";
 
@@ -81,33 +85,42 @@ function boundedAmmo(weaponIndex, value) {
 }
 
 /**
- * The traits a decoded loadout is allowed to keep: the first TRAIT_MAX that survive
- * catalog resolution.
+ * The traits a decoded loadout is allowed to keep: the ids that survive catalog
+ * resolution, with duplicates collapsed.
  *
- * Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+ * Governing: ADR-0024 ("loadable, not legal"), issue #472.
+ *
+ * Decode no longer clamps a decoded trait list to `TRAIT_MAX`. The fifteen-trait cap
+ * is a game rule, and per ADR-0024's contract the decoder MUST NOT enforce a game-rule
+ * cap — that is the reducer and the UI's job, at the point of a live user action where
+ * the player can see and choose to fix an over-cap record rather than have it silently
+ * rewritten underneath them. The trait panel's over-capacity warning
+ * (`traitOverCapacity` in `calc.js`, consumed by `TraitsPanel.jsx`) is what makes an
+ * over-cap decode VISIBLE rather than silently wrong, exactly the way the equipment
+ * panel's `equipOverCapacity` warning (PR #416) already does for the equipment grid.
  *
  * Decode clamps rather than throws, for the reason boundedAmmo above states: the store
- * subscriber persists a decoded loadout BEFORE it is rendered, so a decoder that refused an
- * over-cap list would write the record it rejects and then fail on it on every later visit
- * (issue #201). Clamping keeps the record loadable and self-correcting — a stored twenty-trait
- * loadout decodes to fifteen and the next save writes fifteen back.
+ * subscriber persists a decoded loadout BEFORE it is rendered, so a decoder that
+ * refused an over-cap list would write the record it rejects and then fail on it on
+ * every later visit (issue #201). The dedupe still happens — a decoded loadout must
+ * not carry duplicate ids, which is a syntactic repair (issue #357), not a rule cap.
  *
- * It takes the FIRST surviving ids so decoding is deterministic, and it is applied AFTER each
- * decoder's own resolution step (id filter in v1, positional translation in legacy) so the cap
- * counts traits the loadout actually holds rather than entries that were about to be dropped.
+ * It takes the surviving ids in the order the decoder's own resolution step produces
+ * them (id filter in v1, positional translation in legacy), so the list is stable and
+ * deterministic.
  *
- * Governing: issue #357. Duplicate trait ids are collapsed BEFORE the slice, so the cap counts
- * fifteen DISTINCT traits — without this, a crafted payload of fifteen copies of `quartermaster`
- * decoded to fifteen copies, burned the whole trait budget, and inflated `upTotal` (which charges
- * per copy). The manual UI already guards against re-adding a present trait (`addTrait`); this
- * only matters for hand-crafted or tampered records, but the decoder is the single chokepoint
- * every decode path shares, so fixing it here covers all three decoders at once.
+ * Governing: issue #357. Duplicate trait ids are collapsed, so the decoder does not
+ * hand the rest of the system a list of fifteen copies of one trait that inflates
+ * `upTotal` (which charges per copy). The manual UI already guards against re-adding a
+ * present trait (`addTrait`); this only matters for hand-crafted or tampered records,
+ * but the decoder is the single chokepoint every decode path shares, so fixing it here
+ * covers all three decoders at once.
  *
  * Both decoders call this. A bound carried by one decoder and not the other is the defect PR
  * #203 had to fix for the ammo index, and is the reason this lives in one function.
  */
 function boundedTraits(ids) {
-  return [...new Set(ids)].slice(0, TRAIT_MAX);
+  return [...new Set(ids)];
 }
 
 /**
@@ -130,51 +143,52 @@ function boundedBlocked(b) {
 }
 
 /**
- * The equipment grid a decoded loadout is allowed to keep: at most `slotMax` items
- * (8 minus blocked cells) and at most four per consumable cap category.
+ * The equipment grid a decoded loadout is allowed to keep: resolved items and
+ * preserved holes, with NO cap-driven eviction.
  *
- * Governing: ADR-0009 (eight-cell grid), ADR-0015 (four per cap category),
- * SPEC-0006 REQ "Capacity Rules Are Stated Once and Preserved", issue #353/#418.
+ * Governing: ADR-0024 ("loadable, not legal"), issue #472.
+ *
+ * Decode no longer clamps a decoded equipment grid to `slotMax` (8 minus blocked
+ * cells) or to ADR-0015's four-per-cap-category consumable ceiling. Both are game
+ * rules, and per ADR-0024's contract the decoder MUST NOT enforce a game-rule cap —
+ * that is the reducer and the UI's job, at the point of a live user action where the
+ * player can see and choose to fix an over-cap record rather than have it silently
+ * rewritten underneath them. The equipment panel's over-capacity warning
+ * (`equipOverCapacity` in `calc.js`, consumed by `EquipmentPanel.jsx` via
+ * `selectEquipOverCapacity`) already reads whatever the store holds regardless of how
+ * it got there, so an over-cap decoded grid is already VISIBLE rather than silently
+ * wrong — the clamp was redundant with that warning, not a prerequisite for it.
+ *
+ * The function preserves the structural, non-rule half of what it always did: it
+ * resolves items against the catalog and preserves holes (a `null` cell stays a hole,
+ * rather than being repacked). The eviction loop that used to call `dropLast` until
+ * `equipOverCapacity` reported the grid was back within capacity is removed entirely.
  *
  * Decode clamps rather than throws, for the same reason `boundedTraits` does: the
  * store subscriber persists a decoded loadout BEFORE it renders, so a decoder that
  * refused an over-cap grid would write the record it rejects and then fail on it on
- * every later visit. Clamping keeps the record loadable and self-correcting — the
- * next save writes the clamped grid back.
+ * every later visit (issue #201). Degrading to absence (holes) is just as loadable
+ * as clamping to a maximum, so nothing about avoiding the #201 hazard requires
+ * clamping specifically.
  *
- * The clamp is DETERMINISTIC: it drops the highest-numbered occupied cell first, so
- * the earliest items survive and the same record always decodes to the same loadout.
- * For a category overflow it drops the last item OF THAT CATEGORY, so the earliest
- * four of each survive and items of other categories are never disturbed.
- *
- * Both rules are read through `equipOverCapacity` (calc.js) — one loop, not two, so
- * there is no second copy of the slot arithmetic. An earlier revision hand-rolled
- * `8 - blocked.length` for the slot pass; with a blocked list that was never
- * deduplicated, that bound could go negative and the loop spun forever on an empty
- * grid. `boundedBlocked` fixes the input, and driving the whole clamp from
- * `equipOverCapacity` means the arithmetic exists once, in `slotMax`.
- *
- * TERMINATION is structural rather than a counter: every iteration nulls exactly one
- * occupied cell, the grid holds at most eight, and `dropLast` returning false — the
- * over-capacity report names a category with nothing left to drop — exits instead of
- * spinning. So the loop cannot outlive the items it is removing.
+ * Compatibility note (ADR-0024): a record that was already clamped by a prior
+ * decode-then-resave cycle under the old (clamping) code cannot have its dropped data
+ * restored — this change only stops FUTURE clamping, it does not un-lose data a
+ * prior decode already dropped. No action needed; don't be surprised if an existing
+ * test fixture that was already trimmed stays trimmed.
  */
-function dropLast(equip, category) {
-  for (let k = equip.length - 1; k >= 0; k--) {
-    const e = equip[k];
-    if (!e) continue;
-    if (category !== null && (e.t !== "C" || capCategory(e.i) !== category)) continue;
-    equip[k] = null;
-    return true;
-  }
-  return false;
-}
-
 function boundedEquip(equip, blocked) {
   const result = [...equip];
-  const loadout = { equip: result, blocked: Array.isArray(blocked) ? blocked : [] };
-  for (let over = equipOverCapacity(loadout); over; over = equipOverCapacity(loadout)) {
-    if (!dropLast(result, over.kind === "category" ? over.category : null)) break;
+  // Governing: ADR-0024, issue #472, item 4. An occupied-and-blocked cell resolves to a
+  // hole (blocked wins) — the item is dropped, not the block. This matches how blocking
+  // already refuses to apply to an occupied cell elsewhere in the interactive UI, and it
+  // is the deterministic resolution both ends of the wire format now agree on. The server
+  // resolves the same overlap in `isValidData` before storing, so a stored record should
+  // never carry one — but the decoder resolves it again here as defence in depth, the
+  // same way `boundedBlocked` deduplicates even though the server already does.
+  const blockedSet = new Set(Array.isArray(blocked) ? blocked : []);
+  for (const k of blockedSet) {
+    if (Number.isInteger(k) && k >= 0 && k < result.length) result[k] = null;
   }
   return result;
 }

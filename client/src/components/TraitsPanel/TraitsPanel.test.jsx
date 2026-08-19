@@ -276,3 +276,66 @@ describe("TraitsPanel grid geometry", () => {
     expect(getByRole("group", { name: /Traits, 1 of 15/ })).toBeInTheDocument();
   });
 });
+
+// Governing: ADR-0012 (fifteen-trait cap), ADR-0024 ("loadable, not legal").
+//
+// The decoder no longer clamps a decoded trait list to fifteen (ADR-0024), so a
+// loadout can legitimately hold more than fifteen traits after a decode. This is the
+// trait-side mirror of the equipment panel's over-capacity warning (PR #416,
+// `equipOverCapacity`): the overage is disclosed rather than silently hidden by a
+// label that caps the count at fifteen. The group label names the true held count,
+// the warning is visible, and the live region announces it — the same two-channel
+// structure the equipment panel uses.
+describe("TraitsPanel over-capacity disclosure (ADR-0024)", () => {
+  it("renders no warning when the trait list is within the cap", () => {
+    const { container } = renderPanel(TRAITS.slice(0, TRAIT_MAX).map((t) => t[0]));
+    expect(container.querySelector(".over-capacity-warning")).not.toBeInTheDocument();
+    // The live region is mounted permanently (inserting it together with content is
+    // silent to assistive tech), so it exists but carries an empty string.
+    const announcer = container.querySelector('[data-testid="trait-overcap-announcer"]');
+    expect(announcer).toBeInTheDocument();
+    expect(announcer).toHaveTextContent("");
+  });
+
+  it("renders a visible warning naming the count when the trait list is over the cap", () => {
+    // Sixteen traits: one over the cap. The grid still renders exactly fifteen cells
+    // (the shape is fixed), but the warning discloses the overage and the group label
+    // names the true count.
+    const overIds = TRAITS.slice(0, TRAIT_MAX + 1).map((t) => t[0]);
+    const { container, getByRole } = renderPanel(overIds);
+
+    const warning = container.querySelector(".over-capacity-warning");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent(/Over capacity — 16 of 15 traits/);
+
+    // The group label names the true held count, not the grid's cell count — an
+    // over-cap loadout reads honestly as "16 of 15" rather than silently capping.
+    expect(getByRole("group", { name: /Traits, 16 of 15/ })).toBeInTheDocument();
+  });
+
+  it("announces the over-capacity message through a permanently-mounted live region", () => {
+    // The live region is mounted BEFORE the first violation, not created on demand —
+    // the same discipline the equipment panel uses (see EquipmentPanel.jsx's comment
+    // on `equip-overcap-announcer` for why: inserting a live region together with its
+    // content is silent to assistive tech).
+    const overIds = TRAITS.slice(0, TRAIT_MAX + 1).map((t) => t[0]);
+    const { container } = renderPanel(overIds);
+
+    const announcer = container.querySelector('[data-testid="trait-overcap-announcer"]');
+    expect(announcer).toBeInTheDocument();
+    expect(announcer).toHaveAttribute("role", "status");
+    expect(announcer).toHaveAttribute("aria-live", "polite");
+    expect(announcer).toHaveAttribute("aria-atomic", "true");
+    // The announced text matches the visible warning, so the two channels cannot drift.
+    expect(announcer).toHaveTextContent(/Over capacity — 16 of 15 traits/);
+  });
+
+  it("still renders exactly fifteen cells when the list is over the cap", () => {
+    // The grid's shape is fixed (five across, three rows) — the overage is disclosed
+    // by the warning, not by adding cells. This is intentional and documented in the
+    // file's own header comment.
+    const overIds = TRAITS.slice(0, TRAIT_MAX + 1).map((t) => t[0]);
+    const { container } = renderPanel(overIds);
+    expect(container.querySelectorAll(".trait-cell")).toHaveLength(TRAIT_MAX);
+  });
+});

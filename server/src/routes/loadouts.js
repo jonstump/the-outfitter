@@ -172,11 +172,15 @@ function isValidData(data) {
   }
   if (!Array.isArray(data.tr) || data.tr.length > MAX_TRAITS) return reject("tr");
   if (!data.tr.every((id) => isRef(id, WIRE_CATEGORIES.tr))) return reject("tr");
-  // Governing: issue #357. A trait list carrying duplicate ids inflates the decoded
-  // loadout's upgrade-point total and burns the trait budget on one entry. The same
-  // distinctness check already used for `data.b` (line 154) applies here — the cap is
-  // fifteen DISTINCT traits, not fifteen copies of one.
-  if (new Set(data.tr).size !== data.tr.length) return reject("tr");
+  // Governing: ADR-0024 ("loadable, not legal"), issue #472. A trait list carrying
+  // duplicate ids is syntactically malformed (the decoded loadout's upgrade-point
+  // total is inflated by the repeated entry, and the trait budget burns on one id),
+  // but the duplicate is structurally harmless: the client's decoder (`boundedTraits`,
+  // `client/src/utils/loadoutCodec.js`) already deduplicates before any other consumer
+  // sees the list, and the same dedup on the server brings both ends into agreement.
+  // Refusing the whole write would diverge from the "degrade rather than refuse"
+  // pattern every other decode/validate path in this codebase already follows.
+  if (Array.isArray(data.tr)) data.tr = [...new Set(data.tr)];
   if (typeof data.n !== "string" || data.n.length > 200) return reject("n");
   if (data.b !== undefined) {
     if (isV2OrLater) {
@@ -185,9 +189,31 @@ function isValidData(data) {
       // clamped when an index is out of range — a clamp would store a grid the client
       // never asked for (REQ "Error Handling at the Payload Boundary").
       if (!Array.isArray(data.b) || data.b.some((c) => !Number.isInteger(c) || c < 0 || c >= 8)) return reject("b");
-      if (new Set(data.b).size !== data.b.length) return reject("b");
+      // Governing: ADR-0024 ("loadable, not legal"), issue #472. A repeated blocked-cell
+      // index is syntactically malformed (SPEC-0006 REQ "Version 1 Records Migrate
+      // Losslessly" — "no input SHALL produce a blocked list containing a duplicate"),
+      // but a duplicate is structurally harmless: the same cell is blocked either way, so
+      // deduplicating rather than refusing the write matches the "degrade rather than refuse"
+      // pattern every other decode/validate path in this codebase already follows. The
+      // client's decoder (`boundedBlocked`, `client/src/utils/loadoutCodec.js`) already
+      // dedupes; this brings the server into agreement.
+      data.b = [...new Set(data.b)];
     } else if (typeof data.b !== "number" || data.b < 0 || data.b > 8) {
       return reject("b");
+    }
+  }
+  // Governing: ADR-0024, issue #472, item 4. An occupied-and-blocked cell (an `e`
+  // entry and a `b` index naming the same cell) is now handled deterministically
+  // rather than left to break the arithmetic downstream: blocked wins, the occupied
+  // entry becomes a hole (null). This matches how blocking already refuses to apply
+  // to an occupied cell elsewhere in the interactive UI, and the client's decoder
+  // (`boundedEquip`, `client/src/utils/loadoutCodec.js`) resolves the same overlap
+  // the same way as defence in depth. Applies to v2+ records, where `e` is a
+  // fixed eight-cell grid and `b` is an array of cell indices — v1/legacy packed
+  // records have no per-cell blocking to overlap with.
+  if (isV2OrLater && Array.isArray(data.b) && Array.isArray(data.e)) {
+    for (const k of data.b) {
+      if (k >= 0 && k < data.e.length) data.e[k] = null;
     }
   }
   return { ok: true };

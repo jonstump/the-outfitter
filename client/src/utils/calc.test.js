@@ -9,6 +9,8 @@ import {
   hasFreeCell,
   slotMax,
   totalCost,
+  traitOverCapacity,
+  TRAIT_MAX,
   upgradePointsAtLevel,
   upTotal,
   weaponSize,
@@ -222,6 +224,64 @@ describe("equipOverCapacity agrees with hasFreeCell on duplicate blocked cells",
     });
     expect(hasFreeCell(lo)).toBe(true);
     expect(equipOverCapacity(lo)).toBeNull();
+  });
+});
+
+// Governing: ADR-0012 (fifteen-trait cap), ADR-0024 ("loadable, not legal"). The
+// trait-side mirror of `equipOverCapacity` above. A decoded loadout can legitimately
+// hold more than fifteen traits under ADR-0024's contract — the decoder no longer
+// clamps — so this predicate is what makes an over-cap trait count visible rather than
+// silently wrong, exactly the way `equipOverCapacity` does for the equipment grid.
+describe("traitOverCapacity", () => {
+  it("returns null when the trait list is within the cap", () => {
+    expect(traitOverCapacity(loadoutWith({}))).toBeNull();
+    expect(traitOverCapacity(loadoutWith({ traits: TRAITS.slice(0, 1).map((t) => t[0]) }))).toBeNull();
+    // At the cap, not over it — the boundary itself is legal.
+    expect(traitOverCapacity(loadoutWith({ traits: TRAITS.slice(0, TRAIT_MAX).map((t) => t[0]) }))).toBeNull();
+  });
+
+  it("returns the held and max counts when the trait list is over the cap", () => {
+    // The catalog carries at least sixteen traits (verified by the over-cap block
+    // in loadoutCodec.test.js), so this is built from real ids rather than synthetic.
+    const over = traitOverCapacity(loadoutWith({ traits: TRAITS.slice(0, TRAIT_MAX + 1).map((t) => t[0]) }));
+    expect(over).not.toBeNull();
+    expect(over.held).toBe(TRAIT_MAX + 1);
+    expect(over.max).toBe(TRAIT_MAX);
+  });
+
+  it("tolerates a missing or malformed traits array by treating it as empty", () => {
+    // A decoded loadout always carries a `traits` array, but the predicate is exported
+    // and a caller may pass a partial object; a missing array must not throw.
+    expect(traitOverCapacity({})).toBeNull();
+    expect(traitOverCapacity({ traits: null })).toBeNull();
+  });
+});
+
+// Governing: ADR-0024, issue #472, item 4. An occupied-and-blocked cell (an `e`
+// entry and a `b` index naming the same cell) is resolved to a hole (blocked wins)
+// by the decoder (`boundedEquip`) and by the server (`isValidData`) before either
+// hands the loadout to these arithmetic functions. These tests verify the
+// arithmetic is correct against a loadout containing such a resolved cell — a
+// blocked cell is always empty, so it must not be counted as held and must not
+// inflate the slot budget.
+describe("slotMax / equipOverCapacity handle a resolved occupied-and-blocked cell", () => {
+  // A loadout where cell 2 was occupied and is now blocked (and thus resolved to a
+  // hole). The blocked cell is empty, slotMax is 7, and the 7 held items fit.
+  const overlap = loadoutWith({
+    equip: [
+      { t: "T", i: 0 }, { t: "T", i: 0 }, null, { t: "T", i: 0 },
+      { t: "T", i: 0 }, { t: "T", i: 0 }, { t: "T", i: 0 }, { t: "T", i: 0 },
+    ],
+    blocked: [2],
+  });
+
+  it("slotMax counts the blocked cell as unavailable (7 free)", () => {
+    expect(slotMax(overlap)).toBe(7);
+  });
+
+  it("equipOverCapacity reports no violation when held == slotMax", () => {
+    expect(equipOverCapacity(overlap)).toBeNull();
+    expect(hasFreeCell(overlap)).toBe(false);
   });
 });
 
