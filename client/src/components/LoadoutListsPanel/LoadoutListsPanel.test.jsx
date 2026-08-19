@@ -1155,11 +1155,16 @@ const LOADED = v1({
 // ordinary savable loadout, because the trait-point budget is off by default and the server
 // accepted forty.
 //
-// Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+// Governing: ADR-0024 ("loadable, not legal"), ADR-0012 (fifteen-trait cap), SPEC-0003
+// REQ "A Loadout Holds At Most Fifteen Traits"
 //
-// It is still a valid fixture, and what it now tests is the other half of the decision: an
-// over-cap record is not stranded. It loads, decodes to fifteen, and renders — so through the
-// panel this payload draws a FULL grid with no remainder, and the next save writes fifteen back.
+// It is still a valid fixture, and what it now tests is the decoder contract ADR-0024
+// establishes: an over-cap record is not stranded and is not silently rewritten. It
+// loads, decodes with all eighteen traits intact (the decoder no longer clamps), and
+// renders — so through the panel this payload draws a FULL grid of fifteen cells with a
+// "+3 more" overflow for the three past the cap. The next save writes eighteen back
+// through the server's write-time `MAX_TRAITS` check, which refuses the oversized write
+// outright (the opposite of clamping and silently proceeding).
 const EIGHTEEN_TRAIT_IDS = TRAITS.slice(0, 18).map((t) => t[0]);
 const OVERSTUFFED = v1({ w: [["sparks-lrr", -1]], tr: EIGHTEEN_TRAIT_IDS });
 
@@ -1277,22 +1282,26 @@ describe("the categorised loadout preview", () => {
     expect(filledIn("preview-traits-2")).toHaveLength(9);
   });
 
-  it("fills fifteen trait cells for an over-cap record, with no remainder left to state", () => {
-    // Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most Fifteen Traits"
+  it("fills fifteen trait cells for an over-cap record, stating the overflow remainder", () => {
+    // Governing: ADR-0024 ("loadable, not legal"), ADR-0012 (fifteen-trait cap)
     //
-    // The eighteen-trait record loads rather than erroring — that is the clamp doing its job —
-    // and the card never sees the three past the cap, because decode dropped them. So the grid
-    // is full and there is no overflow count. The overflow RENDERING is kept as defence and is
-    // asserted against previewGroups below, where an over-cap loadout can still be constructed;
-    // it is unreachable through a stored record now, which is the point of the cap.
+    // The decoder no longer clamps a decoded trait list to fifteen (ADR-0024 removed the
+    // clamp), so an eighteen-trait record now reaches the card with all eighteen intact.
+    // The grid still draws exactly fifteen cells (its shape is fixed — five across, three
+    // rows), and the three traits past the cap are announced as overflow rather than
+    // silently dropped. The overflow rendering was kept as defence for exactly this case
+    // — a record saved before the cap existed, or a payload arriving by a path that does
+    // not enforce the cap — and is now reachable through a stored record under ADR-0024.
     renderPanel(base([], [filed("1", "everything", OVERSTUFFED)], { unassignedOpen: true }));
 
     // The grid does not grow, does not scroll and does not clip silently.
     expect(cellsIn("preview-traits-1")).toHaveLength(15);
     expect(filledIn("preview-traits-1")).toHaveLength(15);
     expect(emptyIn("preview-traits-1")).toHaveLength(0);
-    expect(previewOf("1")).not.toHaveTextContent("more");
-    expect(previewOf("1").querySelector(".ll-lp-more")).toBeNull();
+    // The three traits past the cap are announced as overflow — they are not silently
+    // dropped by the decoder.
+    expect(previewOf("1")).toHaveTextContent("+3 more");
+    expect(previewOf("1").querySelector(".ll-lp-more")).not.toBeNull();
 
     // The other grids are unmoved by it.
     expect(cellsIn("preview-weapons-1")).toHaveLength(WEAPON_CELLS);
@@ -1380,10 +1389,13 @@ describe("the categorised loadout preview", () => {
   it("describes what the loadout holds, counting what survived decode", () => {
     renderPanel(base([], [filed("1", "everything", OVERSTUFFED)], { unassignedOpen: true }));
 
-    // The label still states what the LOADOUT holds rather than the grid's capacity — the two
-    // simply coincide now, because the eighteen-trait record reaches the card as fifteen
-    // (ADR-0012). Announcing eighteen here would describe traits the app has dropped.
-    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks, 15 traits");
+    // Governing: ADR-0024 ("loadable, not legal"). The decoder no longer clamps a decoded
+    // trait list to fifteen, so the eighteen-trait record reaches the card with all eighteen
+    // intact. The label states what the loadout HOLDS (eighteen), not what the grid can draw
+    // (fifteen) — the grid fills its fifteen cells and the three overflow are announced as
+    // "+3 more" (see the test above). Announcing fifteen here would describe traits the app
+    // has dropped, which is exactly what ADR-0024 says the decoder must not do.
+    expect(previewOf("1")).toHaveAccessibleName("Holds Sparks, 18 traits");
     expect(filledIn("preview-traits-1")).toHaveLength(15);
   });
 

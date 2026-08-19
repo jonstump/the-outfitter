@@ -1102,12 +1102,25 @@ Clamping loses the traits past the fifteenth, and this is accepted rather than o
 #### Scenario: An over-cap stored record heals rather than trapping
 
 - **WHEN** a record written under the old bound and holding twenty traits is read, rendered, and re-saved
-- **THEN** the read SHALL succeed, the loadout SHALL hold fifteen traits, and the save SHALL NOT be refused
+- **THEN** the read SHALL succeed, the loadout SHALL hold twenty traits (per ADR-0024 — decode no longer clamps; the overage is disclosed by the warning below rather than silently dropped), and the save SHALL NOT be refused
 
 #### Scenario: Generation stays within the bound
 
 - **WHEN** a loadout is generated
 - **THEN** it SHALL hold at most fifteen traits, asserted against the bound rather than against the generator's current draw count
+
+### Requirement: Traits Over Capacity Are Disclosed, Not Silently Dropped
+
+*(added 2026-08-17, per [ADR-0024](../../../adrs/ADR-0024-loadout-decoder-contract-loadable-not-legal.md))*
+
+A loadout that holds more than fifteen traits — however it arrived: by decode of a record written under a looser historical rule, by a share code, by a server payload, or by any other path that is not the live interactive add — SHALL be visibly disclosed to the user via an over-capacity warning that names the true held count. No trait SHALL be silently discarded by the client's decoder without the user's action. The decoder's contract (ADR-0024) is "produce a loadable loadout," not "produce a legal one": rule enforcement belongs to the reducer and the UI at the point of a live user action, where the player can see and choose to fix an over-cap record rather than have it silently rewritten underneath them.
+
+The warning SHALL follow the same two-channel structure the equipment panel already uses (PR #416, `equipOverCapacity`): one visible message the sighted user sees, and one permanently-mounted `aria-live="polite"` region the assistive-tech user hears, both driven by the same message string so the two surfaces cannot drift apart. The fixed fifteen-cell grid SHALL NOT reflow to accommodate the overage — the grid's shape is intentional (five across, three rows) and the warning is what makes the overage visible rather than the grid growing extra cells. The group label SHALL name the true held count rather than silently capping at fifteen.
+
+#### Scenario: A loadout decoded with sixteen traits shows an over-capacity warning naming the count
+
+- **WHEN** a loadout carrying sixteen valid trait ids is decoded
+- **THEN** the trait panel SHALL render a visible over-capacity warning naming the held count ("16 of 15 traits"), and a live region SHALL announce the same message, and no trait SHALL be silently dropped by the decoder
 
 ### Requirement: A Scarce Pick Costs Nothing and Still Occupies Its Slot
 

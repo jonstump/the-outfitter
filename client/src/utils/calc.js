@@ -212,6 +212,31 @@ export function equipOverCapacity(loadout) {
   return null;
 }
 
+/**
+ * Whether the trait list is over its cap, and by how much.
+ *
+ * Governing: ADR-0012 (fifteen-trait cap), SPEC-0003 REQ "A Loadout Holds At Most
+ * Fifteen Traits", ADR-0024 ("loadable, not legal").
+ *
+ * The trait-side mirror of `equipOverCapacity` above. A decoded loadout can legitimately
+ * hold more than fifteen traits under ADR-0024's contract — a save made under a looser
+ * historical rule, or a hand-crafted payload, loads rather than being silently
+ * rewritten. The decoder no longer clamps that list, so this predicate is what makes an
+ * over-cap trait count VISIBLE rather than silently wrong: the trait panel renders a
+ * warning the player can see and act on, exactly the way the equipment panel already
+ * does for an over-cap grid (PR #416). Returns null when the list is within the cap.
+ *
+ * Kept deliberately simpler than `equipOverCapacity` — there is no category concept on
+ * the trait side, just a flat count against `TRAIT_MAX`. A record over by N traits is
+ * over by N, and the only fix is to remove N of them; naming a specific trait to drop
+ * is the player's choice, not something this predicate can or should decide.
+ */
+export function traitOverCapacity(loadout) {
+  const held = Array.isArray(loadout.traits) ? loadout.traits.length : 0;
+  if (held > TRAIT_MAX) return { held, max: TRAIT_MAX };
+  return null;
+}
+
 const TRAIT_UP = new Map(TRAITS.map((t) => [t[0], t[2]]));
 export function upTotal(loadout) {
   return loadout.traits.reduce((a, id) => a + (TRAIT_UP.get(id) || 0), 0);

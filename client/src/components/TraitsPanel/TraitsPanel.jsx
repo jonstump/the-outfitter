@@ -3,6 +3,7 @@ import { TRAITS, traitThumb } from "../../data/catalog.js";
 import { RARITY_COLOR, descriptionFor, rarityFor } from "../../data/itemStats.js";
 import { loadoutActions } from "../../store/loadoutSlice.js";
 import { TRAIT_MAX } from "../../utils/calc.js";
+import { selectTraitOverCapacity } from "../../store/selectors.js";
 import ItemThumb from "../ItemThumb/ItemThumb.jsx";
 
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time,
@@ -86,10 +87,28 @@ function TraitCell({ trait, onRemove }) {
 export default function TraitsPanel() {
   const dispatch = useDispatch();
   const traits = useSelector((s) => s.loadout.traits);
+  const overCap = useSelector(selectTraitOverCapacity);
   const remove = (id) => dispatch(loadoutActions.removeTrait(id));
 
   const resolved = traits.map((id) => TRAITS.find((t) => t[0] === id)).filter(Boolean);
   const cells = Array.from({ length: TRAIT_MAX }, (_, i) => resolved[i] ?? null);
+  // Governing: ADR-0024 ("loadable, not legal"). A decoded loadout can legitimately hold
+  // more than `TRAIT_MAX` traits (a save made under a looser historical rule, or a crafted
+  // payload, loads rather than being silently clamped). The fixed fifteen-cell grid renders
+  // the first fifteen; the overage — when it exists — is disclosed by the warning below
+  // rather than hidden by a label that silently caps the count at fifteen. The group label
+  // names the true held count, never the grid's cell count, so an over-cap loadout reads
+  // honestly as "16 of 15" rather than "15 of 15".
+  const heldLabel = resolved.length;
+  // One message, two channels: the visible warning and the live region below both
+  // read it, so the sighted and announced surfaces cannot drift apart. Empty string
+  // when the grid is legal — the live region is mounted either way (see the comment
+  // on `equip-overcap-announcer` in EquipmentPanel.jsx for why: inserting a live region
+  // together with its content is silent to assistive tech, so it must already be in the
+  // tree before the first violation).
+  const overCapMessage = !overCap
+    ? ""
+    : `Over capacity — ${overCap.held} of ${overCap.max} traits. Remove one to save.`;
 
   return (
     <div className="panel">
@@ -103,7 +122,7 @@ export default function TraitsPanel() {
           a listitem put a bare span between the grid and its cell — which made filled and empty
           cells size differently, since only one of them was the grid item. Both are direct
           children here, so one rule sizes both. */}
-      <div className="trait-grid" role="group" aria-label={`Traits, ${resolved.length} of ${TRAIT_MAX}`}>
+      <div className="trait-grid" role="group" aria-label={`Traits, ${heldLabel} of ${TRAIT_MAX}`}>
         {cells.map((trait, slot) =>
           trait ? (
             <TraitCell key={trait[0]} trait={trait} onRemove={remove} />
@@ -111,6 +130,20 @@ export default function TraitsPanel() {
             <EmptyCell key={`empty-${slot}`} />
           )
         )}
+      </div>
+      {/* Governing: ADR-0024 ("loadable, not legal"), ADR-0012 (fifteen-trait cap). A decoded
+          loadout can now hold more than fifteen traits (the decoder no longer clamps), so this
+          warning is what makes the overage visible rather than silently wrong — the same
+          two-channel structure the equipment panel uses (PR #416, `equipOverCapacity`). */}
+      {overCap && <div className="over-capacity-warning">{overCapMessage}</div>}
+      <div
+        data-testid="trait-overcap-announcer"
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {overCapMessage}
       </div>
     </div>
   );

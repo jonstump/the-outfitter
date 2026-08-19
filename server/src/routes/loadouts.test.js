@@ -182,19 +182,24 @@ describe("loadouts API", () => {
     expect(stored.data.tr).toHaveLength(20);
   });
 
-  // Governing: issue #357. Duplicate trait ids inflate the decoded loadout's upgrade-point
-  // total and burn the trait budget. The same distinctness check that rejects a duplicate
-  // blocked-cell array (line 154 of loadouts.js) applies to `tr`: fifteen DISTINCT traits.
-  it("rejects a trait list carrying duplicate ids", async () => {
+  // Governing: ADR-0024 ("loadable, not legal"), issue #472. Duplicate trait ids are
+  // syntactically malformed but structurally harmless: the client's decoder
+  // (`boundedTraits`) already deduplicates, and the server now deduplicates the same
+  // way rather than refusing the write outright. This brings both ends into agreement
+  // — the same payload the client repairs and loads, the server now stores.
+  it("deduplicates a trait list carrying duplicate ids rather than rejecting it", async () => {
     const app = makeApp();
     const token = randomUUID();
+    const name = `__test__duptr-${Date.now()}`;
     const res = await request(app)
       .post("/api/loadouts")
       .set("x-loadout-token", token)
-      .send({ name: `__test__duptr-${Date.now()}`, data: { ...validData, tr: ["quartermaster", "quartermaster"] } });
-    expect(res.status).toBe(400);
+      .send({ name, data: { ...validData, tr: ["quartermaster", "quartermaster"] } });
+    expect(res.status).toBe(201);
     await db.read();
-    expect(db.data.loadouts.some((l) => l.name.startsWith("__test__duptr-"))).toBe(false);
+    const stored = db.data.loadouts.find((l) => l.name === name);
+    expect(stored).toBeTruthy();
+    expect(stored.data.tr).toEqual(["quartermaster"]);
   });
 
   // --- REQ "Loadout Identity Is Scoped to Its List" — id-addressed writes (#314) -------
@@ -465,6 +470,30 @@ describe("loadouts API", () => {
     expect(db.data.loadouts.some((l) => l.name.startsWith("__test__v2boor"))).toBe(false);
   });
 
+  // Governing: ADR-0024 ("loadable, not legal"), issue #472. A blocked-cell array
+  // carrying a repeated index is syntactically malformed but structurally harmless
+  // (the same cell is blocked either way). The server now deduplicates rather than
+  // rejecting, matching the client decoder's `boundedBlocked` behaviour. A duplicate
+  // is NOT the same condition as an out-of-range index: the out-of-range case above
+  // is still rejected outright, because clamping an out-of-range index would move the
+  // block to a cell the record never declared — a different concern entirely.
+  it("deduplicates a blocked-cell array carrying a duplicate index rather than rejecting it", async () => {
+    const app = makeApp();
+    const name = `__test__v2bdup-${Date.now()}`;
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", randomUUID())
+      .send({
+        name,
+        data: v2Data({ b: [2, 2] }),
+      });
+    expect(res.status).toBe(201);
+    await db.read();
+    const stored = db.data.loadouts.find((l) => l.name === name);
+    expect(stored).toBeTruthy();
+    expect(stored.data.b).toEqual([2]);
+  });
+
   it("accepts a v2 payload with holes at blocked positions", async () => {
     // A v2 grid may carry holes (empty cells) at blocked indices — that is a valid
     // state, not a malformed one.
@@ -477,6 +506,36 @@ describe("loadouts API", () => {
         data: v2Data({ b: [2, 3] }),
       });
     expect(res.status).toBe(201);
+  });
+
+  // Governing: ADR-0024, issue #472, item 4. An occupied-and-blocked cell (an `e`
+  // entry and a `b` index naming the same cell) is resolved to a hole (blocked
+  // wins) before storing. This matches the client decoder's `boundedEquip`
+  // resolution, so both ends of the wire format agree. The blocked cell's item is
+  // dropped, not the block — blocked-wins mirrors how blocking already refuses to
+  // apply to an occupied cell elsewhere in the interactive UI.
+  it("resolves an occupied-and-blocked overlap to a hole (blocked wins)", async () => {
+    const app = makeApp();
+    const name = `__test__v2overlap-${Date.now()}`;
+    const res = await request(app)
+      .post("/api/loadouts")
+      .set("x-loadout-token", randomUUID())
+      .send({
+        name,
+        data: v2Data({
+          e: [["T", "first-aid-kit"], null, ["T", "knife"], null, null, null, null, null],
+          b: [0, 2],
+        }),
+      });
+    expect(res.status).toBe(201);
+    await db.read();
+    const stored = db.data.loadouts.find((l) => l.name === name);
+    expect(stored).toBeTruthy();
+    // Cells 0 and 2 were occupied and are now blocked — the items are dropped.
+    expect(stored.data.e[0]).toBeNull();
+    expect(stored.data.e[2]).toBeNull();
+    // The blocked list is preserved — the cells are still blocked, just now empty.
+    expect(stored.data.b).toEqual([0, 2]);
   });
 
   it("names the offending field on a rejected save", async () => {
