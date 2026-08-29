@@ -233,9 +233,33 @@ exactly what this section existed to prevent.
 
 ## Requirements
 
-**Implementation status (as of 2026-08-18).** Nothing in this capability is implemented yet. No
-`desktop/` workspace exists; `server/src/index.js` still calls `app.listen()` at module scope. The
-requirements below are the work `/sdd:plan SPEC-0005` has yet to break down.
+**Implementation status (corrected 2026-08-28 per `/sdd:audit`).** **This capability is
+implemented.** The `desktop/` workspace exists (`main.js`, `preload.js`, `preferences.js`,
+`preferences-preload.js`, `lib/secretCheck.js`, `lib/prefsPure.js`, `scripts/build.js`),
+`server/src/index.js` exports the configured `app` behind an entry-point guard so importing it
+binds no port, and `.github/workflows/release.yml` carries the gated three-platform matrix.
+Epic #501's seven stories are all closed.
+
+This note previously read: "Nothing in this capability is implemented yet. No `desktop/` workspace
+exists; `server/src/index.js` still calls `app.listen()` at module scope. The requirements below are
+the work `/sdd:plan SPEC-0005` has yet to break down." All three clauses were false by the time the
+frontmatter moved to `status: implemented`, and the note was left behind. It is recorded here rather
+than deleted because this is the third recurrence of the same failure in this corpus — SPEC-0006 and
+SPEC-0009 each carried a stale status snapshot that was read as current fact, and in SPEC-0006's case
+it propagated into SPEC-0008 as a false statement about live code. **Read the frontmatter `status:`
+field as authoritative, not this paragraph.**
+
+Three requirements are implemented but carry known defects, each tracked and none of them a reason to
+re-open the capability's status:
+
+- **"Authenticated Loopback Boundary"** — the `/api` guard in `desktop/main.js` is bypassable by path
+  case (#517, blocker). The middleware itself is correct; its caller re-derives Express's path
+  matching by hand and gets it wrong.
+- **"Reproducible Three-Platform Release Artifacts"** — the Windows signing credential is modelled as
+  a certificate file secret, which this spec forbids by name (#518). Latent: the signing path only
+  runs when `RELEASE_SIGNING=signed`, which is not the default.
+- **"Native Application Menu and Preferences Surface"** — About shows no installed version on Windows
+  or Linux (#519).
 
 ### Requirement: Authenticated Loopback Boundary
 
