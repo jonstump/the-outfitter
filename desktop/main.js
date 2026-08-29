@@ -181,27 +181,46 @@ function createMainWindow(port) {
 }
 
 // Governing: SPEC-0005 REQ "Native Application Menu and Preferences Surface".
-// The native application menu is installed here. About opens the in-app
-// About/Help panel (epic #72, not yet landed at time of writing — wired to
-// shell.openExternal on the README as a placeholder). Preferences opens a
-// separate window hosting the data-directory control and future settings.
+// The native application menu is installed here, together with the contents of
+// the About panel it opens. About is informational only — no persisted state,
+// no editable controls — and Preferences opens a separate window hosting the
+// data-directory control and future settings, so neither surface contains the
+// other's content.
 //
-// Fixed 2026-08-19 (/sdd:review on PR #508): the original code sent an IPC
-// message (`menu:about`) whenever `mainWindow` was truthy — which is every
-// realistic click, since this menu is only installed after the main window
-// is created. Nothing in `desktop/preload.js` bridges `ipcRenderer` (it
-// exposes only the launch secret), and issue #76 (the in-app About/Help
-// panel this was meant to eventually trigger) is still open, so the message
-// had no listener anywhere. The documented README fallback was unreachable
-// dead code. Until #76 lands, always open the README externally.
+// Fixed 2026-08-29 (#519): About used to be a `click` handler that opened the
+// GitHub README in the OS browser, and the macOS app-menu item carried BOTH
+// `role: "about"` and that handler. Electron ignores `click` when `role` is
+// set, so on macOS the app-menu item opened the native panel while the Help
+// item on the same machine opened a web page, and on Windows and Linux — which
+// had no role-based item at all — the installed version appeared nowhere.
+// About is now `role: "about"` on every platform, backed by the panel options
+// set below; the README link survives as a separate "Documentation" Help item,
+// which is what it always was.
+//
+// TODO(#76): the in-app About/Help panel (epic #72) is still open. About is no
+// longer a click handler, so if that panel ever replaces this native one the
+// wiring will need an `ipcRenderer.on` bridge in desktop/preload.js AND a
+// listener in the client — neither exists today, and preload.js deliberately
+// exposes only the launch secret. A pre-2026-08-19 version of this file sent a
+// `menu:about` IPC message that nothing anywhere listened for; don't
+// reintroduce a send() without building both ends of it first.
 function installMenu(prefs) {
+  // Governing: SPEC-0005 REQ "Native Application Menu and Preferences
+  // Surface" — "About SHALL show the installed version". `app.getVersion()`
+  // reads the running application's own manifest — desktop/package.json,
+  // whose `version` electron-builder also stamps into the packaged bundle —
+  // so this is always the installed version and never a literal that can
+  // drift from it. These options populate the macOS native panel and the
+  // dialog Electron generates on Windows and Linux alike, which is what makes
+  // the three platforms agree.
+  app.setAboutPanelOptions({
+    applicationName: app.name || "Backwater Outfitters",
+    applicationVersion: app.getVersion(),
+    copyright: "© 2026 Jon Stump",
+  });
+
   const menu = buildMenu({
-    onAbout: () => {
-      // TODO(#76): once the in-app About/Help panel lands, wire this to send
-      // an IPC message the renderer listens for and opens that panel instead
-      // — but that requires a corresponding `ipcRenderer.on` bridge in
-      // desktop/preload.js and a listener in the client, neither of which
-      // exist yet. Don't reintroduce the send() call without both.
+    onDocumentation: () => {
       shell.openExternal("https://github.com/jonstump/the-outfitter#readme");
     },
     onPreferences: () => {
