@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu } = require("electron");
+const { app, BrowserWindow, shell, Menu, ipcMain } = require("electron");
 const path = require("node:path");
 const http = require("node:http");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
@@ -31,6 +31,44 @@ let mainWindow = null;
 // listening on it for the whole life of the process. Stays null until
 // `startServer()` resolves.
 let serverPort = null;
+
+// Governing: SPEC-0005 REQ "Authenticated Loopback Boundary", issue #523.
+//
+// The launch secret reaches the preload script over a synchronous IPC channel,
+// NOT through `process.env`. Until #523 this file assigned the secret into the
+// environment under the name `__DESKTOP_SECRET__` and desktop/preload.js read
+// it back — but every child process inherits the environment, and this file
+// calls `shell.openExternal(...)` in three places (will-navigate, the window-open
+// handler, and the About menu item), each of which spawns an OS handler. On
+// Linux that child's environment is then readable from `/proc/<pid>/environ`
+// by any process running as the same user, which is precisely the local-process
+// threat model lib/secretCheck.js exists to close.
+//
+// Deleting the variable after the window is created is deliberately NOT the
+// fix: `openExternal` (or any other spawn) can fire at any time, so the delete
+// races. The variable is never set at all.
+//
+// SYNCHRONOUS ipc (`ipcMain.on` + `event.returnValue`) rather than
+// `ipcMain.handle` + `await ipcRenderer.invoke`: a sandboxed preload is
+// CommonJS with no top-level await, so an async handshake would leave
+// `window.__DESKTOP_SECRET__` as a promise (or a getter over a cache that is
+// not provably warm) at the moment the renderer issues its first `/api`
+// request. `sendSync` keeps the exposed global a plain string, so
+// client/src/api/loadouts.js's synchronous `headers()` (#514) needs no change
+// and there is no ordering to race. The cost is one blocking round trip, once,
+// before the page loads.
+//
+// ORDERING: this must be registered before the BrowserWindow exists, or the
+// preload's `sendSync` would find no listener and get `undefined`. It is —
+// `startServer()` calls this at secret-generation time and is awaited inside
+// `app.whenReady()` before `createMainWindow(port)` runs.
+const SECRET_IPC_CHANNEL = "desktop:secret";
+
+function registerSecretIpc(secret) {
+  ipcMain.on(SECRET_IPC_CHANNEL, (event) => {
+    event.returnValue = secret;
+  });
+}
 
 async function startServer() {
   // Read preferences BEFORE setting OUTFITTER_DB_FILE — the data directory
@@ -90,7 +128,7 @@ async function startServer() {
   // Generate a fresh 256-bit launch secret on every launch. Held in memory
   // only; injected into the renderer via the preload script's contextBridge.
   const secret = generateLaunchSecret();
-  process.env.__DESKTOP_SECRET__ = secret;
+  registerSecretIpc(secret);
 
   // Mount the secret-check middleware before every `/api` router. Registered
   // in front of `serverApp`, not inside server/src/index.js — the
