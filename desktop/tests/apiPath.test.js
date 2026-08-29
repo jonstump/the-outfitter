@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import express from "express";
 import http from "node:http";
+import net from "node:net";
 const { isApiPath } = require("../lib/apiPath.js");
 const { createSecretCheck, generateLaunchSecret } = require("../lib/secretCheck.js");
 
@@ -19,6 +20,17 @@ const { createSecretCheck, generateLaunchSecret } = require("../lib/secretCheck.
 //    the check with `app.use("/api", ...)`, which Express itself resolved
 //    correctly) while production hand-rolled that matching and got it wrong.
 //    A test that asks Express cannot drift from Express.
+//
+// #526 widened this file after review found the first #517 fix still had a
+// bypass. Two shapes are probed that the original list could not express:
+//   - ABSOLUTE-FORM targets (`GET http://host/api/loadouts HTTP/1.1`), which
+//     RFC 9112 §3.2.2 permits and Node hands to `req.url` whole. These cannot
+//     be sent through `http.request({ path })`, so a raw-socket helper writes
+//     the request line verbatim.
+//   - DOT-SEGMENT targets (`/api/loadouts/../..`), which Express routes because
+//     it prefix-matches the RAW pathname, and which any normalizing parser
+//     (`new URL()`) would answer false for. These pin the predicate against a
+//     future "simplification" that would silently reopen #517.
 
 // Request targets to probe. Includes the #517 case variants plus separator,
 // query, encoding and traversal shapes that could plausibly diverge.
@@ -42,6 +54,13 @@ const PROBE_PATHS = [
   "/%41PI/loadouts",
   "/api%2Floadouts",
   "/apifoo",
+  // Dot segments. Express never resolves `..` — it prefix-matches the raw
+  // pathname from `parseurl` — so these ARE routed to the loadouts mount, and a
+  // normalizing parser that collapses them to `/` would under-guard a live
+  // route. Verified against real Express, not assumed. (#526)
+  "/api/loadouts/../..",
+  "/api/loadout-lists/../..",
+  "/api/loadouts/%2e%2e/..",
   "/healthz",
   "/",
   "/index.html",
@@ -58,6 +77,43 @@ function rawGet(port, target) {
     req.end();
   });
 }
+
+// `http.request({ path })` cannot express an absolute-form request target, so
+// the request line is written straight onto a socket. That is the only way to
+// probe the #526 vector at all — which is precisely why the original suite,
+// built entirely on `rawGet`, could not see it.
+function rawRequestLine(port, requestTarget, { method = "GET", headers = "" } = {}) {
+  return new Promise((resolve) => {
+    const sock = net.connect(port, "127.0.0.1", () => {
+      sock.write(
+        `${method} ${requestTarget} HTTP/1.1\r\n` +
+          `Host: 127.0.0.1:${port}\r\n` +
+          headers +
+          "Connection: close\r\n\r\n"
+      );
+    });
+    let raw = "";
+    sock.on("data", (c) => (raw += c));
+    sock.on("end", () => {
+      const status = parseInt((raw.split("\r\n")[0] || "").split(" ")[1], 10) || 0;
+      resolve({ status, body: raw.split("\r\n\r\n")[1] || "" });
+    });
+    sock.on("error", () => resolve({ status: 0, body: "" }));
+  });
+}
+
+// Absolute-form probe suffixes, turned into full URIs once a port is known.
+const ABSOLUTE_FORM_SUFFIXES = [
+  "/api/loadouts",
+  "/API/loadouts",
+  "/aPi/LoAdOuTs",
+  "/API/loadout-lists",
+  "/api/hunter-favorites",
+  "/api/loadouts?x=1",
+  "/api",
+  "/healthz",
+  "/",
+];
 
 describe("isApiPath (SPEC-0005, #517)", () => {
   it("matches the canonical /api paths", () => {
@@ -82,6 +138,44 @@ describe("isApiPath (SPEC-0005, #517)", () => {
     expect(isApiPath("/")).toBe(false);
     expect(isApiPath("/index.html")).toBe(false);
     expect(isApiPath("/apifoo")).toBe(false); // no segment boundary
+  });
+
+  // The #526 regression. Reverting apiPath.js to the split-only predicate (no
+  // scheme/authority strip) turns every assertion here red.
+  it("matches /api paths sent in absolute-form (the #526 bypass)", () => {
+    expect(isApiPath("http://127.0.0.1:1234/api/loadouts")).toBe(true);
+    expect(isApiPath("http://127.0.0.1:1234/API/loadouts")).toBe(true);
+    expect(isApiPath("http://127.0.0.1:1234/api/hunter-favorites")).toBe(true);
+    expect(isApiPath("http://127.0.0.1:1234/api/loadouts?x=1")).toBe(true);
+    expect(isApiPath("http://127.0.0.1:1234/api")).toBe(true);
+    // The scheme is case-insensitive too (RFC 3986 §3.1), and so is the
+    // authority — neither may be the thing that decides authentication.
+    expect(isApiPath("HTTP://127.0.0.1:1234/API/loadouts")).toBe(true);
+    expect(isApiPath("HtTp://127.0.0.1:1234/aPi/LoAdOuTs")).toBe(true);
+    expect(isApiPath("https://127.0.0.1:1234/api/loadouts")).toBe(true);
+    // Userinfo is part of the authority; the path still starts after it.
+    expect(isApiPath("http://user:pw@127.0.0.1:1234/api/loadouts")).toBe(true);
+  });
+
+  it("does not match non-API absolute-form targets", () => {
+    expect(isApiPath("http://127.0.0.1:1234/healthz")).toBe(false);
+    expect(isApiPath("http://127.0.0.1:1234/")).toBe(false);
+    // No path at all: addresses the origin root, not the API.
+    expect(isApiPath("http://127.0.0.1:1234")).toBe(false);
+    expect(isApiPath("http://127.0.0.1:1234?x=1")).toBe(false);
+    // A host that merely looks like the mount is still not a path under /api.
+    expect(isApiPath("http://api/healthz")).toBe(false);
+  });
+
+  // Guards the parsing strategy itself, not just its current output. Express
+  // prefix-matches the RAW pathname and never resolves `..`, so it routes these;
+  // a normalizing parser collapses them to `/` and would under-guard a live
+  // route. This is why apiPath.js does not use `new URL()`. (#526)
+  it("still matches when dot segments follow the mount, as Express does", () => {
+    expect(isApiPath("/api/loadouts/../..")).toBe(true);
+    expect(isApiPath("/api/loadout-lists/../..")).toBe(true);
+    expect(isApiPath("/api/loadouts/%2e%2e/..")).toBe(true);
+    expect(isApiPath("http://127.0.0.1:1234/api/loadouts/../..")).toBe(true);
   });
 
   it("is total over junk input rather than throwing", () => {
@@ -111,10 +205,21 @@ describe("isApiPath vs Express routing — superset invariant (SPEC-0005, #517)"
     await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const port = server.address().port;
 
+    // Absolute-form targets can only be built once the port is known, and can
+    // only be SENT down a raw socket — `http.request({ path })` will not carry
+    // them. Folding them into the same invariant check is the whole point of
+    // #526: the property is about request targets, not about one spelling of
+    // them.
+    const absoluteForm = ABSOLUTE_FORM_SUFFIXES.flatMap((suffix) => [
+      `http://127.0.0.1:${port}${suffix}`,
+      `HTTP://127.0.0.1:${port}${suffix}`,
+    ]);
+    const targets = [...PROBE_PATHS, ...absoluteForm];
+
     const violations = [];
-    for (const target of PROBE_PATHS) {
+    for (const target of targets) {
       routed.length = 0;
-      await rawGet(port, target);
+      await rawRequestLine(port, target);
       const expressRouted = routed.length > 0;
       const guarded = isApiPath(target);
       // The invariant: routed => guarded. Guarded-but-not-routed is fine.
@@ -167,6 +272,31 @@ describe("production request handler (SPEC-0005, #517)", () => {
         expect(res.status, `${target} must be refused`).toBe(403);
         expect(res.body).not.toContain("SENSITIVE");
       }
+    });
+  });
+
+  // The #526 finding, at the layer that actually matters: not "does the
+  // predicate return true" but "does the real handler shape refuse the request".
+  it("refuses absolute-form /api targets without the secret", async () => {
+    await withServer(async (port) => {
+      for (const suffix of ["/api/loadouts", "/API/loadouts", "/aPi/LoAdOuTs"]) {
+        for (const scheme of ["http", "HTTP"]) {
+          const target = `${scheme}://127.0.0.1:${port}${suffix}`;
+          const res = await rawRequestLine(port, target);
+          expect(res.status, `${target} must be refused`).toBe(403);
+          expect(res.body, `${target} must not leak`).not.toContain("SENSITIVE");
+        }
+      }
+    });
+  });
+
+  // Reads were the visible half of #526; the write was the damaging half. The
+  // original #517 report held itself to proving persistence, so this does too.
+  it("refuses an absolute-form write without the secret", async () => {
+    await withServer(async (port) => {
+      const target = `http://127.0.0.1:${port}/api/loadouts`;
+      const res = await rawRequestLine(port, target, { method: "POST" });
+      expect(res.status).toBe(403);
     });
   });
 
