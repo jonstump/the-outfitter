@@ -5,12 +5,23 @@ const { createSecretCheck, generateLaunchSecret } = require("../lib/secretCheck.
 
 // Governing: SPEC-0005 REQ "Authenticated Loopback Boundary", issue #503.
 //
-// The secret-check middleware is the real boundary — binding to 127.0.0.1
-// alone is not enough, since any local process can reach a loopback port.
-// Every `/api` request must carry the current launch's secret in the
-// `X-Desktop-Secret` header, or it is rejected with 403 before any router
-// runs. The check uses `crypto.timingSafeEqual`, not `===`, to avoid a
-// timing side-channel.
+// SCOPE: this file tests `createSecretCheck` IN ISOLATION — does it accept a
+// good secret, reject a bad/absent/stale one, and compare in constant time.
+// It does NOT test whether production actually calls it for a given request.
+//
+// That distinction is not pedantic; it is #517. `buildApp` below mounts the
+// check with `app.use("/api", check)`, which was production's wiring before
+// #510 replaced it with a hand-rolled path test in `desktop/main.js`. Express
+// resolves `app.use("/api", ...)` case-insensitively and therefore guarded
+// `/API/loadouts` correctly, so every test here stayed green while production
+// — which no longer used this wiring — served `/API/loadouts` unauthenticated.
+// A test harness that is more correct than the code it stands in for reports
+// success it has not earned.
+//
+// The predicate that decides whether the check runs, and a test built on
+// production's ACTUAL handler shape, both live in `desktop/lib/apiPath.js` and
+// `desktop/tests/apiPath.test.js`. When changing the boundary, change them
+// there. Do not treat a green run of this file as evidence the boundary holds.
 
 function buildApp(secret) {
   const app = express();

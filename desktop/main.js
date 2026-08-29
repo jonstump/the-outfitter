@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("node:path");
 const http = require("node:http");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
+const { isApiPath } = require("./lib/apiPath");
 const { loadPreferences, registerPreferencesIpc, buildMenu, createPreferencesWindow } = require("./preferences");
 const { isDirectoryWritable } = require("./lib/prefsPure");
 
@@ -105,9 +106,22 @@ async function startServer() {
   // real "dependencies" left at all — matching its state before this
   // problem existed — so electron-builder should have nothing to
   // auto-collect for the app bundle.
+  //
+  // Fixed 2026-08-29 (#517): the path test below used to be spelled inline as
+  // `req.url === "/api" || req.url.startsWith("/api/") || req.url.startsWith("/api?")`.
+  // `startsWith` is case-sensitive; Express's routing is not (nothing sets
+  // `case sensitive routing`), so `GET /API/loadouts` skipped the check and was
+  // then routed and served — an unauthenticated read, and `POST /API/loadouts`
+  // an unauthenticated write that reached lowdb. Reproduced directly before
+  // fixing: 200 and 201 respectively, with no `X-Desktop-Secret` header.
+  //
+  // The predicate now lives in `lib/apiPath.js` so it can be unit-tested
+  // without booting Electron — that it could not be is why the regression
+  // survived a green suite. See that module for the superset invariant it has
+  // to hold against Express.
   const secretCheck = createSecretCheck(secret);
   const server = http.createServer((req, res) => {
-    if (req.url === "/api" || req.url.startsWith("/api/") || req.url.startsWith("/api?")) {
+    if (isApiPath(req.url)) {
       secretCheck(req, res, () => serverApp(req, res));
     } else {
       serverApp(req, res);
