@@ -36,15 +36,41 @@ async function savePreferences(prefs) {
  * Exposes two distinct entry points: About and Preferences. These MUST NOT be
  * merged into one window. On macOS, the app name is the first menu, containing
  * at minimum an About item and a Preferences item (Cmd+,).
+ *
+ * Governing: the same REQ — "About SHALL show the installed version, and MAY
+ * link out to documentation or support. It owns no persisted state and SHALL
+ * NOT contain editable controls." — and its scenario "WHEN a user opens About
+ * and, separately, Preferences / THEN they SHALL be distinct windows or
+ * panels, and neither SHALL contain the other's content".
+ *
+ * Fixed 2026-08-29 (#519). Every About item is `{ role: "about" }` with NO
+ * `click` handler. Electron ignores `click` when `role` is set, so an item
+ * carrying both silently runs the role and drops the handler — which is how
+ * macOS ended up with two About items doing two different things (the app-menu
+ * one opened the native panel, the Help one opened the GitHub README). The
+ * role opens Electron's About panel, populated by `app.setAboutPanelOptions`
+ * in desktop/main.js; on Windows and Linux, which have no native panel,
+ * Electron generates an equivalent dialog from the same options. One role,
+ * one behaviour, the installed version on all three platforms.
+ *
+ * The README link survives as its own Help item labelled "Documentation",
+ * which is what it always was — the REQ's "MAY link out to documentation",
+ * not the About surface itself.
  */
-function buildMenu({ onAbout, onPreferences }) {
+function buildMenu({ onDocumentation, onPreferences }) {
   const isMac = process.platform === "darwin";
   const appName = app.name || "Backwater Outfitters";
+
+  // A factory, not a shared literal: Menu.buildFromTemplate consumes the
+  // template objects it is handed, so the app-menu and Help-menu About items
+  // must be distinct objects even though they are deliberately identical.
+  const aboutItem = () => ({ role: "about", label: `About ${appName}` });
+
   const appMenu = isMac
     ? {
         label: appName,
         submenu: [
-          { role: "about", label: `About ${appName}`, click: onAbout },
+          aboutItem(),
           { type: "separator" },
           { label: "Preferences…", accelerator: "Cmd+,", click: onPreferences },
           { type: "separator" },
@@ -65,13 +91,15 @@ function buildMenu({ onAbout, onPreferences }) {
         ],
       };
 
+  // About lives in the Help menu on every platform, and additionally in the
+  // app menu on macOS where that is the platform convention. Both entry
+  // points are the same item, so they cannot diverge again.
   const helpMenu = {
     role: "help",
     submenu: [
-      {
-        label: `About ${appName}`,
-        click: onAbout,
-      },
+      aboutItem(),
+      { type: "separator" },
+      { label: "Documentation", click: onDocumentation },
     ],
   };
 
