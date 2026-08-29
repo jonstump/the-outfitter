@@ -83,12 +83,44 @@ async function isDirectoryWritable(dir) {
 }
 
 /**
+ * Governing: SPEC-0005 "Security Requirements", REQ "Native Application Menu
+ * and Preferences Surface", issue #521.
+ *
+ * Escape a value for interpolation into an HTML text node or attribute. `&` is
+ * handled by the same single pass as the rest — one regex plus a lookup map —
+ * so an already-escaped-looking value cannot be double-escaped by an ordering
+ * mistake.
+ */
+const HTML_ESCAPES = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
+/**
  * The descriptor list for the Preferences surface.
  *
  * Each entry declares a control that the Preferences view renders. A future
  * setting can be added by appending an entry here — the view and the menu
  * logic do not need to change. `render(value)` returns an HTML fragment for
  * the control.
+ *
+ * Governing: SPEC-0005 "Security Requirements", REQ "Native Application Menu
+ * and Preferences Surface", issue #521.
+ *
+ * EVERY control's `render()` MUST pass any interpolated value through
+ * `escapeHtml()`. preferences.js joins these fragments into a document loaded
+ * as a `data:` URL, and preferences-preload.js exposes the privileged
+ * `window.prefs` bridge (`changeDataDir()`, `relaunch()`) into that page — so
+ * unescaped markup from a value runs with those in reach. Values are not
+ * trustworthy just because a native picker produced them: directory names
+ * arrive from archive extraction, sync clients, and external volumes.
  */
 const PREFERENCE_CONTROLS = [
   {
@@ -97,7 +129,7 @@ const PREFERENCE_CONTROLS = [
     render: (value) => `
       <div class="pref-control" data-key="dataDir">
         <label for="dataDir-path">Data directory</label>
-        <code id="dataDir-path">${value || "(default)"}</code>
+        <code id="dataDir-path">${escapeHtml(value || "(default)")}</code>
         <button type="button" id="dataDir-change">Change…</button>
       </div>`,
   },
@@ -108,6 +140,7 @@ const PREFERENCE_CONTROLS = [
 
 module.exports = {
   DEFAULT_PREFERENCES,
+  escapeHtml,
   loadPreferencesFromDir,
   savePreferencesToDir,
   isDirectoryWritable,

@@ -22,6 +22,7 @@ import {
   isDirectoryWritable,
   PREFERENCE_CONTROLS,
   DEFAULT_PREFERENCES,
+  escapeHtml,
 } from "../lib/prefsPure.js";
 
 let tempDir;
@@ -94,6 +95,77 @@ describe("PREFERENCE_CONTROLS descriptor list (SPEC-0005, #504/#505)", () => {
   it("is structured so a future control can be appended without changing core logic", () => {
     expect(Array.isArray(PREFERENCE_CONTROLS)).toBe(true);
     expect(PREFERENCE_CONTROLS.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("PREFERENCE_CONTROLS render() escaping (SPEC-0005 'Security Requirements', #521)", () => {
+  // Governing: SPEC-0005 "Security Requirements", REQ "Native Application Menu
+  // and Preferences Surface", issue #521. preferences.js joins these fragments
+  // into a document loaded as a `data:` URL, and preferences-preload.js exposes
+  // the privileged `window.prefs` bridge into that page — so an unescaped value
+  // is live markup running next to `changeDataDir()` and `relaunch()`. A
+  // directory name can carry markup without the user typing it (archive
+  // extraction, sync clients, external volumes), so the picker is not a guard.
+
+  it("escapes markup in the data directory value — no raw <img survives (#521)", () => {
+    const payload = '/home/u/<img src=x onerror="window.prefs.relaunch()">';
+    const html = PREFERENCE_CONTROLS[0].render(payload);
+
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("onerror=\"window.prefs");
+    expect(html).toContain("&lt;img src=x onerror=&quot;window.prefs.relaunch()&quot;&gt;");
+  });
+
+  it("escapes all five of & < > \" ' in the rendered value", () => {
+    const html = PREFERENCE_CONTROLS[0].render("/a&b/c<d>e/f\"g'h");
+    const rendered = html.slice(
+      html.indexOf('<code id="dataDir-path">') + '<code id="dataDir-path">'.length,
+      html.indexOf("</code>")
+    );
+
+    expect(rendered).toBe("/a&amp;b/c&lt;d&gt;e/f&quot;g&#39;h");
+    for (const raw of ["&", "<", ">", '"', "'"]) {
+      expect(rendered.includes(raw + "b") || rendered.includes(raw + "d")).toBe(false);
+    }
+  });
+
+  it("does not double-escape an ampersand it just escaped", () => {
+    const html = PREFERENCE_CONTROLS[0].render("/tmp/a&b");
+    expect(html).toContain("/tmp/a&amp;b");
+    expect(html).not.toContain("&amp;amp;");
+  });
+
+  it("renders an ordinary path legibly, with no entity noise", () => {
+    const ordinary = "/home/u/Library/App Support/Backwater Outfitters";
+    const html = PREFERENCE_CONTROLS[0].render(ordinary);
+
+    expect(html).toContain(ordinary);
+    expect(html).not.toContain("&amp;");
+    expect(html).not.toContain("&#39;");
+    expect(html).not.toContain("&quot;");
+    expect(html).not.toContain("&lt;");
+    expect(html).not.toContain("&gt;");
+  });
+
+  it("still renders (default) when the value is null", () => {
+    const html = PREFERENCE_CONTROLS[0].render(null);
+    expect(html).toContain("(default)");
+    expect(html).not.toContain("&#40;");
+  });
+
+  it("every registered control escapes a markup payload in its rendered output", () => {
+    // Guards the comment beside PREFERENCE_CONTROLS: a future setting added to
+    // the array must inherit the escaping guarantee, not reintroduce the bug.
+    for (const control of PREFERENCE_CONTROLS) {
+      const html = control.render("<script>window.prefs.relaunch()</script>");
+      expect(html).not.toContain("<script>");
+    }
+  });
+
+  it("escapeHtml is exported and escapes the five HTML-significant characters", () => {
+    expect(escapeHtml("&<>\"'")).toBe("&amp;&lt;&gt;&quot;&#39;");
+    expect(escapeHtml("plain/path")).toBe("plain/path");
+    expect(escapeHtml(null)).toBe("null");
   });
 });
 
