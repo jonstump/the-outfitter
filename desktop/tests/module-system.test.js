@@ -29,15 +29,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // green in CI, broken in the packaged app, the exact failure mode this test
 // exists to catch.
 //
-// Scoped to the two files in desktop/ explicitly documented as having "no
-// Electron dependency" (lib/prefsPure.js, lib/secretCheck.js) — every other
-// file here requires("electron") at module scope, which behaves specially
-// only inside a real Electron process and isn't meaningfully testable this
-// way.
+// Scoped to the files in desktop/ explicitly documented as having "no
+// Electron dependency" (lib/prefsPure.js, lib/secretCheck.js, and since #526
+// lib/apiPath.js) — every other file here requires("electron") at module
+// scope, which behaves specially only inside a real Electron process and
+// isn't meaningfully testable this way.
+//
+// Keep this list in step with lib/. apiPath.js arrived in #517 without being
+// added here, and it is on the authentication path and inside the packaged
+// bundle (`lib/**/*` in package.json's build.files) — a module-system mistake
+// in it would take the /api guard down on first launch of a real build, which
+// is the same class of failure this test was written for.
 describe("desktop/lib files load under Electron's real bundled CommonJS loader (regression)", () => {
   const libDir = path.join(__dirname, "..", "lib");
 
-  it.each(["prefsPure.js", "secretCheck.js"])(
+  it.each(["prefsPure.js", "secretCheck.js", "apiPath.js"])(
     "%s is loadable via require() under Electron's actual bundled Node, not just a newer local `node` or Vitest's transform",
     (filename) => {
       const filePath = path.join(libDir, filename);
