@@ -26,7 +26,7 @@ The previous revision of this spec (implementing ADR-0001) planned to extend tha
 
 ### Offline scrape script, not a runtime or CI dependency
 
-**Choice**: A standalone Node script (e.g. `scripts/scrape-images.mjs`, run manually or on-demand — not part of `npm run dev`, `npm run build`, or CI) fetches item images from huntshowdown.wiki.gg, respecting `robots.txt` and rate-limiting requests, and writes them to `client/public/images/{category}/{slug}.{ext}`.
+**Choice**: A standalone Node script (e.g. `scripts/scrape-images.mjs`, run manually or on-demand — not part of `npm run dev`, `npm run build`, or CI) fetches item images from huntshowdown.wiki.gg and writes them to `client/public/images/{category}/{slug}.{ext}`. The `robots.txt` check, rate limiting, user agent, and slug derivation are not the script's own: they come from the shared client `scripts/lib/wiki.mjs`, which every scrape script imports (ADR-0005). That module is a hard contract rather than a convenience — a second copy of `slugify()` would drift from the on-disk path this requirement names, so a new scrape script MUST import it rather than reimplement it.
 
 **Rationale**: This is the architectural expression of "ethically done" scraping from ADR-0002 — a bounded, infrequent interaction with the wiki's infrastructure, invoked deliberately when the catalog changes (e.g., new DLC), rather than a standing dependency that hits their servers on every build or every page view.
 
@@ -61,8 +61,10 @@ The previous revision of this spec (implementing ADR-0001) planned to extend tha
 ```mermaid
 flowchart TD
     subgraph offline["Offline (developer-invoked, not runtime/CI)"]
-        SCRIPT["scripts/scrape-images.mjs\n(respects robots.txt, rate-limited)"]
+        LIB["scripts/lib/wiki.mjs\nslugify · robots · rate limit\nuser agent · sentinel errors"]
+        SCRIPT["scripts/scrape-images.mjs\n(image-specific logic only)"]
         WIKI["huntshowdown.wiki.gg"]
+        LIB --> SCRIPT
         SCRIPT -->|"bounded, rate-limited fetch"| WIKI
         SCRIPT --> ASSETS["client/public/images/{category}/{slug}.ext\n(self-hosted static assets)"]
     end

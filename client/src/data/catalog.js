@@ -13,8 +13,28 @@
 // `id` is a stable, slug-style identifier, unique within its category and never
 // reused after removal. The wire format (loadoutCodec.js), localStorage, saved
 // loadout records, and share codes all reference items by `id` rather than by
-// array position, so reordering/inserting/removing entries here never silently
-// remaps an existing saved loadout to a different item.
+// array position.
+//
+// So REORDERING and INSERTING are free: no saved loadout is silently remapped to a
+// different item, because nothing anywhere stores an array position.
+//
+// REMOVING IS NOT FREE, and this note used to say it was (corrected by #252; #250
+// had already corrected the identical claim in `scripts/lib/wiki.mjs`, but not this
+// copy — the one someone deleting a row actually reads). `fromLegacy` resolves a
+// pre-versioning record through the frozen positional table in `loadoutCodec.js`,
+// which maps an index to an id, and then resolves THAT ID AGAINST THE LIVE CATALOG.
+// Delete the row and the frozen table still names the id, the lookup finds nothing,
+// and the item is dropped from the decoded loadout. "Never remaps to a different
+// item" stays true — which is exactly what made it misleading, because the failure
+// is a SILENT DROP, which that sentence does not rule out. #243 walked into this.
+//
+// The remedy is an ALIAS, not a delete: add the retired id to
+// `RETIRED_WEAPON_ALIASES` in `loadoutCodec.js`, pointing at a surviving row, before
+// removing anything. Both decoders route through it (`fromV1` as well as
+// `fromLegacy` — `toData` writes the id, so a v1 record carries it too).
+//
+// That hatch is WEAPONS-ONLY today. A tool, consumable or trait in the same position
+// has no equivalent, so removing one of those rows has no safe path yet.
 //
 // Governing: ADR-0002 (Source Weapon/Equipment Images from huntshowdown.wiki.gg via a One-Time, Self-Hosted Scrape)
 // Implements: SPEC-0001 REQ "Image Coverage Across All Catalog Categories, with Fallback"
