@@ -1,5 +1,5 @@
 ---
-status: approved
+status: implemented
 date: 2026-08-09
 implements: [ADR-0004]
 ---
@@ -12,7 +12,7 @@ This capability formalizes how Backwater Outfitters' developer environment is pi
 
 The gap this capability closes is concrete. Node 20 was pinned in four places (`.nvmrc`, `.github/workflows/ci.yml`, and twice in `Dockerfile`) with no mechanism keeping them in sync, and nothing read any of them automatically — the machine ADR-0004 was authored on resolves `node` to v24.13.1. The README instructs `npm install` while CI and the production image run `npm ci`, permitting lockfile drift that surfaces only as a CI failure on an unrelated pull request. No `.env.example` existed, so the four environment variables the app reads were discoverable only by grepping source.
 
-**Implementation status.** Nearly all of this capability is in place. `mise.toml`, `.npmrc`, and `.env.example` exist at the repo root and the root `package.json` declares `engines.node`; `.github/workflows/ci.yml` resolves Node via `node-version-file: .nvmrc` and verifies lockfile integrity on every pull request; the `Dockerfile` declares a single `ARG NODE_VERSION` consumed by both of its stages; `.env.example` documents `OUTFITTER_DB_FILE`; and the root `package.json` has a `test` script running the client, server, and scrape suites, documented in the README's Scripts table. The README's install instruction now matches this (`npm ci`, corrected via `/sdd:audit`). One gap remains:
+**Implementation status** *(status moved `approved` → `implemented` on 2026-08-28 via `/sdd:audit`)*. **This capability is implemented**, with one SHOULD-level gap tracked separately and named below — the status field reflects that every SHALL/MUST requirement is built, not that nothing remains. `mise.toml`, `.npmrc`, and `.env.example` exist at the repo root and the root `package.json` declares `engines.node`; `.github/workflows/ci.yml` resolves Node via `node-version-file: .nvmrc` and verifies lockfile integrity on every pull request; the `Dockerfile` declares a single `ARG NODE_VERSION` consumed by both of its stages; `.env.example` documents `OUTFITTER_DB_FILE`; and the root `package.json` has a `test` script running the client, server, and scrape suites, documented in the README's Scripts table. The README's install instruction now matches this (`npm ci`, corrected via `/sdd:audit`). One SHOULD-level gap remains, tracked as #57 and deliberately not blocking the `implemented` status:
 
 - **Documented Environment Variables** — `mise.toml` carries no `[env]` section to load the documented variables on activation (#57).
 
