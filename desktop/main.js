@@ -3,7 +3,13 @@ const path = require("node:path");
 const http = require("node:http");
 const { generateLaunchSecret, createSecretCheck } = require("./lib/secretCheck");
 const { isApiPath } = require("./lib/apiPath");
-const { loadPreferences, registerPreferencesIpc, buildMenu, createPreferencesWindow } = require("./preferences");
+const {
+  loadPreferences,
+  registerPreferencesIpc,
+  buildMenu,
+  createPreferencesWindow,
+  setMainWindow,
+} = require("./preferences");
 const { isDirectoryWritable } = require("./lib/prefsPure");
 
 // Governing: SPEC-0005 REQ "One Server Implementation, Shared by Both Targets",
@@ -18,6 +24,13 @@ const { isDirectoryWritable } = require("./lib/prefsPure");
 // and desktop targets.
 
 let mainWindow = null;
+
+// The loopback port `startServer()` bound for this launch. Module-scope rather
+// than a local inside the `whenReady` handler because the `activate` handler
+// below needs it to rebuild a window the user closed, and the server keeps
+// listening on it for the whole life of the process. Stays null until
+// `startServer()` resolves.
+let serverPort = null;
 
 async function startServer() {
   // Read preferences BEFORE setting OUTFITTER_DB_FILE — the data directory
@@ -175,8 +188,20 @@ function createMainWindow(port) {
     return { action: "deny" };
   });
 
+  // Governing: SPEC-0005 REQ "Native Application Menu and Preferences Surface".
+  // Hand the window to preferences.js so `createPreferencesWindow` can parent
+  // the Preferences window to it (the platform-conventional relationship for a
+  // settings window). Before #524 nothing ever called this, so `mainWindowRef`
+  // was permanently null and the `parent:` option was always undefined.
+  setMainWindow(mainWindow);
+
   mainWindow.on("closed", () => {
     mainWindow = null;
+    // Clear the reference too. On macOS the process outlives its window, and
+    // Preferences stays reachable from the menu (Cmd+,) with no window open —
+    // so `createPreferencesWindow` can genuinely run after this fires. Leaving
+    // a destroyed BrowserWindow here would hand it to `parent:`.
+    setMainWindow(null);
   });
 }
 
@@ -242,7 +267,8 @@ if (!gotLock) {
     const prefs = await loadPreferences();
     registerIpc(prefs);
     const { port } = await startServer();
-    createMainWindow(port);
+    serverPort = port;
+    createMainWindow(serverPort);
     installMenu(prefs);
   });
 }
@@ -251,12 +277,24 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+// Governing: ADR-0008 ("Ship a Desktop App by Wrapping the Existing Server in
+// Electron"). Recreate the window when the user reactivates the app with no
+// window open — on macOS `window-all-closed` above deliberately does not quit,
+// so without this the user is left with a live process and a dock icon that
+// does nothing. The server started by `whenReady` is still listening on
+// `serverPort`, and the launch secret is still the one the preload script will
+// hand the new renderer, so the existing port is the correct one to reuse.
+//
+// Fixed 2026-08-29 (#524): the body of this handler used to be a comment
+// describing exactly that and no code at all.
+//
+// `activate` also fires during a normal macOS launch, which can race the async
+// `whenReady` handler above (it awaits preferences and the server bind before
+// `serverPort` is set). Doing nothing in that case is correct — `whenReady`
+// creates the window itself moments later — and is why this checks the port
+// rather than calling `createMainWindow(null)`.
 app.on("activate", () => {
-  if (mainWindow === null) {
-    // The server should already be running from the initial whenReady; if
-    // the window was closed on macOS (where windows stay in the dock), just
-    // recreate it. The port and secret are still valid for this launch.
-    // This is a best-effort path — in practice, activate fires after the
-    // window is closed, and the server is still listening.
+  if (mainWindow === null && serverPort !== null) {
+    createMainWindow(serverPort);
   }
 });

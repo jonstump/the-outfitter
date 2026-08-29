@@ -82,8 +82,16 @@ let preferencesWindow = null;
 let mainWindowRef = null;
 
 /**
- * Set the main window reference (used as the parent for the Preferences
- * window and to send IPC messages like `menu:about`).
+ * Set the main window reference, used as the parent for the Preferences window
+ * (see `createPreferencesWindow` below).
+ *
+ * Called from `createMainWindow` in main.js when the window is created, and
+ * again with `null` from its "closed" handler — a destroyed BrowserWindow must
+ * never reach `parent:`, and on macOS the process outlives its window.
+ *
+ * Corrected 2026-08-29 (#524): this used to also claim the reference was used
+ * "to send IPC messages like `menu:about`". Nothing sends that message any
+ * more — see the TODO(#76) in main.js's `installMenu` for why.
  */
 function setMainWindow(win) {
   mainWindowRef = win;
