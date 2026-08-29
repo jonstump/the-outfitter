@@ -112,9 +112,20 @@ describe("the launch secret never enters the process environment (#523)", () => 
     expect(registered).toBeGreaterThan(generated);
     expect(resolved).toBeGreaterThan(registered);
     // Inside whenReady(): startServer() is awaited before the window exists.
+    //
+    // Matched by call shape rather than by the argument's NAME. #524 renamed
+    // the port local to `serverPort` (lifting it to module scope so the
+    // `activate` handler can rebuild a closed window), which turned a literal
+    // `createMainWindow(port)` search into a silent -1 — a test that failed
+    // for a rename while the ordering it exists to protect was untouched.
+    // The invariant is "startServer() is awaited first", not "the argument is
+    // spelled `port`". The slice starts at `app.whenReady()`, so the function
+    // DEFINITION earlier in the file cannot match, and `indexOf` takes the
+    // whenReady call rather than the later one in `activate`.
     const startServerCall = whenReady.indexOf("await startServer()");
-    const createWindowCall = whenReady.indexOf("createMainWindow(port)");
+    const createWindowCall = whenReady.search(/createMainWindow\(\w+\)/);
     expect(startServerCall).toBeGreaterThan(-1);
+    expect(createWindowCall).toBeGreaterThan(-1);
     expect(createWindowCall).toBeGreaterThan(startServerCall);
   });
 });
