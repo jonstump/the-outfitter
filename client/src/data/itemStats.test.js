@@ -93,9 +93,16 @@ describe("the generated dataset", () => {
   // a standing invariant is the whole point of having written the values down.
   //
   // Items with no record are skipped rather than failed: the catalog and the dataset refresh
-  // independently, so a newly added row is the uncovered case `statsFor` already documents. Today
-  // that skip covers exactly one id, `winfield-m1873c`, a KNOWN_CATALOG_DUPLICATES entry with no
-  // wiki page of its own.
+  // independently, so a newly added row is the uncovered case `statsFor` already documents.
+  //
+  // Corrected by #253. This used to add "today that skip covers exactly one id,
+  // `winfield-m1873c`, a KNOWN_CATALOG_DUPLICATES entry with no wiki page of its own" — a
+  // count that was true for one commit. #250 retired that row behind
+  // `RETIRED_WEAPON_ALIASES`, so it is no longer a `WEAPONS` row at all, and
+  // `KNOWN_CATALOG_DUPLICATES` (which lives in `scripts/scrape-images.mjs`, not here) is
+  // empty. As of this writing the skip set is EMPTY: all 147 `WEAPONS` rows have a record.
+  // The skip policy is kept anyway, because it is about what happens when the two files
+  // drift apart, not about any particular row that has drifted.
   describe("stays consistent with the hand-authored catalog", () => {
     const asNumber = (raw) => {
       if (raw === null) return null;
@@ -597,12 +604,21 @@ describe("dualWieldFor", () => {
   });
 
   it("resolves every weapon the dataset covers, leaving none merely unread", () => {
-    // Scoped to covered rows on purpose. A row with no record at all is the documented uncovered state
-    // `statsFor` already describes — `winfield-m1873c` has no wiki page of its own, so it can have no
-    // verdict, and #243 retires it. What this catches is the different failure: a row the scrape DID
-    // read and still could not resolve, which would mean the description landed without the sentence
-    // and without denying it.
+    // Scoped to covered rows on purpose. A row with no record at all is the documented uncovered
+    // state `statsFor` already describes, and it can have no verdict either way. What this catches
+    // is the different failure: a row the scrape DID read and still could not resolve, which would
+    // mean the description landed without the sentence and without denying it.
+    //
+    // Corrected by #253. The scoping above used to be illustrated with `winfield-m1873c` ("has no
+    // wiki page of its own [...] and #243 retires it") — an example that has since been resolved:
+    // #243 is done, #250 retired the row behind `RETIRED_WEAPON_ALIASES`, and it is not a
+    // `WEAPONS` row any more. The reasoning survives the example, so the example is gone and the
+    // general case stated instead.
     const covered = WEAPONS.filter((w) => statsFor(w[0]) !== null);
+    // Deliberately a floor, not equality. Coverage is 147/147 today — the slack is not describing
+    // known-uncovered rows (there are none) but tolerating the window where a catalog row has been
+    // added and the scrape has not been re-run yet, which is the same independence the skip policy
+    // above exists for. Equality here would turn that ordinary sequence into a failing suite.
     expect(covered.length).toBeGreaterThan(WEAPONS.length - 3);
     const unresolved = covered.filter((w) => dualWieldFor(w[0]) === null).map((w) => w[0]);
     expect(unresolved).toEqual([]);
