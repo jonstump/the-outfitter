@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+// Governing: SPEC-0005 REQ "Reproducible Three-Platform Release Artifacts".
+// This is what `npm run build -w desktop` runs, and it is the packaging step
+// release.yml's matrix invokes on windows-latest, macos-latest and
+// ubuntu-latest to emit the NSIS installer, the DMG, and the AppImage/deb the
+// requirement names. It packages `client/dist` exactly as `npm run build -w
+// client` produced it — no desktop-specific client build configuration, per
+// that requirement and ADR-0003's plain-static-output contract.
+//
 // npm scripts run through cmd.exe on Windows, not bash — `$(...)` command
 // substitution (the obvious one-liner fix) only works on macOS/Linux, and
 // release.yml's package job runs a windows-latest leg. This derives
