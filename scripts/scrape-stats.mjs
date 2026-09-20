@@ -104,6 +104,7 @@ import {
   KNOWN_CATALOG_DUPLICATES,
   NetworkFailureError,
   RateLimiter,
+  assertNotRateLimited,
   RobotsDisallowedError,
   ScrapeError,
   USER_AGENT,
@@ -457,6 +458,11 @@ export async function scrapeItemStats(target, deps) {
       { cause: err, item, url: pageUrl }
     );
   }
+
+  // Governing: ADR-0016 Confirmation 2. Before extractInfoboxes, deliberately: a throttled response
+  // is valid JSON with no infobox in it, so parsing first reports InfoboxNotFoundError — a real and
+  // much more plausible-looking failure that sends the reader after the page instead of the pacing.
+  assertNotRateLimited(html, { item, url: pageUrl });
 
   const infoboxes = extractInfoboxes(html);
   if (infoboxes.length === 0) {
@@ -1592,7 +1598,12 @@ export async function runDiscovery(options, deps) {
         throw new NetworkFailureError(`failed to fetch ${page}: HTTP ${res.status} at ${url}`, { url });
       }
       // eslint-disable-next-line no-await-in-loop
-      const listed = parseCategoryMembers(await res.text());
+      const indexHtml = await res.text();
+      // Governing: ADR-0016 Confirmation 2. parseCategoryMembers returns [] for anything without an
+      // "mw-pages" anchor, so an unguarded throttled index reads as a category that lost every
+      // member — drift that looks like the wiki deleting a whole weapon class.
+      assertNotRateLimited(indexHtml, { url });
+      const listed = parseCategoryMembers(indexHtml);
       for (const member of listed) {
         const key = norm(member);
         // Which indexes listed a page is recorded rather than discarded: it is the difference between
@@ -1635,6 +1646,10 @@ export async function runDiscovery(options, deps) {
             const pageRes = await fetchFn(url, { headers: { "User-Agent": userAgent } });
             if (pageRes.ok) {
               const html = await pageRes.text();
+              // Governing: ADR-0016 Confirmation 2. classifyPage scans prose for removal language,
+              // and an error envelope contains none — so a throttled page classifies as "live" and
+              // the run reports a confident verdict it never read a page to reach.
+              assertNotRateLimited(html, { item: page, url });
               classification = classifyPage(html, { page: page.replace(/ /g, "_") });
               // The page is already in hand, so purchasability costs nothing extra — and it is what
               // separates "the catalog is missing this" from "the catalog excludes this on purpose".

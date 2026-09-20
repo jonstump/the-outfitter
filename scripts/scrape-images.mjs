@@ -65,6 +65,7 @@ import {
   RobotsDisallowedError,
   ScrapeError,
   USER_AGENT,
+  assertNotRateLimited,
   buildItemPageUrl,
   collectCatalogItems,
   fetchRobotsTxt,
@@ -274,6 +275,10 @@ export async function scrapeItem(target, deps) {
   }
 
   const html = await pageRes.text();
+  // Governing: ADR-0016 Confirmation 2. extractImageUrl finds no <img> in an error envelope, so an
+  // unguarded throttled response raises ImageAssetNotFoundError — which reads as "this page has no
+  // usable art", a claim about the wiki's content made from a response that carried none.
+  assertNotRateLimited(html, { item, url: pageUrl });
   const rawImageUrl = extractImageUrl(html);
   if (!rawImageUrl) {
     throw new ImageAssetNotFoundError(`image asset not found on page for "${item}" at ${pageUrl}`, {
