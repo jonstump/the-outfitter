@@ -16,7 +16,8 @@
     "build": "npm run build -w client",
     "start": "npm run start -w server",
     "test": "npm run test -w client && npm run test -w server && npm run test:scrape && npm run test -w desktop",
-    "test:scrape": "node --test scripts/*.test.mjs"
+    "test:scrape": "node --test scripts/*.test.mjs",
+    "check:drift": "node scripts/check-drift.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

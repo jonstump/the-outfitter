@@ -82,6 +82,19 @@ export class InfoboxFieldNotFoundError extends ScrapeError {
 /** A network, HTTP, or rate-limit failure occurred while talking to the wiki. */
 export class NetworkFailureError extends ScrapeError {}
 
+/**
+ * The wiki refused the request by throttling it, while answering HTTP 200.
+ *
+ * Governing: ADR-0016 Confirmation 2 ("Rate limiting is asserted on content, not status").
+ *
+ * Deliberately a subclass of NetworkFailureError rather than a sibling: every existing caller that
+ * already distinguishes a transport failure from a parse failure keeps working unchanged, while a
+ * caller that wants to say "back off and retry later" rather than "this page is broken" can still
+ * tell the two apart. Splitting it out as a sibling would have silently reclassified throttling as
+ * an unhandled error in code that already handles the network case.
+ */
+export class RateLimitedError extends NetworkFailureError {}
+
 /** robots.txt disallows fetching the resource this script needed. */
 export class RobotsDisallowedError extends ScrapeError {}
 
@@ -469,6 +482,10 @@ export async function fetchRobotsTxt(fetchFn, userAgent) {
     throw new NetworkFailureError(`failed to fetch robots.txt at ${url}: HTTP ${res.status}`, { url });
   }
   const text = await res.text();
+  // Governing: ADR-0016 Confirmation 2. A throttled robots.txt fetch answers HTTP 200 like any
+  // other, and parseRobotsTxt would read the error envelope as a file with no rules — i.e. as
+  // "allow everything", which is the one wrong answer this function must never return.
+  assertNotRateLimited(text, { url });
   return parseRobotsTxt(text);
 }
 
@@ -498,6 +515,78 @@ export class RateLimiter {
     }
     this.lastRequestAt = this.now();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Rate limiting, INBOUND: what the wiki sends back when it refuses.
+//
+// Governing: ADR-0016 (Detect Dataset Staleness in Two Tiers over Allowed HTML) Confirmation 2,
+// ADR-0002 (the robots.txt posture this protects).
+//
+// The RateLimiter above is the outbound half — our own 1500 ms pacing. This is the inbound half,
+// and it exists because the wiki does NOT refuse with a status code. It answers a throttled
+// request with **HTTP 200** and a JSON error envelope, so `res.ok` is true, `res.text()` succeeds,
+// and a script that trusts either records a rejected page as a successful empty one.
+//
+// That is not a hypothetical. It cost 136 of 147 pages in a single run during the verification
+// pass that produced ADR-0016, and the run reported success. A refresh that records rejected pages
+// as unchanged is worse than no refresh, because it reports freshness it never verified.
+// ---------------------------------------------------------------------------
+
+/**
+ * Throw if `body` is an API-style error envelope rather than the page we asked for.
+ *
+ * Call it immediately after reading a response body and BEFORE parsing that body, at every site
+ * that reads one. Parsing first would turn a throttled response into whatever the parser makes of
+ * an error envelope — for an HTML parser, reliably "no infobox", which is a different and much
+ * more plausible-looking failure.
+ *
+ * Two classes of envelope, both failures:
+ *   - `error.code === "ratelimited"` throws RateLimitedError. Back off; the page is fine.
+ *   - any other `error.code` throws NetworkFailureError. We asked for an HTML page over an allowed
+ *     /wiki/ path and got an API error instead, which means we did not get the page, whatever the
+ *     code says.
+ *
+ * The `{` probe is load-bearing for cost, not correctness: every real payload here is an HTML
+ * document beginning `<!DOCTYPE` or `<html`, and item pages run to a couple of hundred kilobytes.
+ * Without the probe this would JSON.parse every one of them to learn nothing.
+ */
+export function assertNotRateLimited(body, { item, url } = {}) {
+  if (typeof body !== "string") return;
+
+  // First non-whitespace character. An HTML page can never open with `{`, so anything that does is
+  // worth the parse and nothing that does not is.
+  let i = 0;
+  while (i < body.length && /\s/.test(body[i])) i += 1;
+  if (body[i] !== "{") return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // Opens like JSON, is not JSON. Not our failure mode to diagnose — let the caller's own parser
+    // report what it actually found.
+    return;
+  }
+
+  const code = parsed?.error?.code;
+  if (typeof code !== "string") return;
+
+  const info = parsed.error.info ? `: ${parsed.error.info}` : "";
+  const where = item ? ` for "${item}"` : "";
+  if (code === "ratelimited") {
+    throw new RateLimitedError(
+      `the wiki rate-limited this request${where}${url ? ` at ${url}` : ""} — it answered HTTP 200 ` +
+        `with {"error":{"code":"ratelimited"}}${info}. Slow down and re-run; the data is not stale, ` +
+        `the request was refused.`,
+      { item, url }
+    );
+  }
+  throw new NetworkFailureError(
+    `the wiki returned an API error envelope instead of a page${where}${url ? ` at ${url}` : ""}: ` +
+      `code "${code}"${info}`,
+    { item, url }
+  );
 }
 
 // ---------------------------------------------------------------------------

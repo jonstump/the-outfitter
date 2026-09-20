@@ -1,7 +1,7 @@
 ---
 status: implemented
 date: 2026-08-10
-implements: [ADR-0005, ADR-0013, ADR-0015]
+implements: [ADR-0005, ADR-0013, ADR-0015, ADR-0016]
 requires: [SPEC-0001]
 ---
 
@@ -83,6 +83,140 @@ An item that is re-added after having been retired SHALL receive a fresh `id`. I
 
 - **WHEN** a scraped record is spot-checked against the wiki's history for that page
 - **THEN** the recorded revision identifier SHALL match what the wiki reports, and `ingestedAt` SHALL be the time of the run
+
+### Requirement: Throttling Is Detected on Content, Not Status
+
+Realizes [ADR-0016](../../../adrs/ADR-0016-incremental-wiki-refresh.md) Confirmation 2.
+
+The wiki answers a throttled request with **HTTP 200** and a JSON error envelope rather than with a
+4xx status. Every script that reads a response body from huntshowdown.wiki.gg SHALL therefore assert
+success on the parsed content and MUST NOT assert it on the status code alone.
+
+A body that is an API-style error envelope SHALL fail the run loudly. `{"error":{"code":"ratelimited"}}`
+SHALL raise a rate-limit-specific error distinguishable from a transport failure; any other
+`error.code` SHALL raise a network failure, because a request for an HTML page that returned an API
+error did not return the page whatever the code says.
+
+The check SHALL run **before** the body is parsed for content. An error envelope carries no infobox,
+no `mw-pages` anchor and no gallery, so a parse-first ordering converts a throttled response into a
+plausible-looking claim about the wiki's contents — "this item has no infobox", "this category is
+empty" — which is precisely the silent failure this requirement exists to prevent. A refresh that
+records rejected pages as unchanged is worse than no refresh, because it reports a freshness it never
+verified.
+
+#### Scenario: A throttled item page fails as a rate limit, not as a missing infobox
+
+- **WHEN** an item page fetch returns HTTP 200 with an `{"error":{"code":"ratelimited"}}` body
+- **THEN** the run SHALL fail with a rate-limit error, and SHALL NOT report the item as having no infobox
+
+#### Scenario: A throttled category index does not read as an emptied category
+
+- **WHEN** a category index fetch returns HTTP 200 with a `ratelimited` body
+- **THEN** the run SHALL fail, and SHALL NOT report the category's every member as removed
+
+#### Scenario: A throttled robots.txt cannot be read as allow-all
+
+- **WHEN** the robots.txt fetch returns HTTP 200 with a `ratelimited` body
+- **THEN** the run SHALL fail, and SHALL NOT proceed with an empty rule set
+
+#### Scenario: A normal page is unaffected
+
+- **WHEN** a fetch returns an HTML document
+- **THEN** the guard SHALL NOT alter or reject it
+
+### Requirement: Roster Drift Is Detected by a Bounded, Schedulable Check
+
+Realizes [ADR-0016](../../../adrs/ADR-0016-incremental-wiki-refresh.md) Confirmations 1
+and 4 — tier 1 of its two-tier scheme.
+
+A roster-drift check SHALL diff the membership of the wiki's own category indexes and hunter gallery
+against the committed datasets, and SHALL report pages added and pages removed. It SHALL list them
+page by page rather than merely counting them: the check exists to tell a human *what* moved so they
+can decide whether the expensive tier is worth running.
+
+**The report SHALL present additions as candidates, not as new content.** The wiki keeps a page for an
+item removed from the game in its original category indefinitely, so a trait merged away three updates
+ago and a weapon that shipped yesterday are indistinguishable to a check that never reads a page. On
+2026-09-20, 20 of the 41 pages reported as added were archived removals — every consumable in the list,
+and 10 of 28 traits. The report SHALL say this in its own output and SHALL name `classifyPage` as the
+next step, because the reader will not otherwise have that context.
+
+The check SHALL issue **no more page fetches than there are index pages** — every `CATEGORY_INDEX`
+page plus the hunter gallery, which is **eight** as of 2026-09-20. It MUST NOT fetch an item page or
+a hunter page. The bound SHALL be derived from `CATEGORY_INDEX` rather than written as a literal, and
+SHALL be enforced at runtime and not only in tests, because a scheduled job is exactly where a
+regression would otherwise run unobserved against someone else's infrastructure. `robots.txt` is
+fetched in addition and is not counted against the bound; it is the permission to make the others.
+
+> **ADR-0016 documents this bound as seven, and that figure is stale rather than wrong-in-spirit.**
+> Its 2026-08-12 survey counted a `CATEGORY_INDEX` that was missing `Category:Traits/Burn`, so the
+> cost figure inherited the index's own gap. The decision — crawl the category indexes and the
+> gallery, and nothing else — is unchanged. ADR-0016's cost figure and its Confirmation 4 both owe a
+> one-line amendment.
+
+The trait indexes SHALL include **Burn**. Six of the eight Burn pages are cross-listed under Scarce
+or Event, so omitting the index is silent for those six and wrong in both directions for the two that
+are Burn-only: a Burn trait we carry reads as removed from the wiki, and one we do not carry is never
+surfaced at all.
+
+Every URL SHALL be checked against `robots.txt` before **any** of them is fetched, and the check SHALL
+fail closed when `robots.txt` cannot be read. A test SHALL assert, against a committed fixture of the
+live `robots.txt`, that the gate returns false for `/api.php`, `/api.php?action=query`, `/rest.php`
+and `/wiki/Special:RecentChanges`, and true for `/wiki/{Page}` and `/wiki/Category:{Name}` — the
+MediaWiki API is disallowed by the source, and this is the test that catches that before a design is
+built on top of it.
+
+Pages recorded in `KNOWN_TOMBSTONES` SHALL be suppressed from *added* but not from *removed*: a page
+this project has already decided not to carry is not news when the wiki still lists it, whereas its
+disappearance from our own data would be.
+
+The hunter half SHALL join the gallery to the committed dataset on the **portrait slug**, not on the
+page path. Roster links are redirect titles and one page yields several hunters, so a page-path join
+reports hunters we already carry as both added and removed.
+
+Tier 1 detects roster changes only. A price that moved with no page added or removed is invisible to
+it, and that is the documented trade-off for the robots.txt constraint rather than a defect — tier 2
+(the per-page revision sweep, below) is what detects content drift.
+
+#### Scenario: The check spends exactly its budget and touches no item page
+
+- **WHEN** the roster check runs
+- **THEN** it SHALL issue exactly one fetch per `CATEGORY_INDEX` page plus one for the gallery, every one of them a category index or the hunter gallery
+
+#### Scenario: A Burn-only trait is neither reported as removed nor silently missed
+
+- **WHEN** the roster check runs against a dataset carrying a trait whose only wiki category is Burn
+- **THEN** it SHALL NOT report that trait as removed, and SHALL report a Burn-only trait absent from the dataset as a candidate addition
+
+#### Scenario: A new page on the wiki is reported
+
+- **WHEN** the wiki lists a page the committed dataset does not carry, and it is not a known tombstone
+- **THEN** the check SHALL report it as added, name it, and exit non-zero
+
+#### Scenario: A known tombstone is not reported as drift
+
+- **WHEN** the wiki lists a page recorded in `KNOWN_TOMBSTONES` and the dataset does not carry it
+- **THEN** the check SHALL NOT report it as added
+
+#### Scenario: A redirect title does not read as a new hunter
+
+- **WHEN** the gallery links a hunter by a redirect title whose portrait is already committed
+- **THEN** the check SHALL report neither an addition nor a removal for that hunter
+
+#### Scenario: Nothing is fetched under a dry run
+
+- **WHEN** the check is run with `--dry-run`
+- **THEN** it SHALL resolve every URL and check `robots.txt`, and SHALL issue no page fetch
+
+> **Implementation status.** Tier 1 and the throttling guard above are **implemented**
+> (`scripts/check-drift.mjs`, `assertNotRateLimited` in `scripts/lib/wiki.mjs`; issue #534).
+> **Tier 2 — the per-page revision sweep that compares each page's `wgCurRevisionId` against the
+> stored `sourceRevision` and regenerates only the rows whose revision moved — is NOT built.** The
+> watermark it compares against is recorded on every row (see "Provenance Is Recorded and Ids Are
+> Never Wiki-Derived"), and ADR-0016 deliberately leaves the sweep human-invoked rather than
+> scheduled. Until it exists, an unchanged row is still re-fetched and rewritten by a full scrape,
+> so ADR-0002's "not re-scraping needlessly" duty is only half discharged. Do not read this
+> requirement's presence as a claim that content drift is detected.
 
 ### Requirement: Catalog Write-Through Is Bounded, Reviewable, and Opt-In
 

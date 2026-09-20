@@ -301,7 +301,10 @@ export function parseRoster(html) {
     const img = box.match(/<img[^>]+src="\/images\/thumb\/([^/"]+)\//) || box.match(/<img[^>]+src="\/images\/([^/"?]+)/);
     const file = img ? decodeURIComponent(img[1]) : null;
 
-    const key = `${wikiPath} ${label}`;
+    // The separator is a NUL, written as an escape rather than as a raw byte: a literal NUL in
+    // the source makes grep classify this whole file as binary, which silently hides it from
+    // every grep-driven tool including /sdd:audit (#531). The runtime value is unchanged.
+    const key = `${wikiPath}\u0000${label}`;
     if (seen.has(key)) continue;
     seen.add(key);
 

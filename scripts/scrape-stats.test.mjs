@@ -1915,12 +1915,19 @@ test("runDiscovery: a page with no price field is unresolved, not proposed as mi
 test("CATEGORY_INDEX: traits are enumerated by every in-scope rarity index, not one redirect", () => {
   // A regression guard with a specific target. `Category:Purchasable_Traits` is a REDIRECT to
   // `Category:Traits/Regular`, so crawling it returned 58 members and a coverage figure that read as
-  // complete while 14 Scarce and 18 Event traits were never enumerated. Naming the three indexes here
+  // complete while 14 Scarce and 18 Event traits were never enumerated. Naming the indexes here
   // means reverting to the redirect fails a test rather than quietly shrinking the roster. (#231)
+  //
+  // FOUR since #534, not three. This test pinned three and passed for a month while the list was
+  // still incomplete: `Category:Traits/Burn` was never crawled, which is the same class of defect
+  // #231 fixed, one index further on. Worth keeping in view — the list was pinned as complete twice
+  // and was wrong both times, so a passing assertion here is evidence about regressions and not a
+  // proof that the wiki has no other trait index.
   assert.deepEqual(CATEGORY_INDEX.traits, [
     "Category:Traits/Regular",
     "Category:Traits/Scarce",
     "Category:Traits/Event",
+    "Category:Traits/Burn",
   ]);
   for (const [category, indexes] of Object.entries(CATEGORY_INDEX)) {
     assert.ok(Array.isArray(indexes) && indexes.length > 0, `${category} maps to a non-empty list`);
@@ -2092,15 +2099,16 @@ test("runDiscovery: --dry-run resolves the indexes it would crawl and fetches no
 });
 
 test("runDiscovery: --dry-run names every index a multi-index category would crawl", async () => {
-  // Traits map to three indexes. Reporting only the first would make the cheap mode the one that
-  // hides the very thing #231 fixed.
+  // Traits map to four indexes (Regular, Scarce, Event, Burn). Reporting only the first would make
+  // the cheap mode the one that hides the very thing #231 fixed.
   const report = await runDiscovery(
     { categories: ["traits"], delayMs: 0, dryRun: true },
     { fetchFn: async () => okResponse(""), robotsGroups: allowAll, rateLimiter: noWait, log: () => {} }
   );
-  assert.equal(report.traits.indexUrls.length, 3);
+  // Derived, so adding an index cannot leave this asserting the old count.
+  assert.equal(report.traits.indexUrls.length, CATEGORY_INDEX.traits.length);
   const out = formatCoverage(report);
-  for (const name of ["Traits/Regular", "Traits/Scarce", "Traits/Event"]) {
+  for (const name of ["Traits/Regular", "Traits/Scarce", "Traits/Event", "Traits/Burn"]) {
     assert.ok(out.includes(name), `${name} is named in the dry-run output`);
   }
 });

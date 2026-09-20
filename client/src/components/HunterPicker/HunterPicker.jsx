@@ -351,7 +351,9 @@ export default function HunterPicker({
   // A stable identity for the favorite SET, not for the array carrying it. `favorites` is a
   // prop off a server round-trip and a caller re-rendering with an equal-but-new array must
   // not count as a change — that would reset the roving tabindex under a user mid-navigation.
-  const favoritesKey = useMemo(() => [...favored].sort().join(" "), [favored]);
+  // NUL as an escape, not a raw byte: a literal NUL makes grep treat this file as binary and
+  // hides it from grep-driven tooling (#531). Same separator, same runtime value.
+  const favoritesKey = useMemo(() => [...favored].sort().join("\u0000"), [favored]);
 
   // Every other input that reorders rows calls resetActive(); `favorites` was the one that
   // did not, leaving activeRow pointing at a flat index that now holds a different hunter.

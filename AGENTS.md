@@ -40,6 +40,7 @@ Run from the repo root.
 | `npm test -w client` | Client vitest only (jsdom) |
 | `npm test -w server` | Server vitest only. Sets `OUTFITTER_DB_FILE` to a throwaway file |
 | `npm run test:scrape` | Scrape-script tests only (`node --test scripts/*.test.mjs`) |
+| `npm run check:drift` | **Tier 1 roster-drift check** (ADR-0016). Eight live wiki fetches, ~12 s. Exits 1 if wiki membership moved. `--dry-run` fetches nothing. The one script here that **does** hit the network — not part of `npm test` |
 | `npm run build` | Production client build (`vite build`) |
 | `npm start` | Production server: serves the built client from `client/dist` and the API on `PORT` (default 4100) from **one origin** |
 | `npm run build -w client` | Client build (CI also runs this separately) |
@@ -80,6 +81,24 @@ run them by hand to refresh data: `scrape-images.mjs`, `scrape-hunters.mjs` (see
 to skip `sharp`; every AVIF portrait has a **byte budget** — an over-budget asset fails its
 hunter), `scrape-stats.mjs` (`--write-catalog` reconciles `catalog.js`; default is additive and
 never touches `catalog.js`). Tests for them are `*.test.mjs` beside each script.
+
+**Before running any refresh, know the trap:** the wiki answers a throttled request with **HTTP
+200** and a `{"error":{"code":"ratelimited"}}` body, so a rejected page looks like a successful
+empty one. `assertNotRateLimited` in `scripts/lib/wiki.mjs` is called at every body-read site and
+fails the run loudly; it is why success is asserted on parsed content and never on `res.ok`
+(ADR-0016 Confirmation 2). Do not add a fetch that skips it.
+
+`check-drift.mjs` is tier 1 of ADR-0016: it diffs the wiki's seven category indexes and hunter
+gallery against the committed data to answer "did membership move?" in eight fetches. It is
+**capped at runtime** and must never read an item page — that is tier 2 (the per-page
+`sourceRevision` sweep), which is **not built yet**. Tier 1 sees pages added and removed; it
+cannot see a price change, so a balance patch is invisible to it.
+
+**A `+` in its output is a candidate, not a new item.** The wiki keeps pages for removed items in
+their original category forever — on 2026-09-20, 20 of 41 reported additions were archived removals
+(all 10 consumables; 10 traits merged away in Update 1.15). Run them through `classifyPage` before
+believing any of them, and mind its own hazard: an item removed and later returned states both, and
+a whole-page scan reads whichever sentence comes first (see `KNOWN_LIVE`).
 
 ## The catalog (`client/src/data/catalog.js`) — read this before editing pools
 
