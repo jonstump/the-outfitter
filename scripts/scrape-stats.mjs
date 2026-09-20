@@ -604,7 +604,18 @@ export function buildStatsRecord(result, { now = () => new Date().toISOString() 
 export const CATEGORY_INDEX = {
   weapons: ["Category:Weapons"],
   tools: ["Category:Tools"],
-  traits: ["Category:Traits/Regular", "Category:Traits/Scarce", "Category:Traits/Event"],
+  // FOUR trait indexes, not three. Burn was missing until #534's first live tier-1 run, and its
+  // absence was silent in both directions: Necromancer (Burn-only, and in our catalog) was reported
+  // as REMOVED FROM THE WIKI when it is simply categorised somewhere we never looked, and Chupacabra
+  // (Burn-only, and NOT in our catalog) was never surfaced at all. Six of the eight Burn pages are
+  // cross-listed under Scarce or Event, which is exactly why the gap went unnoticed for so long —
+  // only the two that are Burn-only ever expose it.
+  traits: [
+    "Category:Traits/Regular",
+    "Category:Traits/Scarce",
+    "Category:Traits/Event",
+    "Category:Traits/Burn",
+  ],
   consumables: ["Category:Consumables"],
 };
 

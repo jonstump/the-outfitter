@@ -18,7 +18,7 @@ import {
   parseRobotsTxt,
   fetchRobotsTxt,
 } from "./lib/wiki.mjs";
-import { scrapeItemStats } from "./scrape-stats.mjs";
+import { CATEGORY_INDEX, scrapeItemStats } from "./scrape-stats.mjs";
 import {
   FetchBudgetExceededError,
   TIER1_FETCH_BUDGET,
@@ -191,10 +191,17 @@ function fixtureWiki({ categoryPages = [], rosterEntries = [] } = {}) {
 }
 
 describe("ADR-0016 Confirmation 4: tier 1 is tier 1", () => {
-  it("derives its budget as the ADR's literal 7", () => {
-    // The budget is computed from CATEGORY_INDEX so adding an index moves it. If that ever makes it
-    // disagree with the ADR, the ADR is the thing to revisit — hence asserting the literal here.
-    assert.equal(TIER1_FETCH_BUDGET, 7);
+  it("derives its budget from CATEGORY_INDEX, which is now EIGHT and not the ADR's 7", () => {
+    // ADR-0016 documents 7 (six item indexes + the hunter gallery). It is 8, and the ADR's figure is
+    // the stale one: its 2026-08-12 survey was taken against a CATEGORY_INDEX that was missing
+    // Category:Traits/Burn, so the count inherited the same gap the index had. #534's first live run
+    // exposed it — Necromancer, a Burn trait we carry, was reported as removed from the wiki.
+    //
+    // Asserted as a literal on purpose. The budget is DERIVED, so this test does not stop anyone
+    // adding an index; it stops an index being added without someone noticing that ADR-0016's cost
+    // figure and its Confirmation 4 both need amending. That amendment is owed and not yet made.
+    assert.equal(TIER1_FETCH_BUDGET, 8);
+    assert.equal(TIER1_FETCH_BUDGET, Object.values(CATEGORY_INDEX).flat().length + 1);
   });
 
   it("issues exactly 7 fetches and never touches an item page", async () => {
@@ -210,11 +217,27 @@ describe("ADR-0016 Confirmation 4: tier 1 is tier 1", () => {
         readFile: async () => JSON.stringify([{ portrait: "the-revenant" }]) }
     );
 
-    assert.equal(calls.length, 7, `tier 1 spent ${calls.length} fetches:\n${calls.join("\n")}`);
+    assert.equal(
+      calls.length,
+      TIER1_FETCH_BUDGET,
+      `tier 1 spent ${calls.length} fetches:\n${calls.join("\n")}`
+    );
     const indexOrRoster = (u) => /\/wiki\/Category(%3A|:)/.test(u) || u.endsWith("/wiki/Hunters");
     for (const url of calls) {
       assert.ok(indexOrRoster(url), `tier 1 fetched a non-index page, which belongs in tier 2: ${url}`);
     }
+  });
+
+  it("crawls all FOUR trait indexes, Burn included", () => {
+    // The bug #534's first live run exposed. Burn is the only trait index with members that appear
+    // nowhere else (Necromancer, Chupacabra), so dropping it is silent for six of its eight pages
+    // and wrong in both directions for the other two.
+    assert.deepEqual(CATEGORY_INDEX.traits, [
+      "Category:Traits/Regular",
+      "Category:Traits/Scarce",
+      "Category:Traits/Event",
+      "Category:Traits/Burn",
+    ]);
   });
 
   it("refuses to spend an eighth fetch even if the code asks for one", () => {
@@ -230,7 +253,7 @@ describe("ADR-0016 Confirmation 4: tier 1 is tier 1", () => {
     const { fetchFn, calls } = fixtureWiki();
     const report = await runRosterCheck({ dryRun: true }, { fetchFn, log: () => {} });
     assert.equal(calls.length, 0);
-    assert.equal(report.urls.length, 7);
+    assert.equal(report.urls.length, TIER1_FETCH_BUDGET);
   });
 
   it("fails closed when the throttled index would otherwise read as an empty category", async () => {
@@ -333,6 +356,33 @@ describe("tier 1 roster join and reporting", () => {
     assert.equal(report.drift, true);
     // Listed, not merely counted: the cheap tier's whole job is saying WHAT moved.
     assert.match(formatRosterReport(report), /\+ the-new-one/);
+  });
+
+  it("presents additions as candidates rather than as new content", async () => {
+    // The first live run's output was read as "N new items" and it was not: 20 of 41 additions were
+    // pages the wiki keeps for items removed from the game. The report has to say so itself, because
+    // whoever reads it next will not have that context.
+    const { fetchFn } = fixtureWiki({
+      categoryPages: ["Weapons/Merged Away Long Ago"],
+      rosterEntries: [{ page: "Hunters/The_Revenant", label: "The Revenant", file: "Hunter_The_Revenant.png" }],
+    });
+    const report = await runRosterCheck(
+      {},
+      {
+        fetchFn,
+        robotsGroups: parseRobotsTxt(ROBOTS_FIXTURE),
+        rateLimiter: noWait,
+        log: () => {},
+        collectItems: () => [],
+        readFile: async () => JSON.stringify([{ portrait: "the-revenant" }]),
+      }
+    );
+    const text = formatRosterReport(report);
+    assert.match(text, /CANDIDATE LIST, not a list of new content/);
+    assert.match(text, /does NOT mean the item is new/);
+    assert.match(text, /listed by the wiki, not in our data/);
+    // And it must point at the classifier rather than leaving the reader to invent a method.
+    assert.match(text, /classifyPage/);
   });
 
   it("reports no drift, and says content drift is still invisible, when membership matches", async () => {

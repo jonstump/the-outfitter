@@ -134,11 +134,30 @@ against the committed datasets, and SHALL report pages added and pages removed. 
 page by page rather than merely counting them: the check exists to tell a human *what* moved so they
 can decide whether the expensive tier is worth running.
 
-The check SHALL issue **no more than seven page fetches** — the six `CATEGORY_INDEX` pages plus the
-hunter gallery. It MUST NOT fetch an item page or a hunter page. The bound SHALL be enforced at
-runtime and not only in tests, because a scheduled job is exactly where a regression would otherwise
-run unobserved against someone else's infrastructure. `robots.txt` is fetched in addition and is not
-counted against the bound; it is the permission to make the other seven.
+**The report SHALL present additions as candidates, not as new content.** The wiki keeps a page for an
+item removed from the game in its original category indefinitely, so a trait merged away three updates
+ago and a weapon that shipped yesterday are indistinguishable to a check that never reads a page. On
+2026-09-20, 20 of the 41 pages reported as added were archived removals — every consumable in the list,
+and 10 of 28 traits. The report SHALL say this in its own output and SHALL name `classifyPage` as the
+next step, because the reader will not otherwise have that context.
+
+The check SHALL issue **no more page fetches than there are index pages** — every `CATEGORY_INDEX`
+page plus the hunter gallery, which is **eight** as of 2026-09-20. It MUST NOT fetch an item page or
+a hunter page. The bound SHALL be derived from `CATEGORY_INDEX` rather than written as a literal, and
+SHALL be enforced at runtime and not only in tests, because a scheduled job is exactly where a
+regression would otherwise run unobserved against someone else's infrastructure. `robots.txt` is
+fetched in addition and is not counted against the bound; it is the permission to make the others.
+
+> **ADR-0016 documents this bound as seven, and that figure is stale rather than wrong-in-spirit.**
+> Its 2026-08-12 survey counted a `CATEGORY_INDEX` that was missing `Category:Traits/Burn`, so the
+> cost figure inherited the index's own gap. The decision — crawl the category indexes and the
+> gallery, and nothing else — is unchanged. ADR-0016's cost figure and its Confirmation 4 both owe a
+> one-line amendment.
+
+The trait indexes SHALL include **Burn**. Six of the eight Burn pages are cross-listed under Scarce
+or Event, so omitting the index is silent for those six and wrong in both directions for the two that
+are Burn-only: a Burn trait we carry reads as removed from the wiki, and one we do not carry is never
+surfaced at all.
 
 Every URL SHALL be checked against `robots.txt` before **any** of them is fetched, and the check SHALL
 fail closed when `robots.txt` cannot be read. A test SHALL assert, against a committed fixture of the
@@ -162,7 +181,12 @@ it, and that is the documented trade-off for the robots.txt constraint rather th
 #### Scenario: The check spends exactly its budget and touches no item page
 
 - **WHEN** the roster check runs
-- **THEN** it SHALL issue exactly seven page fetches, every one of them a category index or the hunter gallery
+- **THEN** it SHALL issue exactly one fetch per `CATEGORY_INDEX` page plus one for the gallery, every one of them a category index or the hunter gallery
+
+#### Scenario: A Burn-only trait is neither reported as removed nor silently missed
+
+- **WHEN** the roster check runs against a dataset carrying a trait whose only wiki category is Burn
+- **THEN** it SHALL NOT report that trait as removed, and SHALL report a Burn-only trait absent from the dataset as a candidate addition
 
 #### Scenario: A new page on the wiki is reported
 

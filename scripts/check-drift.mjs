@@ -24,7 +24,13 @@
 //
 // WHAT IT CANNOT SEE
 //
-// Roster changes only. A weapon whose price moved with no page added or removed is invisible here,
+// Roster changes only, and only as CANDIDATES. The wiki keeps a page for a removed item in its
+// original category forever, so "listed by the wiki, not in our data" covers both a new weapon and a
+// trait merged away three updates ago — indistinguishable without reading the page, which tier 1 does
+// not do. The first live run (2026-09-20) reported 41 such pages and 20 of them were archived
+// removals. Treat `+` as "go look at this", never as "this shipped".
+//
+// A weapon whose price moved with no page added or removed is invisible here,
 // and a balance patch is mostly price changes. That is tier 2's job (the per-page revision sweep),
 // which is human-invoked precisely because it costs 512 fetches. ADR-0016 records this trade-off as
 // a known Bad consequence rather than an oversight: tier 1 firing is the evidence that tier 2 is
@@ -302,16 +308,30 @@ export function formatRosterReport(report) {
     if (!d.added.length && !d.removed.length) continue;
     lines.push("");
     lines.push(`${name}:`);
-    for (const page of d.added) lines.push(`  + ${page}   (on the wiki, not in our data)`);
-    for (const page of d.removed) lines.push(`  - ${page}   (in our data, no longer listed)`);
+    for (const page of d.added) lines.push(`  + ${page}   (listed by the wiki, not in our data)`);
+    for (const page of d.removed) lines.push(`  - ${page}   (in our data, not listed by these indexes)`);
   }
 
   lines.push("");
-  lines.push(
-    report.drift
-      ? "ROSTER MOVED. Run tier 2 (the per-page revision sweep) to pick up content changes too, then re-scrape."
-      : "No roster drift. Content drift is invisible to tier 1 — a balance patch moves prices, not membership."
-  );
+  if (report.drift) {
+    // Said plainly because the first live run's output was read as "N new items" and it was not.
+    // The wiki keeps a page for an item REMOVED from the game, in its original category, forever:
+    // of the 41 pages this reported as added on 2026-09-20, 20 were removed-and-archived — every
+    // one of the 10 consumables, and 10 of the 28 traits (the Update 1.15 merges into Iron Eye,
+    // Scopesmith, Hundred Hands, Steady Aim and Assailant).
+    lines.push("MEMBERSHIP MOVED — this is a CANDIDATE LIST, not a list of new content.");
+    lines.push("");
+    lines.push("  A `+` means the wiki lists a page we do not carry. It does NOT mean the item is new:");
+    lines.push("  the wiki keeps pages for removed items in their original category indefinitely, so a");
+    lines.push("  merged-away trait and a brand-new weapon look identical from here. Tier 1 never reads");
+    lines.push("  a page, so it cannot tell them apart by construction.");
+    lines.push("");
+    lines.push("  Classify before acting: `classifyPage` in scrape-stats.mjs reads each page's own");
+    lines.push("  removal language. Note its known hazard — an item removed and later returned states");
+    lines.push("  both, and a whole-page scan reads whichever sentence comes first (see KNOWN_LIVE).");
+  } else {
+    lines.push("No membership drift. Content drift is invisible to tier 1 — a balance patch moves prices, not membership.");
+  }
   return lines.join("\n");
 }
 
